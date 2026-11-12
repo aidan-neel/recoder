@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { AgentEvent } from '../../../../src/agents/contract';
 import type { OpenCodeAgent } from '../../../../src/agents/opencode/opencode';
 import { ChatConversation } from '../../../../src/models/llm/conversation';
 import type { ChatOptions } from '../../../../src/models/llm/types';
@@ -125,20 +126,20 @@ describe('OpenCode 2 chat', () => {
 });
 
 describe('OpenCode 2 agent', () => {
-	async function open(target: OpenCodeAgent, handlers: Parameters<OpenCodeAgent['openAgent']>[0]['handlers']) {
-		return target.openAgent({
+	async function open(target: OpenCodeAgent, onEvent: (event: AgentEvent) => void = () => {}) {
+		return target.openRun({
 			model: 'openai/m',
 			system: 'Review.',
 			tools: ['search'],
 			runTool: async () => ({ text: 'ok', isError: false }),
-			handlers,
+			onEvent,
 			signal: new AbortController().signal
 		});
 	}
 
 	test('registers its tools natively, not as code mode, and allows only the ones named on each prompt', async () => {
 		const target = await start();
-		const session = await open(target, {});
+		const session = await open(target);
 
 		await session.prompt('hi', { tools: true, timeoutMs: 5_000 });
 		await session.prompt('hi', { tools: false, timeoutMs: 5_000 });
@@ -164,9 +165,9 @@ describe('OpenCode 2 agent', () => {
 		const target = await start();
 		const events: string[] = [];
 
-		const session = await open(target, {
-			onStepStart: () => events.push('start'),
-			onStepFinish: (usage) => events.push(`finish ${usage.totalTokens}`)
+		const session = await open(target, (event) => {
+			if (event.type === 'step-start') events.push('start');
+			if (event.type === 'usage') events.push(`finish ${event.usage.totalTokens}`);
 		});
 
 		const reply = await session.prompt('hi', { tools: true, timeoutMs: 5_000 });
@@ -175,5 +176,30 @@ describe('OpenCode 2 agent', () => {
 
 		expect(reply.text).toBe(' world');
 		expect(events).toEqual(['start', 'finish 17']);
+	});
+
+	/** A prompt with a minute of its own, sent to a server that stops serving mid-turn: its reply, and how long it took. */
+	async function promptToStoppingServer(text: string): Promise<{ error: unknown; elapsedMs: number }> {
+		const session = await open(await start());
+		const started = Date.now();
+		const reply = await session.prompt(text, { tools: true, timeoutMs: 60_000 });
+
+		await session.close();
+
+		return { error: reply.error, elapsedMs: Date.now() - started };
+	}
+
+	test('a prompt ends with an error as soon as the server stops mid-turn, long before its own time runs out', async () => {
+		const { error, elapsedMs } = await promptToStoppingServer('crash');
+
+		expect(error).toBeInstanceOf(Error);
+		expect(elapsedMs).toBeLessThan(3_000);
+	});
+
+	test('a prompt ends with an error as soon as the server closes its port mid-turn, while its process still runs', async () => {
+		const { error, elapsedMs } = await promptToStoppingServer('deaf');
+
+		expect(error).toBeInstanceOf(Error);
+		expect(elapsedMs).toBeLessThan(3_000);
 	});
 });

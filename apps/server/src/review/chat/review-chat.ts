@@ -72,8 +72,30 @@ function codeEvidence(context?: ReviewCodeContext): string {
 
 /** Orchestrator receives every reviewer and subagent discussion, including the replies. */
 export async function discussionContext(reviewId: string, assignmentId = ORCHESTRATOR_ID): Promise<string> {
-	return ((await reviewProgress.get(reviewId))?.messages ?? [])
-		.filter((message) => message.discussion && message.assignmentId === assignmentId && message.status === 'done')
+	return formatDiscussion(await discussionMessages(reviewId, assignmentId));
+}
+
+/**
+ * The developer's own messages to the orchestrator, without its replies or the messages shared from reviewers'
+ * conversations, since either can carry another reviewer's findings. An independent-pass reviewer reads this in
+ * place of the orchestrator's conversation, so the first pass's findings never reach it (issue #95).
+ */
+export async function developerDiscussion(reviewId: string): Promise<string> {
+	const messages = await discussionMessages(reviewId, ORCHESTRATOR_ID);
+
+	return formatDiscussion(messages.filter((message) => message.from === 'user' && !message.forwardedFrom));
+}
+
+/** The finished discussion messages of one conversation, oldest first. */
+async function discussionMessages(reviewId: string, assignmentId: string): Promise<ReviewChatMessage[]> {
+	return ((await reviewProgress.get(reviewId))?.messages ?? []).filter(
+		(message) => message.discussion && message.assignmentId === assignmentId && message.status === 'done'
+	);
+}
+
+/** The last discussion messages as prompt text, each marked with who wrote it and where it was shared from. */
+function formatDiscussion(messages: ReviewChatMessage[]): string {
+	return messages
 		.slice(-30)
 		.map(
 			(message) =>
@@ -82,6 +104,7 @@ export async function discussionContext(reviewId: string, assignmentId = ORCHEST
 		.join('\n\n')
 		.slice(-40000);
 }
+
 /**
  * The developer's own messages to the orchestrator before the review started:
  * the brief the review runs with ("review only the Python files"). Messages
@@ -233,7 +256,7 @@ export async function startReviewChat(
 					assignmentId,
 					model: config.model,
 					role: assignment?.role ?? 'orchestrator',
-					...(config.provider === 'codex' ? { text: '', summary: true } : { text: reasoning }),
+					text: reasoning,
 					status,
 					outputRate: reply.outputRate
 				});

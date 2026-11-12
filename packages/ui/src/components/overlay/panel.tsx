@@ -30,12 +30,14 @@ const SIZES: Record<ModalSize, string> = {
 /**
  * Centered and fixed; `kit-overlay.css` owns the centering translate, so the
  * entrance transform composes on top of it. Content past the viewport scrolls.
+ * Its classes never conflict, so it is a plain string and loading the module
+ * merges nothing.
  */
-const PANEL = cn(
+const PANEL = [
 	'fixed top-1/2 left-1/2 flex w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-4 p-5',
 	'overflow-y-auto overscroll-contain rounded-[16px] bg-raised-2 text-fg shadow-(--shadow-modal) outline-none',
 	'thin-scroll data-[state=closed]:pointer-events-none!'
-);
+].join(' ');
 
 /**
  * One modal's stacking context, holding its scrim and panel. A modal opened

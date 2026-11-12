@@ -1,63 +1,36 @@
-/* connections */
-
-/* ───────── Forges: the mark beside the name ───────── */
-.forge-name {
-	display: inline-flex;
-	align-items: center;
-	gap: 8px;
+/* ───────── Settings → Connections: forges and tracked repositories ───────── */
+/* While the section loads, the bars start where the text lands: after the mark's tile. */
+.connections-loading .settings-row {
+	padding-left: 56px;
 }
 
-/* ───────── Tracked repositories: rows that fold in and out ───────── */
-.repo-item {
+/* A tracked repository folds out of the list and back in; the divider moves to the fold. */
+.repo-fold {
 	overflow: hidden;
 }
-.repo-item + .repo-item {
-	border-top: 1px solid var(--line-subtle-2);
-}
-.repo-row {
-	display: flex;
-	min-height: 46px;
-	align-items: center;
-	gap: 10px;
-	padding: 8px 10px 8px 16px;
-}
-.repo-name {
-	min-width: 0;
-	flex: 1;
-	overflow: hidden;
-	color: var(--text-primary);
-	font-family: var(--font-code);
-	font-size: 12.5px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+.repo-fold + .repo-fold {
+	box-shadow: inset 0 1px 0 var(--line-subtle);
 }
 
 /* ───────── Token dialog ───────── */
 .token-form {
 	display: flex;
 	flex-direction: column;
-	gap: 14px;
-}
-/* Two lines tall, the hint's height, so an error in its place never moves the dialog. */
-.token-field [data-ui='field-message'] {
-	min-height: 38px;
+	gap: 16px;
 }
 
-/* ───────── Repo browser: search, a fixed-height list, then Add by URL ───────── */
+/* ───────── Repository browser: search, the forge's repositories, add by URL ───────── */
 .repo-browser {
-	gap: 14px;
+	gap: 12px;
 }
-.repo-browser .add-url {
-	margin-top: 4px;
-}
+
+/* The list keeps one height, so loading and searching never resize the dialog. */
 .remote-frame {
 	display: flex;
-	height: 320px;
+	height: 280px;
+	flex-shrink: 0;
 	flex-direction: column;
-	overflow: hidden;
-	border-radius: 10px;
-	background-color: var(--bg-panel);
-	box-shadow: inset 0 0 0 1px var(--line-card);
+	margin: 0 -8px;
 }
 .remote-scroll {
 	height: 100%;
@@ -65,82 +38,66 @@
 .remote-list {
 	display: flex;
 	flex-direction: column;
-	padding: 4px;
-}
-.remote-list > [data-ui='hover-list-highlight'].remote-hover {
-	border-radius: 7px;
-	background-color: var(--bg-hover);
 }
 .remote-row {
 	display: flex;
-	height: 38px;
-	flex-shrink: 0;
+	height: 40px;
 	align-items: center;
 	gap: 10px;
-	padding: 0 6px 0 10px;
+	padding: 0 8px;
+	color: var(--text-subtle);
 }
 .remote-name {
 	min-width: 0;
-	flex: 1;
 	overflow: hidden;
 	color: var(--text-primary);
-	font-family: var(--font-code);
-	font-size: 12.5px;
+	font-size: var(--font-size-label);
+	line-height: 18px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.remote-action {
+.remote-row [data-ui='pill'] {
+	flex-shrink: 0;
+}
+.remote-end {
+	position: relative;
 	display: flex;
 	min-width: 76px;
 	flex-shrink: 0;
 	justify-content: flex-end;
+	margin-left: auto;
 }
 .remote-tracked {
 	display: inline-flex;
 	height: 28px;
 	align-items: center;
-	gap: 5px;
-	padding: 0 12px 0 6px;
-	color: var(--text-subtle);
-	font-size: 12.5px;
+	gap: 6px;
+	padding-right: 2px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
 }
 .remote-tracked svg {
 	width: 14px;
 	height: 14px;
-	color: var(--ok);
+	color: var(--success);
+	stroke-width: 2.25;
 }
-.remote-message {
-	display: flex;
-	height: 100%;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 14px;
-	padding: 0 32px;
-	color: var(--text-subtle);
-	font-size: 13px;
-	line-height: 1.5;
-	text-align: center;
-	text-wrap: balance;
-}
-.remote-detail {
-	margin-top: 2px;
-	color: var(--text-subtle);
-	font-size: 12px;
-	overflow-wrap: anywhere;
-}
-/* A forge whose list failed while another loaded: the reason and a retry, above the rows */
+
+/* A forge whose list failed, above the rows that did load. */
 .remote-note {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	margin: 4px 4px 0;
-	padding: 8px 6px 8px 10px;
-	border-bottom: 1px solid var(--line-subtle-2);
-	font-size: 12.5px;
-	line-height: 18px;
+	margin: 0 8px 4px;
+}
+
+.add-url {
+	padding-top: 14px;
+	border-top: 1px solid var(--line-subtle);
 }
 .add-url-row {
 	display: flex;
+	align-items: center;
 	gap: 8px;
+}
+.add-url-row [data-ui='input'] {
+	min-width: 0;
+	flex: 1;
 }

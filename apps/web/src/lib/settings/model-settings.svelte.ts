@@ -82,7 +82,7 @@ export function toModelOption(entry: ModelEntry): ModelOption {
 	};
 }
 
-/** ChatGPT models only return summaries of their reasoning, never the reasoning itself. */
+/** Codex models only return summaries of their reasoning, never the reasoning itself. */
 export function summarizesReasoning(modelId: string | null | undefined): boolean {
 	if (!modelId) return false;
 
@@ -115,6 +115,13 @@ type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-
 
 /** Last-seen settings, so pickers paint model names before the server answers. */
 const CACHE_KEY = 'model-settings';
+
+/** The answer's models, plus the loaded ones of each agent the answer has none of. */
+function keepUnlisted(answer: ModelEntry[], loaded: ModelEntry[]): ModelEntry[] {
+	const listed = new Set(answer.map((entry) => entry.agent));
+
+	return [...answer, ...loaded.filter((entry) => !listed.has(entry.agent))];
+}
 
 /** Global open state + cached config for the model settings modal. */
 class ModelSettingsUi {
@@ -170,6 +177,14 @@ class ModelSettingsUi {
 		if (!model) return this.orchestrator;
 
 		return { modelId: model.id, effort: resolveEffort(model, config.specialistEffort) };
+	}
+
+	/** The model verifiers run on, or null when they follow the Review model. */
+	get verifier(): ModelChoice | null {
+		const config = this.config;
+		const model = config?.verifierModelId ? this.models.find((item) => item.id === config.verifierModelId) : undefined;
+
+		return model ? { modelId: model.id, effort: resolveEffort(model, config?.verifierEffort) } : null;
 	}
 
 	/** Optimistically apply a patch, then persist; reverts and reports on failure. */
@@ -237,12 +252,20 @@ class ModelSettingsUi {
 		writeCache(CACHE_KEY, cacheableModelSettings(config));
 	}
 
+	/**
+	 * Saves a patch and takes the server's answer. The answer can lack an agent
+	 * whose listing was still slow when it was sent, so once a load has brought
+	 * that agent's models they stay.
+	 */
 	async save(patch: ModelSettingsPatch): Promise<boolean> {
 		this.saving = true;
 		this.error = null;
 
 		try {
-			this.apply(await serverApi.saveModelSettings(patch));
+			const next = await serverApi.saveModelSettings(patch);
+			const loaded = this.fresh ? this.config?.models : undefined;
+
+			this.apply(loaded ? { ...next, models: keepUnlisted(next.models, loaded) } : next);
 
 			return true;
 		} catch (e) {

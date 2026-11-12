@@ -1,7 +1,9 @@
-import { beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, jest, test } from 'bun:test';
 import { mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ModelBlockedError, ReviewAbortedError } from '../../../../src/review/pipeline/agent-loop';
+import { acquireLlmSlot, llmEndpoint, releaseLlmSlot } from '../../../../src/models/llm/limiter';
 import { createRun } from '../../../../src/review/pipeline/harness/context';
 import { briefBlock } from '../../../../src/review/pipeline/intent/brief';
 import { distillIntent } from '../../../../src/review/pipeline/intent/distill';
@@ -20,6 +22,7 @@ import {
 	restoreAfterEach,
 	useTestModel
 } from '../harness-fixtures';
+import { settleOnClock } from '../../../helpers/fake-clock';
 
 restoreAfterEach();
 
@@ -261,6 +264,61 @@ test('a unit whose model call fails is recorded as omitted with the reason, and 
 	expect(intentBlock(intent)).toContain('Brief incomplete (1 of 2 units read in full)');
 });
 
+/** A unit call that never answers: it records when its request is aborted, then rejects. */
+function hangUntilAborted(init: RequestInit | undefined, aborted: string[], files: string[]): Promise<Response> {
+	return new Promise((_resolve, reject) => {
+		const stop = () => {
+			aborted.push(files.join(','));
+			reject(new Error('cancelled'));
+		};
+
+		if (init?.signal?.aborted) stop();
+		else init?.signal?.addEventListener('abort', stop, { once: true });
+	});
+}
+
+test('a unit call blocked by the model stops its sibling calls before the stage throws', async () => {
+	const aborted: string[] = [];
+	let siblingStarted: () => void = () => {};
+	const started = new Promise<void>((resolve) => (siblingStarted = resolve));
+
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const files = unitFiles(init) ?? [];
+
+		if (files.includes('src/a.ts')) {
+			await started;
+
+			return new Response('{"error":"invalid api key"}', { status: 401 });
+		}
+
+		siblingStarted();
+
+		return hangUntilAborted(init, aborted, files);
+	}) as unknown as typeof fetch;
+
+	const thrown = await distill(TWO_UNIT_DIFF).catch((err: unknown) => ({ err, aborted: [...aborted] }));
+
+	expect(thrown).toMatchObject({ aborted: ['tests/b.ts'] });
+	expect(thrown && 'err' in thrown && thrown.err).toBeInstanceOf(ModelBlockedError);
+});
+
+test('a review cancelled while unit calls run ends the stage only after every call was stopped', async () => {
+	const aborted: string[] = [];
+	const run = createRun({ diff: TWO_UNIT_DIFF, sandboxPath: null });
+	let inFlight = 0;
+
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		if (++inFlight === 2) run.controller.abort();
+
+		return hangUntilAborted(init, aborted, unitFiles(init) ?? []);
+	}) as unknown as typeof fetch;
+
+	const thrown = await distillIntent(run, sources, stack).catch((err: unknown) => ({ err, aborted: [...aborted] }));
+
+	expect(thrown).toMatchObject({ aborted: ['src/a.ts', 'tests/b.ts'] });
+	expect(thrown && 'err' in thrown && thrown.err).toBeInstanceOf(ReviewAbortedError);
+});
+
 /** Answers like `perFile` after `ms`, counting the calls in flight at once. */
 function slowStub(ms: number): { peak: () => number } {
 	let inFlight = 0;
@@ -281,6 +339,12 @@ function slowStub(ms: number): { peak: () => number } {
 	return { peak: () => peak };
 }
 
+/**
+ * How long the slot test holds the only model slot, with a third of it left after: longer than the quarter of the
+ * review's time a brief call may wait and run in, and well within the quarter left for its second try.
+ */
+const SLOT_HELD_MS = 11 * 60_000;
+
 const manyUnits = (count: number) => Array.from({ length: count }, (_, i) => addedFile(`d${i}/f.ts`, 200)).join('');
 
 test('unit calls run at most as many at once as reviewers do', async () => {
@@ -292,21 +356,28 @@ test('unit calls run at most as many at once as reviewers do', async () => {
 	expect(peak()).toBe(REVIEW_POLICY.maxConcurrentAssignments);
 });
 
-test('a unit call that found no model slot in time is made again and briefed', async () => {
-	const policy = REVIEW_POLICY as { perCallDeadlineMs: number };
-	const saved = policy.perCallDeadlineMs;
+test('a unit call that found no model slot within its share of the review’s time is made again and briefed', async () => {
+	jest.useFakeTimers();
+	useTestModel(1);
+	stub(perFile);
 
-	policy.perCallDeadlineMs = 500;
-	useTestModel(2);
-	slowStub(200);
+	const endpoint = llmEndpoint({ baseUrl: 'http://model.test/v1' });
 
 	try {
-		const intent = await distill(manyUnits(8));
+		const logs: string[] = [];
+		const run = createRun({ diff: TWO_UNIT_DIFF, sandboxPath: null }, { onLog: (message) => logs.push(message) });
 
-		expect(intent?.units?.map((unit) => unit.status)).toEqual(Array(8).fill('included'));
-		expect(calls.filter((call) => call !== 'context')).toHaveLength(8);
+		run.deadlineAt = reviewNow() + 3 * SLOT_HELD_MS;
+		await acquireLlmSlot(endpoint);
+		setTimeout(() => releaseLlmSlot(endpoint), SLOT_HELD_MS);
+
+		const intent = await settleOnClock(distillIntent(run, sources, stack), 1_000, run.deadlineAt - reviewNow());
+
+		expect(intent?.units?.map((unit) => unit.status)).toEqual(['included', 'included']);
+		expect(calls.filter((call) => call !== 'context')).toHaveLength(2);
+		expect(logs.filter((log) => log.includes('found no model slot in time'))).toHaveLength(2);
 	} finally {
-		policy.perCallDeadlineMs = saved;
+		jest.useRealTimers();
 	}
 });
 

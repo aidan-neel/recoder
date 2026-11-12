@@ -1,0 +1,436 @@
+/* ───────── Bugs: what the review found, one card a bug ───────── */
+.reading {
+	min-height: 0;
+	flex: 1;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--line-strong) transparent;
+	scrollbar-gutter: stable both-edges;
+}
+.reading-column {
+	display: flex;
+	width: 100%;
+	max-width: 868px;
+	flex-direction: column;
+	gap: 10px;
+	margin: 0 auto;
+	padding: 20px 24px 64px;
+}
+.reading-column[data-width='narrow'] {
+	max-width: 768px;
+}
+
+.bug-item {
+	border-bottom: 1px solid var(--line-subtle);
+	scroll-margin-top: 20px;
+}
+.bug-head {
+	display: grid;
+	width: 100%;
+	align-items: center;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 8px 12px;
+	padding: 14px 12px;
+	border-radius: 10px;
+	outline: none;
+	text-align: left;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.bug-head:hover {
+	background: var(--bg-hover);
+}
+.bug-head:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--focus-color);
+}
+.bug-title {
+	color: var(--text-primary);
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 20px;
+	text-wrap: pretty;
+}
+.bug-item:not([data-open]) .bug-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.bug-head > svg {
+	width: 14px;
+	height: 14px;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.bug-item[data-open] .bug-head > svg {
+	rotate: 180deg;
+}
+
+/* The facts of a bug (and of a fix or a rule): one row of badges that wraps cleanly. */
+.bug-facts,
+.bug-line-facts,
+.bug-section-head {
+	display: flex;
+	min-width: 0;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.bug-facts {
+	grid-column: 1 / -1;
+}
+.bug-body {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 2px 12px 18px;
+}
+.bug-body [data-ui='markdown'] {
+	max-width: 72ch;
+	color: var(--text-secondary);
+	font-size: var(--font-size-body);
+	line-height: 22px;
+}
+.bug-section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.bug-section-head .section-label {
+	margin-right: 2px;
+}
+.bug-note {
+	max-width: 72ch;
+	margin: 0;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+
+/* The suggested fix opens from one quiet line. */
+.fix-head {
+	display: flex;
+	min-height: 28px;
+	align-items: center;
+	gap: 8px;
+	margin-left: -4px;
+	padding: 0 4px;
+	border-radius: 6px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	outline: none;
+	text-align: left;
+	transition: color var(--dur-hover) ease-out;
+}
+.fix-head:hover {
+	color: var(--text-primary);
+}
+.fix-head:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.fix-head > svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.fix-head[data-state='open'] > svg {
+	rotate: 90deg;
+}
+.fix-body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding-top: 8px;
+}
+
+/* A block of evidence: a quiet header line over mono content. */
+.proof {
+	overflow: hidden;
+	border-radius: 10px;
+	background: var(--bg-canvas);
+	box-shadow: 0 0 0 1px var(--line-card);
+	font-family: var(--font-code);
+	font-size: 12.5px;
+	line-height: 20px;
+}
+.proof-head {
+	display: flex;
+	min-height: 36px;
+	align-items: center;
+	gap: 12px;
+	padding: 7px 12px;
+	border-bottom: 1px solid var(--line-card);
+	color: var(--text-primary);
+}
+.proof-command {
+	min-width: 0;
+	flex: 1;
+	overflow-x: auto;
+	scrollbar-width: none;
+	white-space: pre;
+}
+.proof-command::before {
+	margin-right: 8px;
+	color: var(--text-faint);
+	content: '$';
+}
+.proof-exit {
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.proof-exit[data-failed] {
+	color: var(--danger);
+}
+.proof-output {
+	max-height: 280px;
+	margin: 0;
+	overflow: auto;
+	padding: 10px 12px;
+	color: var(--text-muted);
+	scrollbar-width: thin;
+	white-space: pre;
+}
+.proof [data-ui='code-lines'] {
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+}
+
+/* How execution reaches the problem: numbered steps, the place in mono over the note. */
+.trace {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.trace li {
+	display: grid;
+	grid-template-columns: 20px minmax(0, 1fr);
+	counter-increment: trace;
+}
+.trace li::before {
+	color: var(--text-faint);
+	content: counter(trace);
+	font-family: var(--font-code);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+.trace-where {
+	color: var(--text-primary);
+	font-family: var(--font-code);
+	font-size: 12px;
+}
+.trace-note {
+	grid-column: 2;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 19px;
+}
+.rule-quote,
+.rule-restated {
+	max-width: 72ch;
+	margin: 0;
+	color: var(--text-secondary);
+	font-size: var(--font-size-body);
+	line-height: 22px;
+}
+.rule-quote {
+	padding-left: 12px;
+	border-left: 2px solid var(--line-strong);
+}
+
+.bug-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.bug-actions-end {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	margin-left: auto;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.bug-actions-end > span {
+	margin-right: 6px;
+}
+.bug-actions-end [aria-pressed='true'] {
+	background: var(--bg-selected);
+	color: var(--text-primary);
+}
+.bug-ask {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding-top: 14px;
+	border-top: 1px solid var(--line-card);
+}
+
+/* A group under the open bugs: a quiet line that opens to its rows. */
+.bug-group-head {
+	display: flex;
+	width: 100%;
+	min-height: 40px;
+	align-items: center;
+	gap: 12px;
+	padding: 0 16px;
+	border-radius: 10px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-body);
+	outline: none;
+	text-align: left;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.bug-group-head:hover {
+	background: var(--bg-raised);
+}
+.bug-group-head:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.bug-group-head > svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.bug-group-head[data-state='open'] > svg {
+	rotate: 90deg;
+}
+.bug-group-head .meta {
+	margin-left: auto;
+}
+.bug-group-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 2px 0 8px 42px;
+}
+.bug-line {
+	display: flex;
+	min-height: 36px;
+	align-items: center;
+	gap: 12px;
+	padding: 6px 8px 6px 0;
+	font-size: var(--font-size-label);
+}
+.bug-line-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+}
+.bug-line-facts {
+	margin-top: 4px;
+}
+.bug-line-title {
+	overflow: hidden;
+	color: var(--text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ───────── Run card: a review in progress, step by step ───────── */
+.run-card {
+	border-radius: 12px;
+	background: var(--bg-raised);
+	box-shadow: 0 0 0 1px var(--line-card);
+}
+.run-card-head {
+	display: flex;
+	height: 48px;
+	align-items: center;
+	gap: 10px;
+	padding: 0 8px 0 16px;
+	border-bottom: 1px solid var(--line-card);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+}
+.run-card-head .meta {
+	font-weight: 400;
+}
+.run-card-end {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+.run-stages {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 8px 16px 12px;
+	list-style: none;
+}
+.run-stage {
+	display: grid;
+	min-height: 30px;
+	align-items: center;
+	grid-template-columns: 16px minmax(0, 1fr) auto;
+	gap: 0 8px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+}
+.run-stage[data-state='waiting'] {
+	color: var(--text-faint);
+}
+.run-stage[data-state='active'] {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+.run-stage-detail {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	font-variant-numeric: tabular-nums;
+	font-weight: 400;
+}
+.run-stage[data-state='active'] .run-stage-detail {
+	color: var(--text-secondary);
+}
+.run-stage-more {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 2px 0 8px;
+	grid-column: 1 / -1;
+}
+.run-activity {
+	overflow: hidden;
+	padding-left: 24px;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 12px;
+	font-weight: 400;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.run-stage-mark {
+	display: grid;
+	width: 16px;
+	height: 16px;
+	place-items: center;
+	color: var(--text-faint);
+}
+.run-stage-mark svg {
+	width: 14px;
+	height: 14px;
+}
+.run-stage-mark[data-state='waiting']::before {
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	box-shadow: inset 0 0 0 1.5px var(--text-ghost);
+	content: '';
+}
+.run-stage-mark[data-state='active']::before {
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--accent);
+	box-shadow: 0 0 0 3px var(--accent-tint);
+	content: '';
+}

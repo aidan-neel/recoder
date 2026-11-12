@@ -1,182 +1,280 @@
-# Recoder review surface (apps/app)
+# Recoder app (apps/app)
 
-The standalone Recoder app: a Next.js 16 App Router app (React 19, Tailwind v4)
-built on the shared React kit, `@recoder/ui` (`packages/ui`). It keeps the look
-of apps/web and the root `DESIGN.md`: the same tokens, warm neutrals, quiet
-controls, one canvas card under a 46px top bar, and the serif AI voice. The UI
-face is **Inter**; code and metadata are Geist Mono; summaries, briefs and
-findings are Lora (`.ai-voice`).
+The Recoder app: a Next.js 16 App Router app (React 19, Tailwind v4, zustand)
+built on the shared React kit, `@recoder/ui` (`packages/ui`). It is a quiet
+tool for one job: read an agent-written pull request, see what a review found,
+and merge it or send the fix back. The layout is the one people know from
+pull request tools: a sidebar, a list of pull requests, and a pull request
+page with tabs.
 
-What is new is how a review is organised, around one question: **what does a
-person still have to decide before this agent-written pull request can merge?**
+It departs from the root `DESIGN.md` (apps/web) in four places:
+
+- **A sidebar shell**, not a top bar with session tabs. The rule "do not
+  reintroduce the left sidebar" is for apps/web only.
+- **One sans face.** The UI face is Inter (`--font-ui`), and the AI voice
+  uses it too (`--font-ai`). There is no serif and no Cal Sans. Code, paths,
+  hashes and aligned numbers are Geist Mono.
+- **Neutral surfaces.** Near-black panels with white hairlines in dark,
+  white and light grey in light. One cream primary button and one azure
+  accent (links, the selected line, hunk headers).
+- **A pull request is the unit**, not a review session. A review belongs to a
+  pull request and shows inside its page.
 
 ## The kit
 
 - Every control and surface comes from `@recoder/ui`: Radix primitives styled
-  with the Recoder tokens, plus `motion` for movement. apps/app never hand-rolls
-  a button, menu, dialog, popover, tooltip, select, input, tab strip or scroll
-  area. When the kit lacks a piece, add it to `packages/ui`, not to the app.
-- Tokens live in `packages/ui/src/styles/tokens.css` and map onto Tailwind
-  utilities (`bg-canvas`, `text-fg-faint`, `ring-line-card`…). Components use
-  tokens, never raw hex or raw durations.
-- The kit's control CSS (buttons, display, form) sits in `@layer components`,
-  so a `className` utility wins over it. Menus, overlays and code are
-  unlayered. Restyle through `data-ui`, `data-variant` and `data-state` hooks.
+  with the Recoder tokens, plus `motion` for movement. The app never
+  hand-rolls a button, menu, dialog, popover, tooltip, select, input, switch,
+  tab strip, card or scroll area. When the kit lacks a piece that two places
+  need, add it to `packages/ui`, not to the app.
+- The kit's tokens keep their names. `src/styles/tokens.css` gives them the
+  app's values under `.app-skin` (on `<html>` here and in
+  apps/site), in dark and in light. Components use tokens, never raw hex or
+  raw durations.
+- The kit's control CSS sits in `@layer components`, so a `className` utility
+  wins over it. Restyle through `data-ui`, `data-variant` and `data-state`.
 - App styles are one file per feature in `src/styles/`, imported by
   `src/styles/app.css`.
 
-## The model
+## Structure
 
-A review becomes three lists (`src/lib/review/surface.ts`):
-
-| Name | What it holds | Where it comes from |
-|---|---|---|
-| **Needs you** (decisions) | Findings, and brief questions no reviewer could settle | `Review.findings`, `Review.questions` with result `unresolved` |
-| **Checked for you** (receipts) | Behaviour a reviewer investigated and found sound, with the command it ran | Questions `disproved`, obligation answers `disproved`, plus CI checks |
-| **Change map** | Every changed line in one of four classes | Files, open decisions, reviewer context |
-
-Change map classes: **Read** (lines within 10 of an open decision, or a file no
-reviewer opened), **Checked** (examined, nothing open), **Tests** (test code is
-evidence, not behaviour) and **Skim** (lockfiles, docs, generated). The
-overview leads with "N of M changed lines need your eyes" and a minute
-estimate. Deciding an item moves its lines from Read to Checked, so the bar
-shrinks as the person works.
-
-A decision ends one of three ways: **Accept** (a real point, ships as is),
-**Send back** (goes to the coding agent) or **Not an issue** (dismissed on the
-server, so Recoder stops raising it). Decisions are kept per review and head
-commit in localStorage; a new push starts clean. Everything sent back becomes
-one **handoff** prompt for the agent that opened the PR, with locations, repro
-commands and the person's notes.
-
-The queue orders pull requests the same way: Needs you, Reviewing, Not
-reviewed, With the agent (every decision made, some sent back), Ready to merge.
+- **Routes** (`src/app/(live)`): `/` the pull request list, `/new` a new
+  review, `/pulls/[repoId]/[number]` a pull request, `/automations`,
+  `/guidelines`, `/settings/[section]`. `/sample` mirrors the list, the new
+  review page and the pull request page on an in-memory client, with no
+  server.
+- **Logic** lives in `src/lib/<feature>/` as view-model hooks and stores. A
+  component calls a hook, gets a plain view object (state and actions) and
+  renders it. Components hold no fetches, timers or derived data.
+- **One client contract.** `lib/api/client.tsx` defines `ApiClient`; the live
+  client calls the server and the sample client (`lib/sample/`) answers from
+  memory with the same behaviour. A page under `/sample` and its live twin
+  render the same components.
+- **Components** are grouped by feature in `src/components/`: `shell`,
+  `pulls`, `pull`, `changes`, `summary`, `bugs`, `commits`, `ask`, `compose`,
+  `automations`, `guidelines`, `settings`, `connections`, `setup`, `common`.
 
 ## Layout
 
-- **Top bar** (46px): Queue, then one tab per open review (badge = open
-  decisions; the close button, middle-click or the tab menu closes one; tabs
-  that do not fit go into an overflow menu), the search field that opens the
-  ⌘K palette (it also lists every past review), and the settings button. Tabs
-  persist in localStorage.
-- **First run** replaces the queue until a provider, a model and a repository
-  are set. The sample review is always one click away.
-- **Queue**: the serif headline, the review bar, grouped rows; j/k marks a row,
-  Enter opens it.
-- **Review bar** (under the headline): a 44px field that opens in place as a
-  small modal (kit `CommandBar`). At rest it is a button; `/` or a press opens
-  it. Open, the page dims under the modal scrim, a live field lands exactly on
-  the resting one and the results float under it on the menu surface (the menu
-  entrance), so nothing below moves. Focus stays inside (Tab moves between the
-  field and the footer's switch, unless it completes a reference), the page
-  takes no pointer, scroll or keys, and Escape or a click outside closes it
-  and returns focus to what had it. Each opening starts from an empty field.
-  ⌘K and ⌘, close it and open the palette or settings. It is for starting and
-  steering reviews; ⌘K stays the way to go places. It reads a
-  pull request link (GitHub, GitLab, self-managed GitLab), a short reference
-  (`#214`, `api#214`, `acme/api#214`, GitLab `!214`) with an optional brief
-  after it (`#214 focus on the auth changes`), or words that search the open
-  pull requests by number, title, repository, author and branch. Empty, it
-  lists what waits for a review, then recent reviews. Search matches whole
-  words and word starts; letters typed in order (`rtlim`) only count when
-  packed close from a word start, and only when nothing matches as typed.
-  Rows are two lines (the queue's glyph and title, then reference, author,
-  size and branch) and end alike: the status pill, then the Enter keycap on
-  the highlighted row only, so moving the highlight never shifts anything;
-  the footer names what Enter does. A typed brief shows
-  as a line above the rows. A link into an untracked repository offers Track
-  and review. The footer names the keys for the highlighted row and holds the
-  Comment on the PR switch. A start spins on its row, then closes the bar with
-  one line under it (Reviewing api #214 with your brief, Open review); a
-  failure stays in the open bar with its reason and the settings section that
-  fixes it. In the sample, rows come from the sample queue, starts simulate a
-  run, and links can't be tracked.
-- **Review page**: a 44px header (`#214`, title, repo, author, branch, head),
-  then a 304px rail (Overview, Needs you, Checked for you, Files) and the
-  reading pane, centred; the file view widens. The selection lives in the URL
-  (`?item=`). The ask column opens on the right: on a decision or receipt it
-  asks that item's reviewer; on the overview or a file it is the conversation
-  with Orchestrator, for the review's whole life. While a review runs, the
-  overview is the live view (below); a decision, receipt or file keeps a slim
-  live strip on top instead.
-- **Live view** (the calm timeline): the serif lead ("Reviewing this pull
-  request.", "Paused.", "Waiting for a free slot."), a 4px meter (steps
-  finished of steps known; amber while paused), "Step 4 of 6", then Ask
-  Orchestrator, Cancel review and Pause/Resume. Below, the stages on one rail:
-  Checkout, Understand, Checks, Review, Subagents (only when a reviewer asked
-  for one), Verify, Finish. Each has a glyph (dashed ring, spinner, check;
-  amber ring while paused), a line on what it did, does or will do, and a
-  time read from the stage's own task and reviewer timestamps: how long a
-  finished stage took, and a clock on the running one. There is no time-left
-  estimate and no estimate for stages not reached, since nothing in the
-  progress supports one. Only the current stage stands open, listing its
-  reviewers in a ringed list: what each covers, what it is doing right now
-  (the command it runs, in mono), and how many possible issues it raised. A
-  finished Review folds its reviewers away; its name opens them again. When
-  anything is already open (a continued review keeps what it found), a card
-  under the timeline says it is ready to read, with the region's one filled
-  button, Read the riskiest (Enter); it steps back to an outline while Resume
-  is the filled one. Loading shows placeholder stages.
-- **Settings** is a large modal over whatever page is open (the gear, ⌘, the
-  palette and error toasts open it). Its section is in the address,
-  `?settings=<section>`, beside the page's own params, so Back closes it and a
-  link opens it; the old `/settings/<section>` routes redirect there. Inside:
-  a nav column (Agent, Connections, Auto-review, Review harness, Guidelines,
-  Appearance) and one centred column of grouped rows under a 44px header with
-  the close button. Page keys stand down while it is open.
-- **Auto-review** (a settings section) turns on the watcher that starts
-  reviews by itself: when a comment mentions the handle (`@recoder`), when a
-  pull request opens, or when a reviewed one gets new commits. It also holds
-  the poll interval, posting results back, which tracked repositories are
-  watched, the reviews it started, and the webhook addresses.
+- **Sidebar** (248px, `--sidebar-width`): the account menu; New review, Pull
+  requests (with the open count), Automations and Guidelines; the recent
+  reviews; and at the foot the model reviews run with, the shortcuts and the
+  theme switch. `[` shows or hides it. Settings open from the account menu
+  and with ⌘,.
+- **Page bar** (44px, `--bar-height`): breadcrumbs on the left, the page's own
+  actions on the right. Every page's content starts under it, so borders line
+  up across pages.
+- **Pull request list**: one row a pull request. A row shows the title, the
+  branch, the author, the size of the change and one fact: what the newest
+  review found, that a review is running, or that there is none. Filters:
+  all, needs review, has bugs, ready, and one repository when more than one
+  is tracked. A repository that failed to load, or whose list was cut, says
+  so in a strip above the rows.
+- **New review**: one field that takes a pull request link, a number or a
+  branch, then what the review should look at, and a few open pull requests
+  to pick from. A sentence that links one pull request anywhere in it works
+  too ("Check the retries in <link>"): the link is the target and the
+  sentence is what the review looks at. One line under the field, always in
+  the layout, holds what stops Enter (the target's error) or what Enter will
+  do first (connect an untracked repository); it is empty otherwise.
+- **Pull request page**: the header (the title over a row of badges: state,
+  author, base and head branch, change size, last activity), a banner for the
+  newest review (running, failed, stopped, or done) with the one next step,
+  then four tabs:
+  - **Changes**: the file tree beside the diff. Bugs sit under the line they
+    name. A file can be marked viewed. The guide gives the order to read the
+    files in.
+  - **Summary**: what the change does (clamped), the order to read the
+    files in, the description (clamped), and the conversation with the
+    reviewer. No boxes: labels, space and hairlines group it. The composer
+    is docked at the bottom of the tab, always: the text scrolls above it,
+    and a hairline marks its edge only while text is under it. A sent
+    message and its reply stay in view until the reader scrolls up.
+  - **Bugs**: one row a bug, the worst first, split by hairlines. Shut, a row
+    is the title over its badges: severity (or Suggestion), category, evidence
+    class, file and line, and whether an earlier review reported it. Open, it
+    adds the explanation (clamped), the proof (a command and its output in a
+    terminal box, a trace, or a rule quoted word for word with its source as
+    badges), the suggested fix behind a disclosure line, and its actions:
+    post it on the pull request, copy a fix prompt for the coding agent,
+    accept it, or dismiss it with a reason. The tab row carries the review's
+    own facts as badges (commit, when, model, duration). While a review runs,
+    a run card shows its steps.
+  - **Commits**.
+    The merge bar at the bottom shows checks and mergeability and holds the
+    merge button. It merges at the head commit the page shows, and never with
+    admin rights.
+- **Automations**, **Guidelines** and **Settings** are single columns of
+  titled cards (`SettingsGroup`), one setting a row (`SettingsRow`): the name
+  on the left, with a detail line under it only when the line passes the
+  subtext rule (see Copy), and the control on the right. A row saves on
+  change and shows where the save stands beside the control.
 
-## App-only tokens
+## Type
 
-`--att-read`, `--att-checked`, `--att-tests`, `--att-skim` (change map
-classes), `--sent` (violet, "sent back to the agent") and `--diff-focus` (the
-amber wash on lines an open decision names) are defined in the kit tokens.
-New files render without the green add tint, since every line is an addition.
+- **Inter** at 400 and 500 carries the interface. 600 is for page titles,
+  markdown headings and key numbers only.
+- **Sizes**: body 13.5px on a 20px line, labels and buttons 13px, meta 12px,
+  badges 11.5px medium, the page title 20px.
+- **Tracking**: 0 at 16px and below, -1% from 18 to 24px, -3% near 36px.
+- **Numbers** that line up use tabular figures (`.tabular`). The shipped
+  Inter files carry `tnum` and `calt` and no character variants, so no
+  `cv`/`ss` features are set.
+
+## Facts and long text
+
+The pull request screens show facts, not sentences about facts.
+
+- **Badges for facts.** A fact a reader scans for (state, author, branch,
+  size, severity, category, evidence, file, rule, review time) is a kit
+  `Pill`: 20px tall, 11.5px medium, 6px radius, wrapping in rows with a 6px
+  gap. Paths, branches, commits and commands use `face="code"`. A pill whose
+  text may not fit ends in an ellipsis and shows the whole on hover.
+- **Colour only for meaning.** Severity (high, medium, low, with a dot), pass
+  or fail, and a reproduced bug are tinted. Category, traced, rule, file and
+  time stay neutral; an icon tells them apart.
+- **Not every word is a badge.** Titles, the model's prose and the person's
+  comments stay text; only a link in a person's words shows as an embed.
+- **Long prose is clamped.** Model-written text (what changed, the
+  description, a bug's explanation) shows its first lines through the kit's
+  `ClampedText`; the last line fades and Show more opens the rest over
+  `--dur-disclose`. Text one line past the cut shows whole. The words are
+  never rewritten or cut for good. A suggested fix sits shut behind a
+  disclosure line that names its file and how many checks it passed.
+- **One box level.** A box holds only code or terminal output. Everything
+  else groups by space, a section label and hairlines.
+
+## Link embeds
+
+The app's text boxes for a person's words (New review, the Composer, the
+guidelines draft request) are the kit's `LinkField`, a swap for `Textarea`
+with the same props and the same plain-string value, URLs in full. Each
+`http:` or `https:` link in it shows as an embed: the forge's mark and a short
+label (`api #214`, `proj !12` for a GitLab merge request, `api #9`,
+`api@0123456`, `retry.ts:40`, `acme/api`), or a link glyph with the host and
+a short path for any other site.
+
+- **Technique.** A `contenteditable="plaintext-only"` element whose content
+  is a model (the text and which ranges are embeds); the DOM is only its view.
+  Every `beforeinput` is cancelled and applied to the model, so typing,
+  deleting, pasting, cutting, dropping, undo and redo all run through one
+  path. An IME composition is the one edit the browser makes, and the field
+  reads it back when it ends. A textarea under a painted overlay was ruled
+  out: the caret, selection and line breaks would sit in one layer and the
+  embeds in another, so an embed could never be one unit or narrower than its
+  URL.
+- **When a link becomes an embed**: on paste, on a value from outside, and
+  when the link being typed ends (a space, Enter, or the caret leaving its
+  word). Never while it is typed, never during a composition. Trailing
+  punctuation stays text; balanced parentheses stay in. A Markdown link's URL
+  becomes an embed and its brackets stay text.
+- **One unit.** The caret never goes inside an embed. Arrows step over it,
+  Shift+arrows and the mouse select it whole, Backspace and Delete remove it
+  whole. The first Backspace straight after a typed link became an embed turns
+  it back into text, so a link that was not meant as one costs one key.
+  Copy and cut give the full URL.
+- **Facts.** A host passes `linkFacts`: only what the app already holds (an
+  open pull request's title and state, that a repository is not connected,
+  why a target cannot be reviewed). The embed shows the fact as a dot; the
+  card shows it in words. The field never fetches anything for a link.
+- **The card.** Resting the pointer on an embed, or the caret beside one,
+  opens a card with the title, the state, the full URL, Open and Copy. It
+  never takes focus. A link opens only from Open, Alt+Enter beside it, or
+  Ctrl/Cmd+click, in a new tab with `noopener noreferrer`.
+- **Layout.** An embed is inline, 18px tall on the 20px line, so a line with
+  one is as tall as a line without. Its label ends in an ellipsis at 260px.
+- **Sent words.** A person's sent message shows its links the same way,
+  read-only (`LinkText`). Model-written Markdown keeps its own links.
+- Fields for tokens, URLs, numbers and names stay plain `Input`s, and the
+  guidelines editor stays a `Textarea`: its text is Markdown.
 
 ## Motion
 
 Motion explains a change and never makes the person wait.
 
-- Things that move: the active tab pill and settings nav pill slide; a queue
-  row slides to its new group; a decided item's glyph morphs; counts and the
-  change map bar roll to new values; collapsibles open by height; menus and
-  modals enter with a short fade, a 0.95 scale and a 2px blur.
-- Things that do not move: keyboard moves (j/k, deciding, advancing) swap
-  content at once and scroll to the top. Lists load with skeletons and swap
-  in place with no entrance animation. A page paints once, fully formed.
-- Durations and easings come from the kit presets (`DURATION`, `EASE_OUT`,
-  `SPRING`); nothing on a keyboard path runs longer than ~150ms.
+- Things that move: the sidebar slides, the active tab's pill and the nav
+  highlight travel, collapsibles and the provider dialog change height, menus,
+  dialogs and the link card enter with a short fade, a 0.95 scale and a 2px
+  blur. A link that becomes an embed settles in place: its tint fades in over
+  `--dur-swap`, with no change of size.
+- Things that do not move: keyboard moves (j/k, tabs 1 to 4) swap content at
+  once. Lists load with skeletons shaped like the content and swap in place
+  with no entrance animation. A page paints once, fully formed: no half
+  renders and no content that jumps after the first paint.
+- Durations and easings come from the kit tokens (`--dur-*`, `--ease-menu`)
+  and the kit's motion presets. Nothing on a keyboard path runs longer than
+  about 150ms.
 - `prefers-reduced-motion` turns movement into plain swaps.
 
 ## Interaction rules
 
-- **Keyboard first.** On the queue j/k move, Enter opens and r starts a
-  review; `/` opens the review bar, where arrows move, Enter runs the
-  highlighted row, ⌘Enter or Shift+Enter runs its other action (also comment
-  on the PR, or open instead of reviewing again), Tab completes the reference
-  and Escape closes it, dropping the text. A brief on a reviewed pull request reviews it again; a
-  brief or a comment always starts a fresh run. On a review j/k and arrows move, Enter starts with the riskiest,
-  a/s/x decide, u undoes, h hands off, f opens the file, o or Esc returns to
-  the overview, q opens or closes ask, and Space, Shift+Space, Page Up/Down,
-  Home and End scroll the reading pane. In the ask field, Escape closes ask
-  when the field is empty. Everywhere ? lists shortcuts, ⌘K searches and ⌘,
-  opens settings. Held keys never repeat a decision.
-- **Deciding advances at once** to the next open decision; the rail glyph
-  morphs and the header tally fills a pip. Undo reopens.
-- **Keycaps press.** A handled shortcut lights every keycap that names it.
+- **Keyboard first.** ⌘K searches, `c` starts a new review, `[` toggles the
+  sidebar, ⌘, opens settings and `?` lists every shortcut. On the list, j/k
+  move, Enter opens, `r` reviews and `/` opens a pull request by link. On a
+  pull request, 1 to 4 pick a tab, j/k move between files or bugs, `v` marks
+  a file viewed, `r` reviews (or reviews again) and `t` finds a file. On a
+  bug, Enter opens or closes it, `p` posts it, `y` copies its fix prompt and
+  `x` dismisses it.
 - **Enter and Space on a focused control belong to that control.** Page keys
   stand down while typing or while a dialog or menu is open.
-- **The likely call is the filled button.** High, medium and open questions
-  fill Send back; low and quality findings fill Accept. Positions never change.
 - **Every async action shows its state**: idle, pending (same width), then
-  success or failure. Destructive actions confirm or offer Undo.
+  success or failure with the server's reason. A change shows at once and
+  goes back when the save fails.
+- **One primary button per region**, in cream. Everything else is quiet at
+  rest: no background until hover.
+
+## Buttons
+
+A button is compact and calm: a 13px label in the regular weight (the
+primary alone is medium), a hairline edge drawn inside the box so it lines
+up with fields, and a soft lift instead of a border. The side an icon sits
+on gets 2px less padding than a side with text.
+
+| Size | Height | Padding (text / icon side) | Radius | Use |
+| --- | --- | --- | --- | --- |
+| `md` (default) | 28px | 10 / 8px | 8px | Everywhere, including the 44px page bar and list rows. Omit `size`. |
+| `sm` | 24px | 8 / 6px, 12.5px label | 6px | Inside a line of text or a dense group: a retry in a sentence, suggestion chips, actions on collapsed bug lines. |
+| `lg` | 32px | 12 / 10px, 13.5px label | 9px | Not used in the app today. |
+| `icon` | 28px square | none | 8px | Every icon-only action. |
+
+| Variant | At rest | Use |
+| --- | --- | --- |
+| `primary` | Cream (black in light), a sheen and a bevel | The one next step of a region: Post to pull request, Merge, Save. Never repeated down a list. |
+| `secondary` | Raised fill, hairline, lift | A standalone action with no primary beside it: Try again in an error notice, Back to pull requests. |
+| `outline` | Hairline only | The action beside a primary, and the action a list row offers (Review, Track, Connect). |
+| `ghost` | Muted text, nothing else | Tertiary actions and row controls: Accept, Dismiss, Disconnect, Cancel, icon buttons. |
+| `quiet` | Full-strength text, nothing else | Triggers that name their value: the filter, the model picker. |
+| `destructive` | Red text on a red tint | A step that deletes, inside its confirmation. |
+
+- **Hover and press** lay a wash over whatever is behind a see-through
+  button, so it still shows inside a hovered row. A press shrinks the button
+  to 0.97 and shades it within `--dur-hover`; reduced motion keeps the shade
+  and drops the shrink.
+- **Status** keeps the idle width. Pending shows a spinner, success a green
+  check and error a red cross on a red-tinted button, each in the label's
+  place. Pass `successLabel` or `errorLabel` only when the word adds
+  something (Connected, Checked), and accept that the button is as wide as
+  that face.
+- **No forced widths.** A button is as wide as its label. Set a width only
+  where two labels swap in one place and the row must not move.
+- **Nothing is posted or merged without a click.** Posting findings, a
+  comment or a merge is one explicit action, and a second click posts nothing
+  twice.
+
+## Copy
+
+Short and plain. A heading is a title with no subtitle. An error says what
+failed and, when the server gave one, the reason. No taglines.
+
+**Subtext.** A line under a label, field or control stays only when it
+carries an error, a state, a limit or unit, a consequence (above all one that
+deletes or writes to a forge), where a secret is kept, or a fact needed to
+fill the field. A line that restates the label, the placeholder or the
+control, explains an ordinary control, or describes the feature in general
+goes. A needed fact moves to where it is used rather than being shortened. A
+line that comes and goes keeps its space, so nothing jumps.
 
 ## Code
 
-Code renders with the kit's `CodeLines`: excerpts (±4 lines around a
-decision, ±3 around a receipt), the suggested fix (a parsed patch) and the
-full-file view, which shows each decision under the line it ends on.
+Code renders with the kit's `CodeLines`. The diff uses the server's hunks;
+syntax colours are the `--syn-*` tokens.

@@ -1,11 +1,13 @@
 'use client';
 
+import { Check } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
 import { useContext, useState, type ComponentProps, type ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
 import { MENU_SEPARATOR, MenuItemBody, MenuOpen, MenuPanel, menuItemRoot, type MenuItemProps } from './menu-parts';
+import { useOpened } from './use-opened';
 
 interface DropdownMenuProps {
 	open?: boolean;
@@ -68,7 +70,10 @@ interface DropdownMenuContentProps {
 	children: ReactNode;
 }
 
-/** The menu panel: at least 180px or the trigger's width, fading and scaling in from the trigger. */
+/**
+ * The menu panel: at least 180px or the trigger's width, fading and scaling
+ * in from the trigger. It renders nothing until the menu first opens.
+ */
 export function DropdownMenuContent({
 	align = 'start',
 	side = 'bottom',
@@ -77,6 +82,9 @@ export function DropdownMenuContent({
 	children
 }: DropdownMenuContentProps) {
 	const open = useContext(MenuOpen);
+	const opened = useOpened(open);
+
+	if (!opened) return null;
 
 	return (
 		<AnimatePresence>
@@ -117,6 +125,43 @@ export function DropdownMenuItem({ icon, shortcut, destructive, className, child
 				{children}
 			</MenuItemBody>
 		</DropdownMenuPrimitive.Item>
+	);
+}
+
+interface DropdownMenuRadioGroupProps {
+	/** The chosen row's value. */
+	value: string;
+	onValueChange: (value: string) => void;
+	children: ReactNode;
+}
+
+/** Rows of which one is chosen: a filter, a sort order, a theme. The chosen row carries a check at its end. */
+export function DropdownMenuRadioGroup({ value, onValueChange, children }: DropdownMenuRadioGroupProps) {
+	return (
+		<DropdownMenuPrimitive.RadioGroup value={value} onValueChange={onValueChange} className="contents">
+			{children}
+		</DropdownMenuPrimitive.RadioGroup>
+	);
+}
+
+interface DropdownMenuRadioItemProps extends Omit<MenuItemProps, 'destructive' | 'shortcut'> {
+	value: string;
+}
+
+/**
+ * One choice in a `DropdownMenuRadioGroup`. Every row keeps room for the
+ * check, so what a row shows at its end (a count) lines up down the list.
+ */
+export function DropdownMenuRadioItem({ icon, className, children, ...props }: DropdownMenuRadioItemProps) {
+	return (
+		<DropdownMenuPrimitive.RadioItem {...menuItemRoot(false, className)} {...props}>
+			<MenuItemBody icon={icon}>{children}</MenuItemBody>
+			<span data-ui="menu-item-check" className="w-3.5">
+				<DropdownMenuPrimitive.ItemIndicator>
+					<Check aria-hidden />
+				</DropdownMenuPrimitive.ItemIndicator>
+			</span>
+		</DropdownMenuPrimitive.RadioItem>
 	);
 }
 

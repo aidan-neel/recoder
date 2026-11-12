@@ -1,19 +1,19 @@
 import type { CoverageGap, FindingSeverity } from '@recoder/shared';
 import type { ReportFinding, ReportSettings, ReportTarget, ReviewReport } from '../report/report.js';
+import { shortSha } from '../short-sha.js';
 import { formatDuration } from '../terminal/duration.js';
 import { tildePath } from '../terminal/home-path.js';
 import { sectionRule } from '../terminal/layout.js';
 import { textWidth, type Surface } from '../terminal/surface.js';
 import { indent, plural, wrapText } from '../terminal/text.js';
 import { SEVERITIES } from './severity.js';
+import { sinceLabel } from './target-since.js';
 import { findingLines, severityPaint } from './text-finding.js';
 import { prose } from './text-prose.js';
 
 const MARGIN = 2;
 
 const FACT_INDENT = 4;
-
-const SHORT_SHA_LENGTH = 7;
 
 const BULLET = '- ';
 
@@ -97,7 +97,8 @@ function describeTarget(report: ReviewReport, { glyphs }: Surface): string {
 
 	const parts = [
 		targetName(target, glyphs.arrow),
-		target.headSha ? target.headSha.slice(0, SHORT_SHA_LENGTH) : null,
+		target.headSha ? shortSha(target.headSha) : null,
+		sinceLabel(target),
 		target.repoPath ? tildePath(target.repoPath) : null,
 		`${coverage.reviewed} of ${plural(coverage.total, 'file')} reviewed`
 	];
@@ -123,6 +124,9 @@ function describeSettings(settings: ReportSettings, { glyphs }: Surface): string
 		`${settings.budget} budget`,
 		settings.reviewerModel ? `reviewer ${settings.reviewerModel}` : null,
 		settings.workerModel && settings.workerModel !== settings.reviewerModel ? `worker ${settings.workerModel}` : null,
+		settings.verifierModel && settings.verifierModel !== settings.reviewerModel
+			? `verifier ${settings.verifierModel}`
+			: null,
 		settings.exec ? 'code ran in the sandbox' : `no code ran${settings.execReason ? ` (${settings.execReason})` : ''}`
 	];
 

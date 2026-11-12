@@ -4,9 +4,8 @@
  * API-key models use OpenAI-compatible chat completions, so one client covers
  * vLLM (`http://host:8000/v1`), OpenRouter
  * (`https://openrouter.ai/api/v1`), and DashScope
- * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). Subscription
- * entries explicitly select the direct ChatGPT OAuth adapter instead; they never
- * inherit an API endpoint or key from the shared environment.
+ * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). A model an agent
+ * CLI runs has an id `<agent id>:<model>` and goes through that agent's adapter.
  *
  * With no models saved, the shared environment names one:
  *
@@ -16,15 +15,19 @@
  */
 
 import { z } from 'zod';
-import { VLLM_MODEL_PREFIX, type ModelProvider, type ModelRuntimeProfile, type ReasoningEffort } from '@recoder/shared';
+import {
+	VLLM_MODEL_PREFIX,
+	supportedEffort,
+	type ModelProvider,
+	type ModelRuntimeProfile,
+	type ReasoningEffort
+} from '@recoder/shared';
 import { lockedModels, runLocked, type LockedModels } from './llm/locked-models.js';
 import { recordLockMiss } from './metrics.js';
 import { hostedProvider } from './model-providers.js';
 import { resolveRuntime } from './runtime-profiles.js';
 import { vllmTarget } from './vllm/vllm-models.js';
-import { CLAUDE_CODE_MODEL_PREFIX, claudeCodeEfforts } from '../agents/claude-code/claude-code-models.js';
-import { DEVIN_MODEL_PREFIX } from '../agents/devin/devin-models.js';
-import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode.js';
+import { agentForModel } from '../agents/registry.js';
 import { effectiveReviewEnv, getStoredSettings, type StoredModelEntry } from '../review/session/review-settings.js';
 
 const configSchema = z.object({
@@ -72,9 +75,13 @@ function reviewConfig(): { baseUrl: string; apiKey: string; model: string } {
 	return parsed.data;
 }
 
-/** True when both models resolve (registry or legacy env trio). */
+/** Which stage pick is being resolved. */
+type StageRole = 'orchestrator' | 'subagent' | 'verifier';
+
+/** True when every configured pick resolves (registry or legacy env trio). */
 export function isReviewConfigured(): boolean {
 	try {
+		configForVerifier();
 		configForSubagent();
 		configForOrchestrator();
 
@@ -96,7 +103,11 @@ export function withLockedModels<T>(run: () => T): T {
 	let picks: LockedModels;
 
 	try {
-		picks = { orchestrator: resolveConfig(true), subagent: resolveConfig(false) };
+		picks = {
+			orchestrator: resolveConfig('orchestrator'),
+			subagent: resolveConfig('subagent'),
+			verifier: resolveConfig('verifier')
+		};
 	} catch {
 		return run();
 	}
@@ -105,24 +116,37 @@ export function withLockedModels<T>(run: () => T): T {
 }
 
 /** The locked pick, or the live one; inside a pipeline the live one is a lock miss and is recorded as one. */
-function pickFor(orchestrator: boolean): ModelConfig {
+function pickFor(role: StageRole): ModelConfig {
 	const picks = lockedModels();
 
-	if (picks) return orchestrator ? picks.orchestrator : picks.subagent;
+	if (picks) return picks[role];
 
 	recordLockMiss();
 
-	return resolveConfig(orchestrator);
+	return resolveConfig(role);
 }
 
 /** The Review model: reviewers, consolidation and chat. */
 export function configForOrchestrator(): ModelConfig {
-	return pickFor(true);
+	return pickFor('orchestrator');
 }
 
-/** The second model: subagents and verifiers. Unset, it follows the Review model. */
+/** The second model: subagents and workers. Unset, it follows the Review model. */
 export function configForSubagent(): ModelConfig {
-	return pickFor(false);
+	return pickFor('subagent');
+}
+
+/** The verifier model: verification stage. Unset, it follows the Review model. */
+export function configForVerifier(): ModelConfig {
+	return pickFor('verifier');
+}
+
+/**
+ * Every stage's model, in stage order: Review, worker, verifier. Code that must cover each model a review can call
+ * (sign-in checks, doctor) reads this list, so a new stage cannot be missed in one copy.
+ */
+export function stageConfigs(): readonly [review: ModelConfig, worker: ModelConfig, verifier: ModelConfig] {
+	return [configForOrchestrator(), configForSubagent(), configForVerifier()];
 }
 
 /**
@@ -141,10 +165,12 @@ export function hasSeparateSpecialist(): boolean {
 
 /**
  * The model behind an agent's messages, so a follow-up (chat, discussion or
- * fix) runs where the finding came from: a subagent's on the second model,
- * everything else on the Review model.
+ * fix) runs where the finding came from: a subagent's on the second model, a
+ * verifier's on the verifier model, everything else on the Review model.
  */
 export function configForAgent(agent: string | undefined): ModelConfig {
+	if (agent === 'verifier') return configForVerifier();
+
 	return agent === 'subagent' ? configForSubagent() : configForOrchestrator();
 }
 
@@ -156,29 +182,36 @@ export function savedReviewModelId(): string | undefined {
 }
 
 /**
- * Resolve one of the two picks to its concrete model.
+ * Resolve one of the three stage picks to its concrete model.
  *
- * There are two picks: the Review model and the second model for subagents
- * and verifiers. An unset second pick follows the Review model and its effort.
- * A pick whose entry was deleted out-of-band falls back to the first entry,
- * each entry falling back to the global base URL/key. The legacy env trio
- * still works when no entries exist.
+ * There are three picks: the Review model, the second model for subagents and
+ * workers, and the verifier model. An unset second or verifier pick follows
+ * the Review model and its effort. A pick whose entry was deleted out-of-band
+ * falls back to the first entry, each entry falling back to the global base
+ * URL/key. The legacy env trio still works when no entries exist.
  */
-function resolveConfig(orchestrator: boolean): ModelConfig {
+function resolveConfig(role: StageRole): ModelConfig {
 	const stored = getStoredSettings();
 	const entries = stored.models ?? [];
 	const reviewId = savedReviewModelId();
-	const followsReview = orchestrator || !stored.specialistModelId;
-	const entryId = followsReview ? reviewId : stored.specialistModelId;
 
-	const requested = orchestrator
-		? stored.orchestratorEffort
-		: (stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
+	const rolePicks: Record<StageRole, { id: string | null | undefined; effort: ReasoningEffort | null | undefined }> = {
+		orchestrator: { id: reviewId, effort: stored.orchestratorEffort },
+		subagent: { id: stored.specialistModelId, effort: stored.specialistEffort },
+		verifier: { id: stored.verifierModelId, effort: stored.verifierEffort }
+	};
+
+	const { id: pickedId, effort: ownEffort } = rolePicks[role];
+	const followsReview = role === 'orchestrator' || !pickedId;
+	const entryId = followsReview ? reviewId : pickedId;
+	const inheritedEffort = followsReview ? stored.orchestratorEffort : undefined;
+	const requested = role === 'orchestrator' ? ownEffort : (ownEffort ?? inheritedEffort);
 
 	if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, requested);
-	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(entryId, requested ?? undefined);
-	if (entryId?.startsWith(CLAUDE_CODE_MODEL_PREFIX)) return claudeCodeConfig(entryId, requested);
-	if (entryId?.startsWith(DEVIN_MODEL_PREFIX)) return devinConfig(entryId);
+
+	const agentModel = entryId ? agentConfig(entryId, requested ?? undefined) : null;
+
+	if (agentModel) return agentModel;
 
 	return entryConfig(entries.find((e) => e.id === entryId) ?? entries[0], requested);
 }
@@ -191,9 +224,10 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
  */
 export function configForModel(id: string, effort: ReasoningEffort | undefined): ModelConfig {
 	if (id.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(id, effort);
-	if (id.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(id, effort);
-	if (id.startsWith(CLAUDE_CODE_MODEL_PREFIX)) return claudeCodeConfig(id, effort);
-	if (id.startsWith(DEVIN_MODEL_PREFIX)) return devinConfig(id);
+
+	const agentModel = agentConfig(id, effort);
+
+	if (agentModel) return agentModel;
 
 	const entry = getStoredSettings().models?.find((e) => e.id === id);
 
@@ -209,16 +243,6 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 
 	if (entry) {
 		const reasoningEffort = supportedEffort(requested ?? undefined, entry.efforts, entry.defaultEffort);
-
-		if (entry.provider === 'codex') {
-			return {
-				provider: 'codex',
-				model: entry.model,
-				baseUrl: '',
-				apiKey: '',
-				reasoningEffort: reasoningEffort ?? entry.defaultEffort ?? 'medium'
-			};
-		}
 
 		const runtime = resolveRuntime(entry.model, entry.runtime);
 		const hosted = hostedProvider(entry.source);
@@ -273,51 +297,18 @@ function vllmConfig(entryId: string, requested: ReasoningEffort | null | undefin
 }
 
 /**
- * An OpenCode model is listed live from the CLI rather than stored, so the
- * config comes from its id (`opencode:<provider>/<model>`). The transport
- * checks the effort against the model's variants.
+ * A model an agent CLI runs (`claude-code:opus`, `opencode:openai/gpt-5`) is listed live or by the adapter
+ * rather than stored, so the config comes from its id. It needs no endpoint or key; the adapter says which effort
+ * the model takes and which hosted provider it routes to. Null when no agent owns the id.
  */
-function openCodeConfig(entryId: string, reasoningEffort: ReasoningEffort | undefined): ModelConfig {
-	const model = entryId.slice(OPENCODE_MODEL_PREFIX.length);
+function agentConfig(id: string, requested: ReasoningEffort | undefined): ModelConfig | null {
+	const owner = agentForModel(id);
 
-	return { provider: 'opencode', source: model.split('/')[0], baseUrl: '', apiKey: '', model, reasoningEffort };
-}
+	if (!owner) return null;
 
-/**
- * A Claude Code model is a static entry of the CLI adapter, so the config
- * comes from its id (`claude-code:<model>`). Like ChatGPT it needs no
- * endpoint or key, and an unset effort takes the model's default.
- */
-function claudeCodeConfig(entryId: string, requested: ReasoningEffort | null | undefined): ModelConfig {
-	const model = entryId.slice(CLAUDE_CODE_MODEL_PREFIX.length);
-	const { efforts, defaultEffort } = claudeCodeEfforts(model);
-	const reasoningEffort = efforts ? supportedEffort(requested ?? defaultEffort, efforts, defaultEffort) : undefined;
+	const { agent, model } = owner;
 
-	return { provider: 'claude-code', baseUrl: '', apiKey: '', model, reasoningEffort };
-}
-
-/**
- * A Devin model is listed live from the CLI, so the config comes from its id (`devin:<model>`). Devin names the
- * effort in the model id (`swe-2-high`), so there is no effort to pass.
- */
-function devinConfig(entryId: string): ModelConfig {
-	return { provider: 'devin', baseUrl: '', apiKey: '', model: entryId.slice(DEVIN_MODEL_PREFIX.length) };
-}
-
-/**
- * A saved effort the model no longer offers (e.g. after switching models) falls
- * back to the model default: medium when offered, else the first listed level.
- */
-function supportedEffort(
-	requested: ReasoningEffort | null | undefined,
-	offered: ReasoningEffort[] | undefined,
-	fallback: ReasoningEffort | undefined
-): ReasoningEffort | undefined {
-	if (!requested) return undefined;
-	if (!offered?.length || offered.includes(requested)) return requested;
-	if (fallback && offered.includes(fallback)) return fallback;
-
-	return offered.includes('medium') ? 'medium' : offered[0];
+	return { provider: agent.id, baseUrl: '', apiKey: '', model, ...agent.modelSettings(model, requested) };
 }
 
 /** Caps so one PR can't blow the context window. */

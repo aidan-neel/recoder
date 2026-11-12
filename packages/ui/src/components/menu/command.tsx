@@ -11,15 +11,20 @@ import { modalMotion, scrimMotion } from '../../motion/presets';
 import { useMotionVariants } from '../../motion/reduced';
 import { Keycap } from '../keycap';
 import { useReturnFocus } from '../overlay/return-focus';
+import { ShallowBodyLock } from '../overlay/shallow-body-lock';
 
 type CommandFilter = ComponentProps<typeof Command>['filter'];
 
-/** The palette frame: 640px wide, 14vh from the top, radius 14, floating on a deep shadow. */
-const FRAME = cn(
+/**
+ * The palette frame: 640px wide, 14vh from the top, radius 14, floating on a
+ * deep shadow. Its classes never conflict, so it is a plain string and
+ * loading the module merges nothing.
+ */
+const FRAME = [
 	'fixed inset-x-0 top-[14vh] z-[120] mx-auto flex w-[calc(100vw-32px)] max-w-[640px] flex-col overflow-hidden',
 	'rounded-[14px] bg-menu text-fg outline-none',
 	'shadow-[0_0_0_1px_var(--line-menu),0_30px_80px_rgb(var(--shade-rgb)/0.6)]'
-);
+].join(' ');
 
 /** A click on a toast (an Undo, say) is not a click outside the palette. */
 function keepOpenForToasts(event: Event): void {
@@ -36,13 +41,16 @@ interface CommandDialogProps {
 	shouldFilter?: boolean;
 	/** Scores an item for the query, 0 hides it; defaults to cmdk's fuzzy score. */
 	filter?: CommandFilter;
+	/** Runs when the palette closes, before focus returns to what had it; prevent it to place focus yourself. */
+	onCloseAutoFocus?: (event: Event) => void;
 	children: ReactNode;
 }
 
 /**
  * The command palette: a modal search over commands, with a scrim. Arrow keys
  * move the selection and wrap, Enter chooses, Escape closes. Clicks on toasts
- * leave it open. On close, focus returns to what had it when it opened.
+ * leave it open. On close, focus returns to what had it when it opened,
+ * unless `onCloseAutoFocus` prevents that to send it elsewhere.
  */
 export function CommandDialog({
 	open,
@@ -51,9 +59,10 @@ export function CommandDialog({
 	className,
 	shouldFilter,
 	filter,
+	onCloseAutoFocus,
 	children
 }: CommandDialogProps) {
-	const { panelRef, restoreFocus } = useReturnFocus<HTMLDivElement>(open);
+	const { panelRef, restoreFocus } = useReturnFocus<HTMLDivElement>(open, onCloseAutoFocus);
 	const variants = useMotionVariants(modalMotion);
 
 	return (
@@ -88,6 +97,7 @@ export function CommandDialog({
 								className={cn(FRAME, className)}
 							>
 								<Dialog.Title className="sr-only">{label}</Dialog.Title>
+								<ShallowBodyLock />
 								<Command
 									label={label}
 									shouldFilter={shouldFilter}

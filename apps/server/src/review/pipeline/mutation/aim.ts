@@ -1,50 +1,34 @@
-import type { DetectorResult } from '../detectors/types.js';
-import { testBlocks } from '../detectors/test-source.js';
+import type { DetectorResult, SuspicionShape } from '../detectors/types.js';
+import { BROAD_ERRORS } from '../detectors/assertion-checks.js';
+import { testBlocks, type TestBlock } from '../detectors/test-source.js';
 import { symbolsOf } from '../change-model/symbols.js';
+import { escapeRegExp } from '../change-model/reference-kinds.js';
 import { EDITS_BY_SHAPE, mutantsAt, swapErrorClass, type Edit, type Mutant } from './mutants.js';
-
-/** What a suspicion says about the weak assertion, which picks the mutation. */
-type Shape = 'broadError' | 'lowerBound' | 'someForEvery' | 'presence' | 'output' | 'selection' | 'generic';
 
 /** Mutants tried per suspicion, at most. */
 const MAX_AIMED = 3;
 
 const ERROR_CLASS = /\b[A-Z]\w*(?:Error|Exception)\b/g;
 
-/** The shape of a detector's suspicion, from the words of its title and body. */
-function shapeOf(result: DetectorResult): Shape {
-	const text = `${result.title} ${result.body}`;
-
-	if (/printed/i.test(text)) return 'output';
-	if (/not which one/i.test(text)) return 'selection';
-	if (/accepts any|broader error|never checks which error|error type/i.test(text)) return 'broadError';
-	if (/only from below|exact value/i.test(text)) return 'lowerBound';
-	if (/only some|some items/i.test(text)) return 'someForEvery';
-	if (/presence|truthy/i.test(text)) return 'presence';
-
-	return 'generic';
+/** The test block a suspicion's line falls in, if the file parses into tests. */
+function testAt(head: string, line: number): TestBlock | undefined {
+	return [...testBlocks(head).values()].find((test) => test.startLine <= line && line <= test.endLine);
 }
 
 /**
  * Names the weak test mentions: error classes, called functions and the words
  * of its assertions. Source lines that hold them are the ones the test is about.
  */
-function termsOf(head: string, line: number): string[] {
-	const block = [...testBlocks(head).values()].find((test) => test.startLine <= line && line <= test.endLine);
-
-	if (!block) return [];
-
-	const words = block.body.match(/\b[A-Za-z_$][\w$]{3,}\b/g) ?? [];
+function termsOf(body: string): string[] {
+	const words = body.match(/\b[A-Za-z_$][\w$]{3,}\b/g) ?? [];
 	const ignored = new Set(['test', 'expect', 'async', 'await', 'const', 'true', 'false', 'null', 'return', 'function']);
 
 	return [...new Set(words.filter((word) => !ignored.has(word)))];
 }
 
 /** Error classes the test names, in order. */
-function errorClasses(head: string, line: number): string[] {
-	const block = [...testBlocks(head).values()].find((test) => test.startLine <= line && line <= test.endLine);
-
-	return [...new Set(block?.body.match(ERROR_CLASS) ?? [])];
+function errorClasses(body: string): string[] {
+	return [...new Set(body.match(ERROR_CLASS) ?? [])];
 }
 
 /** Source lines holding a term, most terms first, so the mutants land where the test looks. */
@@ -74,16 +58,14 @@ function specificLines(text: string, specifics: ReadonlySet<string>): number[] {
 
 /** Classes the sources declare as `extends broad`. */
 function subclassesOf(broad: string, sources: readonly { head: string }[]): Set<string> {
-	const pattern = new RegExp(`\\bclass\\s+([A-Z]\\w*)\\s+extends\\s+${broad}\\b`, 'g');
+	const pattern = new RegExp(`\\bclass\\s+([A-Z]\\w*)\\s+extends\\s+${escapeRegExp(broad)}\\b`, 'g');
 
 	return new Set(sources.flatMap((source) => [...source.head.matchAll(pattern)].map((match) => match[1]!)));
 }
 
 /** Names the test calls: `run(`, `.get(`, `new Thing(`. */
-function calledNames(head: string, line: number): Set<string> {
-	const block = [...testBlocks(head).values()].find((test) => test.startLine <= line && line <= test.endLine);
-
-	return new Set([...(block?.body.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g) ?? [])].map((match) => match[1]!));
+function calledNames(body: string): Set<string> {
+	return new Set([...(body.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g) ?? [])].map((match) => match[1]!));
 }
 
 /** Lines inside the functions the test calls, which a change there can reach. */
@@ -110,12 +92,13 @@ export async function aimedMutants(
 	testHead: string,
 	sources: readonly { path: string; head: string }[]
 ): Promise<Mutant[]> {
-	const shape = shapeOf(suspicion);
-	const terms = termsOf(testHead, suspicion.line);
-	const broad = errorClasses(testHead, suspicion.line)[0] ?? 'Error';
+	const shape: SuspicionShape = suspicion.shape ?? 'generic';
+	const body = testAt(testHead, suspicion.line)?.body ?? '';
+	const terms = termsOf(body);
+	const classes = errorClasses(body);
+	const broad = classes.find((name) => BROAD_ERRORS.has(name)) ?? classes[0] ?? 'Error';
+	const called = calledNames(body);
 	const specifics = subclassesOf(broad, sources);
-	const called = calledNames(testHead, suspicion.line);
-
 	const edits: readonly Edit[] = shape === 'broadError' ? [swapErrorClass(broad)] : EDITS_BY_SHAPE[shape];
 	const found: Mutant[] = [];
 

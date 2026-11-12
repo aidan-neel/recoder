@@ -6,18 +6,10 @@ interface Account {
 	provider: Provider;
 }
 
-interface Usage {
-	name: string;
-	percent: number;
-	resetsAt: number | null;
-}
-
-/** App-shell data: signed-in account, subscription usage, and the ⌘K palette. */
+/** App-shell data: signed-in account and the ⌘K palette. */
 class ShellState {
 	account = $state<Account | null>(null);
-	usage = $state<Usage | null>(null);
 	paletteOpen = $state(false);
-	usageOpen = $state(false);
 	private loaded = false;
 
 	load(): void {
@@ -38,26 +30,6 @@ class ShellState {
 			.catch(() => {
 				this.account = null;
 			});
-
-		void this.refreshUsage();
-	}
-
-	async refreshUsage(): Promise<void> {
-		try {
-			const status = await serverApi.getCodexStatus();
-			const limit = status.authenticated ? status.limits?.[0] : undefined;
-
-			this.usage =
-				limit && Number.isFinite(limit.usedPercent)
-					? {
-							name: limit.name,
-							percent: Math.max(0, Math.min(100, Math.round(limit.usedPercent))),
-							resetsAt: limit.resetsAt
-						}
-					: null;
-		} catch {
-			this.usage = null;
-		}
 	}
 }
 

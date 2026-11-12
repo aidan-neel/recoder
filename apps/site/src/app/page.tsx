@@ -1,10 +1,10 @@
-import { Button, CodeBlock } from '@recoder/ui';
-import { ArrowUpRight } from 'lucide-react';
+import { CodeBlock } from '@recoder/ui';
 import type { Metadata } from 'next';
 import type { CSSProperties } from 'react';
 
 import { HeroDemo } from '~/components/hero-demo/hero-demo';
 import { HeroHeadline } from '~/components/home/hero-headline';
+import { SelfHostLink } from '~/components/home/self-host-link';
 import { WaitlistForm } from '~/components/home/waitlist-form';
 import { DESCRIPTION, REPO_URL, SITE_URL } from '~/lib/site';
 
@@ -23,13 +23,8 @@ export default function Home() {
 		<div className="site-column">
 			<section aria-labelledby="site-title">
 				<HeroHeadline />
-				<div className="hero-rise mt-[22px] flex flex-wrap items-start gap-2">
-					<Button asChild variant="primary" className="brief-action">
-						<a href={REPO_URL}>
-							Self-host on GitHub
-							<ArrowUpRight aria-hidden />
-						</a>
-					</Button>
+				<div className="site-actions hero-rise">
+					<SelfHostLink />
 					<WaitlistForm />
 				</div>
 			</section>

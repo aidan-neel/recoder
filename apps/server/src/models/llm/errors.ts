@@ -1,5 +1,3 @@
-import type { ChatOptions } from './types';
-
 export class LlmError extends Error {
 	status: number;
 
@@ -21,15 +19,18 @@ const TRANSIENT_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const TRANSIENT_NETWORK =
 	/stalled|socket|ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|EAI_AGAIN|fetch failed|network|connection (?:was )?(?:closed|reset|refused|lost)|other side closed|Unable to connect|terminated/i;
 
-/** ChatGPT's own wording for a dropped or cut-short response stream. */
-const CODEX_TRANSIENT = /response failed|incomplete response|could not complete/i;
-
-/**
 /** A provider's wording for a request throttle that lifts within a minute. */
 const THROTTLE = /rate limit|too many requests/i;
 
 /** Wording that means the plan or quota is spent, even when the provider also calls it a rate limit. */
 const SPENT_PLAN = /quota|usage|insufficient|balance|billing|credit|exhausted|reset at|per (?:day|week|month)/i;
+
+/**
+ * The plan, quota or credit behind the model is spent, which lasts hours: it is never retried, never read as an
+ * endpoint shedding load, and is reported as out of usage. An agent adapter raises it for its CLI's usage cap
+ * (status 429) or spent credit (402), so nothing outside the adapter needs to know what a CLI's 429 means.
+ */
+export class UsageLimitError extends LlmError {}
 
 /** The provider's words say the plan or quota is spent, so waiting minutes will not help. */
 export function isSpentPlan(message: string): boolean {
@@ -37,43 +38,48 @@ export function isSpentPlan(message: string): boolean {
 }
 
 /**
- * A 429 from OpenCode that says the provider is throttling requests, not that
- * the plan is spent. OpenCode retries most rate limits itself but passes some
- * straight through (Z.AI's "Rate limit reached for requests"), so Recoder
- * retries these instead of stopping the review as out of usage.
+ * Words that state outright that the plan is spent. Narrower than {@link SPENT_PLAN}, which only tells a spent
+ * plan from a throttle once the status is a 429: these stand on their own.
  */
-export function isOpenCodeThrottle(err: LlmError): boolean {
+const STATES_PLAN_SPENT =
+	/\busage limit (?:exceeded|reached)\b|\bquota (?:exceeded|exhausted)\b|\binsufficient (?:balance|credits?)\b/i;
+
+/**
+ * The provider's words state that the plan is spent, whatever status they came with: OpenCode Go's
+ * `Go usage limit exceeded` arrives with none.
+ */
+export function statesPlanSpent(message: string): boolean {
+	return STATES_PLAN_SPENT.test(message);
+}
+
+/**
+ * A 429 whose words say the provider is throttling requests, not that the plan is spent. A router such as
+ * OpenCode retries most rate limits itself but passes some straight through (Z.AI's "Rate limit reached for
+ * requests"), so Recoder retries these, with a longer wait.
+ */
+export function isProviderThrottle(err: LlmError): boolean {
 	return err.status === 429 && THROTTLE.test(err.message) && !isSpentPlan(err.message);
 }
 
 /**
  * Dropped sockets and overloaded servers (vLLM restarts, proxies) are worth another try; bad requests are not.
- * ChatGPT's and Claude Code's 429 is a usage cap that lasts hours, not a momentary rate limit, so it never retries.
- * OpenCode's 429 is a spent plan unless its wording says it is a throttle.
+ * A spent plan never retries: an agent CLI raises {@link UsageLimitError} for it.
  */
-export function isTransientLlmError(err: unknown, provider?: ChatOptions['provider']): boolean {
-	if (!(err instanceof LlmError)) return false;
-	if ((provider === 'codex' || provider === 'claude-code' || provider === 'devin') && err.status === 429) return false;
-	if (provider === 'opencode' && err.status === 429) return isOpenCodeThrottle(err);
+export function isTransientLlmError(err: unknown): boolean {
+	if (!(err instanceof LlmError) || err instanceof UsageLimitError) return false;
 	if (TRANSIENT_STATUS.has(err.status)) return true;
 	if (err.status !== 0 || /cancelled|timed out|truncated/i.test(err.message)) return false;
 
-	return TRANSIENT_NETWORK.test(err.message) || (provider === 'codex' && CODEX_TRANSIENT.test(err.message));
+	return TRANSIENT_NETWORK.test(err.message);
 }
 
 /**
  * The provider is shedding load (HTTP 429, 529 or "overloaded"), so the limiter should send fewer calls at once.
- * A 429 from ChatGPT, Claude Code or OpenCode is not that signal: the first two are usage caps that last hours,
- * and OpenCode retries rate limits itself, so its 429 means a spent plan. Easing off would only slow every other
- * model's calls.
+ * A spent plan is not that signal (an agent CLI's {@link UsageLimitError}): it lasts hours, and easing off would
+ * only slow every other model's calls.
  */
-export function isRateLimitError(err: unknown, provider?: ChatOptions['provider']): boolean {
-	if (!(err instanceof LlmError)) return false;
-	if (
-		(provider === 'codex' || provider === 'claude-code' || provider === 'devin' || provider === 'opencode') &&
-		err.status === 429
-	)
-		return false;
+export function isRateLimitError(err: unknown): boolean {
+	if (!(err instanceof LlmError) || err instanceof UsageLimitError) return false;
 
 	return err.status === 429 || err.status === 529 || /overloaded/i.test(err.message);
 }
@@ -93,7 +99,20 @@ export function cancelledError(): LlmError {
 	return new LlmError(0, 'Model request cancelled');
 }
 
+/** A call that used up its whole time budget. */
+export class TimedOutError extends LlmError {}
+
 /** The error for a call that used up its whole `timeoutMs` budget. */
-export function timedOutError(timeoutMs: number): LlmError {
-	return new LlmError(0, `Model request timed out after ${Math.round(timeoutMs / 1000)}s`);
+export function timedOutError(timeoutMs: number): TimedOutError {
+	return new TimedOutError(0, `Model request timed out after ${Math.round(timeoutMs / 1000)}s`);
+}
+
+/**
+ * A call bounded only by its caller's clock (`ChatOptions.settleBy`, such as a review agent's) reached it. The caller
+ * ran out of time; the model did not fail, so this is never retried and never worded as a timeout of the model.
+ */
+export class OutOfTimeError extends LlmError {
+	constructor() {
+		super(0, 'Model request stopped: its caller ran out of time');
+	}
 }

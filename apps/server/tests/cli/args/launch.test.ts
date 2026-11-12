@@ -9,9 +9,9 @@ const RUN_ID = '20261110-153045-a1b2c3';
 const launchOf = (...argv: string[]) => parseReviewArgs(argv, '/work', 'program').launch;
 
 test('--detach starts the same review in the background with every other flag as the caller wrote it', () => {
-	expect(launchOf('--staged', '--detach', '--title=--detach', '--budget', 'medium')).toEqual({
+	expect(launchOf('--staged', '--detach', '--title=--detach', '--budget', 'medium', '--full')).toEqual({
 		kind: 'detach',
-		flags: ['--staged', '--title=--detach', '--budget', 'medium']
+		flags: ['--staged', '--title=--detach', '--budget', 'medium', '--full']
 	});
 });
 

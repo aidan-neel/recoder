@@ -25,6 +25,12 @@ describe('parseRepoSlug', () => {
 	test('rejects garbage', () => {
 		expect(() => parseRepoSlug('not a url')).toThrow(GhError);
 	});
+
+	test('a URL it cannot parse is named without the credentials in it', () => {
+		expect(() => parseRepoSlug('https://octo:ghp_secret@github.com/owner')).toThrow(
+			'cannot parse repo slug from https://github.com/owner'
+		);
+	});
 });
 
 describe('fetchPullRequest', () => {
@@ -103,6 +109,14 @@ describe('listPullRequests', () => {
 		const err = await listPullRequests('o/r', opts).catch((e) => e);
 
 		expect(err).toBeInstanceOf(GhError);
+	});
+
+	test('classifies a GitHub rate limit as its own kind, never as unknown CLI output', async () => {
+		const opts = await fakeBin('gh', `#!/bin/sh\necho 'GraphQL: API rate limit exceeded for user ID 1.' >&2\nexit 1\n`);
+		const err = await listPullRequests('o/r', opts).catch((e) => e);
+
+		expect(err).toBeInstanceOf(GhError);
+		expect((err as GhError).kind).toBe('rate-limit');
 	});
 });
 

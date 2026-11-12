@@ -1,18 +1,29 @@
 'use client';
 
 import type { AgentAuthPrompt } from '@recoder/shared';
-import { Field, Input, RadioGroup, Select } from '@recoder/ui';
-import { useEffect, useRef, type FormEvent } from 'react';
+import { Field, Input, RadioGroup, Select, StatusNotice } from '@recoder/ui';
+import { useEffect, useRef, type FormEvent, type ReactNode } from 'react';
 
-import { shownPrompts } from '@/lib/settings/provider-options';
-import type { ProviderFlow } from './use-provider-flow';
-
-/** The id the footer's submit button points at. */
-export const METHOD_FORM = 'provider-connect';
+import { METHOD_FORM, type ProviderFlow } from '@/lib/settings/providers/use-provider-flow';
+import { useProviderManager } from '@/lib/settings/use-agent-section';
 
 /** "server" → "Server": the agent's prompt text, read as a label. */
 function asLabel(text: string): string {
 	return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * A label over a control that is a group of its own (option cards, a select),
+ * which a `Field` label cannot point at. The control carries the same words
+ * as its accessible name.
+ */
+function Choice({ label, children }: { label: string; children: ReactNode }) {
+	return (
+		<div className="provider-choice">
+			<span className="provider-choice-label">{label}</span>
+			{children}
+		</div>
+	);
 }
 
 interface PromptFieldProps {
@@ -34,6 +45,7 @@ function PromptField({ prompt, value, readOnly, onChange }: PromptFieldProps) {
 					placeholder={prompt.placeholder ?? undefined}
 					autoComplete="off"
 					spellCheck={false}
+					data-autofocus=""
 					value={value}
 					readOnly={readOnly}
 					onChange={(event) => onChange(event.target.value)}
@@ -49,20 +61,55 @@ function PromptField({ prompt, value, readOnly, onChange }: PromptFieldProps) {
 	}));
 
 	return (
-		<div data-ui="field">
-			<span data-ui="field-label">{label}</span>
-			<Select aria-label={label} value={value} onValueChange={onChange} options={options} className="w-full" />
-		</div>
+		<Choice label={label}>
+			<Select
+				aria-label={label}
+				className="provider-select"
+				value={value}
+				onValueChange={onChange}
+				options={options}
+				disabled={readOnly}
+			/>
+		</Choice>
 	);
 }
 
-/** Moves focus into the form when it first shows: the key field when there is one, else the first control. */
+/** Moves focus into the form when it first shows: to the first field to type in, else to the first control. */
 function focusFirst(form: HTMLFormElement | null): void {
 	const target =
 		form?.querySelector<HTMLElement>('[data-autofocus]') ??
 		form?.querySelector<HTMLElement>('[role="radio"][data-state="checked"], input, button');
 
 	target?.focus();
+}
+
+/** The key the agent saves. The field only takes a key in; a saved one never comes back to the page. */
+function KeyField({ flow }: { flow: ProviderFlow }) {
+	const manager = useProviderManager();
+
+	return (
+		<Field label="API key" hint={`Saved by ${manager?.name ?? 'the agent'} on this machine.`} error={flow.error}>
+			<Input
+				type="password"
+				autoComplete="off"
+				spellCheck={false}
+				data-autofocus=""
+				value={flow.key}
+				readOnly={flow.sending}
+				onChange={(event) => flow.setKey(event.target.value)}
+			/>
+		</Field>
+	);
+}
+
+/** What a browser sign-in does next, and why the last one did not land. */
+function SignInNote({ error }: { error: string | null }) {
+	return (
+		<div className="provider-notes">
+			<p className="provider-note">Opens the provider’s sign-in page in a new tab.</p>
+			{error ? <StatusNotice variant="inline" tone="danger" title={error} /> : null}
+		</div>
+	);
 }
 
 /**
@@ -73,15 +120,13 @@ function focusFirst(form: HTMLFormElement | null): void {
  */
 export function MethodForm({ flow }: { flow: ProviderFlow }) {
 	const form = useRef<HTMLFormElement>(null);
-	const { method, methods, answers, error, sending } = flow;
+	const { method, methods } = flow;
 
 	useEffect(() => {
 		focusFirst(form.current);
 	}, []);
 
 	if (!method) return null;
-
-	const prompts = shownPrompts(method, answers);
 
 	function submit(event: FormEvent<HTMLFormElement>): void {
 		event.preventDefault();
@@ -91,47 +136,25 @@ export function MethodForm({ flow }: { flow: ProviderFlow }) {
 	return (
 		<form ref={form} id={METHOD_FORM} className="provider-form" onSubmit={submit}>
 			{methods.length > 1 ? (
-				<div data-ui="field">
-					<span data-ui="field-label">Connect with</span>
+				<Choice label="Connect with">
 					<RadioGroup
 						aria-label="Connect with"
 						value={String(method.index)}
 						onValueChange={flow.setMethod}
 						options={methods.map((item) => ({ value: String(item.index), label: item.label }))}
 					/>
-				</div>
+				</Choice>
 			) : null}
-			{prompts.map((prompt) => (
+			{flow.prompts.map((prompt) => (
 				<PromptField
 					key={prompt.key}
 					prompt={prompt}
-					value={answers[prompt.key] ?? ''}
-					readOnly={sending}
+					value={flow.answers[prompt.key] ?? ''}
+					readOnly={flow.sending}
 					onChange={(value) => flow.answer(prompt.key, value)}
 				/>
 			))}
-			{method.type === 'api' ? (
-				<Field label="API key" hint="Saved by OpenCode on this machine." error={error}>
-					<Input
-						type="password"
-						autoComplete="off"
-						spellCheck={false}
-						data-autofocus=""
-						value={flow.key}
-						readOnly={sending}
-						onChange={(event) => flow.setKey(event.target.value)}
-					/>
-				</Field>
-			) : (
-				<div className="provider-notes">
-					<p className="provider-note">Opens the provider’s sign-in page in a new tab.</p>
-					{error ? (
-						<p role="alert" className="provider-error">
-							{error}
-						</p>
-					) : null}
-				</div>
-			)}
+			{method.type === 'api' ? <KeyField flow={flow} /> : <SignInNote error={flow.error} />}
 		</form>
 	);
 }

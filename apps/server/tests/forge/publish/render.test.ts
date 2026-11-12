@@ -79,3 +79,14 @@ test('cuts an oversized summary to fit', () => {
 	expect(body.length).toBeLessThanOrEqual(2000);
 	expect(body).toContain('summary cut short');
 });
+
+test('a suggestion block in a finding’s own words shows as plain code, so the forge offers nothing to apply', () => {
+	const words = ['Use the guard.', '```suggestion', 'if (!entry) return load(key);', '```'].join('\n');
+
+	const body = renderPullComment(
+		view({ findings: [{ ...finding(0, 'error', words), suggestion: '~~~ suggestion:-0+0\nreturn 1;\n~~~' }] })
+	);
+
+	expect(body).not.toMatch(/(```|~~~) ?suggestion/);
+	expect(body).toContain('```text\nif (!entry) return load(key);\n```');
+});

@@ -3,7 +3,8 @@
 import { Fragment, useMemo, type ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
-import { highlightDiff } from './highlight-lines';
+import { escapeHtml } from './highlight';
+import { useHighlighter } from './use-highlighter';
 
 /** One line of a diff or file excerpt. */
 export interface CodeLine {
@@ -85,7 +86,9 @@ function Row({ line, html, showOldNumbers, onClick }: RowProps) {
  * and new line numbers, add and remove tints, flagged lines in amber, and
  * quiet rows for the lines left out. Long lines scroll inside the block. In
  * a new file, where every line is an addition, the green tint is dropped
- * because it carries no information.
+ * because it carries no information. Until the highlighter and the grammar
+ * have loaded the lines show plain, at the same height, and the colors swap
+ * in with no motion.
  */
 export function CodeLines({
 	lines,
@@ -96,7 +99,13 @@ export function CodeLines({
 	annotate,
 	className
 }: CodeLinesProps) {
-	const html = useMemo(() => highlightDiff(lines, lang), [lines, lang]);
+	const highlighter = useHighlighter(lang);
+
+	const html = useMemo(
+		() => (highlighter ? highlighter.highlightDiff(lines, lang) : lines.map((line) => escapeHtml(line.text))),
+		[highlighter, lines, lang]
+	);
+
 	const fresh = lines.length > 0 && lines.every((line) => line.type === 'add');
 	const above = gap?.above ?? 0;
 	const below = gap?.below ?? 0;

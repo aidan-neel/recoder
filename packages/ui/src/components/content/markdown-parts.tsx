@@ -2,6 +2,8 @@ import type { ComponentProps } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
 
 import { CodeBlock } from './code-block';
+import { CodeBlockView, codeSource } from './code-block-view';
+import { highlightNow, preloadHighlighter } from './highlight';
 
 type HastElement = NonNullable<ExtraProps['node']>;
 
@@ -22,15 +24,36 @@ function fenceLang(code: HastElement): string | null {
 	return names.find((name) => name.startsWith('language-'))?.slice('language-'.length) ?? null;
 }
 
-/** Fenced code: the kit's code block, highlighted in the fence's language, with a copy button. */
+/** A fence's code element, or undefined for a `pre` that holds none. */
+function fenceCode(node: HastElement | undefined): HastElement | undefined {
+	return node?.children.find((child): child is HastElement => child.type === 'element' && child.tagName === 'code');
+}
+
+/** Fenced code: the kit's code block, highlighted in the fence's language once the highlighter loads, with a copy button. */
 function Fence({ node }: ComponentProps<'pre'> & ExtraProps) {
-	const code = node?.children.find(
-		(child): child is HastElement => child.type === 'element' && child.tagName === 'code'
-	);
+	const code = fenceCode(node);
 
 	if (!code) return null;
 
 	return <CodeBlock code={textOf(code)} lang={fenceLang(code)} copy />;
+}
+
+/**
+ * Fenced code rendered on the server: an async server component that loads
+ * the highlighter and the fence's grammar first, so the colors are in the
+ * HTML itself and the page ships no highlighter.
+ */
+async function StaticFence({ node }: ComponentProps<'pre'> & ExtraProps) {
+	const code = fenceCode(node);
+
+	if (!code) return null;
+
+	const lang = fenceLang(code);
+	const source = codeSource(textOf(code));
+
+	await preloadHighlighter([lang]);
+
+	return <CodeBlockView source={source} html={highlightNow(source, lang)} copy />;
 }
 
 /** Inline code. Fenced code never reaches here: `Fence` renders it whole. */
@@ -75,3 +98,6 @@ function Table({ children }: ComponentProps<'table'>) {
 
 /** How Markdown renders the elements that need more than default HTML. */
 export const MARKDOWN_PARTS: Components = { pre: Fence, code: InlineCode, a: Link, img: Image, table: Table };
+
+/** The same parts for `StaticMarkdown`, whose fenced code is highlighted on the server. */
+export const STATIC_MARKDOWN_PARTS: Components = { ...MARKDOWN_PARTS, pre: StaticFence };

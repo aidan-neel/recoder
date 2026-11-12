@@ -4,7 +4,7 @@ import { db } from '../../store.js';
 import { CONTEXT_CAPS, makeSource } from './sources.js';
 
 /** One finding as a single line: severity, place and title. */
-function findingLine(finding: Review['findings'][number]): string {
+export function findingLine(finding: Review['findings'][number]): string {
 	const place = finding.line ? `${finding.file}:${finding.line}` : finding.file;
 	const title = finding.title ?? finding.message.split('\n')[0];
 
@@ -38,7 +38,9 @@ export async function pastReviewSources(repoId: string, prNumber: number, headSh
 			ref: `review:${review.headSha.slice(0, 7)}`,
 			title: `Recoder review of ${review.headSha.slice(0, 7)}`,
 			at: review.createdAt,
-			text: [review.summary ?? '', ...review.findings.map(findingLine)].filter(Boolean).join('\n')
+			text: [review.summary ?? '', ...review.findings.filter((finding) => !finding.topic?.quieted).map(findingLine)]
+				.filter(Boolean)
+				.join('\n')
 		})
 	);
 }

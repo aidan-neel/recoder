@@ -6,7 +6,7 @@ The server reads the environment variables below. All are optional. An unset var
 
 ## Experiment flags, kill switches and tuning knobs
 
-- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are six: `RECODER_OBLIGATIONS`, `RECODER_OBLIGATIONS_NEW_CODE`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`, `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`. No other variable is an opt-in flag.
+- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are seven: `RECODER_OBLIGATIONS`, `RECODER_OBLIGATIONS_NEW_CODE`, `RECODER_OBLIGATIONS_TRANSITIONS`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`, `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`. `RECODER_REVIEW_VARIANT` is the one experiment flag that takes a name instead of `1`. No other variable is an opt-in flag.
 - **Kill switches.** On by default. Setting one turns a stage off: `RECODER_EXEC=off`, `RECODER_OVERLAY=off`, `RECODER_BASELINE_CACHE=off`, `RECODER_PACKAGE_PREP=0`, `RECODER_CANDIDATE_REPAIR=0`. Any other value leaves the stage on.
 - **Tuning knobs.** Every other variable. They size, place or credential work and do not add or remove a stage.
 
@@ -26,9 +26,9 @@ Read by `effectiveReviewEnv`. A saved value wins. A value that is not a positive
 
 **RECODER_REVIEW_MAX_FILE_CHARS**: Default 12000. Caps the characters one file read returns to a model. Passed to `EvidenceStore` in `apps/server/src/review/pipeline/harness/context.ts`.
 
-**RECODER_REVIEW_MAX_FILES**: Default 20. Returned in `limits` by `GET /api/settings/models`. No pipeline code reads it.
+**RECODER_REVIEW_MAX_FILES**: Default 200. Caps how many reviewable files one review covers (`applyDiffLimits` in `apps/server/src/review/pipeline/harness/diff-limits.ts`, called from `createRun` in `context.ts`). Files past the limit are excluded with `exceeds maxFiles limit (N)` and recorded in `ReviewContext.omitted` (`reason: 'file-cap'`) and `CoverageLedger`.
 
-**RECODER_REVIEW_MAX_DIFF_CHARS**: Default 60000. Returned in `limits` by `GET /api/settings/models`. No pipeline code reads it.
+**RECODER_REVIEW_MAX_DIFF_CHARS**: Default 600000. Caps total patch characters across the reviewable files (`applyDiffLimits` in `diff-limits.ts`). Files, hunks or trailing lines past the cap are excluded with `exceeds maxDiffChars limit (N)` and recorded in `ReviewContext.omitted` (`reason: 'diff-cap'`) and `CoverageLedger`.
 
 **RECODER_REVIEW_EXCLUDE**: Comma-separated substrings, matched case-insensitively. A changed path containing one is excluded from the review with the reason `matches RECODER_REVIEW_EXCLUDE`. Read by `extraExcludes` in `apps/server/src/review/pipeline/review-scope.ts`. Default empty.
 
@@ -36,7 +36,7 @@ Read by `effectiveReviewEnv`. A saved value wins. A value that is not a positive
 
 **RECODER_LLM_CONCURRENCY**: Ceiling on concurrent calls per model endpoint. Each endpoint gets its own ceiling of this size. Default 64. Read by `envCount` in `apps/server/src/models/llm/limiter.ts`. Must be a positive number.
 
-**RECODER_CLAUDE_CODE_CONCURRENCY**: Ceiling for the `claude-code` endpoint, which starts one CLI process per call. Default 8. The effective ceiling is the smaller of this and `RECODER_LLM_CONCURRENCY`. Read by `envCount` through `PROCESS_CEILINGS` in `apps/server/src/models/llm/limiter.ts`.
+**RECODER_CLAUDE_CODE_CONCURRENCY**: Ceiling for the `claude-code` endpoint, which starts one CLI process per call. Default 8. The effective ceiling is the smaller of this and `RECODER_LLM_CONCURRENCY`. Read through the adapter's `processCeiling` — an `{ env, fallback }` pair each agent declares (`apps/server/src/agents/claude-code/claude-code.ts`) — which `llmCeiling` in `apps/server/src/models/llm/limiter.ts` looks up by the endpoint's provider id. The same shape caps the other process-per-call CLIs: `RECODER_CODEX_CONCURRENCY`, `RECODER_DEVIN_CONCURRENCY`, `RECODER_PI_CONCURRENCY`, `RECODER_GROK_CONCURRENCY`, `RECODER_CURSOR_CONCURRENCY`, `RECODER_ANTIGRAVITY_CONCURRENCY` and `RECODER_COPILOT_CONCURRENCY`, each default 4. `opencode` and `custom-command` declare none and share the endpoint ceiling.
 
 **RECODER_LLM_RETRIES**: Retries after a transient failure. Default 5. Read in `apps/server/src/models/llm/retry.ts`. Non-negative; fractions are floored. A retry also needs time left before the call's deadline.
 
@@ -78,6 +78,8 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 
 **RECODER_OBLIGATIONS_NEW_CODE**: `1` lets a hunk that only adds lines oblige an investigation. Its truthiness tests, bounds and normalizers fire the truthy-default, boundary and normalization triggers with nothing on the base side to compare. Off, only replaced code fires them. Read by `obligationsNewCodeOn` in `apps/server/src/review/pipeline/obligations/config.ts`. It has no effect unless obligations are on.
 
+**RECODER_OBLIGATIONS_TRANSITIONS**: `1` adds the state-transition trigger (issue #99). A changed line that moves an entity between states derives an obligation: a state field (`status`, `state`, `phase`, `lifecycle`, `jobStatus`…) set or compared, a lease or lifecycle flag written on an object (`leaseUntil`, `lockedBy`, `closed`, `isCancelled`…), and an entry put into or taken out of a cache or queue (`cache.delete`, `jobQueue.push`, `invalidate`, `ack`…). A state field set to a literal counts only when the file gives the field two states or more, and a number is never a state. Read by `obligationsTransitionsOn` in `apps/server/src/review/pipeline/obligations/config.ts`. It has no effect unless obligations are on.
+
 **RECODER_TEST_STRENGTH**: `1` turns on test-strength work. Read by `testStrengthOn` in `apps/server/src/review/pipeline/test-strength.ts`. It adds:
 
 - the matrix stage, which runs the changed tests against mutants (`apps/server/src/review/pipeline/harness/quality-stage.ts`);
@@ -93,11 +95,15 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 
 **RECODER_CONTRACT_CHECKS**: `1` turns on contract checks. Each valid readability candidate whose smell is `stale-comment`, `misleading-name` or `hidden-side-effect` gets one second-look subagent on the specialist model, which decides whether the comment, name or doc is wrong or the code is. It counts inside the subagent cap. Read by `contractChecksOn` in `apps/server/src/review/pipeline/second-look/config.ts`.
 
+**RECODER_REVIEW_VARIANT**: names an experiment arm of issue #95; unset, the review is the baseline. `independent-pass` adds a second, complete review pass: one more reviewer per slice (`independent-reviewer-N`), with the same scope and lenses, that never sees the first pass's findings. `specialist-tree` asks a coordinator (one orchestrator call) which specialists read which slices, then runs one reviewer per specialist, each applying one lens (`specialist-<lens>`); correctness, security, concurrency, api-contract and rules always read every slice they fit, and each specialist may send at most 3 subagents, inside the subagent cap. An empty value is unset; any other value makes the server refuse to start and a review throw. Read by `reviewVariant` in `apps/server/src/env.ts`. It is recorded in `RunIdentity.flags` like every other `RECODER_*` variable, so reports of different arms never compare as equal.
+
 **RECODER_CONTRACT_CHECK_CAP**: Most contract checks one review launches, one per place. Default 4. A non-negative integer. Read only when contract checks are on.
 
 ## Data and caches
 
 **RECODER_DATA_DIR**: Directory for the SQLite database, saved settings, forge tokens and caches. Default `~/.recoder/data`. Read by `serverDataDir` in `apps/server/src/util/data-dir.ts`. Do not read the settings or token files in it: they hold keys.
+
+The fact cache is `cache/facts.db` in the data directory. It holds parsed declarations per file blob and merged commit-to-PR answers, for every repository. You can delete it at any time; reviews fill it again. See the glossary.
 
 **RECODER_WORKDIR**: Root for repo checkouts (`<workdir>/repos/...`) and the command runner's default working directory. Default `/tmp/recoder-work`. Parsed in `apps/server/src/env.ts`. Used in `apps/server/src/sandbox/sandbox.ts` and `apps/server/src/review/session/review-checkout.ts`.
 
@@ -148,5 +154,21 @@ Resolved by `findCli` in `apps/server/src/agents/cli-process.ts`. When the varia
 **RECODER_CLAUDE_CODE_DEBUG_DIR**: When set, a failed `claude-code` call writes its raw `stream-json` lines (text and thinking deltas left out) to a file in this directory. Unset by default, which keeps nothing. Read in `apps/server/src/agents/claude-code/claude-code-debug.ts`.
 
 **RECODER_CLAUDE_BIN**: Claude Code binary. Fallback `~/.local/bin/claude`. Read in `apps/server/src/agents/claude-code/claude-code.ts`.
+
+**RECODER_CODEX_BIN**: Codex binary. Fallback `~/.local/bin/codex`. Read in `apps/server/src/agents/codex/codex.ts`.
+
+**RECODER_COPILOT_BIN**: GitHub Copilot binary. Fallback `~/.local/bin/copilot`. Read in `apps/server/src/agents/copilot/copilot.ts`.
+
+**RECODER_CURSOR_BIN**: Cursor `cursor-agent` binary. Fallback `~/.local/bin/cursor-agent`. Read in `apps/server/src/agents/cursor/cursor.ts`.
+
+**RECODER_DEVIN_BIN**: Devin binary. Fallback `~/.local/bin/devin`. Read in `apps/server/src/agents/devin/devin.ts`.
+
+**RECODER_GROK_BIN**: Grok Build binary. Fallback `~/.grok/bin/grok`. Read in `apps/server/src/agents/grok/grok.ts`.
+
+**RECODER_PI_BIN**: Pi binary. Fallback `~/.local/bin/pi`. Read in `apps/server/src/agents/pi/pi.ts`.
+
+**RECODER_ANTIGRAVITY_BIN**: Antigravity `agy` binary. Fallback `~/.local/bin/agy`. Read in `apps/server/src/agents/antigravity/antigravity.ts`.
+
+**RECODER_CUSTOM_AGENT**: A JSON `{"argv": [...], "name"?, "maxOutputBytes"?}` naming the command the custom-command adapter runs, never through a shell. Unset, the adapter is not configured. Read by `readCustomCommand` in `apps/server/src/agents/custom/custom-config.ts`.
 
 The Claude Code CLI does not inherit `RECODER_*`, `ANTHROPIC_*`, `OPENAI_*`, `CLAUDE_*` other than `CLAUDE_CONFIG_DIR` and `CLAUDE_SECURESTORAGE_CONFIG_DIR`, `DISABLE_PROMPT_CACHING*`, `ENABLE_PROMPT_CACHING*`, `MAX_THINKING_TOKENS`, `DISABLE_INTERLEAVED_THINKING`, `DISABLE_COMPACT`, `DISABLE_AUTO_COMPACT`, or any token, key, secret or password variable (`claudeCodeEnv` in `apps/server/src/agents/claude-code/claude-code-process.ts`). It reads no settings file, so a settings `env` block cannot set them either.

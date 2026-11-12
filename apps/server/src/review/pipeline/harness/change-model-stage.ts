@@ -20,6 +20,12 @@ export async function changeModelStage(run: ReviewRun): Promise<void> {
 		return;
 	}
 
+	if (!run.repo) {
+		task(TASK_ID, LABEL, 'skipped', 'Could not list the repository files', { kind: 'inventory' });
+
+		return;
+	}
+
 	task(TASK_ID, LABEL, 'running', 'Parsing changed declarations', { kind: 'inventory' });
 
 	const started = Date.now();
@@ -27,6 +33,7 @@ export async function changeModelStage(run: ReviewRun): Promise<void> {
 	try {
 		run.changeModel = await buildChangeModel({
 			inventory: run.inventory,
+			repo: run.repo,
 			checkoutPath,
 			signal: run.controller.signal,
 			baseSha: input.revision?.mergeBaseSha || undefined

@@ -1,5 +1,5 @@
 import type { OutputRate, ReviewReasoningEntry } from '@recoder/shared';
-import { streamChatCompletion, type ChatConversation, type ChatMessage } from '../../../models/llm.js';
+import { OutOfTimeError, streamChatCompletion, type ChatConversation, type ChatMessage } from '../../../models/llm.js';
 import { sampling } from '../../../models/runtime-profiles.js';
 import { streamedMessage } from '../../../models/response-text.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
@@ -15,6 +15,11 @@ export type TurnResult =
 	| { kind: 'reply'; output: string; responseId: string }
 	/** Paused mid-call: the caller gives the call back and redoes the turn after resume. */
 	| { kind: 'paused' }
+	/**
+	 * The call ran until the time it had to settle by (`settleAt`). `settle` closes the streamed message (with an
+	 * optional note on why it was cut off) and the reasoning.
+	 */
+	| { kind: 'out-of-time'; settle: (cutOff?: string) => void }
 	/**
 	 * The call failed. `overthought` means it was cut off for reasoning too long.
 	 * `settle` closes the streamed message (with an optional note on why it was cut off) and the reasoning.
@@ -35,9 +40,11 @@ export function isLooping(text: string): boolean {
 
 /**
  * One streamed model call for an agent turn, relaying its reasoning and
- * reply as they arrive. Runaway reasoning (too long, or looping) aborts the
- * call so a stuck model doesn't think until it times out. Pausing the review
- * aborts it too; the caller re-runs it on resume.
+ * reply as they arrive. The call has no time limit of its own: it runs until
+ * `settleAt` on the review clock, the wait for a model slot included, while
+ * its stream stays alive. Runaway reasoning (too long, or looping) aborts the
+ * call so a stuck model doesn't think until its time runs out. Pausing the
+ * review aborts it too; the caller re-runs it on resume.
  */
 export async function streamTurn<T>(
 	opts: JsonAgentOptions<T>,
@@ -45,7 +52,7 @@ export async function streamTurn<T>(
 	conversation: ChatConversation,
 	turn: number,
 	lastTurn: boolean,
-	deadlineAt: number
+	settleAt: number
 ): Promise<TurnResult> {
 	const reasoningId = `reason_${opts.label.slice(0, 24)}_${turn}_${Math.random().toString(36).slice(2, 8)}`;
 	const responseId = `message_${reasoningId}`;
@@ -56,12 +63,9 @@ export async function streamTurn<T>(
 	let overthought = false;
 	let outputRate: OutputRate | undefined;
 
-	/** ChatGPT sends a summary, not its reasoning: keep the timing, drop the text. */
 	const flushReasoning = (status: ReviewReasoningEntry['status'] = 'streaming') => {
-		if (!opts.onReasoning || !reasoningText) return;
-		if (opts.config.provider === 'codex')
-			opts.onReasoning({ id: reasoningId, text: '', status, summary: true, outputRate });
-		else opts.onReasoning({ id: reasoningId, text: reasoningText, status, outputRate });
+		if (opts.onReasoning && reasoningText)
+			opts.onReasoning({ id: reasoningId, text: reasoningText, status, outputRate });
 	};
 
 	const flushResponse = (status: 'streaming' | 'done' | 'error', cutOff?: string) => {
@@ -110,8 +114,7 @@ export async function streamTurn<T>(
 				jsonMode: true,
 				jsonSchema: opts.responseSchema?.(lastTurn),
 				...sampling(opts.config),
-				timeoutMs: opts.callDeadlineMs ?? REVIEW_POLICY.perCallDeadlineMs,
-				settleBy: Date.now() + Math.max(1, deadlineAt - reviewNow()),
+				settleBy: Date.now() + Math.max(1, settleAt - reviewNow()),
 				signal: callAbort.signal,
 				onReasoning: opts.onReasoning ? onReasoning : undefined,
 				onRate: (rate) => (outputRate = rate),
@@ -140,15 +143,14 @@ export async function streamTurn<T>(
 			return { kind: 'paused' };
 		}
 
-		return {
-			kind: 'failed',
-			err,
-			overthought,
-			settle: (cutOff) => {
-				flushResponse('error', cutOff);
-				flushReasoning(overthought ? 'done' : 'error');
-			}
+		const settle = (cutOff?: string) => {
+			flushResponse('error', cutOff);
+			flushReasoning(overthought ? 'done' : 'error');
 		};
+
+		if (err instanceof OutOfTimeError) return { kind: 'out-of-time', settle };
+
+		return { kind: 'failed', err, overthought, settle };
 	}
 
 	detach();

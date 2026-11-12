@@ -1,20 +1,30 @@
 'use client';
 
-import { createContext, use, useId, type ReactNode } from 'react';
+import { createContext, use, useId, useMemo, type ReactNode } from 'react';
 
-import { Pill } from './pill';
+import { Pill, usePillTravel } from './pill';
 
-/** The layout id the pills of one nav share; null outside a `NavPillGroup`. */
-const NavPillScope = createContext<string | null>(null);
+interface NavPillScopeValue {
+	/** The layout id the pills of one nav share. */
+	id: string;
+	/** False until the nav has painted once; its pill sits still until then. */
+	travels: boolean;
+}
+
+/** The pill scope of one nav; null outside a `NavPillGroup`. */
+const NavPillScope = createContext<NavPillScopeValue | null>(null);
 
 /**
  * Scopes the `NavPill`s inside it to one sliding pill, so two navs on a page,
- * or one nav mounted twice, never trade pills. It renders no element.
+ * or one nav mounted twice, never trade pills. The pill slides once the nav
+ * has painted; its first paint draws it in place. It renders no element.
  */
 export function NavPillGroup({ children }: { children: ReactNode }) {
 	const id = `${useId()}-nav-pill`;
+	const travels = usePillTravel();
+	const scope = useMemo(() => ({ id, travels }), [id, travels]);
 
-	return <NavPillScope value={id}>{children}</NavPillScope>;
+	return <NavPillScope value={scope}>{children}</NavPillScope>;
 }
 
 interface NavPillProps {
@@ -40,9 +50,18 @@ interface NavPillProps {
  * `HoverList` has it) and keep the items free of `z-index`.
  */
 export function NavPill({ value, radius = 8, className }: NavPillProps) {
-	const layoutId = use(NavPillScope);
+	const scope = use(NavPillScope);
 
-	if (!layoutId) throw new Error('A NavPill must sit inside a NavPillGroup.');
+	if (!scope) throw new Error('A NavPill must sit inside a NavPillGroup.');
 
-	return <Pill layoutId={layoutId} ui="nav-pill" radius={radius} value={value} className={className} />;
+	return (
+		<Pill
+			layoutId={scope.id}
+			ui="nav-pill"
+			radius={radius}
+			value={value}
+			travels={scope.travels}
+			className={className}
+		/>
+	);
 }

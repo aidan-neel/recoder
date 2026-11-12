@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { buildChangeModel } from '../../../../src/review/pipeline/change-model/change-model';
 import type { ChangeModel } from '../../../../src/review/pipeline/change-model/types';
 import { buildInventory, type ReviewInventory } from '../../../../src/review/pipeline/inventory';
+import { loadRepoInventory } from '../../../../src/review/pipeline/repo-inventory/repo-inventory';
 
 /** A built change model and the inventory it came from. */
 export interface Built {
@@ -58,11 +59,13 @@ export async function buildFrom(
 		git(root, ['commit', '-q', '-m', 'head']);
 
 		const inventory = buildInventory(git(root, ['diff', baseSha, 'HEAD']), []);
+		const signal = new AbortController().signal;
 
 		const model = await buildChangeModel({
 			inventory,
+			repo: await loadRepoInventory(root, 'HEAD', signal, []),
 			checkoutPath: root,
-			signal: new AbortController().signal,
+			signal,
 			baseSha,
 			callerSelection
 		});

@@ -36,6 +36,8 @@ export async function resolveDiffFile(source: string, request: TargetRequest): P
 			baseSha: null,
 			mergeBaseSha: null,
 			headSha: null,
+			since: null,
+			sinceRunId: null,
 			url: null,
 			changedFiles: files.length
 		},

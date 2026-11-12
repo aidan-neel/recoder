@@ -27,12 +27,12 @@ const attempted = new Map<string, number>();
 
 const inflight = new Map<string, Promise<void>>();
 
-/** The models a review is set to run on this server: its Review, Subagent and older shared picks. */
+/** The models a review is set to run on this server: its Review, Subagent, Verifier and older shared picks. */
 function pickedOn(serverId: string): Set<string> {
-	const { orchestratorModelId, specialistModelId, sharedModelId } = getStoredSettings();
+	const { orchestratorModelId, specialistModelId, verifierModelId, sharedModelId } = getStoredSettings();
 	const picked = new Set<string>();
 
-	for (const id of [orchestratorModelId, specialistModelId, sharedModelId]) {
+	for (const id of [orchestratorModelId, specialistModelId, verifierModelId, sharedModelId]) {
 		const parsed = id ? parseVllmModelId(id) : null;
 
 		if (parsed?.serverId === serverId) picked.add(parsed.model);

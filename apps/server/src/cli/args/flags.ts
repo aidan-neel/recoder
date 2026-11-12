@@ -112,6 +112,11 @@ export const REVIEW_FLAGS = {
 		description:
 			'With --pull: review only the commits after this one, such as the head of an earlier review. It must be in the history of the pull request.'
 	},
+	full: {
+		type: 'boolean',
+		group: 'target',
+		description: 'Review the whole change, also when an earlier review covered part of it.'
+	},
 	diff: {
 		type: 'string',
 		group: 'target',
@@ -175,7 +180,14 @@ export const REVIEW_FLAGS = {
 		type: 'string',
 		group: 'tuning',
 		value: 'model id',
-		description: 'Model the workers (subagents and verifiers) run on. Default: the saved pick.'
+		description:
+			'Model the subagents run on; verifiers follow the Review model unless --verifier is given. Default: the saved pick.'
+	},
+	verifier: {
+		type: 'string',
+		group: 'tuning',
+		value: 'model id',
+		description: 'Model the verifiers run on. Default: the saved pick, else the Review model.'
 	},
 	'reviewer-effort': {
 		type: 'string',

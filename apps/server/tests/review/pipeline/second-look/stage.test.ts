@@ -178,38 +178,6 @@ test('second looks take only the room reviewers’ requests left under the subag
 	expect(await ids(2, 0)).toEqual([]);
 });
 
-test('a second-look call slower than the per-call deadline answers within its own longer one, with no call made again', async () => {
-	const policy = REVIEW_POLICY as { perCallDeadlineMs: number; secondLookCallDeadlineMs: number };
-	const saved = { ...policy };
-
-	policy.perCallDeadlineMs = 150;
-	policy.secondLookCallDeadlineMs = 5000;
-	useTwoModels();
-	process.env.RECODER_RESIDUAL = '1';
-
-	try {
-		const instant = stubReview();
-
-		await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 });
-
-		const slow = stubReview(400);
-		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 });
-
-		const secondLooks = (calls: Call[]) =>
-			calls
-				.filter(isSecondLook)
-				.map((call) => call.stage)
-				.sort();
-
-		expect(secondLooks(slow)).toEqual(secondLooks(instant));
-
-		expect(residualsDone(result)).toBe(true);
-	} finally {
-		policy.perCallDeadlineMs = saved.perCallDeadlineMs;
-		policy.secondLookCallDeadlineMs = saved.secondLookCallDeadlineMs;
-	}
-});
-
 test('a second look that starts after the review deadline has passed still runs its own clock and answers', async () => {
 	const policy = REVIEW_POLICY as Record<string, number>;
 	const names = ['analysisDeadlineMs', 'msPerAssignment', 'reserveMsForConsolidation', 'secondLookMaxMs'];

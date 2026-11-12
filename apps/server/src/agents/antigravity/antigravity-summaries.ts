@@ -1,0 +1,250 @@
+import { Database } from 'bun:sqlite';
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeSync } from 'node:fs';
+
+const SUMMARY_DELETE_STATEMENTS: ReadonlyArray<{ table: string; sql: string }> = [
+	{ table: 'conversation_summaries', sql: 'DELETE FROM conversation_summaries WHERE conversation_id = ?' },
+	{ table: 'conversations_fts', sql: 'DELETE FROM conversations_fts WHERE conversation_id = ?' },
+	{ table: 'conversation_parents', sql: 'DELETE FROM conversation_parents WHERE conversation_id = ?' }
+];
+
+/**
+ * How long a delete waits for another process's write lock on the summaries database. The delete runs synchronously
+ * on the server's one thread, so the wait is kept short; a conversation it gives up on is tried again at shutdown.
+ */
+const LOCK_WAIT_MS = 1000;
+
+interface VarintResult {
+	next: number;
+	value: bigint;
+}
+
+interface WireRecord {
+	end: number;
+	fieldNumber: number;
+	payloadEnd: number;
+	payloadStart: number;
+	start: number;
+	wireType: number;
+}
+
+/** Reads one base-128 varint from `buffer` starting at `offset`. */
+function readVarint(buffer: Uint8Array, offset: number): VarintResult {
+	let value = 0n;
+	let shift = 0n;
+	let cursor = offset;
+
+	while (cursor < buffer.length) {
+		const byte = buffer[cursor] ?? 0;
+
+		cursor += 1;
+		value |= BigInt(byte & 0x7f) << shift;
+		if ((byte & 0x80) === 0) return { value, next: cursor };
+		shift += 7n;
+		if (shift > 63n) throw new Error('Protobuf varint exceeds 64 bits.');
+	}
+
+	throw new Error('Unexpected end of protobuf varint.');
+}
+
+/** Reads one protobuf wire record at `offset` in `buffer`. */
+function readWireRecord(buffer: Uint8Array, offset: number): WireRecord {
+	const tag = readVarint(buffer, offset);
+	const fieldNumber = Number(tag.value >> 3n);
+	const wireType = Number(tag.value & 7n);
+
+	if (wireType === 0) {
+		const skipped = readVarint(buffer, tag.next);
+
+		return {
+			start: offset,
+			end: skipped.next,
+			fieldNumber,
+			wireType,
+			payloadStart: tag.next,
+			payloadEnd: skipped.next
+		};
+	}
+
+	if (wireType === 1) {
+		const end = tag.next + 8;
+
+		if (end > buffer.length) throw new Error('Truncated 64-bit protobuf field.');
+
+		return { start: offset, end, fieldNumber, wireType, payloadStart: tag.next, payloadEnd: end };
+	}
+
+	if (wireType === 2) {
+		const length = readVarint(buffer, tag.next);
+		const byteLength = Number(length.value);
+		const end = length.next + byteLength;
+
+		if (!Number.isSafeInteger(byteLength) || byteLength < 0 || end > buffer.length) {
+			throw new Error('Truncated length-delimited protobuf field.');
+		}
+
+		return { start: offset, end, fieldNumber, wireType, payloadStart: length.next, payloadEnd: end };
+	}
+
+	if (wireType === 5) {
+		const end = tag.next + 4;
+
+		if (end > buffer.length) throw new Error('Truncated 32-bit protobuf field.');
+
+		return { start: offset, end, fieldNumber, wireType, payloadStart: tag.next, payloadEnd: end };
+	}
+
+	throw new Error(`Unsupported protobuf wire type ${wireType}.`);
+}
+
+/** Extracts the string map key (field 1) from a serialized protobuf map-entry payload. */
+function readMapEntryKey(payload: Uint8Array): string | null {
+	let offset = 0;
+	let key: string | null = null;
+
+	while (offset < payload.length) {
+		const field = readWireRecord(payload, offset);
+
+		if (field.fieldNumber === 1 && field.wireType === 2) {
+			key = Buffer.from(payload.subarray(field.payloadStart, field.payloadEnd)).toString('utf8');
+		}
+
+		offset = field.end;
+	}
+
+	return key;
+}
+
+/**
+ * Removes every map entry keyed by one of `ids` from `jetbox_summaries_proto.pb`, which `agy` 1.5.6 loads on startup
+ * and mirrors back into `conversation_summaries.db`. Other entries are preserved byte-for-byte via atomic temp-file
+ * rename.
+ */
+function pruneSummariesProto(protoPath: string, ids: ReadonlySet<string>): void {
+	if (!existsSync(protoPath)) return;
+
+	let raw: Buffer;
+
+	try {
+		raw = readFileSync(protoPath);
+	} catch (readError) {
+		if (!existsSync(protoPath)) return;
+		throw readError;
+	}
+
+	const kept: Uint8Array[] = [];
+	let offset = 0;
+	let removed = false;
+
+	while (offset < raw.length) {
+		const record = readWireRecord(raw, offset);
+
+		if (
+			record.fieldNumber === 1 &&
+			record.wireType === 2 &&
+			ids.has(readMapEntryKey(raw.subarray(record.payloadStart, record.payloadEnd)) ?? '')
+		) {
+			removed = true;
+		} else {
+			kept.push(raw.subarray(record.start, record.end));
+		}
+
+		offset = record.end;
+	}
+
+	if (!removed) return;
+
+	const tempPath = `${protoPath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+
+	try {
+		writeDurably(tempPath, Buffer.concat(kept));
+		renameSync(tempPath, protoPath);
+	} catch (writeError) {
+		rmSync(tempPath, { force: true });
+		throw writeError;
+	}
+}
+
+/** Writes `bytes` to a new private file and flushes them to disk, so a crash right after the rename keeps them. */
+function writeDurably(path: string, bytes: Uint8Array): void {
+	const file = openSync(path, 'wx', 0o600);
+
+	try {
+		writeSync(file, bytes);
+		fsyncSync(file);
+	} finally {
+		closeSync(file);
+	}
+}
+
+/** The two stores of conversation summaries `agy` keeps for all conversations. */
+export interface SummaryStores {
+	/** `conversation_summaries.db`: what the CLI's conversation list and its search read. */
+	database: string;
+	/** `jetbox_summaries_proto.pb`: the snapshot `agy` loads at its start and copies back into the database. */
+	snapshot: string;
+}
+
+/** The reason a store refused, as the text of a new error that keeps the first one as its cause. */
+function storeFailure(what: string, cause: unknown): Error {
+	const detail = cause instanceof Error ? cause.message : String(cause);
+
+	return new Error(`${what}: ${detail}`, { cause });
+}
+
+/**
+ * Deletes `ids` from the database (`conversation_summaries`, `conversations_fts`, `conversation_parents`) and from
+ * the snapshot inside one `IMMEDIATE` SQLite transaction when the database exists, serializing concurrent Recoder
+ * cleanups in the same `$HOME`.
+ */
+export function deleteSummaryRecords(stores: SummaryStores, ids: readonly string[]): void {
+	if (ids.length === 0) return;
+
+	const wanted = new Set(ids);
+
+	if (!existsSync(stores.database)) {
+		try {
+			pruneSummariesProto(stores.snapshot, wanted);
+		} catch (protoError) {
+			throw storeFailure('The Antigravity summaries snapshot could not be rewritten', protoError);
+		}
+
+		return;
+	}
+
+	let database: Database;
+
+	try {
+		database = new Database(stores.database, { readwrite: true, create: false });
+	} catch (openError) {
+		if (!existsSync(stores.database)) return;
+
+		throw storeFailure('The Antigravity summaries database could not be opened', openError);
+	}
+
+	try {
+		database.run(`PRAGMA busy_timeout = ${LOCK_WAIT_MS}`);
+
+		const tables = new Set(
+			database
+				.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'table'")
+				.all()
+				.map((row) => row.name)
+		);
+
+		const statements = SUMMARY_DELETE_STATEMENTS.filter((statement) => tables.has(statement.table));
+
+		const removeRows = database.transaction(() => {
+			for (const statement of statements) {
+				for (const id of wanted) database.query(statement.sql).run(id);
+			}
+
+			pruneSummariesProto(stores.snapshot, wanted);
+		});
+
+		removeRows.immediate();
+	} catch (deleteError) {
+		throw storeFailure('The Antigravity summaries could not be deleted', deleteError);
+	} finally {
+		database.close();
+	}
+}

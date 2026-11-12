@@ -9,7 +9,7 @@ const HEADING_HEIGHT = 29;
 /** The list's padding above the first row (`[cmdk-list-sizer]` in the kit). */
 const LIST_PAD = 8;
 
-/** The row that unsets the subagent pick, so subagents follow the Review model. */
+/** The row that unsets a pick, so it follows the Review model. */
 export const FOLLOW_LABEL = `Same as ${ROLE_NAME.orchestrator}`;
 
 /** The id the follow row goes by in the list; no model id has a space in it. */

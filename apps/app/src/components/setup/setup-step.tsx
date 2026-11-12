@@ -1,37 +1,38 @@
-'use client';
-
-import { Collapsible, CollapsibleContent, StatusGlyph, SwapText } from '@recoder/ui';
+import { StatusGlyph, SwapText } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
+import type { SaveState } from '@/lib/settings/use-save-state';
+
+import { SettingsRow } from '@/components/settings/settings-group';
+
 interface SetupStepProps {
+	name: string;
+	/** The step's one line: why it waits, or what is in place once it is done. Null when the row says enough. */
+	detail: string | null;
 	done: boolean;
-	/** The first step not done yet: it takes the tint and the region's one primary button. */
+	/** The first step not done yet: its action is the page's next one. */
 	current: boolean;
-	title: string;
-	/** One line under the title. A new line replaces the old one after it fades out, so the two never overlap. */
-	description: string;
-	/** What gets the step done; it folds away once the step is. */
-	children: ReactNode;
+	/** Where the step's own save stands, when its control saves on change. */
+	state?: SaveState;
+	/** Under the row: a command to run by hand. */
+	below?: ReactNode;
+	/** The step's actions, at the end of its row. */
+	children?: ReactNode;
 }
 
-/**
- * One step of first run. Its glyph morphs from an empty ring to a check when
- * the step is done, the line under the title changes to what was set up, and
- * the actions fold away.
- */
-export function SetupStep({ done, current, title, description, children }: SetupStepProps) {
+/** One step of first run: a ring that turns into a check mark, what the step is, and the way to do it. */
+export function SetupStep({ name, detail, done, current, state, below, children }: SetupStepProps) {
 	return (
-		<li data-ui="setup-step" data-state={done ? 'done' : current ? 'current' : 'pending'} className="setup-step">
-			<StatusGlyph kind={done ? 'ok' : 'idle'} label={done ? 'Done' : 'To do'} className="setup-glyph" />
-			<div className="setup-step-main">
-				<h2 className="setup-step-title">{title}</h2>
-				<SwapText mode="wait" className="setup-step-desc">
-					{description}
-				</SwapText>
-				<Collapsible open={!done}>
-					<CollapsibleContent className="setup-step-body">{children}</CollapsibleContent>
-				</Collapsible>
-			</div>
-		</li>
+		<div className="setup-step" data-current={current || undefined}>
+			<SettingsRow
+				leading={<StatusGlyph kind={done ? 'ok' : 'idle'} label={done ? 'Done' : 'To do'} />}
+				name={name}
+				detail={detail ? <SwapText mode="wait">{detail}</SwapText> : null}
+				state={state}
+			>
+				{children}
+			</SettingsRow>
+			{below}
+		</div>
 	);
 }

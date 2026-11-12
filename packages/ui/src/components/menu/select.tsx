@@ -3,11 +3,12 @@
 import { Check, ChevronDown } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { Select as SelectPrimitive } from 'radix-ui';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
 import { buttonClass } from '../button';
 import { SwapText } from '../display/swap-text';
+import { ShallowBodyLock } from '../overlay/shallow-body-lock';
 import { MENU_ITEM, MenuPanel } from './menu-parts';
 import { MenuHighlight } from './menu-highlight';
 
@@ -59,7 +60,8 @@ function SelectRow({ option }: { option: SelectOption }) {
  * same variant, and a new choice crossfades into it. The list opens under it
  * on the menu panel, with the traveling highlight and a check mark on the
  * chosen value. Arrow keys, Home, End and typeahead work; Escape closes and
- * returns focus to the trigger.
+ * returns focus to the trigger. A clear layer under the list takes presses
+ * outside it, so the page's pointer lock stays shallow (`ShallowBodyLock`).
  */
 export function Select({
 	value,
@@ -74,6 +76,7 @@ export function Select({
 	disabled
 }: SelectProps) {
 	const [open, setOpen] = useState(false);
+	const panelRef = useRef<HTMLDivElement>(null);
 	const selected = options.find((option) => option.value === value);
 
 	return (
@@ -117,6 +120,7 @@ export function Select({
 							collisionPadding={8}
 						>
 							<MenuPanel
+								ref={panelRef}
 								highlight={false}
 								data-ui="select-content"
 								className={cn(
@@ -126,6 +130,7 @@ export function Select({
 									contentClassName
 								)}
 							>
+								<ShallowBodyLock cover={panelRef} />
 								<SelectPrimitive.Viewport data-ui="select-viewport" className="flex flex-col gap-px p-1">
 									<MenuHighlight />
 									{options.map((option) => (

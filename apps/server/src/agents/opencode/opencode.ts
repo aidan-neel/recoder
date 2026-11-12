@@ -6,20 +6,22 @@ import type {
 	AgentProvider,
 	AgentStatus,
 	ModelEntry,
+	ModelFailure,
 	ReasoningEffort
 } from '@recoder/shared';
+import { LlmError, UsageLimitError } from '../../models/llm/errors';
 import { withFieldFallback } from '../../models/llm/request-fields';
+import { outOfUsage } from '../../models/out-of-usage';
 import type { ChatOptions } from '../../models/llm/types';
-import type { AgentAdapter } from '../registry';
+import type { AgentAdapter, AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
 import { OAUTH_TIMEOUT_MS } from './api/types';
-import { AgentSession, refusesStructuredOutput, type AgentSessionOptions } from './opencode-agent-session';
+import { OpenCodeAgentRun, refusesStructuredOutput } from './opencode-agent-session';
 import { openCodeChat } from './opencode-chat';
 import { normalizeCatalog, normalizeModels, normalizeProviders, type CatalogProvider } from './opencode-catalog';
 import { OpenCodeError } from './opencode-error';
-import { toolHost } from './opencode-mcp';
 import { OpenCodeServer, findOpenCode, probeVersion, type ServerRequest } from './opencode-server';
 
-export { OPENCODE_MODEL_PREFIX, normalizeModels, normalizeProviders } from './opencode-catalog';
+export { normalizeModels, normalizeProviders } from './opencode-catalog';
 export { OpenCodeError } from './opencode-error';
 
 const INSTALL = 'curl -fsSL https://opencode.ai/install | bash';
@@ -50,6 +52,11 @@ type Attempt = AgentOAuthAttempt & {
 export class OpenCodeAgent implements AgentAdapter {
 	readonly id = 'opencode';
 	readonly name = 'OpenCode';
+	/** Every call goes through one `opencode serve` process, so they share the endpoint ceiling. */
+	readonly processCeiling = null;
+	readonly signInFix =
+		'Sign in to the model\u2019s provider with `opencode auth login`, or pick another model in Recoder settings.';
+
 	private readonly server: OpenCodeServer;
 	private status: AgentStatus | null = null;
 	private attempts = new Map<string, Attempt>();
@@ -71,19 +78,7 @@ export class OpenCodeAgent implements AgentAdapter {
 		if (this.status && !refresh) return this.status;
 
 		const path = findOpenCode(this.env);
-
-		const base: AgentStatus = {
-			id: this.id,
-			name: this.name,
-			installed: !!path,
-			version: null,
-			path,
-			error: null,
-			install: INSTALL,
-			signedIn: null,
-			login: null,
-			providers: true
-		};
+		const base = this.binaryStatus(path);
 
 		if (!path) return (this.status = base);
 
@@ -103,6 +98,36 @@ export class OpenCodeAgent implements AgentAdapter {
 		}
 
 		return (this.status = base);
+	}
+
+	/**
+	 * Whether OpenCode is installed, and nothing more: its status starts its server, and it signs in per provider,
+	 * which `recoder doctor` checks by whether it lists the picked model.
+	 */
+	async quickStatus(): Promise<AgentStatus> {
+		return this.binaryStatus(findOpenCode(this.env));
+	}
+
+	installed(): boolean {
+		return findOpenCode(this.env) !== null;
+	}
+
+	/** Only its server lists its models. */
+	fixedModels(): null {
+		return null;
+	}
+
+	/**
+	 * Names the hosted provider the model routes to, since its plan and its key are that provider's: a spent plan is
+	 * that provider's, a 401 asks to reconnect it, and a server error reads as the fallback.
+	 */
+	describeFailure(err: LlmError, fallback: string, source: string | undefined): ModelFailure {
+		const name = this.providerName(source ?? this.id);
+
+		if (err instanceof UsageLimitError) return outOfUsage({ provider: name, name, usageUrl: null });
+		if (err.status === 401) return { reason: `${name} rejected the sign-in. Reconnect it in Settings → Agent.` };
+
+		return { reason: err.status >= 500 ? fallback : err.message || fallback };
 	}
 
 	async providers(): Promise<AgentProvider[]> {
@@ -135,6 +160,22 @@ export class OpenCodeAgent implements AgentAdapter {
 		return providerId;
 	}
 
+	/** The status of the binary at `path`, before it is run. */
+	private binaryStatus(path: string | null): AgentStatus {
+		return {
+			id: this.id,
+			name: this.name,
+			installed: !!path,
+			version: null,
+			path,
+			error: null,
+			install: INSTALL,
+			signedIn: null,
+			login: null,
+			providers: true
+		};
+	}
+
 	/**
 	 * One model call through the server. See {@link openCodeChat}. A server that cannot force a schema, and
 	 * a model that refuses it, are asked for plain JSON instead.
@@ -151,9 +192,17 @@ export class OpenCodeAgent implements AgentAdapter {
 		return withFieldFallback(opts, opts.model, this.noStructuredOutput, refusesStructuredOutput, run);
 	}
 
-	/** A session in which OpenCode runs a whole agent with Recoder's tools. See {@link AgentSession}. */
-	openAgent(options: AgentSessionOptions): Promise<AgentSession> {
-		return AgentSession.open(
+	/**
+	 * A model id names its hosted provider (`openai/gpt-5`). The effort goes through as picked: the model's
+	 * variants are known only once it is listed, and a call checks it against them then.
+	 */
+	modelSettings(model: string, requested: ReasoningEffort | undefined): AgentModelSettings {
+		return { source: model.split('/')[0], reasoningEffort: requested };
+	}
+
+	/** A session in which OpenCode runs a whole agent with Recoder's tools. See {@link OpenCodeAgentRun}. */
+	openRun(options: AgentRunOptions): Promise<AgentRun> {
+		return OpenCodeAgentRun.open(
 			{
 				server: this.server,
 				efforts: (model: string) => this.efforts(model),
@@ -257,7 +306,6 @@ export class OpenCodeAgent implements AgentAdapter {
 	}
 
 	stop(): void {
-		toolHost.stop();
 		this.server.stop();
 	}
 }

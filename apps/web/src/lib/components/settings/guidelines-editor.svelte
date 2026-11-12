@@ -20,6 +20,7 @@
 	import { keepPillAligned } from '$lib/shell/tab-pill';
 	import { errorToast, undoToast } from '$lib/shell/notify';
 	import { serverApi } from '$lib/api/server-api';
+	import { proposeRefusal } from '@recoder/shared';
 
 	/**
 	 * The one editor for owner review guidelines (global layer or a repo's
@@ -95,11 +96,8 @@
 	const primaryLabel = $derived(
 		editing?.kind === 'global' ? 'Save' : repo?.pending ? 'Update pull request' : 'Open pull request'
 	);
-	const blockedReason = $derived(
-		editing?.kind === 'repo' && repo && !repo.canPropose
-			? 'Connect a token with write access in Settings → Connections to open a pull request.'
-			: null
-	);
+	const provider = $derived(editing?.kind === 'repo' ? guidelinesStore.repoProvider(editing.repoId) : null);
+	const blockedReason = $derived(repo && provider && !repo.canPropose ? proposeRefusal(provider) : null);
 
 	/** One-click requests; the repo gets one that mines its instruction files. */
 	const presets = $derived([
@@ -417,8 +415,10 @@
 						{/each}
 					</div>
 				{/if}
-				{#if draftError || saveError || blockedReason}
-					<p class="guidelines-error" role="alert">{draftError ?? saveError ?? blockedReason}</p>
+				{#if draftError || saveError}
+					<p class="guidelines-error" role="alert">{draftError ?? saveError}</p>
+				{:else if blockedReason}
+					<p class="guidelines-blocked">{blockedReason}</p>
 				{/if}
 				<ReviewComposer
 					bind:value={prompt}

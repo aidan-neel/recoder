@@ -5,6 +5,7 @@ import {
 	MAX_GUIDELINES_CHARS,
 	MAX_GUIDELINES_PROMPT_CHARS,
 	type GuidelinesOverview,
+	proposeRefusal,
 	type GuidelinesProposal,
 	type RepoGuidelines
 } from '@recoder/shared';
@@ -20,6 +21,7 @@ import { streamGuidelinesDraft } from '../review/guidelines/guidelines-draft';
 import { LlmError } from '../models/llm';
 import { isReviewConfigured } from '../models/models';
 import { repoFileHost } from '../forge/repo-files';
+import { detectProvider } from '../forge/providers';
 import { proposalPath, readRepoGuidelinesFile } from '../review/guidelines/repo-layer';
 import { db } from '../store';
 import { settingsOperation } from '../storage/backend';
@@ -144,13 +146,7 @@ app.post('/repos/:id/propose', async (c) => {
 
 	const host = repoFileHost(repo);
 
-	if (!host.canWrite())
-		return c.json(
-			{
-				error: `Connect a ${repo.provider === 'gitlab' ? 'GitLab' : 'GitHub'} token with write access in Settings → Connections to open a pull request.`
-			},
-			401
-		);
+	if (!host.canWrite()) return c.json({ error: proposeRefusal(repo.provider ?? detectProvider(repo.url)) }, 401);
 
 	return withHost(c, async () => {
 		const pending = await host.findPending(BRANCH_PREFIX);

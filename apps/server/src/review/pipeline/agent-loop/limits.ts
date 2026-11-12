@@ -26,6 +26,18 @@ export function agentDeadlines<T>(opts: JsonAgentOptions<T>): AgentLimits {
 	return { startedAt, deadlineAt, finalTurnAt };
 }
 
+/**
+ * When a turn's model call must settle, on the review clock. The final turn may run to the agent's deadline. A turn
+ * before it that is still running at the final-turn time may go on for half of what is left: a call that is nearly
+ * done is not thrown away, and the final turn keeps the other half to answer in. A call stopped there is followed
+ * by the final turn, since the final-turn time has passed.
+ */
+export function callSettleAt(limits: AgentLimits, lastTurn: boolean): number {
+	if (lastTurn || limits.finalTurnAt >= limits.deadlineAt) return limits.deadlineAt;
+
+	return limits.finalTurnAt + (limits.deadlineAt - limits.finalTurnAt) / 2;
+}
+
 /** Why an agent past its deadline stopped: its own time limit, or the review's. */
 export function deadlineError<T>(opts: JsonAgentOptions<T>, limits: AgentLimits): string {
 	const ownLimit = opts.timeLimit && limits.deadlineAt === limits.startedAt + opts.timeLimit.maxWallMs;

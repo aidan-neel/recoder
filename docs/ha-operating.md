@@ -22,7 +22,12 @@ The server reads these variables at startup.
 | `RECODER_INSTANCE_ID` | A generated identifier | Executor identity. Use a distinct value for each replica when setting it explicitly. |
 | `RECODER_JOB_LEASE_MS` | `30000` | Ownership lease in milliseconds, from 1000 through 300000. |
 | `RECODER_JOB_POLL_MS` | `250` | Work polling interval in milliseconds, from 50 through 5000. |
-| `RECODER_JOB_CONCURRENCY` | `2` | Maximum owned review actors per API replica, from 1 through 32. |
+| `RECODER_JOB_CONCURRENCY` | `2` | Maximum owned review actors per API replica, from 0 through 32. `0` makes an API-only replica that serves requests and event streams but never runs a review. |
+
+At least one replica must run reviews (`RECODER_JOB_CONCURRENCY` above 0), or started reviews stay queued.
+When every review worker is busy, a queued review's progress carries `workerWait`: when it joined the queue, its place in line and how many reviews the workers hold.
+It appears after the review has waited about two seconds and clears when a worker takes the review.
+Each pipeline run records the worker that ran it (`worker`, the replica's `RECODER_INSTANCE_ID` or generated identifier) in the review's metrics.
 
 All replicas of one installation must use the same database and compatible server images.
 The API image must include this PostgreSQL runtime and the `/health/ready` endpoint.
@@ -50,6 +55,7 @@ It imports `recoder.db`, its committed WAL contents, and these settings files wh
 - `auto-review.json`
 - `auto-review-state.json`
 - `dismissed-findings.json`
+- `finding-votes.json`
 
 Missing settings remain unset. An explicitly saved empty guidelines file remains empty.
 Legacy model settings pass through the same migration as local server startup.

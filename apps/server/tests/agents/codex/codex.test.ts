@@ -1,153 +1,138 @@
-import { afterEach, expect, test } from 'bun:test';
-import { codex } from '../../../src/agents/codex/codex';
-import { LlmError, chatCompletion, streamChatCompletion } from '../../../src/models/llm';
-import { db, reviewMetrics } from '../../../src/store';
-import { getReviewMetrics, withReviewMetrics } from '../../../src/models/metrics';
-import { configForSubagent } from '../../../src/models/models';
-import {
-	initReviewSettings,
-	saveReviewSettings,
-	setReviewOverrides
-} from '../../../src/review/session/review-settings';
-import { testReview } from '../../helpers/review';
-import { cleanupFixtures, completeEvent, finalItem, fixture, input, sse, usage } from './chatgpt-fixture';
+import { describe, expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import type { TokenUsage } from '@recoder/shared';
+import { CodexAgent } from '../../../src/agents/codex/codex';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
+import type { ChatOptions } from '../../../src/models/llm/types';
+import { fakeCodex } from '../../helpers/fake-codex';
+import { testCallFailures } from '../../helpers/native-agent';
 
-afterEach(cleanupFixtures);
-
-test('existing codex model routing persists without an API key or endpoint', () => {
-	saveReviewSettings({
-		models: [{ id: 'sub', label: 'ChatGPT', model: 'test-model', provider: 'codex', apiKey: 'must-not-be-saved' }],
-		sharedModelId: 'sub'
-	});
-
-	setReviewOverrides({});
-	initReviewSettings();
-
-	expect(configForSubagent()).toMatchObject({
+function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
+	return {
 		provider: 'codex',
 		baseUrl: '',
 		apiKey: '',
-		model: 'test-model'
-	});
-});
+		model: 'gpt-6-sol',
+		messages: [
+			{ role: 'system', content: 'Review the diff.' },
+			{ role: 'user', content: 'diff --git a/x b/x' }
+		],
+		...overrides
+	};
+}
 
-test('disconnected provider fails before any model request', async () => {
-	const f = fixture({ authenticated: false });
+/** The one call the fake logged: its argv, prompt, system prompt and the sub-agent version its model was offered. */
+async function loggedCall(
+	log: string | undefined
+): Promise<{ args: string[]; prompt: string; system: string; subagents: string | null }> {
+	return JSON.parse((await readFile(log ?? '', 'utf8')).trim());
+}
 
-	await expect(f.provider.complete(input)).rejects.toThrow('Sign in to ChatGPT');
-	expect(f.calls).toEqual([]);
-});
+test('the models are the catalog’s listed ones, with the effort levels Recoder names and their context windows', async () => {
+	const models = await new CodexAgent(await fakeCodex()).models();
 
-test('account usage and model discovery use direct endpoints and hide non-listed models', async () => {
-	const f = fixture();
-
-	expect((await f.provider.status()).limits).toEqual([
-		{ name: 'Codex · 300 min', usedPercent: 25, resetsAt: 1900001000 },
-		{ name: 'Spark · 10080 min', usedPercent: 40, resetsAt: 1900002000 }
+	expect(models).toEqual([
+		{
+			id: 'codex:gpt-6-sol',
+			provider: 'codex',
+			label: 'GPT-6-Sol',
+			model: 'gpt-6-sol',
+			baseUrl: null,
+			apiKeyPreview: null,
+			contextWindow: 272000,
+			efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+			defaultEffort: 'medium'
+		},
+		expect.objectContaining({ id: 'codex:gpt-6-luna', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] })
 	]);
-
-	expect(await f.provider.models()).toEqual([{ id: 'test-model', label: 'Test model' }]);
 });
 
-test('usage failure preserves login and reports its own error, not App Server unavailable', async () => {
-	const f = fixture({
-		handler: (call) => (call.url.endsWith('/wham/usage') ? new Response('', { status: 503 }) : undefined)
-	});
+test('a listed model runs at the picked effort it offers, else at its default; one not listed yet at Medium', async () => {
+	const agent = new CodexAgent(await fakeCodex());
 
-	expect(await f.provider.status()).toMatchObject({
-		available: true,
-		authenticated: true,
-		error: expect.stringContaining('HTTP 503')
-	});
+	expect(agent.modelSettings('gpt-6-sol', 'minimal')).toEqual({ reasoningEffort: 'medium' });
 
-	expect(await f.provider.complete(input)).toBe('{"findings":[]}');
+	await agent.models();
+
+	expect(agent.modelSettings('gpt-6-sol', 'xhigh')).toEqual({ reasoningEffort: 'xhigh' });
+	expect(agent.modelSettings('gpt-6-sol', 'minimal')).toEqual({ reasoningEffort: 'medium' });
+	expect(agent.modelSettings('gpt-6-sol', undefined)).toEqual({ reasoningEffort: 'medium' });
 });
 
-test('harness completion and streaming use direct HTTP, count once each and preserve HTTP failure status', async () => {
-	let limited = false;
+test('detect reports the version and whether the CLI is signed in', async () => {
+	const signedOut = await new CodexAgent(await fakeCodex()).detect();
+	const signedIn = await new CodexAgent(await fakeCodex({ FAKE_CODEX_SIGNED_IN: '1' })).detect();
 
-	const f = fixture({
-		handler: (call) => {
-			if (!call.url.endsWith('/responses')) return undefined;
-			if (limited) return new Response('', { status: 429 });
-
-			return sse([
-				{ type: 'response.output_item.added', item: { ...finalItem, content: [] } },
-				{ type: 'response.output_text.delta', item_id: 'answer', delta: '{"findings":' },
-				{ type: 'response.output_text.delta', item_id: 'answer', delta: '[]}' },
-				completeEvent({ usage })
-			]);
-		}
-	});
-
-	const original = codex.complete;
-
-	codex.complete = f.provider.complete.bind(f.provider);
-
-	const id = crypto.randomUUID();
-
-	await db.reviews.set(testReview({ id }));
-
-	try {
-		await withReviewMetrics(id, 'pipeline', () => chatCompletion(input));
-
-		const chunks: string[] = [];
-
-		await withReviewMetrics(id, 'discussion', () => streamChatCompletion(input, (text) => chunks.push(text)));
-		expect(chunks).toEqual(['{"findings":', '[]}']);
-
-		expect((await getReviewMetrics(id))?.total).toMatchObject({
-			calls: 2,
-			failedCalls: 0,
-			usage: { inputTokens: 200, outputTokens: 60, totalTokens: 260, cachedInputTokens: 40, reasoningOutputTokens: 20 }
-		});
-
-		expect((await getReviewMetrics(id))?.models).toHaveLength(1);
-		limited = true;
-
-		const error = await withReviewMetrics(id, 'pipeline', () => chatCompletion(input)).catch((error) => error);
-
-		expect(error).toBeInstanceOf(LlmError);
-		expect(error.status).toBe(429);
-
-		expect((await getReviewMetrics(id))?.total).toMatchObject({
-			calls: 3,
-			failedCalls: 1,
-			usage: { totalTokens: 260 }
-		});
-	} finally {
-		codex.complete = original;
-		await db.reviews.delete(id);
-		await reviewMetrics.delete(id);
-	}
+	expect(signedOut).toMatchObject({ installed: true, version: '0.167.0', signedIn: false, login: 'codex login' });
+	expect(signedIn.signedIn).toBe(true);
 });
 
-test('model discovery reads effort levels and the default from the catalog', async () => {
-	const f = fixture({
-		handler: (call) =>
-			call.url.includes('/codex/models?')
-				? Response.json({
-						models: [
-							{
-								slug: 'sol',
-								display_name: 'GPT-5.6-Sol',
-								visibility: 'list',
-								default_reasoning_level: 'medium',
-								supported_reasoning_levels: [
-									{ effort: 'low', description: 'Fast' },
-									{ effort: 'medium', description: 'Balanced' },
-									{ effort: 'xhigh', description: 'Extra high' },
-									{ effort: 'turbo', description: 'Unknown levels are ignored' }
-								]
-							},
-							{ slug: 'legacy', visibility: 'list', supported_reasoning_efforts: ['minimal', 'high'] }
-						]
-					})
-				: undefined
+describe('CodexAgent.complete', () => {
+	test('saves no session, passes no MCP server, drops the server’s keys, and streams the answer and its usage', async () => {
+		const env = await fakeCodex({ RECODER_SECRET_KEY: 'k', OPENAI_API_KEY: 'sk-x', CODEX_API_KEY: 'c' });
+		const tokens: string[] = [];
+		const reasoning: string[] = [];
+		let usage: TokenUsage | undefined;
+
+		const reply = await new CodexAgent(env).complete(
+			call({ reasoningEffort: 'high', onUsage: (u) => (usage = u), onReasoning: (r) => reasoning.push(r) }),
+			(t) => tokens.push(t)
+		);
+
+		const logged = await loggedCall(env.FAKE_CODEX_LOG);
+		const childEnv = (await readFile(`${env.FAKE_CODEX_LOG}.env`, 'utf8')).split('\n');
+
+		expect(reply).toBe('the reply');
+		expect(tokens).toEqual(['the reply']);
+		expect(reasoning).toEqual(['**Reading the diff**']);
+		expect(usage).toMatchObject({ inputTokens: 1000, outputTokens: 20, cachedInputTokens: 600 });
+		expect(logged.args.slice(0, 2)).toEqual(['exec', '--ephemeral']);
+		expect(logged.args.some((arg) => arg.startsWith('mcp_servers.'))).toBe(false);
+		expect(logged.args).toEqual(expect.arrayContaining(['--disable', 'shell_tool', 'model_reasoning_effort="high"']));
+		expect(logged.system).toStartWith('Review the diff.');
+		expect(logged.prompt).toBe('diff --git a/x b/x');
+		expect(childEnv).toContain('CODEX_HOME');
+		expect(childEnv).not.toContain('RECODER_SECRET_KEY');
+		expect(childEnv).not.toContain('OPENAI_API_KEY');
+		expect(childEnv).not.toContain('CODEX_API_KEY');
 	});
 
-	expect(await f.provider.models()).toEqual([
-		{ id: 'sol', label: 'GPT-5.6-Sol', efforts: ['low', 'medium', 'xhigh'], defaultEffort: 'medium' },
-		{ id: 'legacy', label: 'legacy', efforts: ['minimal', 'high'] }
-	]);
+	test('offers the model no sub-agents, though the CLI’s catalog gives it a version', async () => {
+		const env = await fakeCodex();
+
+		await new CodexAgent(env).complete(call({ model: 'gpt-6-luna' }));
+
+		expect((await loggedCall(env.FAKE_CODEX_LOG)).subagents).toBeNull();
+	});
+
+	test('runs no call when the CLI prints no catalog to turn sub-agents off in', async () => {
+		const env = await fakeCodex({ FAKE_CODEX_CATALOG: 'not a catalog' });
+
+		const error = await new CodexAgent(env).complete(call()).catch((e: unknown) => e);
+
+		expect(error).toMatchObject({ message: expect.stringContaining('sub-agents could not be turned off') });
+		expect(existsSync(env.FAKE_CODEX_LOG ?? '')).toBe(false);
+	});
+
+	testCallFailures(
+		async (mode) => new CodexAgent(await fakeCodex({ FAKE_CODEX_MODE: mode })).complete(call()),
+		[
+			{ mode: 'auth', status: 401, message: /signed out\. Run: codex login/, error: LlmError },
+			{ mode: 'crash', status: 0, message: /boom/, error: LlmError }
+		]
+	);
+
+	test('a usage cap fails as a UsageLimitError that Recoder words as out of usage, with the reset time', async () => {
+		const agent = new CodexAgent(await fakeCodex({ FAKE_CODEX_MODE: 'limit' }));
+
+		const error = await agent.complete(call()).catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(UsageLimitError);
+
+		const failure = agent.describeFailure(error as UsageLimitError, 'fallback');
+
+		expect(failure.usageLimit).toEqual({ provider: 'codex', name: 'Codex', usageUrl: null });
+		expect(failure.reason).toContain('try again at 5:28 AM');
+	});
 });

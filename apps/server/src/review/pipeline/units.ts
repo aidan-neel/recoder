@@ -1,4 +1,4 @@
-import type { DiffLine, ReviewAssignment } from '@recoder/shared';
+import { byCodePoint, type DiffLine, type ReviewAssignment } from '@recoder/shared';
 import { REVIEW_POLICY } from '../session/review-policy.js';
 import type { InventoryFile, ReviewInventory } from './inventory.js';
 import type { LensId } from './lenses/types.js';
@@ -37,9 +37,22 @@ export type SecondLookPurpose = 'residual' | 'contract-check';
 
 const UNIT_REASON = 'Every changed line is read by every lens that applies to it.';
 
+/** The id prefix of a reviewer's second attempt: `retry-reviewer-1`. */
+const RETRY_PREFIX = 'retry-';
+
 /** Patch characters in one diff line: its text, its sign and its line break. */
 export function patchLineChars(line: DiffLine): number {
 	return line.text.length + 2;
+}
+
+/** The first lines of a hunk that fit in `chars`. */
+export function linesWithin(lines: DiffLine[], chars: number): DiffLine[] {
+	let left = chars;
+	let count = 0;
+
+	while (count < lines.length && patchLineChars(lines[count]) <= left) left -= patchLineChars(lines[count++]);
+
+	return lines.slice(0, count);
 }
 
 /** Patch characters in one file of the diff, counted the way the evidence store pages them. */
@@ -56,11 +69,6 @@ function directoryOf(path: string): string {
 	const slash = path.lastIndexOf('/');
 
 	return slash < 0 ? '.' : path.slice(0, slash);
-}
-
-/** Plain code-point order, so the partition doesn't depend on the machine's locale. */
-function byCodePoint(a: string, b: string): number {
-	return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /** "src/a.ts", "src/review", or "src/review and 2 more folders". */
@@ -138,7 +146,14 @@ export function reviewerSlices(units: ReviewUnit[]): ReviewUnit[] {
 
 /** Whether the unit is the second attempt of a reviewer that failed. */
 export function isRetry(unit: ReviewUnit): boolean {
-	return unit.id.startsWith('retry-');
+	return unit.id.startsWith(RETRY_PREFIX);
+}
+
+/** The id of the unit a retry stands in for: `reviewer-1` for `retry-reviewer-1` and its halves `-a` and `-b`. */
+export function originalUnitId(unitId: string): string {
+	if (!unitId.startsWith(RETRY_PREFIX)) return unitId;
+
+	return unitId.slice(RETRY_PREFIX.length).replace(/-[ab]$/, '');
 }
 
 /** A fresh, queued record for a reviewer or subagent. */

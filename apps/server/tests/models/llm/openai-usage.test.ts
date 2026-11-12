@@ -65,5 +65,5 @@ test('a gateway that names the counts input_tokens and output_tokens still repor
 	const [usage] = await streamedUsage({ input_tokens: 120, output_tokens: 15 });
 
 	expect(usage).toMatchObject({ inputTokens: 120, outputTokens: 15, totalTokens: 135 });
-	expect(normalizeTokenUsage({ prompt_tokens: 7, input_tokens: 9 }, 'openai-compatible').inputTokens).toBe(7);
+	expect(normalizeTokenUsage({ prompt_tokens: 7, input_tokens: 9 }).inputTokens).toBe(7);
 });

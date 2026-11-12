@@ -1,4 +1,7 @@
-import type { AskMessage, AskThread, ReviewThreads } from './ask-store';
+import type { AskMessage, AskThread } from './bug-thread';
+
+/** The threads of one review, by finding id. */
+export type ReviewThreads = Record<string, AskThread>;
 
 /** One session-storage entry per review: its threads by item key. */
 const PREFIX = 'recoder-ask:';
@@ -66,21 +69,13 @@ function parse(json: string | null): ReviewThreads | null {
 	}
 }
 
-/** Every review's threads saved in this tab. Threads last for the tab's session, like the conversation they hold. */
-export function readThreads(): Record<string, ReviewThreads> {
-	const store = storage();
-	const all: Record<string, ReviewThreads> = {};
-
-	if (!store) return all;
-
-	for (let index = 0; index < store.length; index++) {
-		const key = store.key(index);
-		const threads = key?.startsWith(PREFIX) ? parse(store.getItem(key)) : null;
-
-		if (key && threads) all[key.slice(PREFIX.length)] = threads;
+/** The threads this tab saved for one review; none when there are none or they do not parse. Threads last for the tab's session, like the conversation they hold. */
+export function readThreads(reviewId: string): ReviewThreads {
+	try {
+		return parse(storage()?.getItem(`${PREFIX}${reviewId}`) ?? null) ?? {};
+	} catch {
+		return {};
 	}
-
-	return all;
 }
 
 /** Saves one review's threads. A full or blocked storage only costs the threads on reload. */

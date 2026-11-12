@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Repo } from '@recoder/shared';
 
-import { parsePullRef, parseReviewQuery, refNamesPull, repoFromLink, reposFor } from '../../src/lib/shell/pull-ref';
+import { parsePullRef, reposFor } from '../../src/lib/shell/pull-ref';
 
 function repo(id: string, name: string, url: string): Repo {
 	return { id, name, url, provider: 'github', defaultBranch: 'main', createdAt: '', updatedAt: '' };
@@ -32,6 +32,14 @@ describe('parsePullRef', () => {
 		});
 	});
 
+	test('reads a link to a forge on its own port with that port, as the tracked repository is keyed', () => {
+		const link = 'https://gitlab.acme.dev:8443/team/svc/-/merge_requests/44';
+		const tracked = repo('r4', 'team/svc', 'https://gitlab.acme.dev:8443/team/svc.git');
+
+		expect(parsePullRef(link)?.address).toBe('gitlab.acme.dev:8443/team/svc');
+		expect(reposFor(parsePullRef(link) ?? { number: 0, address: null, name: null }, [API, tracked])).toEqual([tracked]);
+	});
+
 	test('reads a bare number, #N and a repository before #', () => {
 		expect(parsePullRef('12')).toEqual({ number: 12, address: null, name: null });
 		expect(parsePullRef(' #12 ')).toEqual({ number: 12, address: null, name: null });
@@ -60,49 +68,5 @@ describe('reposFor', () => {
 	test('offers every tracked repository for a bare number, and none for an untracked link', () => {
 		expect(reposFor(parsePullRef('#4')!, [API, WEB])).toEqual([API, WEB]);
 		expect(reposFor(parsePullRef('https://github.com/other/thing/pull/1')!, [API, WEB])).toEqual([]);
-	});
-});
-
-describe('repoFromLink', () => {
-	test('reads the owner and name from a pull request or merge request link, keeping their case', () => {
-		expect(repoFromLink('https://github.com/Acme/API/pull/12')).toBe('Acme/API');
-		expect(repoFromLink('https://gitlab.com/group/sub/tool/-/merge_requests/45')).toBe('group/sub/tool');
-		expect(repoFromLink('https://github.com/acme/api')).toBeNull();
-	});
-});
-
-describe('parseReviewQuery', () => {
-	test('reads the brief after a reference or a link, past any separator', () => {
-		expect(parseReviewQuery('#214 focus on the auth changes')).toMatchObject({
-			ref: { number: 214 },
-			refText: '#214',
-			brief: 'focus on the auth changes',
-			search: ''
-		});
-
-		expect(parseReviewQuery('api#214: only the python files').brief).toBe('only the python files');
-
-		expect(parseReviewQuery('https://github.com/acme/api/pull/9 — check retries')).toMatchObject({
-			ref: { number: 9, address: 'github.com/acme/api' },
-			brief: 'check retries'
-		});
-	});
-
-	test('reads a bare number alone as a reference, but a number with words after it as a search', () => {
-		expect(parseReviewQuery('214').ref?.number).toBe(214);
-		expect(parseReviewQuery('2 factor auth')).toMatchObject({ ref: null, search: '2 factor auth' });
-		expect(parseReviewQuery('csv export')).toMatchObject({ ref: null, brief: '', search: 'csv export' });
-	});
-});
-
-describe('refNamesPull', () => {
-	const pull = { repo: 'acme/api', number: 4, url: 'https://github.com/acme/api/pull/4' };
-
-	test('matches the number in the named repository, by link or name', () => {
-		expect(refNamesPull(parsePullRef('#4')!, pull)).toBe(true);
-		expect(refNamesPull(parsePullRef('api#4')!, pull)).toBe(true);
-		expect(refNamesPull(parsePullRef('https://github.com/acme/api/pull/4')!, pull)).toBe(true);
-		expect(refNamesPull(parsePullRef('web#4')!, pull)).toBe(false);
-		expect(refNamesPull(parsePullRef('#5')!, pull)).toBe(false);
 	});
 });

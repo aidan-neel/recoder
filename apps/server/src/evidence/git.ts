@@ -72,3 +72,11 @@ export function regularFiles(lsTreeOutput: string): Set<string> {
 
 	return found;
 }
+
+/** A commit's committer time in ISO 8601, or null when git can't read the commit. */
+export async function commitTime(cwd: string, sha: string, signal?: AbortSignal): Promise<string | null> {
+	const shown = await git(cwd, ['log', '-1', '--format=%cI', sha, '--'], signal);
+	const time = shown.stdout.trim();
+
+	return shown.code === 0 && time ? time : null;
+}

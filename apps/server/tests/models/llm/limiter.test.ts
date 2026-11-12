@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, setSystemTime, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, jest, setSystemTime, test } from 'bun:test';
 import { CapacityError, LlmError, isRateLimitError } from '../../../src/models/llm/errors';
 import {
 	acquireLlmSlot,
@@ -8,6 +8,8 @@ import {
 	releaseLlmSlot,
 	resetLlmLimiter
 } from '../../../src/models/llm/limiter';
+import { withLlmLane } from '../../../src/models/llm/lane';
+import { providerError } from '../../../src/agents/opencode/opencode-error';
 
 const savedConcurrency = process.env.RECODER_LLM_CONCURRENCY;
 
@@ -49,6 +51,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	jest.useRealTimers();
 	resetLlmLimiter();
 	setSystemTime();
 
@@ -246,21 +249,104 @@ describe('per-endpoint limiter', () => {
 	});
 
 	test('a call without a base url is keyed by its provider', () => {
-		expect(llmEndpoint({ baseUrl: '', provider: 'codex' })).toBe('codex');
+		expect(llmEndpoint({ baseUrl: '', provider: 'devin' })).toBe('devin');
+	});
+});
+
+/** Queues a request for a slot on `A` in `review`'s lane, and notes its name in `order` once granted. */
+function queueFor(review: string, name: string, order: string[], signal?: AbortSignal): Promise<void> {
+	return withLlmLane({ id: review, recordWait: () => undefined }, () =>
+		acquireLlmSlot(A, signal).then(() => {
+			order.push(name);
+		})
+	);
+}
+
+/** Frees the held slot `times` times, letting each grant settle before the next. */
+async function releaseInTurn(times: number): Promise<void> {
+	for (let i = 0; i < times; i++) {
+		releaseLlmSlot(A);
+		await Promise.resolve();
+	}
+}
+
+describe('fair turns between reviews', () => {
+	beforeEach(async () => {
+		process.env.RECODER_LLM_CONCURRENCY = '1';
+		await acquireLlmSlot(A);
+	});
+
+	test('a review queued behind a busy review is served in turn, not after all of its requests', async () => {
+		const order: string[] = [];
+		const busy = ['busy-1', 'busy-2', 'busy-3'].map((name) => queueFor('busy', name, order));
+		const small = queueFor('small', 'small-1', order);
+
+		await releaseInTurn(4);
+		await Promise.all([...busy, small]);
+
+		expect(order).toEqual(['busy-1', 'small-1', 'busy-2', 'busy-3']);
+	});
+
+	test('a cancelled request gives its turn to the next review', async () => {
+		const order: string[] = [];
+		const stop = new AbortController();
+		const cancelled = queueFor('first', 'first-1', order, stop.signal);
+		const next = queueFor('second', 'second-1', order);
+
+		stop.abort();
+		await expect(cancelled).rejects.toThrow('Model request cancelled');
+		await releaseInTurn(1);
+		await next;
+
+		expect(order).toEqual(['second-1']);
+	});
+
+	test('a request still waiting at its timeout fails with a capacity error and leaves the queue', async () => {
+		jest.useFakeTimers();
+
+		const order: string[] = [];
+
+		const late = withLlmLane({ id: 'late', recordWait: () => undefined }, () => acquireLlmSlot(A, undefined, 1000));
+
+		const patient = queueFor('patient', 'patient-1', order);
+
+		jest.advanceTimersByTime(1000);
+		await expect(late).rejects.toBeInstanceOf(CapacityError);
+		await releaseInTurn(1);
+		await patient;
+
+		expect(order).toEqual(['patient-1']);
+	});
+
+	test('each request tells its lane how long it waited for a slot', async () => {
+		jest.useFakeTimers();
+
+		const waits: number[] = [];
+		const lane = { id: 'review', recordWait: (waitedMs: number) => waits.push(waitedMs) };
+
+		releaseLlmSlot(A);
+		await withLlmLane(lane, () => acquireLlmSlot(A));
+
+		const queued = withLlmLane(lane, () => acquireLlmSlot(A));
+
+		jest.advanceTimersByTime(2500);
+		releaseLlmSlot(A);
+		await queued;
+
+		expect(waits).toEqual([0, 2500]);
 	});
 });
 
 describe('rate limit classification', () => {
 	test('429, 529 and overloaded errors are rate limits', () => {
-		expect(isRateLimitError(new LlmError(429, 'slow down'), 'openai-compatible')).toBe(true);
-		expect(isRateLimitError(new LlmError(529, 'x'), 'opencode')).toBe(true);
-		expect(isRateLimitError(new LlmError(0, 'Provider is overloaded'), 'opencode')).toBe(true);
+		expect(isRateLimitError(new LlmError(429, 'slow down'))).toBe(true);
+		expect(isRateLimitError(new LlmError(529, 'x'))).toBe(true);
+		expect(isRateLimitError(new LlmError(0, 'Provider is overloaded'))).toBe(true);
 	});
 
-	test("ChatGPT's and OpenCode's final 429s and other failures are not rate limits", () => {
-		expect(isRateLimitError(new LlmError(429, 'usage cap'), 'codex')).toBe(false);
-		expect(isRateLimitError(new LlmError(429, 'plan spent'), 'opencode')).toBe(false);
-		expect(isRateLimitError(new LlmError(500, 'boom'), 'openai-compatible')).toBe(false);
-		expect(isRateLimitError(new Error('429'), 'openai-compatible')).toBe(false);
+	test("OpenCode's final 429s and other failures are not rate limits", () => {
+		expect(isRateLimitError(providerError(429, 'plan spent'))).toBe(false);
+		expect(isRateLimitError(new LlmError(500, 'boom'))).toBe(false);
+		expect(isRateLimitError(new Error('429'))).toBe(false);
 	});
 });

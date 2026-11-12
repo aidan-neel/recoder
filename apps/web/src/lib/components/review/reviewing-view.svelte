@@ -116,8 +116,8 @@
 		}
 	});
 
-	/** Sign-in and usage limits need their own way forward, so they get the notice; any other reason sits on the closing row. */
-	const actionableFailure = $derived(failed && !!(failure?.signIn || failure?.usageLimit));
+	/** A usage limit needs its own way forward, so it gets the notice; any other reason sits on the closing row. */
+	const actionableFailure = $derived(failed && !!failure?.usageLimit);
 
 	const stopped = $derived(failed && failure?.reason === REVIEW_CANCELLED);
 
@@ -289,7 +289,6 @@
 					<FailureNotice
 						title={failed ? stageLabel : 'Something went wrong'}
 						reason={errorMessage ?? failure?.reason ?? ''}
-						signIn={!errorMessage && failure?.signIn}
 						usageLimit={errorMessage ? null : failure?.usageLimit}
 						onRetry={failed && onContinue
 							? () => void continueRun.run()
@@ -306,7 +305,6 @@
 					{focusKey}
 					{onStartReview}
 					intro={isOrchestrator && view.showIntro ? reviewIntro : undefined}
-					signInShown={failed && !errorMessage && !!failure?.signIn}
 					assignment={target}
 					folded={isOrchestrator ? view.units.map((unit) => unit.id) : []}
 					resume={isOrchestrator && failed && !active && (onContinue || onRestart)

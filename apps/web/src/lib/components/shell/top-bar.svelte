@@ -12,7 +12,6 @@
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as ContextMenu from '@sivir-ui/svelte/components/context-menu';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
-	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
@@ -367,29 +366,6 @@
 		<span class="min-w-0 flex-1 truncate text-left">Search or ask Recoder</span>
 		<Shortcut shortcut="cmd+k" class="keycap" />
 	</Button>
-
-	{#if shellState.usage}
-		{@const usage = shellState.usage}
-		<Tooltip.Root delay={400}>
-			<Tooltip.Trigger class="flex shrink-0">
-				<Button
-					variant="ghost"
-					class="usage-meter"
-					aria-label="ChatGPT usage {usage.percent}% of {usage.name}"
-					aria-haspopup="dialog"
-					onclick={() => (shellState.usageOpen = true)}
-				>
-					<Progress
-						value={usage.percent}
-						class="usage-track h-[3px] w-[26px] rounded-[2px] bg-hover"
-						{...{ 'aria-hidden': 'true' }}
-					/>
-					{usage.percent}%
-				</Button>
-			</Tooltip.Trigger>
-			<Tooltip.Content>{usage.name} · {usage.percent}% used</Tooltip.Content>
-		</Tooltip.Root>
-	{/if}
 
 	<Button variant="ghost" size="icon" aria-label="Settings" onclick={() => modelSettingsUi.show()}>
 		<SlidersHorizontal size={15} aria-hidden="true" />

@@ -1,8 +1,6 @@
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { z } from 'zod';
-import { serverDataDir } from '../../../util/data-dir.js';
-import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../../config/shared-settings.js';
+import { DISMISSAL_REASONS, type DismissalReason } from '@recoder/shared';
+import { learnedTable } from './learned-table.js';
 
 /** A finding a person dismissed, remembered so a later review of the same repository does not report it again. */
 export interface Dismissal {
@@ -15,75 +13,61 @@ export interface Dismissal {
 	file: string;
 	category: string;
 	title: string;
-	/** Why the person dismissed it, when they said. */
-	reason?: string;
+	/** Why the person dismissed it; dismissals saved before reasons were chosen have none. */
+	reason?: DismissalReason;
+	/** What the person added in their own words. */
+	note?: string;
 	dismissedAt: string;
 }
 
 /** The newest dismissals kept for each repository. */
 export const MAX_DISMISSALS_PER_REPO = 200;
 
-type Table = Record<string, Dismissal[]>;
+const REASONS: ReadonlySet<string> = new Set(DISMISSAL_REASONS);
 
-const tableSchema = z.record(
-	z.string(),
-	z.array(
-		z.object({
-			repoId: z.string(),
-			fingerprint: z.string(),
-			file: z.string(),
-			category: z.string(),
-			title: z.string(),
-			reason: z.string().optional(),
-			dismissedAt: z.string()
-		})
-	)
-);
+const dismissalSchema = z.object({
+	repoId: z.string(),
+	fingerprint: z.string(),
+	file: z.string(),
+	category: z.string(),
+	title: z.string(),
+	reason: z.enum(DISMISSAL_REASONS).optional(),
+	note: z.string().optional(),
+	dismissedAt: z.string()
+});
 
-function tableFile(): string {
-	return join(serverDataDir(), 'dismissed-findings.json');
+/**
+ * A dismissal saved before reasons were chosen held the person's free text
+ * in `reason`; it is read as the note, with no reason.
+ */
+function withChosenReason(saved: unknown): unknown {
+	if (!saved || typeof saved !== 'object' || !('reason' in saved)) return saved;
+
+	const { reason, ...rest } = saved;
+
+	if (typeof reason !== 'string' || REASONS.has(reason)) return saved;
+
+	return { ...rest, note: reason };
 }
 
-/** The saved table; a missing or unreadable file reads as empty, since losing it only means findings may repeat. */
-function readTable(): Table {
-	if (sharedSettingsActive()) return tableSchema.parse(readSharedSetting('dismissals') ?? {});
-
-	try {
-		const parsed: unknown = JSON.parse(readFileSync(tableFile(), 'utf8'));
-
-		return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Table) : {};
-	} catch {
-		return {};
-	}
-}
-
-/** Writes through a temp file, so a crash never leaves half a table. */
-function writeTable(table: Table): void {
-	if (sharedSettingsActive()) {
-		writeSharedSetting('dismissals', table);
-
-		return;
-	}
-
-	const file = tableFile();
-	const temp = `${file}.${process.pid}.tmp`;
-
-	writeFileSync(temp, JSON.stringify(table));
-	renameSync(temp, file);
-}
+const table = learnedTable<Dismissal>({
+	setting: 'dismissals',
+	file: 'dismissed-findings.json',
+	schema: z.record(z.string(), z.array(z.preprocess(withChosenReason, dismissalSchema)))
+});
 
 /** A repository's dismissals, newest first. */
 export function listDismissals(repoId: string): Dismissal[] {
-	return readTable()[repoId] ?? [];
+	return table.read()[repoId] ?? [];
 }
 
 /** Remembers a dismissal as the newest of its repository; dismissing the same finding again replaces it. */
 export function recordDismissal(dismissal: Dismissal): void {
-	const table = readTable();
-	const others = (table[dismissal.repoId] ?? []).filter((held) => held.fingerprint !== dismissal.fingerprint);
+	const saved = table.read();
+	const others = (saved[dismissal.repoId] ?? []).filter((held) => held.fingerprint !== dismissal.fingerprint);
 
-	table[dismissal.repoId] = [dismissal, ...others].slice(0, MAX_DISMISSALS_PER_REPO);
-	writeTable(table);
+	saved[dismissal.repoId] = [dismissal, ...others].slice(0, MAX_DISMISSALS_PER_REPO);
+	table.write(saved);
 }
 
 /**
@@ -92,14 +76,14 @@ export function recordDismissal(dismissal: Dismissal): void {
  * well as one in the current form; false when none was held.
  */
 export function removeDismissal(repoId: string, matches: (fingerprint: string) => boolean): boolean {
-	const table = readTable();
-	const held = table[repoId] ?? [];
+	const saved = table.read();
+	const held = saved[repoId] ?? [];
 	const kept = held.filter((dismissal) => !matches(dismissal.fingerprint));
 
 	if (kept.length === held.length) return false;
 
-	table[repoId] = kept;
-	writeTable(table);
+	saved[repoId] = kept;
+	table.write(saved);
 
 	return true;
 }

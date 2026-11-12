@@ -5,27 +5,28 @@ import type { ReviewRevision } from '../../../evidence/evidence.js';
 import { INSTRUCTION_PATHS } from '../../pipeline/harness/understand.js';
 import { hasRules, readGlobalGuidelines } from '../guidelines.js';
 
-/** One text the ledger distills, under the path its rules cite. */
+/** One text the ledger distills, under the path its rules cite and the base revision it was read from. */
 export interface LedgerSource {
 	path: string;
 	text: string;
+	revision?: string;
 }
 
 /** The path rules from the owner's Settings guidelines cite; it is not a repo file. */
-const GLOBAL_SOURCE = 'Recoder guidelines';
+export const GLOBAL_SOURCE = 'Recoder guidelines';
 
 /** Root files other agents and editors read, after the shared instruction files. */
-const EXTRA_ROOT_PATHS = ['GEMINI.md', '.cursorrules', '.windsurfrules', '.github/copilot-instructions.md'];
+export const EXTRA_ROOT_PATHS = ['GEMINI.md', '.cursorrules', '.windsurfrules', '.github/copilot-instructions.md'];
 
 /** Instruction files a package or folder can carry for its own code. */
-const NESTED_NAMES = new Set(['AGENTS.md', 'CLAUDE.md']);
+export const NESTED_NAMES = new Set(['AGENTS.md', 'CLAUDE.md']);
 
 const MAX_NESTED = 6;
 const MAX_SOURCE_CHARS = 24_000;
 const MAX_TOTAL_CHARS = 80_000;
 
 /** Bumped when the prompt or validation changes, so cached ledgers from the old rules are not reused. */
-const LEDGER_VERSION = 'ledger-v2';
+export const LEDGER_VERSION = 'ledger-v3';
 
 /**
  * Root instruction files first, in the loader's order, then nested ones by
@@ -37,7 +38,9 @@ function orderedPaths(tracked: string[]): string[] {
 	const root = [...INSTRUCTION_PATHS, ...EXTRA_ROOT_PATHS].filter((path) => present.has(path));
 
 	const nested = tracked
-		.filter((path) => path.includes('/') && NESTED_NAMES.has(path.split('/').pop()!) && !root.includes(path))
+		.filter(
+			(path) => path.includes('/') && NESTED_NAMES.has(path.slice(path.lastIndexOf('/') + 1)) && !root.includes(path)
+		)
 		.sort()
 		.slice(0, MAX_NESTED);
 
@@ -57,7 +60,9 @@ async function repoSources(revision: ReviewRevision, signal: AbortSignal): Promi
 	for (const path of orderedPaths(listed.stdout.split('\0').filter(Boolean))) {
 		const blob = await readBlob(revision.checkoutPath, revision.targetSha, path, signal);
 
-		if (blob.ok && blob.text.trim()) sources.push({ path, text: blob.text.slice(0, MAX_SOURCE_CHARS) });
+		if (blob.ok && blob.text.trim()) {
+			sources.push({ path, text: blob.text.slice(0, MAX_SOURCE_CHARS), revision: revision.targetSha });
+		}
 	}
 
 	return sources;

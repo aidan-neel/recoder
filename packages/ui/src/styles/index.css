@@ -10,7 +10,9 @@
 @import './kit-menu.css';
 @import './kit-form.css';
 @import './kit-form-choice.css';
+@import './kit-form-link.css';
 @import './kit-display.css';
+@import './kit-display-pill.css';
 @import './kit-content.css';
 
 @custom-variant dark (&:where(.dark, .dark *));

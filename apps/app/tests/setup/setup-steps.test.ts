@@ -7,7 +7,7 @@ const NONE = { provider: false, model: false, repo: false };
 const ALL = { provider: true, model: true, repo: true };
 
 describe('gateOf', () => {
-	test('a server that does not answer lets the queue through to show its own notice', () => {
+	test('a server that does not answer lets the pull request list through to show its own notice', () => {
 		expect(
 			gateOf({ settings: 'offline', repos: 'loading', auth: 'idle', steps: null, holding: false, recovering: false })
 		).toBe('done');

@@ -1,4 +1,4 @@
-import type { GuidelinesOverview, GuidelinesProposal, RepoGuidelines } from '@recoder/shared';
+import type { GuidelinesOverview, GuidelinesProposal, Provider, RepoGuidelines } from '@recoder/shared';
 import { serverApi } from '$lib/api/server-api';
 
 type GuidelinesScope = { kind: 'global' } | { kind: 'repo'; repoId: string };
@@ -48,6 +48,11 @@ class GuidelinesStore {
 
 	repoName(repoId: string): string {
 		return this.overview?.repos.find((repo) => repo.id === repoId)?.name ?? 'Repository';
+	}
+
+	/** Where the repository is hosted, or null until the overview names it. */
+	repoProvider(repoId: string): Provider | null {
+		return this.overview?.repos.find((repo) => repo.id === repoId)?.provider ?? null;
 	}
 
 	open(scope: GuidelinesScope): void {

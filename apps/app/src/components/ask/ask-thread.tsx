@@ -1,97 +1,77 @@
 'use client';
 
-import { Button } from '@recoder/ui';
-import { AnimatePresence } from 'motion/react';
-import { memo } from 'react';
+import { Button, LinkText, Markdown, Spinner } from '@recoder/ui';
 
-import type { AskMessage, AskThread } from '@/lib/ask/ask-store';
-import { suggestionsFor, type AskItem } from '@/lib/ask/item';
+import type { AskMessageView, AskView } from '@/lib/ask/types';
 
-import { ChatRow } from './chat-row';
-import { ModelMeta, ReplyMeta, ReplyText, UserBubble } from './chat-message';
-import { ReplyFailure } from './chat-notice';
+import { Age } from '@/components/common/age';
+import { Avatar } from '@/components/common/avatar';
 
-interface AskThreadViewProps {
-	item: AskItem;
-	thread: AskThread;
-	onAsk: (question: string) => void;
-	onRetry: () => void;
+/** Who a message is from, as the thread names them. */
+const NAMES = { person: 'You', recoder: 'Recoder' } as const;
+
+interface AskMessageProps {
+	message: AskMessageView;
+	onRetry: (id: string) => void;
 }
 
-interface AskReplyProps {
-	message: AskMessage;
-	/** The thread's last message: a failure here carries the full notice with Try again. */
-	latest: boolean;
-	onRetry: () => void;
-}
-
-/** The line under a reply: the model once it finished, or that it was stopped. A failure says so in its own notice. */
-function footerOf(message: AskMessage) {
-	if (message.state === 'stopped') return <ReplyMeta>Stopped</ReplyMeta>;
-
-	return message.model && message.state === 'done' ? <ModelMeta model={message.model} /> : null;
-}
-
-/**
- * A reply from the reviewer: its words with the model under them, or that it
- * stopped, then why it failed if it did. Memoised, so a reply that settled is
- * not parsed again while another streams.
- */
-const AskReply = memo(function AskReply({ message, latest, onRetry }: AskReplyProps) {
-	const said = message.text.trim().length > 0;
-
-	if (!said && message.state === 'stopped') return <ReplyMeta className="mt-0">Stopped</ReplyMeta>;
+/** One message: Recoder's replies as markdown, the person's as the plain text they typed. */
+function AskMessage({ message, onRetry }: AskMessageProps) {
+	const recoder = message.from === 'recoder';
+	const waiting = message.state === 'writing' && message.text === '';
 
 	return (
-		<div className="flex min-w-0 flex-col gap-2">
-			{said || !message.failure ? (
-				<ReplyText text={message.text} streaming={message.state === 'streaming'} footer={footerOf(message)} />
-			) : null}
-			{message.failure ? (
-				<ReplyFailure
-					reason={message.failure.message}
-					action={message.failure.action}
-					partial={said}
-					quiet={!latest}
-					onRetry={latest ? onRetry : null}
-				/>
-			) : null}
+		<article className="entry" aria-label={`${NAMES[message.from]} said`}>
+			<Avatar name={NAMES[message.from]} tone={message.from} />
+			<div className="entry-head">
+				<span className="entry-author">{NAMES[message.from]}</span>
+				<Age at={message.at} className="meta" />
+			</div>
+			<div className="entry-body">
+				{waiting ? <Spinner size={13} label="Recoder is thinking" /> : null}
+				{recoder && !waiting ? <Markdown streaming={message.state === 'writing'}>{message.text}</Markdown> : null}
+				{!recoder ? (
+					<p className="entry-plain">
+						<LinkText text={message.text} />
+					</p>
+				) : null}
+				{message.state === 'failed' ? (
+					<p className="entry-failed" role="alert">
+						{message.error ?? 'The reply did not arrive.'}
+						<Button variant="outline" size="sm" onClick={() => onRetry(message.id)}>
+							Ask again
+						</Button>
+					</p>
+				) : null}
+			</div>
+		</article>
+	);
+}
+
+/** A conversation with Recoder, oldest first. Nothing renders while it is empty. */
+export function AskThread({ ask }: { ask: AskView }) {
+	if (ask.messages.length === 0) return null;
+
+	return (
+		<div className="thread" role="log" aria-label="Conversation with Recoder">
+			{ask.messages.map((message) => (
+				<AskMessage key={message.id} message={message} onRetry={ask.retry} />
+			))}
 		</div>
 	);
-});
+}
 
-/**
- * The thread about one item: questions in bubbles, replies in the UI sans.
- * Empty, it offers a few questions to start with, near the composer.
- */
-export function AskThreadView({ item, thread, onAsk, onRetry }: AskThreadViewProps) {
-	const last = thread.messages.at(-1);
+/** Short questions to start from, shown while the thread is empty. A click sends the question. */
+export function AskSuggestions({ ask }: { ask: AskView }) {
+	if (ask.messages.length > 0 || ask.suggestions.length === 0) return null;
 
 	return (
-		<AnimatePresence initial={false} mode="popLayout">
-			{last ? null : (
-				<ChatRow key="suggestions" className="mt-auto flex flex-col items-end gap-2">
-					{suggestionsFor(item).map((suggestion) => (
-						<Button
-							key={suggestion.intent}
-							variant="outline"
-							className="chat-suggestion"
-							onClick={() => onAsk(suggestion.text)}
-						>
-							{suggestion.text}
-						</Button>
-					))}
-				</ChatRow>
-			)}
-			{thread.messages.map((message) => (
-				<ChatRow key={message.id}>
-					{message.role === 'user' ? (
-						<UserBubble text={message.text} />
-					) : (
-						<AskReply message={message} latest={message === last} onRetry={onRetry} />
-					)}
-				</ChatRow>
+		<div className="ask-suggestions">
+			{ask.suggestions.map((question) => (
+				<Button key={question} variant="outline" size="sm" onClick={() => void ask.send(question)}>
+					{question}
+				</Button>
 			))}
-		</AnimatePresence>
+		</div>
 	);
 }

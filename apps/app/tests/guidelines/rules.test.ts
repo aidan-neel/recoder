@@ -1,15 +1,33 @@
 import { describe, expect, test } from 'bun:test';
+import type { RepoGuidelines } from '@recoder/shared';
 
 import {
+	activeSource,
 	caretAt,
 	firstRule,
 	globalSummary,
+	repoSummary,
+	saveLabel,
 	seedText,
 	streamingDraft,
+	successLabel,
 	trimEmptyBullets
 } from '../../src/lib/guidelines/rules';
 
 const TEMPLATE = '## Focus\n-\n\n## Ignore\n-\n\n## Severity\n-\n\n## Conventions\n-\n';
+
+function repo(patch: Partial<RepoGuidelines>): RepoGuidelines {
+	return {
+		repoId: 'r1',
+		path: '.recoder/guidelines.md',
+		ref: 'main',
+		sha: null,
+		content: null,
+		pending: null,
+		canPropose: false,
+		...patch
+	};
+}
 
 describe('the first rule of a guidelines text', () => {
 	test('the starter template has no rule, so its bare bullets never read as one', () => {
@@ -44,6 +62,49 @@ describe('the global row', () => {
 
 	test('a layer saved empty is not mistaken for the defaults', () => {
 		expect(globalSummary({ content: '', updatedAt: '2026-10-17T00:00:00Z' })).not.toBe(neverSaved);
+	});
+});
+
+describe('the repository row', () => {
+	test('previews the first rule in force, or the pending branch’s when it has one', () => {
+		expect(repoSummary(repo({ content: '## Focus\n- Check auth\n' }))).toBe('Check auth');
+
+		expect(
+			repoSummary(
+				repo({
+					content: '## Focus\n- Old\n',
+					pending: { number: 4, url: 'https://x', branch: 'b', content: '## Focus\n- New\n' }
+				})
+			)
+		).toBe('New');
+	});
+
+	test('a repository with no rule yet names where its file would be', () => {
+		expect(repoSummary(repo({}))).toBe('No .recoder/guidelines.md yet');
+	});
+});
+
+describe('the source a repository file was read from', () => {
+	test('names the path, branch and short commit', () => {
+		expect(activeSource(repo({ sha: 'abcdef1234567890' }))).toBe('.recoder/guidelines.md on main at abcdef1');
+		expect(activeSource(repo({}))).toBe('.recoder/guidelines.md on main');
+	});
+});
+
+describe('the save and success labels', () => {
+	test('the global layer saves in place; a repository opens or updates a pull request', () => {
+		expect(saveLabel(null)).toBe('Save');
+		expect(saveLabel(repo({}))).toBe('Open pull request');
+
+		expect(saveLabel(repo({ pending: { number: 4, url: 'u', branch: 'b', content: null } }))).toBe(
+			'Update pull request'
+		);
+	});
+
+	test('the success line mirrors what the save did', () => {
+		expect(successLabel(null)).toBe('Saved');
+		expect(successLabel(repo({}))).toBe('Opened');
+		expect(successLabel(repo({ pending: { number: 4, url: 'u', branch: 'b', content: null } }))).toBe('Updated');
 	});
 });
 

@@ -1,4 +1,5 @@
 import type { Provider } from '@recoder/shared';
+import { withoutCredentials } from '../util/redact';
 import { getGitlabHost, hostOfRepoUrl } from './gitlab-host';
 
 export interface RepoLocator {
@@ -7,12 +8,17 @@ export interface RepoLocator {
 	slug: string;
 }
 
+/** Whether a repo URL points at a local `file:` repository. */
+function isFileRepo(repoUrl: string): boolean {
+	return /^file:\/\//i.test(repoUrl.trim());
+}
+
 /**
  * `file://` → local; github.com (or no recognizable host) → github; *gitlab*
  * hosts and the configured GitLab host → gitlab.
  */
 export function detectProvider(repoUrl: string): Provider {
-	if (/^file:\/\//i.test(repoUrl.trim())) return 'local';
+	if (isFileRepo(repoUrl)) return 'local';
 	if (/gitlab\./i.test(repoUrl.trim())) return 'gitlab';
 
 	const host = getGitlabHost();
@@ -20,19 +26,24 @@ export function detectProvider(repoUrl: string): Provider {
 	return host && hostOfRepoUrl(repoUrl) === host ? 'gitlab' : 'github';
 }
 
-/** Strip scheme/host/`git@` prefix and `.git` suffix → namespace path. */
+/**
+ * Strip scheme/host/`git@` prefix and `.git` suffix → namespace path. A local
+ * `file:` slug is the repo's path, where spaces are legal and no `/`-joined
+ * namespace is required; hosted slugs keep both checks.
+ */
 export function parseSlug(repoUrl: string): string {
 	const clean = repoUrl.trim().replace(/\.git$/, '');
 	const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(clean);
 	const hasUser = clean.includes('@');
+	const local = isFileRepo(clean);
 	let s = clean.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
 
 	if (hasUser) s = s.split('@').pop() ?? s;
 	if (hasScheme || hasUser) s = s.replace(/^[^/:]+[/:]/, '');
 	s = s.replace(/^\/+|\/+$/g, '');
 
-	if (!s || s.includes(' ') || !s.includes('/')) {
-		throw new Error(`cannot parse repo slug from ${repoUrl}`);
+	if (!s || (!local && (s.includes(' ') || !s.includes('/')))) {
+		throw new Error(`cannot parse repo slug from ${withoutCredentials(repoUrl)}`);
 	}
 
 	return s;

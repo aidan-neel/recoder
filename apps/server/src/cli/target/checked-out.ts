@@ -7,6 +7,8 @@ import { revisionDiff } from '../../sandbox/sandbox.js';
 import { sandboxLayout } from '../../sandbox/sandbox-layout.js';
 import { removeLayers } from '../../sandbox/workspace-setup.js';
 import { notReadyError, usageError } from '../exit.js';
+import type { ReviewStart } from '../review/options.js';
+import { shortSha } from '../short-sha.js';
 import { assertNotCancelled } from './git.js';
 import type { ResolvedTarget, TargetRequest } from './resolve-target.js';
 import { isScoped, scopePathspecs } from './scope.js';
@@ -25,6 +27,8 @@ export interface CheckedOutChange {
 	/** The head as the caller named it, or what it stands for (`staged changes`). */
 	headName: string;
 	pull: PullDetails | null;
+	/** Where the review of the commits begins, resolved. */
+	start: ReviewStart;
 }
 
 /** The diff of the change within the request's scope, with the checkout and its cleanup; an empty diff is refused. */
@@ -48,6 +52,8 @@ export async function checkedOutTarget(change: CheckedOutChange): Promise<Resolv
 			baseSha: revision.targetSha,
 			mergeBaseSha: revision.mergeBaseSha,
 			headSha: revision.headSha,
+			since: change.start.since,
+			sinceRunId: change.start.sinceRunId,
 			url: change.pull?.url ?? null,
 			changedFiles: parseUnifiedDiff(diff).length
 		},
@@ -76,11 +82,19 @@ async function scopedDiff(change: CheckedOutChange): Promise<string> {
 	}
 }
 
+/**
+ * The refusal of an empty diff. It names where the diff really started: the base, or the commit the review started
+ * after. After an earlier review it also says which run that was, and that `--full` reviews the whole change.
+ */
 function emptyChange(change: CheckedOutChange): Error {
-	const ends = `${change.revision.targetRef} and ${change.headName}`;
+	const { since, sinceRunId } = change.start;
+	const from = since === null ? change.revision.targetRef : shortSha(since);
 	const within = isScoped(change.request.scope) ? ' within --include and --exclude' : '';
 
-	return usageError(`Nothing to review: no difference between ${ends}${within}.`);
+	const earlier =
+		sinceRunId === null ? '' : ` Run ${sinceRunId} reviewed up to ${from}. Pass --full to review the whole change.`;
+
+	return usageError(`Nothing to review: no difference between ${from} and ${change.headName}${within}.${earlier}`);
 }
 
 /** A cleanup that runs once, however often it is called. */

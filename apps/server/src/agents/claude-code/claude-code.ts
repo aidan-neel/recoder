@@ -1,7 +1,6 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AgentStatus, ModelEntry } from '@recoder/shared';
+import { supportedEffort, within, type AgentStatus, type ModelEntry, type ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
 import {
@@ -9,15 +8,18 @@ import {
 	callDeadline,
 	emptyDirectory,
 	findCli,
-	killGroup,
-	killOnAbort,
+	removeScratchDir,
+	scratchDir,
 	stopOnShutdown
 } from '../cli-process';
 import { systemText } from '../cli-prompt';
-import { claudeCodeEfforts, claudeCodeModels } from './claude-code-models';
+import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
+import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import { claudeCodeEfforts, claudeCodeModels, effortArgs } from './claude-code-models';
 import { FailedCallDump } from './claude-code-debug';
 import { claudeCodeEnv } from './claude-code-process';
 import { ReplyReader } from './claude-code-reply';
+import { ClaudeCodeRun, CLAUDE_CODE_EMPTY_DIR } from './claude-code-run';
 import { sessionCall, sweepSessions, type SessionCall } from './claude-code-session';
 
 const INSTALL = 'curl -fsSL https://claude.ai/install.sh | bash';
@@ -25,6 +27,14 @@ const INSTALL = 'curl -fsSL https://claude.ai/install.sh | bash';
 const LOGIN = 'claude auth login';
 
 const STATUS_TIMEOUT_MS = 10_000;
+
+/**
+ * How long a check waits on `claude auth status` (which can take five seconds) once a check has found the CLI
+ * signed in. Past this it answers with that, and the status call goes on to correct the status if it changed.
+ */
+const SIGN_IN_WAIT_MS = 1_500;
+
+type SignIn = Pick<AgentStatus, 'signedIn' | 'authMethod'>;
 
 /**
  * Print mode with everything but the model call turned off: no tools, a permission mode that refuses any tool,
@@ -55,35 +65,6 @@ const BASE_ARGS = [
 ];
 
 /**
- * The effort flags for a model that takes levels. `thinking: false` turns thinking off; the CLI has no
- * temperature, top-p, seed or output cap, so those are not sent.
- */
-function effortArgs({ model, reasoningEffort, thinking }: ChatOptions): string[] {
-	if (thinking === false) return ['--thinking', 'disabled'];
-
-	const offered = claudeCodeEfforts(model).efforts;
-
-	return reasoningEffort && offered?.includes(reasoningEffort) ? ['--effort', reasoningEffort] : [];
-}
-
-/** Hand each complete line of a stream to `onLine`, the last one included. */
-async function readLines(stream: ReadableStream<Uint8Array>, onLine: (line: string) => void): Promise<void> {
-	const decoder = new TextDecoder();
-	let buffer = '';
-
-	for await (const chunk of stream) {
-		buffer += decoder.decode(chunk, { stream: true });
-
-		const lines = buffer.split('\n');
-
-		buffer = lines.pop() ?? '';
-		for (const line of lines) if (line.trim()) onLine(line);
-	}
-
-	if (buffer.trim()) onLine(buffer);
-}
-
-/**
  * Claude Code, run as one `claude -p` process per model call.
  *
  * The CLI signs in with the user's own subscription. Recoder never reads its
@@ -96,9 +77,43 @@ export class ClaudeCodeAgent extends CliAgent {
 	readonly name = 'Claude Code';
 	readonly install = INSTALL;
 	readonly login = LOGIN;
+	/** Each call runs one CLI process, so eight run at once unless `RECODER_CLAUDE_CODE_CONCURRENCY` says otherwise. */
+	readonly processCeiling = { env: 'RECODER_CLAUDE_CODE_CONCURRENCY', fallback: 8 };
+	readonly signInFix = `Sign in with \`${LOGIN}\`, or pick another model in Recoder settings.`;
+
+	/** The latest `claude auth status` call while it runs, which a check that may take an older answer joins. */
+	private signInCall: Promise<SignIn> | null = null;
+
+	/** What the newest status call that answered clearly found; null until one has. */
+	private signedInAs: SignIn | null = null;
+
+	/** Numbers the status calls in the order they start, so an answer never replaces one from a newer call. */
+	private callsStarted = 0;
+	private keptCall = 0;
 
 	async models(): Promise<ModelEntry[]> {
 		return claudeCodeModels();
+	}
+
+	/** The CLI has no command that lists models, so its list is fixed and offered whether or not it is installed. */
+	override fixedModels(): ModelEntry[] {
+		return claudeCodeModels();
+	}
+
+	/** A model that takes effort levels gets the picked one when it offers it, else its default; others get none. */
+	modelSettings(model: string, requested: ReasoningEffort | undefined): AgentModelSettings {
+		const { efforts, defaultEffort } = claudeCodeEfforts(model);
+
+		return efforts ? { reasoningEffort: supportedEffort(requested ?? defaultEffort, efforts, defaultEffort) } : {};
+	}
+
+	/** A run in which Claude Code is the agent, with Recoder's tools over MCP. See {@link ClaudeCodeRun}. */
+	async openRun(options: AgentRunOptions): Promise<AgentRun> {
+		const path = this.find();
+
+		if (!path) throw new LlmError(0, `Claude Code is not installed. Install it with: ${INSTALL}`);
+
+		return ClaudeCodeRun.open({ path, env: this.env, running: this.running, scratch: this.scratch }, options);
 	}
 
 	/**
@@ -112,10 +127,10 @@ export class ClaudeCodeAgent extends CliAgent {
 		if (!path) throw new LlmError(0, `Claude Code is not installed. Install it with: ${INSTALL}`);
 
 		const deadline = callDeadline(opts);
-		const scratch = await mkdtemp(join(tmpdir(), 'recoder-claude-code-'));
+		const scratch = await scratchDir(this.scratch, 'recoder-claude-code-');
 		const systemFile = join(scratch, 'system.md');
 
-		const cwd = await emptyDirectory('claude-code-empty');
+		const cwd = await emptyDirectory(CLAUDE_CODE_EMPTY_DIR);
 		const system = systemText(opts);
 		const effort = effortArgs(opts);
 
@@ -130,8 +145,6 @@ export class ClaudeCodeAgent extends CliAgent {
 			this.env,
 			cwd
 		);
-
-		this.scratch.add(scratch);
 
 		try {
 			await writeFile(systemFile, system, { mode: 0o600 });
@@ -155,8 +168,7 @@ export class ClaudeCodeAgent extends CliAgent {
 			session.fail();
 			throw deadline.failure(error, 'Claude Code request failed.');
 		} finally {
-			this.scratch.delete(scratch);
-			await rm(scratch, { recursive: true, force: true });
+			await removeScratchDir(this.scratch, scratch);
 		}
 	}
 
@@ -171,9 +183,8 @@ export class ClaudeCodeAgent extends CliAgent {
 	}
 
 	/**
-	 * Spawn the CLI in an empty directory, in its own process group, feed it the prompt and read its reply. When
-	 * `signal` aborts the group is killed and the call rejects at once, without waiting for its pipes to close;
-	 * whatever the CLI started is killed with it once the call ends either way.
+	 * Run the CLI in an empty directory, feed it the prompt and read its reply. See {@link streamCli} for how an
+	 * abort or a runaway output stops it.
 	 */
 	private async run(
 		path: string,
@@ -183,15 +194,6 @@ export class ClaudeCodeAgent extends CliAgent {
 		signal: AbortSignal,
 		onToken: ((text: string) => void) | undefined
 	): Promise<string> {
-		const proc = Bun.spawn([path, ...args], {
-			cwd: where.cwd,
-			env: claudeCodeEnv(this.env),
-			detached: true,
-			stdin: new Blob([where.session.prompt]),
-			stdout: 'pipe',
-			stderr: 'pipe'
-		});
-
 		const reader = new ReplyReader({
 			onText: onToken,
 			onThinking: opts.onReasoning,
@@ -204,40 +206,81 @@ export class ClaudeCodeAgent extends CliAgent {
 
 		const dump = new FailedCallDump(this.env);
 
-		this.running.add(proc);
-
-		const { stopped, release } = killOnAbort(proc, signal);
+		const lines = new LineSplitter((line) => {
+			dump.add(line);
+			reader.line(line);
+		});
 
 		try {
-			const [, stderr, code] = await Promise.race([
-				Promise.all([
-					readLines(proc.stdout, (line) => {
-						dump.add(line);
-						reader.line(line);
-					}),
-					new Response(proc.stderr).text(),
-					proc.exited
-				]),
-				stopped
-			]);
+			const exit = await streamCli({
+				argv: [path, ...args],
+				cwd: where.cwd,
+				env: claudeCodeEnv(this.env),
+				stdin: where.session.prompt,
+				signal,
+				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
+				onOutput: lines.push,
+				running: this.running,
+				name: this.name
+			});
 
-			return reader.finish(opts.onUsage, { code, stderr });
+			lines.end();
+
+			return reader.finish(opts.onUsage, exit);
 		} catch (error) {
 			dump.write(opts.model, error);
 			throw error;
-		} finally {
-			release();
-			this.running.delete(proc);
-			killGroup(proc);
 		}
 	}
 
-	/** `claude auth status --json` exits 1 when signed out; only its `loggedIn` and `authMethod` fields are read. */
 	protected childEnv(): Record<string, string> {
 		return claudeCodeEnv(this.env);
 	}
 
-	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn' | 'authMethod'>> {
+	/**
+	 * The sign-in state. Once the CLI was found signed in, a check joins the status call already running, if any,
+	 * and answers with that state when the call takes past {@link SIGN_IN_WAIT_MS}. The first check joins a running
+	 * call too, and waits for it. While the last answer was signed out, a check starts a call of its own and waits:
+	 * the person may have just signed in, after the running call asked.
+	 */
+	protected signIn(path: string): Promise<SignIn> {
+		const known = this.signedInAs;
+
+		if (known?.signedIn) return within(this.signInCall ?? this.startSignIn(path), SIGN_IN_WAIT_MS, known);
+
+		return known ? this.startSignIn(path) : (this.signInCall ?? this.startSignIn(path));
+	}
+
+	/** Starts a status call, which checks that may take an older answer join until it ends. */
+	private startSignIn(path: string): Promise<SignIn> {
+		const call: Promise<SignIn> = this.checkSignIn(path, ++this.callsStarted).finally(() => {
+			if (this.signInCall === call) this.signInCall = null;
+		});
+
+		this.signInCall = call;
+
+		return call;
+	}
+
+	/**
+	 * One status call. An answer it understood is kept and put on the status, for a check that stopped waiting.
+	 * A call that ends after a newer one answered gives that newer answer, so a stale one never lands.
+	 */
+	private async checkSignIn(path: string, id: number): Promise<SignIn> {
+		const found = await this.readSignIn(path);
+
+		if (found.signedIn === null) return found;
+		if (id < this.keptCall && this.signedInAs) return this.signedInAs;
+
+		this.keptCall = id;
+		this.signedInAs = found;
+		if (this.status?.installed && !this.status.error) Object.assign(this.status, found);
+
+		return found;
+	}
+
+	/** `claude auth status --json` exits 1 when signed out; only its `loggedIn` and `authMethod` fields are read. */
+	private async readSignIn(path: string): Promise<SignIn> {
 		const proc = Bun.spawn([path, 'auth', 'status', '--json'], {
 			stdout: 'pipe',
 			stderr: 'ignore',

@@ -7,6 +7,7 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 import { cn } from '../../lib/cn';
 import { rememberOpener } from '../overlay/return-focus';
 import { MENU_SEPARATOR, MenuItemBody, MenuOpen, MenuPanel, menuItemRoot, type MenuItemProps } from './menu-parts';
+import { useOpened } from './use-opened';
 
 /** What had focus when the nearest context menu opened. */
 const Opener = createContext<RefObject<Element | null>>({ current: null });
@@ -62,10 +63,11 @@ export function ContextMenuTrigger({ children, disabled, className }: ContextMen
 	);
 }
 
-/** The menu panel, placed at the pointer and scaling in from it. */
+/** The menu panel, placed at the pointer and scaling in from it. It renders nothing until the menu first opens. */
 export function ContextMenuContent({ className, children }: { className?: string; children: ReactNode }) {
 	const open = useContext(MenuOpen);
 	const opener = useContext(Opener);
+	const opened = useOpened(open);
 
 	const panelRef = useCallback(
 		(panel: HTMLDivElement | null) => {
@@ -73,6 +75,8 @@ export function ContextMenuContent({ className, children }: { className?: string
 		},
 		[opener]
 	);
+
+	if (!opened) return null;
 
 	return (
 		<AnimatePresence>

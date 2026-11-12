@@ -1,64 +1,60 @@
 'use client';
 
 import type { Repo } from '@recoder/shared';
-import { Button, DURATION, EASE_OUT, ForgeMark, Tooltip } from '@recoder/ui';
-import { Plus, X } from 'lucide-react';
-import { AnimatePresence, motion, type Transition, type Variants } from 'motion/react';
-import { useRef, type ReactNode } from 'react';
+import { Button, DURATION, EASE_OUT, useMotionVariants } from '@recoder/ui';
+import { Plus } from 'lucide-react';
+import { AnimatePresence, motion, type Variants } from 'motion/react';
+import { useRef, type ReactNode, type RefObject } from 'react';
 
+import { ForgeTile } from '@/components/common/forge-tile';
 import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
-
+import { repoPlace } from '@/lib/connections/repo-place';
 import { stopTracking } from '@/lib/connections/stop-tracking';
 
-const FOLD: Transition = { duration: DURATION.disclose, ease: EASE_OUT };
-
-/** A row unfolds to its height as it joins the list and folds away as it leaves; the rows under it follow. */
-const ROW: Variants = {
-	hidden: { height: 0, opacity: 0, transition: { height: FOLD, opacity: { duration: DURATION.swap } } },
-	shown: { height: 'auto', opacity: 1, transition: { height: FOLD, opacity: { duration: DURATION.toggle } } }
+/** A row folds away as it leaves the list and unfolds as it joins or Undo brings it back; the rows under it follow. */
+const FOLD: Variants = {
+	folded: { height: 0, opacity: 0, transition: { duration: DURATION.disclose, ease: EASE_OUT } },
+	open: { height: 'auto', opacity: 1, transition: { duration: DURATION.disclose, ease: EASE_OUT } }
 };
 
+interface FoldProps {
+	/** The tracked repository's id, so keyboard focus can find the row. */
+	repoId?: string;
+	children: ReactNode;
+}
+
 /** One item of the list, folding in and out. */
-function Fold({ children }: { children: ReactNode }) {
+function Fold({ repoId, children }: FoldProps) {
+	const variants = useMotionVariants(FOLD);
+
 	return (
-		<motion.div className="repo-item" variants={ROW} initial="hidden" animate="shown" exit="hidden">
+		<motion.div
+			className="repo-fold"
+			data-repo={repoId}
+			variants={variants}
+			initial="folded"
+			animate="open"
+			exit="folded"
+		>
 			{children}
 		</motion.div>
 	);
 }
 
-interface RepoRowProps {
-	repo: Repo;
-	onRemove: (repo: Repo, button: HTMLButtonElement) => void;
-}
-
-function RepoRow({ repo, onRemove }: RepoRowProps) {
-	return (
-		<div className="repo-row" data-repo={repo.id}>
-			<ForgeMark provider={repo.provider} className="text-fg-subtle" />
-			<span className="repo-name" title={repo.url}>
-				{repo.name}
-			</span>
-			<Tooltip content="Stop tracking">
-				<Button
-					variant="quiet"
-					size="icon"
-					aria-label={`Stop tracking ${repo.name}`}
-					className="text-fg-subtle hover:text-fg"
-					onClick={(event) => onRemove(repo, event.currentTarget)}
-				>
-					<X aria-hidden />
-				</Button>
-			</Tooltip>
-		</div>
-	);
-}
-
-/** The row that takes over a removed row's place in the tab order: the next one, else the one before. */
+/** The repository whose row takes over a removed row's place in the tab order: the next one, else the one before. */
 function neighborOf(repos: Repo[], repo: Repo): Repo | null {
 	const index = repos.findIndex((item) => item.id === repo.id);
 
 	return repos[index + 1] ?? repos[index - 1] ?? null;
+}
+
+interface FocusHandoff {
+	/** The Add repository button, which takes focus when the last row leaves. */
+	add: RefObject<HTMLButtonElement | null>;
+	/** Call as a row is removed, with the button that removed it. */
+	leaving: (repo: Repo, button: HTMLButtonElement) => void;
+	/** Call once the removed row has folded away. */
+	settle: () => void;
 }
 
 /**
@@ -66,8 +62,8 @@ function neighborOf(repos: Repo[], repo: Repo): Repo | null {
  * neighbor's Stop tracking button, or to Add repository when the list is
  * empty. Only a removal made from the keyboard moves focus; a click leaves it.
  */
-function useFocusHandoff(repos: Repo[]) {
-	const add = useRef<HTMLButtonElement>(null);
+function useFocusHandoff(repos: Repo[]): FocusHandoff {
+	const add = useRef<HTMLButtonElement | null>(null);
 	const next = useRef<string | null>(null);
 
 	function leaving(repo: Repo, button: HTMLButtonElement): void {
@@ -89,16 +85,50 @@ function useFocusHandoff(repos: Repo[]) {
 	return { add, leaving, settle };
 }
 
+interface RepoRowProps {
+	repo: Repo;
+	onStop: (repo: Repo, button: HTMLButtonElement) => void;
+}
+
+/** A tracked repository: where it lives, its default branch, and Stop tracking. */
+function RepoRow({ repo, onStop }: RepoRowProps) {
+	return (
+		<SettingsRow
+			leading={<ForgeTile provider={repo.provider} />}
+			name={repo.name}
+			detail={
+				<>
+					{repoPlace(repo)}
+					{repo.defaultBranch ? <span className="meta-sep mono">{repo.defaultBranch}</span> : null}
+				</>
+			}
+		>
+			<Button
+				variant="ghost"
+				aria-label={`Stop tracking ${repo.name}`}
+				onClick={(event) => onStop(repo, event.currentTarget)}
+			>
+				Stop tracking
+			</Button>
+		</SettingsRow>
+	);
+}
+
+interface RepoGroupProps {
+	repos: Repo[];
+	/** Opens the repository browser. */
+	onAdd: () => void;
+}
+
 /**
  * Settings → Connections → Repositories: the tracked repositories, each with
- * a way to stop tracking it (Undo in the toast brings it back), and Add
- * repository to open the repo browser. Rows fold in and out as the list
- * changes.
+ * Stop tracking (Undo in its toast brings the row back), and Add repository
+ * in the group's head.
  */
-export function RepoGroup({ repos, onAdd }: { repos: Repo[]; onAdd: () => void }) {
+export function RepoGroup({ repos, onAdd }: RepoGroupProps) {
 	const { add, leaving, settle } = useFocusHandoff(repos);
 
-	function remove(repo: Repo, button: HTMLButtonElement): void {
+	function stop(repo: Repo, button: HTMLButtonElement): void {
 		leaving(repo, button);
 		stopTracking(repo);
 	}
@@ -117,14 +147,14 @@ export function RepoGroup({ repos, onAdd }: { repos: Repo[]; onAdd: () => void }
 				{repos.length === 0 ? (
 					<Fold key="empty">
 						<SettingsRow
-							name="No repositories tracked yet"
-							description="Add one and its open pull requests land in the queue"
+							name="No repositories yet"
+							detail="Add a repository to see its open pull requests in Pull requests."
 						/>
 					</Fold>
 				) : (
 					repos.map((repo) => (
-						<Fold key={repo.id}>
-							<RepoRow repo={repo} onRemove={remove} />
+						<Fold key={repo.id} repoId={repo.id}>
+							<RepoRow repo={repo} onStop={stop} />
 						</Fold>
 					))
 				)}

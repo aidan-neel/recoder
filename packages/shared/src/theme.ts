@@ -44,7 +44,12 @@ function withoutTransitions(swap: () => void): void {
 	requestAnimationFrame(() => requestAnimationFrame(() => freeze.remove()));
 }
 
-/** Shows a choice: the `dark` class, the color scheme and the browser chrome color. A change of mode never animates. */
+/**
+ * Shows a choice: the `dark` class, the color scheme and the browser chrome
+ * color, on every theme-color meta (a page may keep one per device mode), so
+ * a picked theme reaches the browser's bar whatever the device prefers. A
+ * change of mode never animates.
+ */
 export function applyTheme(choice: ThemeChoice): void {
 	const mode = resolveTheme(choice);
 	const root = document.documentElement;
@@ -59,7 +64,8 @@ export function applyTheme(choice: ThemeChoice): void {
 	else withoutTransitions(show);
 
 	document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', mode);
-	document.querySelector('meta[name="theme-color"]')?.setAttribute('content', CHROME[mode]);
+
+	for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.setAttribute('content', CHROME[mode]);
 }
 
 /** Saves a choice and shows it. */

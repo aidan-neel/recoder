@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BaseTree } from '../../src/sandbox/base-tree';
-import { execUnavailableReason, sandboxLayout } from '../../src/sandbox/exec-sandbox';
+import { execUnavailableReason, sandboxLayout, type RunResult } from '../../src/sandbox/exec-sandbox';
 import { ExecWorkspace } from '../../src/sandbox/exec-workspace';
 import { git } from '../helpers/git';
 
@@ -105,6 +105,84 @@ test('a base tree swapped for a link is never written through and stops being us
 	expect(await readdir(outside)).toEqual([]);
 	expect(await tree.prepare()).toContain('replaced');
 });
+
+/** A stand-in for a sandboxed run that records each command and edits the tree the way a generation command might. */
+function recordingRun(tree: BaseTree, ran: string[]) {
+	return async (command: string): Promise<RunResult> => {
+		ran.push(command);
+		await writeFile(join(tree.root, 'src/a.ts'), 'formatted\n');
+		await writeFile(join(tree.root, `${command}.out`), 'made\n');
+
+		return { exitCode: 0, output: '', truncated: false, timedOut: false, elapsedMs: 1 };
+	};
+}
+
+test('a base tree runs each generation command once and keeps what it made', async () => {
+	const { layout, baseSha, headSha } = await twoCommits();
+	const tree = new BaseTree(layout, headSha, baseSha);
+	const ran: string[] = [];
+
+	await tree.prepare();
+	await tree.generate(['gen-a'], recordingRun(tree, ran));
+	await tree.generate(['gen-a', 'gen-b'], recordingRun(tree, ran));
+
+	expect(ran).toEqual(['gen-a', 'gen-b']);
+	expect(await readFile(join(tree.root, 'gen-a.out'), 'utf8')).toBe('made\n');
+	expect(await readFile(join(tree.root, 'src/a.ts'), 'utf8')).toBe('old\n');
+});
+
+test('a generation command cut short by the review runs again on the next base run', async () => {
+	const { layout, baseSha, headSha } = await twoCommits();
+	const tree = new BaseTree(layout, headSha, baseSha);
+	const ran: string[] = [];
+	const stop = new AbortController();
+	const record = recordingRun(tree, ran);
+
+	await tree.prepare();
+	await tree.generate(['gen-a'], (command) => record(command).finally(() => stop.abort()), stop.signal);
+	await tree.generate(['gen-a'], record);
+
+	expect(ran).toEqual(['gen-a', 'gen-a']);
+});
+
+test('no generation command runs after one replaced the base tree with a link', async () => {
+	const { layout, baseSha, headSha } = await twoCommits();
+	const tree = new BaseTree(layout, headSha, baseSha);
+	const outside = join(layout.cacheDir, '..', 'outside');
+	const ran: string[] = [];
+
+	const swapForLink = async (command: string): Promise<RunResult> => {
+		ran.push(command);
+		await mkdir(outside, { recursive: true });
+		await rm(tree.root, { recursive: true, force: true });
+		await symlink(outside, tree.root);
+
+		return { exitCode: 0, output: '', truncated: false, timedOut: false, elapsedMs: 1 };
+	};
+
+	await tree.prepare();
+	await tree.generate(['gen-a', 'gen-b'], swapForLink);
+
+	expect(ran).toEqual(['gen-a']);
+	expect(await readdir(outside)).toEqual([]);
+	expect(await tree.prepare()).toContain('replaced');
+});
+
+test.skipIf(!available)(
+	'a command on the merge-base tree finds what the head generation commands made there, run once',
+	async () => {
+		const { checkout, layout, baseSha, headSha } = await twoCommits();
+		const ws = new ExecWorkspace(checkout, headSha, layout);
+
+		ws.recordGeneration(['echo "$(cat src/a.ts)" >> generated.log']);
+		await ws.runOnBase('true', baseSha, 20_000);
+
+		expect(await ws.runOnBase('cat generated.log', baseSha, 20_000)).toMatchObject({ output: 'old\n', exitCode: 0 });
+		expect(await lstat(join(checkout, 'generated.log')).catch(() => null)).toBeNull();
+
+		await ws.cleanup();
+	}
+);
 
 test.skipIf(!available)(
 	'a command runs on the merge-base tree with the owner scratch files and the head untouched',

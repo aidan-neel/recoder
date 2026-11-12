@@ -84,11 +84,13 @@ this. Treat a lint error as a bug, not a suggestion.
     `lib/components/<feature>/` and Sivir wrappers in `lib/components/ui/`.
   - Web styles: `apps/web/src/app.css` imports the parts in
     `apps/web/src/styles/`.
-  - App `apps/app/src/`: routes in `app/`, components in
-    `components/<feature>/` (`shell`, `queue`, `review`, `decision`, `ask`,
-    `live`, `settings`, `connections`, `setup`, `guidelines`, `common`), logic in
-    `lib/<feature>/` with server calls in `lib/api/`, and one CSS file per
-    feature in `styles/`, imported by `styles/app.css`.
+  - App `apps/app/src/`: routes in `app/` (`(live)` for the real server,
+    `sample/` for the built-in sample), components in `components/<feature>/`
+    (`shell`, `pulls`, `pull`, `changes`, `summary`, `bugs`, `commits`, `ask`,
+    `compose`, `automations`, `guidelines`, `settings`, `connections`, `setup`,
+    `common`), logic in `lib/<feature>/` (the same names, plus `review`, `run`
+    and `sample`) with server calls in `lib/api/`, and one CSS file per feature
+    in `styles/`, imported by `styles/app.css`.
   - UI kit `packages/ui/src/`: `components/<area>/` (`overlay`, `menu`,
     `form`, `display`, `content`) with `styles/kit-<area>.css`, motion presets
     in `motion/`, tokens in `styles/tokens.css`.
@@ -206,7 +208,7 @@ A browser is always available on this machine. Never conclude otherwise:
   rather than passing it.
 - Do **not** pass `size="sm"` unless a compact control is explicitly required
   (e.g. a dense toolbar row). Prefer `md` everywhere else.
-- For square icon-only controls use `size="icon"` (30px via `--size-icon-md`);
+- For square icon-only controls use `size="icon"` (`--size-icon-md`: 30px in apps/web, 28px in the React kit);
   don't shrink icon buttons below 28px.
 - Sivir `ScrollArea` must always be used with `showCues={false}`. We never use
   the blur/edge-fade scroll cues (the React kit's `ScrollArea` has none).
@@ -224,8 +226,9 @@ component specs, layout and behavior rules.
 - Restyle Sivir through tokens and `data-ui`/`data-variant` hooks in `app.css`;
   never fork a component to change its look. Design "secondary" button =
   Sivir `outline`; design "ghost" = `ghost`; quiet triggers = `quiet`.
-- **Top bar shell only.** Sessions are tabs next to Home. Do not reintroduce
-  the left sidebar.
+- **Top bar shell only** in apps/web. Sessions are tabs next to Home. Do not
+  reintroduce the left sidebar there. apps/app has a sidebar shell; see
+  `apps/app/DESIGN.md`.
 - **Cal Sans is the default UI face** (`--font-ui`, served from
   `static/fonts/CalSansVF.ttf`, Geist as fallback); code and metadata are Geist Mono.
   Chat replies in the conversation use the UI sans. Serif (`.ai-voice`) remains

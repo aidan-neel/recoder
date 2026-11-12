@@ -1,13 +1,14 @@
 /** Where a piece of intent context came from. */
 export type IntentSourceKind =
-	'pr' | 'issue' | 'comment' | 'review-thread' | 'commit' | 'pr-history' | 'stack' | 'past-review';
+	'pr' | 'issue' | 'comment' | 'review-thread' | 'commit' | 'pr-history' | 'stack' | 'past-review' | 'related-review';
 
 /** One piece of gathered context. Always untrusted text. */
 export interface IntentSource {
 	kind: IntentSourceKind;
 	/**
 	 * Stable id the distilled claims cite: `pr`, `issue:#12`, `comment:#12/3`,
-	 * `commit:abc1234`, `pr:#31`, `merge:abc1234`, `history:unavailable`.
+	 * `commit:abc1234`, `pr:#31`, `merge:abc1234`, `history:unavailable`, `review:abc1234` (an earlier
+	 * push of this PR), `review:#31` (an earlier PR's review).
 	 */
 	ref: string;
 	url?: string;

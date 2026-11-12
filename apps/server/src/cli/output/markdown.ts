@@ -2,9 +2,9 @@ import type { CoverageGap, FindingSeverity } from '@recoder/shared';
 import type { ReportFinding, ReportSettings, ReportTarget, ReviewReport } from '../report/report.js';
 import { inlineCode } from './markdown-code.js';
 import { renderFinding } from './markdown-finding.js';
+import { shortSha } from '../short-sha.js';
 import { SEVERITIES } from './severity.js';
-
-const SHORT_SHA_LENGTH = 7;
+import { sinceLabel } from './target-since.js';
 
 const MS_PER_SECOND = 1000;
 
@@ -50,7 +50,8 @@ function describeTarget(target: ReportTarget): string {
 
 	const parts = [
 		`${target.kind}${refs}`,
-		target.headSha ? `head ${target.headSha.slice(0, SHORT_SHA_LENGTH)}` : null,
+		target.headSha ? `head ${shortSha(target.headSha)}` : null,
+		sinceLabel(target),
 		target.url,
 		target.repoPath,
 		`${target.changedFiles} changed files`
@@ -66,6 +67,9 @@ function describeSettings(settings: ReportSettings): string {
 		`subagents ${settings.subagents}`,
 		settings.reviewerModel ? `reviewer ${settings.reviewerModel}` : null,
 		settings.workerModel ? `worker ${settings.workerModel}` : null,
+		settings.verifierModel && settings.verifierModel !== settings.reviewerModel
+			? `verifier ${settings.verifierModel}`
+			: null,
 		settings.reviewerEffort ? `reviewer effort ${settings.reviewerEffort}` : null,
 		settings.workerEffort ? `worker effort ${settings.workerEffort}` : null,
 		settings.lenses ? `lenses ${settings.lenses.join(', ')}` : 'all lenses',

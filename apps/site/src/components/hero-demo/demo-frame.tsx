@@ -1,34 +1,30 @@
 import type { ReactNode } from 'react';
 
-import { ShellFrame } from '@/components/shell/shell-frame';
-
 interface DemoFrameProps {
-	/** The top bar's tabs, search and settings. */
-	bar?: ReactNode;
-	/** The page inside the canvas card. */
+	/** The app, once it has loaded. */
 	children?: ReactNode;
-	/** What floats over the whole window: the handoff. */
-	overlay?: ReactNode;
-	/** False while the loop fades the content out; the frame itself stays. */
+	/** False while the loop fades the app out; the frame itself stays. */
 	shown?: boolean;
 }
 
 /**
- * The app's own frame with the page in it, a layer over both, and an empty
- * frame on top that hides the rest until `shown`. The server paints the
- * empty frame; the review surface fills the one beneath after mount. Both
- * are pictures of the app, so the site keeps its own landmarks.
+ * The app in the window, under an empty frame that hides it until `shown`.
+ * It takes its skin from the page, which wears the app's. The server paints
+ * the empty frame; the app fills in beneath it after mount. Both are pictures
+ * of the app, so the site keeps its own landmarks.
  */
-export function DemoFrame({ bar, children, overlay, shown = false }: DemoFrameProps) {
+export function DemoFrame({ children, shown = false }: DemoFrameProps) {
 	return (
-		<>
-			<ShellFrame picture bar={bar}>
-				{children}
-			</ShellFrame>
-			<div className="demo-layer">{overlay}</div>
+		<div className="demo-app">
+			{children}
 			<div data-shown={shown} className="demo-cover" aria-hidden>
-				<ShellFrame picture />
+				<div className="app-frame">
+					<div className="sidebar" />
+					<div className="page">
+						<div className="page-bar" />
+					</div>
+				</div>
 			</div>
-		</>
+		</div>
 	);
 }

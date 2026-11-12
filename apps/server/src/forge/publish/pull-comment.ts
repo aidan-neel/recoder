@@ -3,12 +3,14 @@ import { subscribeReview } from '../../review/session/events';
 import { db, reviewProgress } from '../../store';
 import { GhError } from '../cli';
 import { PublishConflictError, reviewForge, type PostedComment, type PullCommentForge } from './forge';
-import { savePullComment } from './record';
+import { submitFindingsAfterRun } from './findings-review';
+import { otherPullReviews, savePullComment } from './record';
 import { pullCommentMarker, renderPullComment } from './render';
 import { postgres } from '../../storage/backend';
 import { currentLease } from '../../review/runtime/ownership';
 import type { PublicationSession } from '../../storage/postgres-publication';
 import { missingComment, publicationLock, publicationOperation, rejectedCreate } from './shared-publication';
+import { keyedQueue } from '../../util/keyed-queue';
 
 /**
  * Recoder's one summary comment on a pull request: posted when someone asks
@@ -30,27 +32,13 @@ interface Tracker {
 const trackers = new Map<string, Tracker>();
 
 /** Each review's writes run one at a time, so an edit never races the create before it. */
-const queues = new Map<string, Promise<unknown>>();
+const reviewWrites = keyedQueue();
 
 /** The body each running review last wrote, so an event that changes nothing visible costs no edit. */
 const lastBodies = new Map<string, string>();
 
 function serial<T>(reviewId: string, work: () => Promise<T>): Promise<T> {
-	const execute = () => publicationOperation(work);
-	const run = (queues.get(reviewId) ?? Promise.resolve()).then(execute, execute);
-
-	const settled = run.then(
-		() => undefined,
-		() => undefined
-	);
-
-	queues.set(reviewId, settled);
-
-	void settled.then(() => {
-		if (queues.get(reviewId) === settled) queues.delete(reviewId);
-	});
-
-	return run;
+	return reviewWrites(reviewId, () => publicationOperation(work));
 }
 
 function inFlight(review: Review): boolean {
@@ -59,9 +47,7 @@ function inFlight(review: Review): boolean {
 
 /** Other reviews of the same pull request, newest first. */
 async function siblings(review: Review): Promise<Review[]> {
-	return (await db.reviews.list())
-		.filter((other) => other.id !== review.id && other.repoId === review.repoId && other.prNumber === review.prNumber)
-		.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+	return (await otherPullReviews(review)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 /** A newer review of the same pull request took the comment over; this one must stop writing to it. */
@@ -273,7 +259,10 @@ export async function trackPullComment(reviewId: string): Promise<void> {
 	track(reviewId);
 	writeLater(reviewId);
 }
-/** The pipeline's run ended, however it ended: stop following it and write the final comment. */
+/**
+ * The pipeline's run ended, however it ended: stop following it, write the
+ * final comment, and submit an automatic review's verified findings.
+ */
 export async function settlePullComment(reviewId: string): Promise<void> {
 	untrack(reviewId);
 	if (!(await db.reviews.get(reviewId))?.pullComment) return;
@@ -282,5 +271,10 @@ export async function settlePullComment(reviewId: string): Promise<void> {
 		await serial(reviewId, () => write(reviewId)).catch((error) =>
 			console.warn(`[pull-comment] ${reviewId}: ${failureText(error)}`)
 		);
-	} else writeLater(reviewId);
+
+		await submitFindingsAfterRun(reviewId);
+	} else {
+		writeLater(reviewId);
+		void submitFindingsAfterRun(reviewId);
+	}
 }

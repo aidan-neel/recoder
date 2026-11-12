@@ -1,3 +1,5 @@
+import type { ReasoningEffort } from './models';
+
 /**
  * Every severity a finding can have, lowest first. `info` is a reviewer's "low";
  * informational notes are never reported.
@@ -75,6 +77,13 @@ export function findingKind(category: string | undefined): FindingKind {
 	return category && QUALITY_SET.has(category) ? 'quality' : 'bug';
 }
 
+/** A category or smell id in words: `error-handling` → `Error handling`. */
+export function categoryLabel(category: string): string {
+	const words = category.replace(/-/g, ' ');
+
+	return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 /**
  * A finding's message split into its `[category]` tag and the body after it.
  * Candidates and older saved reviews put the tag in front of the message; a
@@ -109,6 +118,101 @@ export interface FindingClaim {
 	violatedContract: string;
 	/** Code that might already prevent it, and why it doesn't. */
 	existingGuard?: string;
+}
+
+/**
+ * What people's feedback on a finding counts toward in its repository: the
+ * rule it cites, the smell it names, or else its category. Accepting,
+ * sending and dismissing findings of one topic decides whether later
+ * findings of it are quieted.
+ */
+export interface FindingTopic {
+	/** `rule:<hash of the rule's text>`, `smell:<smell>` or `category:<category>`, the same in every review of the repository. */
+	id: string;
+	/** The topic for people: the rule's text, the smell or the category. */
+	label: string;
+	/**
+	 * People in this repository keep dismissing findings of this topic, so the
+	 * finding is listed apart, collapsed, and left out of the review's counts
+	 * until someone turns the topic back on. A reproduced bug is never quieted.
+	 */
+	quieted?: true;
+}
+
+/**
+ * Why a person set a finding aside. Only `wrong` says the finding was false,
+ * so only it becomes a false-positive label for an evaluation.
+ */
+export const DISMISSAL_REASONS = [
+	'wrong',
+	'not-worth-fixing',
+	'already-handled',
+	'style-preference',
+	'duplicate'
+] as const;
+
+export type DismissalReason = (typeof DISMISSAL_REASONS)[number];
+
+/**
+ * What a person decided about a finding, saved with the review so every
+ * device and the pull request list agree. Absent while the finding is open.
+ */
+export interface FindingDecision {
+	state: 'accepted' | 'dismissed';
+	/** Set when `state` is `dismissed`. */
+	reason?: DismissalReason;
+	/** What the person added in their own words. */
+	note?: string;
+	decidedAt: string;
+}
+
+/** The body of `PUT /api/reviews/:id/findings/:findingId/decision`: an acceptance, or a dismissal with its reason. */
+export type FindingDecisionInput =
+	{ state: 'accepted'; note?: string } | { state: 'dismissed'; reason: DismissalReason; note?: string };
+
+/** Whether a repository rule states a hard requirement or a preference with room for judgment. */
+export const RULE_LEVELS = ['mandatory', 'advisory'] as const;
+
+export type RuleLevel = (typeof RULE_LEVELS)[number];
+
+/** The repository rule a finding cites, quoted word for word with where it is written. */
+export interface FindingRule {
+	/** The rule's id in the ledger (`R12`). */
+	id: string;
+	/** Verbatim quote from the source file, or empty when `verbatim` is `false`. */
+	text: string;
+	/** False when the rule's wording was not found verbatim in its source file and only `restatement` is held. */
+	verbatim?: boolean;
+	/** One-sentence restatement of the rule, kept beside the verbatim quote. */
+	restatement?: string;
+	/** Whether the rule is stated as a hard requirement or an advisory preference. */
+	level?: RuleLevel;
+	/** Glob of files the rule applies to; every file when unset. */
+	appliesTo?: string;
+	/** Exceptions stated next to the rule in its source file. */
+	exceptions?: string[];
+	source: { path: string; line?: number; endLine?: number; revision?: string };
+}
+
+/** A cited rule's own words: its quote, or its restatement when no quote was found in the source file. */
+export function citedRuleWords(rule: Pick<FindingRule, 'text' | 'restatement'>): string {
+	return rule.text || rule.restatement || '';
+}
+
+/** How a finding relates to the review before it on the same pull request. */
+export interface FindingHistory {
+	/** The head commit of the first review that reported it. */
+	firstSeenSha: string;
+	/**
+	 * `new`: this review reported it first. `carried`: reported before and
+	 * kept as it was, because the commits since did not touch its code, or
+	 * touched it without new evidence either way. `rechecked`: reported
+	 * before, the commits since touched its code, and this review raised it
+	 * again. A carried or rechecked finding keeps the id it had before, so
+	 * decisions and pull request comments follow it; only a carried one keeps
+	 * its decision.
+	 */
+	state: 'new' | 'carried' | 'rechecked';
 }
 
 /** A suggested change for a quality finding, applied in the sandbox and checked before it is shown. */
@@ -182,6 +286,33 @@ export interface VerificationEvidence {
 	baseline?: VerificationBaseline;
 }
 
+/** Whether a repository rule governs the changed file and lines, checked before any violation is judged. */
+export interface RuleApplicabilityDecision {
+	outcome: 'applies' | 'not-applicable' | 'unknown';
+	reason: string;
+	/** Evidence record ids supporting this decision. */
+	evidenceIds: string[];
+}
+
+/** Whether the changed lines break an applicable repository rule, after checking plausible exceptions. */
+export interface RuleViolationDecision {
+	outcome: 'violated' | 'not-violated' | 'exception' | 'not-checked' | 'unknown';
+	reason: string;
+	/** Stated or nearby exceptions checked before confirming or refuting. */
+	exceptionsChecked?: string[];
+	/** Evidence record ids supporting this decision. */
+	evidenceIds: string[];
+}
+
+/**
+ * The two separate decisions recorded for a `repo-rule` check: first whether
+ * the rule applies to the change, then whether the changed lines break it.
+ */
+export interface RuleCheckDecisions {
+	applicability: RuleApplicabilityDecision;
+	violation: RuleViolationDecision;
+}
+
 /** Whether a finding was proven by running code in the review sandbox. */
 export interface FindingVerification {
 	status: 'verified' | 'unverified';
@@ -201,6 +332,12 @@ export interface FindingVerification {
 	outcome?: VerificationOutcome;
 	/** The run behind a `run` verification; older saved reviews omit it. */
 	evidence?: VerificationEvidence;
+	/** Model that ran the verifier; absent when no verifier model ran. */
+	model?: string;
+	/** Reasoning effort of the verifier model, when one was set. */
+	effort?: ReasoningEffort;
+	/** The separate applicability and violation decisions behind a `repo-rule` check; older saved reviews omit it. */
+	ruleCheck?: RuleCheckDecisions;
 }
 
 export interface Finding {
@@ -233,6 +370,8 @@ export interface Finding {
 	kind?: FindingKind;
 	/** The repo rule a `repo-rule` finding breaks, from the rule ledger (`R12`). */
 	ruleId?: string;
+	/** That rule's text and source, so a reader can check the citation. Older saved reviews omit it. */
+	rule?: FindingRule;
 	/** The smell a `readability` finding names. */
 	smell?: ReadabilitySmell;
 	/** The enclosing function, method or class, as the change model names it (`ReviewRun.createRun`). */
@@ -240,6 +379,11 @@ export interface Finding {
 	claim?: FindingClaim;
 	/** A checked fix, on quality findings. */
 	patch?: FindingPatch;
+	/** What feedback on it counts toward, and whether that feedback quieted it. Older saved reviews omit it. */
+	topic?: FindingTopic;
+	decision?: FindingDecision;
+	/** Absent on the first review of a pull request and on older saved reviews. */
+	history?: FindingHistory;
 	/** Which lens or detector raised it (`correctness`, `detector:duplication`). */
 	lens?: string;
 	evidenceIds?: string[];

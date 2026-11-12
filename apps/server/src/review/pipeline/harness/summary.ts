@@ -33,6 +33,7 @@ function refutedCandidates(run: ReviewRun): CandidateFinding[] {
 		.map((candidate) => ({
 			...candidate,
 			verification: {
+				...candidate.verification,
 				status: 'unverified',
 				outcome: 'refuted',
 				reason: candidate.dropReason ?? 'refuted by the verifier'
@@ -250,6 +251,15 @@ const METHOD_WORDS: Record<NonNullable<FindingVerification['method']>, string> =
 	convention: "checked against the repo's conventions"
 };
 
+/** "Review complete. 3 findings. 2 more quieted by your feedback." — quieted findings are not counted as findings. */
+function findingsSentence(confirmed: Finding[]): string {
+	const quieted = confirmed.filter((finding) => finding.topic?.quieted).length;
+	const shown = confirmed.length - quieted;
+	const count = `Review complete. ${shown} finding${shown === 1 ? '' : 's'}.`;
+
+	return quieted ? `${count} ${quieted} more quieted by your feedback.` : count;
+}
+
 /** "2 verified by running code, 1 traced through the code." — empty when nothing was checked. */
 function verifiedSummary(findings: Finding[]): string {
 	const parts = Object.entries(METHOD_WORDS).flatMap(([method, words]) => {
@@ -266,6 +276,15 @@ function hiddenSentence(hidden: number): string {
 	if (!hidden) return '';
 
 	return `${hidden} unproven candidate${hidden === 1 ? ' was' : 's were'} hidden.`;
+}
+
+/** Says when `maxFiles` or `maxDiffChars` omitted part of the diff before reviewing started. */
+function diffLimitSentence(received: ReviewRun['received']): string {
+	const omitted = received.omitted?.length ?? 0;
+
+	return omitted
+		? `Reviewed within the configured diff limits (${omitted} hunk${omitted === 1 ? '' : 's'} omitted).`
+		: '';
 }
 
 /**
@@ -286,10 +305,11 @@ function buildSummary(
 	const subagents = incomplete.filter((record) => record.role === 'subagent').length;
 
 	const bits = [
-		`Review complete. ${confirmed.length} finding${confirmed.length === 1 ? '' : 's'}.`,
+		findingsSentence(confirmed),
 		verifiedSummary(confirmed),
 		notRunSentence(run.candidates),
 		hiddenSentence(run.hidden.length),
+		diffLimitSentence(run.received),
 		briefSentence(run.intent),
 		units ? `${units} review unit${units === 1 ? '' : 's'} did not finish.` : '',
 		subagents ? `${subagents} subagent${subagents === 1 ? '' : 's'} did not finish.` : '',

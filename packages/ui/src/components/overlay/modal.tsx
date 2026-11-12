@@ -9,6 +9,7 @@ import { cn } from '../../lib/cn';
 import { Button } from '../button';
 import { Layer, Panel, Scrim, TITLE_CLASS, type ModalSize } from './panel';
 import { useReturnFocus } from './return-focus';
+import { ShallowBodyLock } from './shallow-body-lock';
 import { useOpenState, type OpenProps } from './use-open-state';
 
 /** Whether the nearest modal is open, so its content stays mounted until the exit animation ends. */
@@ -61,9 +62,10 @@ interface ModalContentProps {
 
 /**
  * The modal panel and its scrim. The panel scales in from 0.95 through a 2px
- * blur and a 3px rise (150ms) and leaves in 70ms; the scrim only fades.
- * Under reduced motion the panel only fades too. On close, focus returns to
- * what had it when the modal opened.
+ * blur (150ms) and leaves in 70ms; the scrim only fades. Under reduced motion
+ * the panel only fades too. On close, focus returns to what had it when the
+ * modal opened. The scrim covers the page, so the page's pointer lock stays
+ * shallow (`ShallowBodyLock`).
  */
 export function ModalContent({
 	size = 'lg',
@@ -95,6 +97,7 @@ export function ModalContent({
 							onInteractOutside={keepToasts}
 						>
 							<Panel ref={panelRef} size={size} data-close={showClose || undefined} className={className}>
+								<ShallowBodyLock />
 								{children}
 								{showClose ? <CloseButton /> : null}
 							</Panel>

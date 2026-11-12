@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ModelRuntimeProfile } from '@recoder/shared';
+import { byCodePoint, type ModelRuntimeProfile } from '@recoder/shared';
 
 /** The value of every identity field that could not be learned. */
 export const UNKNOWN = 'unknown';
@@ -10,7 +10,14 @@ type Unknown = typeof UNKNOWN;
 export const NOT_RECORDED = 'not recorded';
 
 /** The caches the server keeps across reviews, each recorded with the version of its format. */
-export const SERVER_CACHES = ['intent', 'rule-ledger', 'baseline-cache', 'review-checkpoint'] as const;
+export const SERVER_CACHES = [
+	'intent',
+	'rule-ledger',
+	'baseline-cache',
+	'review-checkpoint',
+	'parsed-symbols',
+	'commit-prs'
+] as const;
 
 export type ServerCache = (typeof SERVER_CACHES)[number];
 
@@ -71,8 +78,8 @@ export interface RunIdentity {
 		/** The server's checkout, which ran the reviewers. */
 		server: string;
 	};
-	/** Verifiers run on the specialist model; there is no separate verifier setting. Reviewer calls send no seed. */
-	models: { orchestrator: StageModel; specialist: StageModel };
+	/** Each review stage's model and settings. Reviewer calls send no seed. */
+	models: { orchestrator: StageModel; specialist: StageModel; verifier: StageModel };
 	judge: { model: string; provider: string; effort: string; version: number; seed: number };
 	/**
 	 * Every `RECODER_*` variable the server runs with, but for keys, endpoints,
@@ -89,7 +96,7 @@ export interface RunIdentity {
 	caches: Record<string, string>;
 	tools: { bun: string; node: string; opencode: string };
 	tasks: TaskIdentity[];
-	/** The task set `tasks` came from: `full`, `only` for `--only`, or a `--set` name; absent from identities older than recording it. */
+	/** The task set `tasks` came from: `full`, `only` for `--only`, or a `--set` name (`holdout` for the labels marked holdout); absent from identities older than recording it. */
 	taskSet?: string;
 	/** `--shard`: this host's part of the task set, `tasks` its task ids and `all` every task id the set resolved to; absent unsharded. */
 	shard?: { index: number; count: number; tasks: string[]; all: string[] };
@@ -231,7 +238,7 @@ function canonical(value: unknown): string {
 		const entries = Object.entries(value).filter(([, child]) => child !== undefined);
 
 		return `{${entries
-			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+			.sort(([a], [b]) => byCodePoint(a, b))
 			.map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`)
 			.join(',')}}`;
 	}

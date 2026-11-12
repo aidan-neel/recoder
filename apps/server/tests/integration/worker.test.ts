@@ -286,4 +286,26 @@ describe.skipIf(!databaseUrl)('Postgres review workers (requires TEST_DATABASE_U
 			await lock;
 		}
 	});
+
+	test('a worker cannot claim a review while a wait for it is written under its lease row', async () => {
+		await coordinator.enqueue('review-1');
+
+		const claimedDuringWrite = await coordinator.whileClaimable('review-1', () => peer.claim('replica-b'));
+
+		expect(claimedDuringWrite).toBeNull();
+		expect((await peer.claim('replica-b'))?.reviewId).toBe('review-1');
+	});
+
+	test('a wait is not written for a review a worker already holds', async () => {
+		await coordinator.enqueue('review-1');
+		await peer.claim('replica-b');
+
+		let ran = false;
+
+		const written = await coordinator.whileClaimable('review-1', async () => {
+			ran = true;
+		});
+
+		expect({ ran, written }).toEqual({ ran: false, written: undefined });
+	});
 });

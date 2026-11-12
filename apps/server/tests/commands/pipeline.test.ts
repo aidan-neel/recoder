@@ -1,5 +1,6 @@
-import { afterEach, beforeAll, expect, test } from 'bun:test';
-import { REVIEW_CANCELLED, type ReviewTask } from '@recoder/shared';
+import { afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
+import { REVIEW_CANCELLED, type Repo, type ReviewTask } from '@recoder/shared';
+import { codex } from '../../src/agents/codex/codex';
 import { createReviewSession, startReviewSession } from '../../src/commands/pipeline';
 import { clearReviewEvents, subscribeReview, type ReviewEvent } from '../../src/review/session/events';
 import { getReviewControl } from '../../src/review/session/review-control';
@@ -24,13 +25,10 @@ afterEach(() => {
 });
 
 /**
- * A draft review of local PR #7 on a fake model that answers every brief call
- * with empty JSON and holds every other call until the review aborts it, so
- * the review is cancelled with its reviewers running.
- * The model has its own endpoint, so calls other test files left on a shared
- * one can't hold its concurrency slots.
+ * Saves the local forge's repository and picks the fake `lead` model, on its own endpoint, for the review and its
+ * workers, with `picks` on top.
  */
-async function draftOnFakeModel(): Promise<{ reviewId: string; repoId: string }> {
+async function repoOnLeadModel(picks: Parameters<typeof setReviewOverrides>[0]): Promise<Repo> {
 	const { repo } = await localForgeFixture();
 
 	await db.repos.set(repo);
@@ -40,8 +38,22 @@ async function draftOnFakeModel(): Promise<{ reviewId: string; repoId: string }>
 		apiKey: 'test',
 		models: [{ id: 'lead', label: 'Lead', model: 'lead' }],
 		orchestratorModelId: 'lead',
-		specialistModelId: 'lead'
+		specialistModelId: 'lead',
+		...picks
 	});
+
+	return repo;
+}
+
+/**
+ * A draft review of local PR #7 on a fake model that answers every brief call
+ * with empty JSON and holds every other call until the review aborts it, so
+ * the review is cancelled with its reviewers running.
+ * The model has its own endpoint, so calls other test files left on a shared
+ * one can't hold its concurrency slots.
+ */
+async function draftOnFakeModel(): Promise<{ reviewId: string; repoId: string }> {
+	const repo = await repoOnLeadModel({});
 
 	globalThis.fetch = (async (url, init) =>
 		String(init?.body).includes(BRIEF_PROMPT)
@@ -102,3 +114,35 @@ test('a review cancelled while its reviewers run leaves every task failed as can
 		await db.repos.delete(repoId);
 	}
 }, 30_000);
+
+test('a review with only its verifier on Codex fails at start when Codex is signed out, before fetching', async () => {
+	const repo = await repoOnLeadModel({ verifierModelId: 'codex:gpt-6-sol' });
+
+	const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+		Response.json({ choices: [{ message: { content: '{}' } }] })
+	);
+
+	const status = { ...(await codex.detect()), installed: true, signedIn: false };
+	const sign = spyOn(codex, 'quickStatus').mockResolvedValue(status);
+	const reviewId = (await createReviewSession({ repoId: repo.id, prNumber: 7 })).id;
+	const ended = nextEvent(reviewId, (event) => event.type === 'error' && !event.step);
+
+	try {
+		await startReviewSession(reviewId);
+		await ended;
+
+		expect(await db.reviews.get(reviewId)).toMatchObject({
+			status: 'failed',
+			summary: expect.stringContaining('Codex is not signed in')
+		});
+
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(await tasksOf(reviewId)).toEqual([]);
+	} finally {
+		fetchSpy.mockRestore();
+		sign.mockRestore();
+		await db.reviews.delete(reviewId);
+		clearReviewEvents(reviewId);
+		await db.repos.delete(repo.id);
+	}
+});

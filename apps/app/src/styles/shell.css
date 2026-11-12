@@ -1,287 +1,235 @@
-/* shell: the top bar, its tabs, the search trigger and the shortcuts sheet */
-
-/* ───────── Grow: bar pieces that grow in and collapse away ───────── */
-/* The gap before a piece lives inside it, so a collapsed piece leaves none behind. */
-[data-ui='grow'] {
+/* ───────── Sidebar: who you are, where you can go, what ran last ───────── */
+.sidebar {
 	display: flex;
-	flex-shrink: 0;
-	align-items: center;
-}
-/* While it moves it clips (overflow, not clip-path, which would lift a pill inside it over the labels). */
-[data-ui='grow'][data-moving] {
+	width: var(--sidebar-width);
+	height: 100dvh;
+	flex-direction: column;
 	overflow: hidden;
-}
-/* Leaving at once: out of the row before the pill measures its target. */
-[data-ui='grow'][data-gone] {
-	display: none;
-}
-[data-ui='grow-body'] {
-	display: flex;
-	flex-shrink: 0;
-	align-items: center;
-	padding-left: var(--grow-gap, 0px);
-	white-space: nowrap;
-}
-/* The fade reaches everything but a tab's pill, which stays solid as it hands over. */
-[data-ui='grow-body'] > :not([data-ui='top-tab']),
-[data-ui='grow'] [data-ui='top-tab-link'] {
-	opacity: var(--grow-fade, 1);
-}
-
-/* ───────── Tab strip ───────── */
-[data-ui='top-tabs'] {
-	--grow-gap: 2px;
-
-	display: flex;
-	height: 100%;
-	min-width: 0;
-	flex: 1 1 auto;
-	align-items: center;
-	overflow: hidden;
-	isolation: isolate;
-}
-[data-ui='top-tab'] {
-	position: relative;
-	display: flex;
-	flex-shrink: 0;
-}
-[data-ui='top-tab-link'] {
-	--grow-gap: 7px;
-
-	position: relative;
-	display: inline-flex;
-	height: 30px;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 7px;
-	padding: 0 10px;
-	border-radius: 8px;
-	color: var(--text-muted);
-	font-size: 13px;
-	line-height: 1;
-	white-space: nowrap;
-	outline: none;
-	-webkit-user-drag: none;
+	border-right: 1px solid var(--line-subtle);
+	background: var(--bg-chrome);
 	transition:
-		background-color var(--dur-hover) ease-out,
-		color var(--dur-hover) ease-out,
-		box-shadow var(--dur-hover) ease-out;
+		translate var(--dur-disclose) var(--ease-menu),
+		opacity var(--dur-toggle) ease-out;
 }
-[data-ui='top-tab-link'] > [data-ui='grow'] {
-	margin-left: calc(-1 * var(--grow-gap));
+.app-frame[data-sidebar='closed'] .sidebar {
+	opacity: 0;
+	translate: -16px 0;
+	pointer-events: none;
 }
-[data-ui='top-tab-link'] > svg {
+
+.sidebar-head {
+	display: flex;
+	height: var(--bar-height);
 	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+	padding: 0 8px 0 10px;
 }
-[data-ui='top-tab-link']:hover {
+
+/* The account row is a quiet menu trigger: square initial, login, chevron. */
+.account {
+	display: flex;
+	min-width: 0;
+	height: 30px;
+	flex: 0 1 auto;
+	align-items: center;
+	gap: 8px;
+	margin-right: auto;
+	padding: 0 8px 0 6px;
+	border-radius: 8px;
 	color: var(--text-primary);
-	background-color: rgb(var(--wash-rgb) / 0.04);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	outline: none;
+	transition: background-color var(--dur-hover) ease-out;
 }
-[data-ui='top-tab'][data-state='active'] [data-ui='top-tab-link'] {
-	color: var(--text-primary);
-	background-color: transparent;
+.account:hover,
+.account[data-state='open'] {
+	background: var(--bg-hover);
 }
-[data-ui='top-tab-link']:focus-visible {
+.account:focus-visible {
 	box-shadow: var(--focus-ring);
 }
-[data-ui='top-tab-separator'] {
-	display: block;
-	width: 1px;
-	height: 16px;
-	flex-shrink: 0;
-	margin: 0 6px;
-	background-color: var(--line-tab);
-}
-
-/* The number, the title cut to fit, and the count after a tab's name. */
-[data-ui='tab-number'] {
-	color: var(--text-faint);
-	font-family: var(--font-code);
-	font-size: 11.5px;
-}
-[data-ui='tab-title'] {
-	max-width: 150px;
+.account-name {
 	overflow: hidden;
 	text-overflow: ellipsis;
-	line-height: 16px;
+	white-space: nowrap;
 }
-[data-ui='tab-count'] {
-	display: inline-flex;
-	color: var(--text-faint);
-	font-family: var(--font-code);
-	font-size: 11.5px;
-	font-variant-numeric: tabular-nums;
-	line-height: 16px;
-}
-[data-ui='tab-count'][data-variant='badge'] {
-	padding: 0 5px;
-	border-radius: 4px;
-	background-color: rgb(var(--wash-rgb) / 0.06);
-	color: var(--text-muted);
-	font-size: 10.5px;
-}
-[data-ui='tab-count'][data-tone='high'] {
-	background-color: var(--sev-high-tint);
-	color: var(--sev-high);
-}
-
-/* A review's mark: a spinner while it runs, then the pull request icon. */
-[data-ui='tab-glyph'] {
-	display: grid;
-	width: 14px;
-	height: 14px;
+.account > svg {
+	width: 12px;
+	height: 12px;
 	flex-shrink: 0;
-	place-items: center;
-	color: var(--ok);
-	transition: opacity var(--dur-hover) ease-out;
-}
-[data-ui='tab-glyph'][data-running] {
-	color: var(--sev-medium);
-}
-[data-ui='tab-glyph-face'] {
-	display: grid;
-	grid-area: 1 / 1;
-	place-items: center;
-}
-
-/* Hovering a review tab, or reaching it by keyboard, swaps its mark for the close button. */
-[data-ui='top-tab'] > [data-slot='tab-close'] {
-	position: absolute;
-	top: 50%;
-	left: 8px;
-	z-index: 1;
-	translate: 0 -50%;
-	color: var(--text-subtle);
-	opacity: 0;
-	pointer-events: none;
-	transition:
-		opacity var(--dur-hover) ease-out,
-		background-color var(--dur-hover) ease-out,
-		color var(--dur-hover) ease-out;
-}
-/* It looks 18px but takes a 28px target, over the mark it replaces. */
-[data-ui='top-tab'] > [data-slot='tab-close']::before {
-	position: absolute;
-	inset: -5px;
-	content: '';
-}
-/* A closing tab's button fades with the rest of it. */
-[data-ui='top-tab']:is(:hover, :has(:focus-visible)) > [data-slot='tab-close'] {
-	opacity: var(--grow-fade, 1);
-	pointer-events: auto;
-}
-[data-ui='top-tab']:is(:hover, :has(:focus-visible)) [data-ui='tab-glyph'] {
-	opacity: 0;
-}
-[data-ui='top-tab'] > [data-slot='tab-close']:is(:hover, :focus-visible) {
-	background-color: rgb(var(--wash-rgb) / 0.08);
-	color: var(--text-primary);
-}
-
-/* The More menu's trigger reads as one more tab. */
-[data-slot='tab-more'] {
-	height: 30px;
-	gap: 7px;
-	padding: 0 8px 0 10px;
-	color: var(--text-muted);
-	font-size: 13px;
-	font-weight: 400;
-}
-[data-slot='tab-more'] svg {
-	width: 13px;
-	height: 13px;
 	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
 }
-[data-slot='tab-more']:hover,
-[data-slot='tab-more'][data-state='open'] {
-	background-color: rgb(var(--wash-rgb) / 0.04);
-	color: var(--text-primary);
-}
-[data-slot='tab-more'][data-state='open'] {
-	background-color: rgb(var(--wash-rgb) / 0.07);
+.account[data-state='open'] > svg {
+	rotate: 180deg;
 }
 
-[data-ui='menu-item-icon'] [data-ui='tab-glyph'] svg {
-	width: 13px;
-	height: 13px;
-}
-
-/* Every strip piece at full size, invisible and out of the flow, for measuring. */
-[data-ui='top-tabs-ruler'] {
-	position: absolute;
-	top: 0;
-	left: 0;
+.sidebar-nav {
 	display: flex;
-	width: max-content;
-	height: 0;
-	gap: 2px;
-	overflow: hidden;
-	visibility: hidden;
-	pointer-events: none;
+	flex-direction: column;
+	gap: 1px;
+	padding: 6px 10px 0;
 }
-[data-ui='top-tabs-ruler'] > * {
-	flex-shrink: 0;
-}
-
-/* ───────── Search trigger and settings ───────── */
-[data-slot='search-trigger'] {
-	width: 240px;
-	height: 30px;
-	justify-content: flex-start;
-	gap: 8px;
-	padding: 0 7px 0 10px;
-	border-radius: 8px;
-	background-color: var(--bg-search);
-	box-shadow: inset 0 0 0 1px var(--line-subtle);
-	color: var(--text-subtle);
-	font-size: 13px;
-	font-weight: 400;
-}
-[data-slot='search-trigger'][data-compact] {
-	width: 170px;
-}
-[data-slot='search-trigger'] > svg {
-	width: 14px;
-	height: 14px;
-}
-[data-slot='search-trigger']:hover {
-	background-color: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-control);
-}
-[data-slot='search-trigger']:focus-visible {
-	box-shadow:
-		var(--focus-ring),
-		inset 0 0 0 1px var(--line-control);
-}
-[data-slot='settings-link'] svg {
-	width: 15px;
-	height: 15px;
-	stroke-width: 1.75;
-}
-[data-slot='settings-link'][data-active] {
-	background-color: var(--bg-menu);
-	color: var(--text-primary);
-}
-
-/* ───────── Shortcuts sheet: one row per key, the settings-row rhythm ───────── */
-[data-ui='shortcuts'] {
-	gap: 18px;
-}
-[data-ui='shortcuts-title'] {
-	margin-bottom: 4px;
-	color: var(--text-faint);
-	font-size: 11.5px;
-}
-[data-ui='shortcuts-row'] {
-	display: flex;
+.nav-item {
 	height: 32px;
+	align-items: center;
+	gap: 10px;
+	padding: 0 10px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+.nav-item svg {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	color: var(--text-subtle);
+	stroke-width: 1.75;
+	transition: color var(--dur-hover) ease-out;
+}
+.nav-item:hover,
+.nav-item[data-active] {
+	color: var(--text-primary);
+}
+.nav-item:hover svg,
+.nav-item[data-active] svg {
+	color: var(--text-primary);
+}
+.nav-item[data-active] {
+	font-weight: 500;
+}
+.nav-count {
+	margin-left: auto;
+	color: var(--text-faint);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 400;
+}
+
+/* Recent reviews: two lines a row, the state as a glyph and as words. */
+.recent {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	margin-top: 22px;
+}
+.recent-label {
+	padding: 0 20px 6px;
+}
+.recent-list {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	gap: 1px;
+	overflow-y: auto;
+	padding: 0 10px 12px;
+	scrollbar-width: none;
+}
+.recent-item {
+	align-items: flex-start;
+	gap: 10px;
+	padding: 6px 10px;
+}
+.recent-item [data-ui='status-glyph'] {
+	margin-top: 1px;
+}
+.recent-text {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+}
+.recent-title {
+	overflow: hidden;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	transition: color var(--dur-hover) ease-out;
+}
+.recent-item:hover .recent-title,
+.recent-item[data-active] .recent-title {
+	color: var(--text-primary);
+}
+.recent-empty {
+	padding: 2px 20px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 18px;
+}
+
+.sidebar-foot {
+	display: flex;
+	height: 52px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+	padding: 0 8px 0 10px;
+}
+.model-chip {
+	display: flex;
+	min-width: 0;
+	height: 30px;
+	align-items: center;
+	gap: 10px;
+	margin-right: auto;
+	padding: 0 8px 0 10px;
+	border-radius: 8px;
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	outline: none;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.model-chip:hover {
+	background: var(--bg-hover);
+}
+.model-chip:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.model-chip-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.model-dot {
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: var(--success);
+}
+.model-dot[data-state='off'] {
+	background: var(--text-ghost);
+}
+.model-dot[data-state='missing'] {
+	background: var(--sev-medium);
+}
+
+/* The button that brings a hidden sidebar back sits where the sidebar's own button was. */
+.sidebar-open {
+	margin-right: 4px;
+}
+
+/* ───────── Shortcuts sheet ───────── */
+.shortcuts {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4px 32px;
+}
+.shortcut-row {
+	display: flex;
+	min-height: 30px;
 	align-items: center;
 	justify-content: space-between;
 	gap: 16px;
-	border-bottom: 1px solid var(--line-divider);
 	color: var(--text-secondary);
-	font-size: 13px;
+	font-size: var(--font-size-label);
 }
-[data-ui='shortcuts-row']:last-child {
-	border-bottom: 0;
+.shortcut-keys {
+	display: flex;
+	gap: 4px;
 }

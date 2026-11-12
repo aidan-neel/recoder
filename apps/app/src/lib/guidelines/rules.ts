@@ -1,4 +1,4 @@
-import type { GlobalGuidelines } from '@recoder/shared';
+import type { GlobalGuidelines, RepoGuidelines } from '@recoder/shared';
 
 /** The global row's line when the owner never saved global guidelines, so the built-in ones apply. */
 const NOT_SET = 'Not set. Reviewers follow Recoder’s defaults.';
@@ -26,6 +26,32 @@ export function globalSummary(global: GlobalGuidelines): string {
 	if (global.updatedAt === null) return NOT_SET;
 
 	return firstRule(global.content) ?? CLEARED;
+}
+
+/** The repository row's line: the first rule in force (or pending), or that the file is missing. */
+export function repoSummary(data: RepoGuidelines): string {
+	return firstRule(data.pending?.content ?? data.content) ?? `No ${data.path} yet`;
+}
+
+/** Where the active file was read: branch and short commit, for the status pill's tooltip. */
+export function activeSource(data: RepoGuidelines): string {
+	const sha = data.sha ? ` at ${data.sha.slice(0, 7)}` : '';
+
+	return `${data.path} on ${data.ref}${sha}`;
+}
+
+/** The save button's label: the global layer saves in place; a repository's file goes through a pull request. */
+export function saveLabel(repo: RepoGuidelines | null): string {
+	if (!repo) return 'Save';
+
+	return repo.pending ? 'Update pull request' : 'Open pull request';
+}
+
+/** The check face after the save landed, in the same words. */
+export function successLabel(repo: RepoGuidelines | null): string {
+	if (!repo) return 'Saved';
+
+	return repo.pending ? 'Updated' : 'Opened';
 }
 
 /**

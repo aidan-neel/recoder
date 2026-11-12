@@ -3,7 +3,7 @@
 import type { ButtonStatus } from '@recoder/ui';
 import { useEffect, useRef, useState } from 'react';
 
-/** How long a failed action's "Try again" face stays before the button rests again. */
+/** How long a failed action's error face stays before the button rests again. */
 const ERROR_MS = 2400;
 
 /** How long the success face stays, for the actions that show one. */
@@ -17,7 +17,7 @@ interface ActionOptions {
 /**
  * Drives a `Button`'s status through one async action: pending while it
  * runs, back to idle when it resolves (the page's new state is the success,
- * unless `showSuccess` asks for the success face first), "Try again" for a
+ * unless `showSuccess` asks for the success face first), the error face for a
  * moment when it rejects. A second click while pending is ignored, even one
  * that lands before the pending face renders.
  */

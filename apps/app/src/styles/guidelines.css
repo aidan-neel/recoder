@@ -1,119 +1,139 @@
-/* guidelines */
+/* ───────── Guidelines: the rules reviews follow, for every review and per repository ───────── */
 
-/* ───────── Rows: a layer and its editor share one card row, split from the next by a hairline ───────── */
+/* A layer and its editor share one row of the card, split from the next by a hairline. */
 .guidelines-item + .guidelines-item {
-	border-top: 1px solid var(--line-subtle-2);
+	box-shadow: inset 0 1px 0 var(--line-subtle);
 }
-/* The preview is one line; a rule too long for it ends in an ellipsis. */
-.guidelines-item .settings-row-desc > * {
+/* The summary is one line; a rule too long for it ends in an ellipsis. A failure wraps, so its reason shows whole. */
+.guidelines-item .settings-row-detail:not([data-tone]) {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.guidelines-item[data-failed] .settings-row-desc {
-	color: var(--danger);
-}
+
+/* Where a repository's file stands: the branch it is on, the pull request that waits. */
 .guidelines-status {
 	display: flex;
-	flex-shrink: 0;
 	align-items: center;
 	gap: 6px;
 }
-.guidelines-pill-link {
+.guidelines-pill {
 	display: flex;
 	border-radius: 6px;
 	outline: none;
-	transition: filter var(--dur-hover) ease-out;
 }
-.guidelines-pill-link:hover {
-	filter: brightness(1.15);
+a.guidelines-pill:hover [data-ui='pill'] {
+	background-color: color-mix(in srgb, var(--pill-fg) 22%, transparent);
 }
-.guidelines-pill-link:focus-visible {
+a.guidelines-pill:focus-visible {
 	box-shadow: var(--focus-ring);
 }
-.guidelines-empty {
+
+/*
+ * The row's button steps aside while its editor is open. After pills or the learned rules, its column closes too,
+ * so they end at the card's edge. Coming back, the column opens before the button fades in.
+ */
+.guidelines-action {
+	display: grid;
+	grid-template-columns: 1fr;
+	transition:
+		grid-template-columns var(--dur-toggle) var(--ease-menu),
+		margin-left var(--dur-toggle) var(--ease-menu),
+		opacity var(--dur-swap) ease-out var(--dur-swap);
+}
+/* Going away, the button fades first, so the closing column never cuts it while it shows. */
+.guidelines-action[inert] {
+	opacity: 0;
+	transition:
+		grid-template-columns var(--dur-toggle) var(--ease-menu) var(--dur-press),
+		margin-left var(--dur-toggle) var(--ease-menu) var(--dur-press),
+		opacity var(--dur-press) ease-out;
+}
+.guidelines-action[inert]:not(:first-child) {
+	grid-template-columns: 0fr;
+	margin-left: -10px;
+}
+/* The clip keeps 3px around the button, so its focus ring is never cut. */
+.guidelines-action-clip {
 	min-width: 0;
-	flex: 1;
-	color: var(--text-muted);
-	font-size: 13px;
-	line-height: 18px;
-	text-wrap: pretty;
+	margin: -3px;
+	padding: 3px;
+	overflow: hidden;
+}
+.guidelines-action-skeleton {
+	width: 50px;
+	height: 28px;
+	border-radius: 8px;
 }
 
-/* ───────── Editor: the text, a note, then the bar ───────── */
+/* ───────── Editor: the text, a note and the count, then the bar ───────── */
 .guidelines-editor {
 	display: flex;
 	flex-direction: column;
-	padding: 0 14px 14px 16px;
+	padding: 2px 16px 16px;
 }
 
-/* The field and the streaming view share one box, so swapping them moves nothing. */
+/* The field and the stream view share one box and one type, so swapping them moves nothing. */
 .guidelines-field {
 	font-family: var(--font-code);
 	font-size: 12.5px;
 	line-height: 20px;
 	tab-size: 2;
 }
+/* The stream grows to the field's 24 rows, then scrolls. */
 .guidelines-stream {
 	max-height: calc(24 * 20px + 16px);
 	border-radius: 10px;
-	background-color: var(--bg-raised);
+	background-color: var(--bg-field);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+	color: var(--text-primary);
+}
+.guidelines-stream:has(:focus-visible) {
 	box-shadow:
 		inset 0 0 0 1px var(--line-focus),
 		0 0 0 3px rgb(var(--ink-rgb) / 0.06);
-	color: var(--text-primary);
+}
+.guidelines-stream [data-ui='scroll-area-viewport'] {
+	outline: none;
 }
 .guidelines-stream-text {
-	min-height: calc(14 * 20px + 16px);
+	min-height: calc(12 * 20px + 16px);
 	padding: 8px 10px;
 	overflow-wrap: anywhere;
 	white-space: pre-wrap;
 }
+.guidelines-stream-text[data-empty] {
+	color: var(--text-faint);
+}
 /* Before the first words, the caret sits where they will land, ahead of "Drafting…". */
 .guidelines-caret-lead {
-	margin: 0 2px 0 0;
+	margin: 0 3px 0 0;
 	color: var(--text-primary);
 }
+
 .guidelines-meta {
 	display: flex;
+	min-height: 24px;
 	align-items: flex-start;
 	gap: 16px;
 	padding: 8px 2px 0;
 }
 .guidelines-note {
-	min-width: 0;
 	flex: 1;
 	color: var(--text-subtle);
-	font-size: 12px;
+	font-size: var(--font-size-meta);
 	line-height: 16px;
 	text-wrap: pretty;
 }
-.guidelines-note[data-tone='danger'] {
+.guidelines-note [data-tone='danger'] {
 	color: var(--danger);
-}
-.guidelines-link {
-	color: var(--text-primary);
-	text-decoration: underline;
-	text-decoration-color: var(--line-strong);
-	text-underline-offset: 2px;
-	transition: text-decoration-color var(--dur-hover) ease-out;
-}
-.guidelines-link:hover {
-	text-decoration-color: currentColor;
-}
-.guidelines-bar {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px;
-	margin-top: 10px;
 }
 .guidelines-count {
 	flex-shrink: 0;
 	margin-left: auto;
 	color: var(--text-faint);
 	font-family: var(--font-code);
-	font-size: 11.5px;
+	font-size: var(--font-size-meta);
 	font-variant-numeric: tabular-nums;
 	line-height: 16px;
 	transition: color var(--dur-toggle) ease-out;
@@ -121,60 +141,141 @@
 .guidelines-count[data-over] {
 	color: var(--danger);
 }
-[data-ui='button'].guidelines-draft {
-	margin-left: -6px;
-	padding: 0 10px 0 8px;
-	color: var(--text-muted);
-	font-weight: 400;
+
+.guidelines-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-top: 12px;
 }
-[data-ui='button'].guidelines-draft:hover,
-[data-ui='button'].guidelines-draft[data-state='open'] {
+.guidelines-bar-end {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+/* The bar's quiet buttons: muted until the pointer is on them, so Save leads. */
+.guidelines-quiet {
+	color: var(--text-muted);
+}
+.guidelines-quiet:hover,
+.guidelines-quiet[data-state='open'] {
 	color: var(--text-primary);
 }
-.guidelines-stop-glyph {
-	width: 9px;
-	height: 9px;
-	margin: 0 3px;
-	border-radius: 2px;
-	background: currentColor;
+/* The draft face leads with an icon the kit cannot see inside SwapText: give it the icon side's 8px and pull it back so the icon lines up with the field. */
+.guidelines-draft {
+	margin-left: -8px;
+	padding-left: 8px;
+}
+.guidelines-draft-face {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.guidelines-draft-face [data-glyph='stop'] {
+	width: 10px;
+	height: 10px;
+	margin: 0 2px;
+	fill: currentColor;
 }
 
 /* ───────── Draft popover: the request, what to read, and Draft ───────── */
 .guidelines-draft-panel {
 	display: flex;
-	width: 392px;
+	width: 384px;
 	flex-direction: column;
-	gap: 10px;
-}
-.guidelines-draft-hint {
-	margin-top: -4px;
-	padding: 0 2px;
-	color: var(--text-subtle);
-	font-size: 12px;
-	line-height: 16px;
+	gap: 12px;
 }
 .guidelines-sources {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	margin: 0;
-	padding: 2px 2px 0;
-	border: 0;
+	padding: 0 2px;
 }
-.guidelines-sources-title {
+.guidelines-sources legend {
 	margin-bottom: 8px;
-	padding: 0;
-	color: var(--text-subtle);
-	font-size: 12px;
-	line-height: 16px;
 }
 .guidelines-source {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	color: var(--text-primary);
-	font-size: 13px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
 	line-height: 18px;
 	cursor: pointer;
 	user-select: none;
+}
+.guidelines-draft-end {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+.guidelines-draft-hint {
+	padding: 0 2px;
+	color: var(--text-subtle);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+
+/* ───────── Learned rules: kinds of finding a repository dismissed often, and what to do with each ───────── */
+.learned-dot {
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	background: var(--accent);
+}
+.learned-panel {
+	display: flex;
+	width: 480px;
+	max-width: calc(100vw - 32px);
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px 12px 6px;
+}
+.learned-list {
+	display: flex;
+	flex-direction: column;
+	margin-top: 6px;
+}
+.learned-rule {
+	display: flex;
+	min-height: 48px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 0;
+}
+.learned-rule + .learned-rule {
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+}
+.learned-text {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 1px;
+}
+/* A rule's name is what the person decides on, so it wraps and is never cut. */
+.learned-name {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	text-wrap: pretty;
+}
+.learned-detail {
+	color: var(--text-subtle);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.learned-detail[data-tone='danger'] {
+	color: var(--danger);
+}
+.learned-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+	margin-right: -4px;
 }

@@ -1,21 +1,13 @@
 'use client';
 
-import { Button, ForgeMark, HoverList, NavPill, NavPillGroup } from '@recoder/ui';
+import { ForgeMark, HoverList, NavPill, NavPillGroup, RowButton } from '@recoder/ui';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
-import { useRootScale } from '@/lib/shell/root-scale';
 import { docs } from '~/lib/docs';
 import { REPO_URL } from '~/lib/site';
-
-/**
- * Half a nav item's 30px height, so the pill is fully round. It must not be
- * larger: while the pill slides, motion turns the radius into percentages of
- * the pill, and a radius far past its size warps the corners into a leaf.
- */
-const PILL_RADIUS = 15;
 
 const LINKS = [{ href: '/', title: 'Home' }, ...docs.map((doc) => ({ href: `/docs/${doc.slug}`, title: doc.title }))];
 
@@ -38,8 +30,9 @@ function revealCurrent(row: HTMLElement | null): void {
 
 /**
  * The site nav: Home, the docs pages and GitHub, in a slim column centered
- * down the card's left edge (a sideways row on narrow screens). The current
- * page's pill slides to a new pick; hover uses the list's snapping highlight.
+ * down the card's left edge (a sideways row on narrow screens). The rows are
+ * the app's sidebar rows (`nav-item`): the current page's pill slides to a
+ * new pick, and hover uses the list's snapping highlight.
  * The links sit in a fixed frame marked `layoutScroll`, so the pill measures
  * against the frame: a page scrolled before the click, which Next puts back
  * at the top, never throws the pill off.
@@ -48,7 +41,6 @@ export function SiteNav() {
 	const pathname = usePathname();
 	const current = pathname.replace(/\/$/, '') || '/';
 	const row = useRef<HTMLDivElement>(null);
-	const scale = useRootScale();
 
 	useEffect(() => revealCurrent(row.current), [current]);
 
@@ -56,30 +48,30 @@ export function SiteNav() {
 		<nav className="site-nav" aria-label="Site">
 			<motion.div ref={row} layoutScroll className="site-nav-scroll">
 				<NavPillGroup>
-					<HoverList as="ul" itemSelector="a" className="site-nav-list" highlightClassName="rounded-full">
+					<HoverList as="ul" itemSelector="a" className="site-nav-list">
 						{LINKS.map((link) => {
 							const active = link.href === current;
 
 							return (
 								<li key={link.href}>
-									<Button asChild variant="ghost" className="site-nav-item">
+									<RowButton asChild data-active={active || undefined} className="nav-item">
 										<Link href={link.href} aria-current={active ? 'page' : undefined}>
-											{active ? <NavPill value={link.href} radius={PILL_RADIUS * scale} className="bg-menu" /> : null}
+											{active ? <NavPill value={link.href} /> : null}
 											{link.title}
 										</Link>
-									</Button>
+									</RowButton>
 								</li>
 							);
 						})}
 						<li>
-							<Button asChild variant="ghost" className="site-nav-item">
+							<RowButton asChild className="nav-item">
 								<a href={REPO_URL}>
 									<span aria-hidden className="flex">
 										<ForgeMark provider="github" />
 									</span>
 									GitHub
 								</a>
-							</Button>
+							</RowButton>
 						</li>
 					</HoverList>
 				</NavPillGroup>

@@ -35,6 +35,24 @@ const VERDICT_ALIASES: Record<string, 'confirmed' | 'refuted' | 'unverified'> = 
 	unproven: 'unverified'
 };
 
+const ruleCheckReplySchema = z.object({
+	applicability: z
+		.object({
+			outcome: z.enum(['applies', 'not-applicable', 'unknown']),
+			reason: z.string().trim().min(1).max(400).optional(),
+			evidenceIds: z.array(z.string().min(1).max(40)).max(12).default([])
+		})
+		.optional(),
+	violation: z
+		.object({
+			outcome: z.enum(['violated', 'not-violated', 'exception', 'not-checked', 'unknown']),
+			reason: z.string().trim().min(1).max(400).optional(),
+			exceptionsChecked: z.array(z.string().trim().min(1).max(240)).max(8).optional(),
+			evidenceIds: z.array(z.string().min(1).max(40)).max(12).default([])
+		})
+		.optional()
+});
+
 const verdictSchema = z.object({
 	message: z.string().max(12000).optional(),
 	verdict: z.enum(['confirmed', 'refuted', 'unverified']),
@@ -43,7 +61,9 @@ const verdictSchema = z.object({
 	/** A stated non-goal (`N2`) or stacked pull request (`#31`) that already covers the problem. */
 	coveredBy: z.string().trim().min(1).max(40).optional(),
 	/** What the cited run should show if the claim is true; optional because weak models leave it out. */
-	expected: z.string().trim().min(1).max(300).optional()
+	expected: z.string().trim().min(1).max(300).optional(),
+	/** Separate applicability and violation decisions reported for a `repo-rule` check. */
+	ruleCheck: ruleCheckReplySchema.optional()
 });
 
 export type VerdictOutput = z.infer<typeof verdictSchema>;
@@ -66,6 +86,13 @@ export function parseVerdict(raw: unknown): VerdictOutput | null {
 	if (typeof out.expected !== 'string' || !out.expected.trim()) delete out.expected;
 	else out.expected = clip(out.expected.trim(), 300);
 
+	if (out.ruleCheck !== undefined) {
+		const parsedRuleCheck = ruleCheckReplySchema.safeParse(out.ruleCheck);
+
+		if (parsedRuleCheck.success) out.ruleCheck = parsedRuleCheck.data;
+		else delete out.ruleCheck;
+	}
+
 	const parsed = verdictSchema.safeParse(out);
 
 	return parsed.success ? parsed.data : null;
@@ -74,7 +101,7 @@ export function parseVerdict(raw: unknown): VerdictOutput | null {
 export function verdictValidationError(raw: unknown): string {
 	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return 'expected one JSON object';
 
-	return 'expected {"message","verdict":"confirmed"|"refuted"|"unverified","reason","evidenceIds","expected"?,"coveredBy"?}';
+	return 'expected {"message","verdict":"confirmed"|"refuted"|"unverified","reason","evidenceIds","expected"?,"coveredBy"?,"ruleCheck"?}';
 }
 
 /**
@@ -94,6 +121,36 @@ export function coveredByIntent(output: VerdictOutput, intent: ChangeIntent | nu
 	return Boolean(number) && stacked.some((pr) => String(pr.number) === number);
 }
 
+function ruleCheckSchemaProperty(): Record<string, unknown> {
+	const str = { type: 'string' };
+	const ids = { type: 'array', items: str };
+
+	return {
+		type: 'object',
+		properties: {
+			applicability: {
+				type: 'object',
+				properties: {
+					outcome: { type: 'string', enum: ['applies', 'not-applicable', 'unknown'] },
+					reason: str,
+					evidenceIds: ids
+				},
+				required: ['outcome']
+			},
+			violation: {
+				type: 'object',
+				properties: {
+					outcome: { type: 'string', enum: ['violated', 'not-violated', 'exception', 'not-checked', 'unknown'] },
+					reason: str,
+					exceptionsChecked: ids,
+					evidenceIds: ids
+				},
+				required: ['outcome']
+			}
+		}
+	};
+}
+
 /** Verifier turns for endpoints with guided decoding: actions, or the verdict (only the verdict on the final turn). */
 export function verifierResponseSchema(
 	exec: boolean,
@@ -108,7 +165,8 @@ export function verifierResponseSchema(
 			verdict: { type: 'string', enum: ['confirmed', 'refuted', 'unverified'] },
 			reason: str,
 			evidenceIds: { type: 'array', items: str },
-			coveredBy: str
+			coveredBy: str,
+			...(!exec ? { ruleCheck: ruleCheckSchemaProperty() } : {})
 		},
 		required: ['message', 'verdict', 'reason', 'evidenceIds']
 	};

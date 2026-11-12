@@ -8,15 +8,16 @@ const FIRST_WORD = HEADLINE.map((_, sentence) =>
 );
 
 /**
- * The home page title in the Home brief's serif. Each word resolves out of a
- * blur in turn (CSS only, so it plays from the server's HTML); screen readers
- * hear the whole headline once, through the label.
+ * The home page title, set large in the UI face with the first sentence
+ * brighter than the second. Each word resolves out of a blur in turn (CSS
+ * only, so it plays from the server's HTML); screen readers hear the whole
+ * headline once, through the label.
  */
 export function HeroHeadline() {
 	return (
-		<h1 id="site-title" className="site-brief" aria-label={DESCRIPTION}>
+		<h1 id="site-title" className="site-headline" aria-label={DESCRIPTION}>
 			{HEADLINE.map((sentence, s) => (
-				<span key={sentence} className={s === 0 ? 'site-brief-lead' : undefined} aria-hidden>
+				<span key={sentence} className={s === 0 ? 'site-headline-lead' : undefined} aria-hidden>
 					{sentence.split(' ').map((word, w) => (
 						<Fragment key={w}>
 							<span className="hero-word" style={{ '--w': FIRST_WORD[s] + w } as CSSProperties}>

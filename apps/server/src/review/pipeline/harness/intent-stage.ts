@@ -1,8 +1,11 @@
+import { commitTime } from '../../../evidence/git.js';
+import { relatedReviewSources } from '../../../forge/context/related-reviews.js';
 import { makeSource, sortSources } from '../../../forge/context/sources.js';
 import { distillIntent } from '../intent/distill.js';
 import { gatherHistory } from '../intent/history.js';
 import type { ChangeIntent, IntentSource } from '../intent/types.js';
 import { publishBudget, type ReviewRun } from './context.js';
+import { recordHistorySources } from './history-record.js';
 
 const TASK = { id: 'intent', label: 'Reading what the change is for' } as const;
 
@@ -17,6 +20,21 @@ function ownSources(run: ReviewRun): IntentSource[] {
 	if (gathered.some((source) => source.kind === 'pr') || (!prTitle?.trim() && !prBody?.trim())) return gathered;
 
 	return [makeSource({ kind: 'pr', ref: 'pr', title: prTitle ?? undefined, text: prBody ?? '' }), ...gathered];
+}
+
+/** Earlier PRs' findings on the changed files, when the review knows its repository and merge base. */
+async function relatedSources(run: ReviewRun, history: IntentSource[]): Promise<IntentSource[]> {
+	const { repoId, revision } = run.input;
+
+	if (!repoId || !revision?.mergeBaseSha) return [];
+
+	const cutoff = await commitTime(revision.checkoutPath, revision.mergeBaseSha, run.controller.signal);
+
+	if (!cutoff) return [];
+
+	const files = run.inventory.files.filter((file) => !file.excludeReason).map((file) => file.path);
+
+	return await relatedReviewSources({ repoId, history, files, cutoff });
 }
 
 function describe(intent: ChangeIntent | null, sources: number): string {
@@ -83,7 +101,11 @@ export async function intentStage(run: ReviewRun): Promise<void> {
 				})
 			: [];
 
-		const sources = sortSources([...ownSources(run), ...history]);
+		const related = await relatedSources(run, history);
+		const sources = sortSources([...ownSources(run), ...history, ...related]);
+
+		recordHistorySources(sources);
+
 		const stack = input.context?.stack ?? { parent: null, children: [] };
 
 		run.intent = await distillIntent(run, sources, stack);

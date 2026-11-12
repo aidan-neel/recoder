@@ -1,3 +1,5 @@
+import { agentCli } from './agent-clis';
+
 /** Reasoning levels in ascending depth; providers offer a subset. */
 export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
@@ -15,6 +17,22 @@ export const EFFORT_TEXT: Record<ReasoningEffort, { label: string; description: 
 /** Effort words are always spelled out in full ("Medium", never "Med"). */
 export function effortLabel(effort: ReasoningEffort): string {
 	return EFFORT_TEXT[effort].label;
+}
+
+/**
+ * A saved effort the model no longer offers (e.g. after switching models) falls
+ * back to the model default: medium when offered, else the first listed level.
+ */
+export function supportedEffort(
+	requested: ReasoningEffort | null | undefined,
+	offered: readonly ReasoningEffort[] | undefined,
+	fallback: ReasoningEffort | undefined
+): ReasoningEffort | undefined {
+	if (!requested) return undefined;
+	if (!offered?.length || offered.includes(requested)) return requested;
+	if (fallback && offered.includes(fallback)) return fallback;
+
+	return offered.includes('medium') ? 'medium' : offered[0];
 }
 
 /**
@@ -53,19 +71,20 @@ export function subagentCapFrom(value: string): SubagentCap {
 	return SUBAGENT_CAPS.find((cap) => String(cap) === value) ?? DEFAULT_SUBAGENT_CAP;
 }
 
-/** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode, Claude Code or Devin CLI. */
-export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode' | 'claude-code' | 'devin';
+/** An agent CLI by the id of its server adapter: one of {@link AGENT_CLIS}. */
+export type AgentCliId = string;
 
-/** Providers that are an app or CLI rather than an endpoint, by the name people know them by. */
-const APP_NAMES: Partial<Record<ModelProvider, string>> = {
-	codex: 'ChatGPT',
-	'claude-code': 'Claude Code',
-	devin: 'Devin'
-};
+/** How Recoder reaches a model: an OpenAI-compatible endpoint, or an agent CLI. */
+export type ModelProvider = 'openai-compatible' | AgentCliId;
 
-/** ChatGPT, Claude Code or Devin for those providers; null for an endpoint or an OpenCode provider. */
+/**
+ * The name people know an agent CLI by, when pickers group its models under it (Claude Code, Devin). Null for an
+ * endpoint, and for an agent CLI whose models go under another name.
+ */
 export function appName(provider: ModelProvider | undefined): string | null {
-	return (provider && APP_NAMES[provider]) || null;
+	const cli = agentCli(provider);
+
+	return cli?.groupsModelsUnderName ? cli.name : null;
 }
 
 const LOCAL_HOST = /^(localhost|127\.|10\.|192\.168\.)/;
@@ -97,7 +116,7 @@ export interface ModelRuntimeProfile {
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {
 	provider?: ModelProvider;
-	/** Hosted provider this model came from (`opencode-go`, `openrouter`…); unset for ChatGPT and the custom endpoint. */
+	/** Hosted provider this model came from (`opencode-go`, `openrouter`…); unset for the custom endpoint. */
 	source?: string;
 	/** The agent CLI that runs this model, by name (`OpenCode`); unset for direct endpoints. */
 	agent?: string;
@@ -126,7 +145,7 @@ export interface DiscoveredModel {
 }
 
 export interface ModelEntryPatch {
-	provider?: 'openai-compatible' | 'codex';
+	provider?: 'openai-compatible';
 	source?: string;
 	id?: string;
 	label: string;
@@ -175,13 +194,17 @@ export interface ModelSettings {
 	apiKeyPreview: string | null;
 	sharedModelId: string | null;
 	orchestratorModelId?: string | null;
-	/** Subagents and verifiers run on this second model; null follows the Review model. */
+	/** Subagents and workers run on this second model; null follows the Review model. */
 	specialistModelId?: string | null;
+	/** Verifiers run on this model; null follows the Review model. */
+	verifierModelId?: string | null;
 	models: ModelEntry[];
 	/** Review (orchestrator) reasoning effort; null follows the model default. */
 	orchestratorEffort?: ReasoningEffort | null;
 	/** The second model's reasoning effort; null follows the Review effort when the model does too. */
 	specialistEffort?: ReasoningEffort | null;
+	/** The verifier model's reasoning effort; null follows the Review effort when the model does too. */
+	verifierEffort?: ReasoningEffort | null;
 	/** How many subagents one review may run in all. */
 	subagentCap: SubagentCap;
 	/** The token budget last picked, whose limits reviews run with; the cap and efforts may since have been changed by hand. */
@@ -193,6 +216,21 @@ export interface ModelSettings {
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
 }
 
+/**
+ * `GET /api/settings/status`: what first run needs to decide whether to show,
+ * without the model catalog the pickers load.
+ */
+export interface SetupStatus {
+	/** A review model is set, in Settings or through the `RECODER_REVIEW_*` variables. */
+	configured: boolean;
+	/** Models the agents can run now. */
+	modelCount: number;
+	/** A model provider is connected: OpenCode has one, an agent offers models, or a model is configured. */
+	providerConnected: boolean;
+	/** Repositories Recoder tracks. */
+	repoCount: number;
+}
+
 export interface ModelSettingsPatch {
 	baseUrl?: string;
 	apiKey?: string;
@@ -200,32 +238,16 @@ export interface ModelSettingsPatch {
 	sharedModelId?: string | null;
 	orchestratorModelId?: string | null;
 	specialistModelId?: string | null;
+	verifierModelId?: string | null;
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
+	verifierEffort?: ReasoningEffort | null;
 	subagentCap?: SubagentCap;
 	tokenBudget?: TokenBudget;
 	reportLowSeverity?: boolean;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;
-}
-
-export interface CodexConnection {
-	available: boolean;
-	authenticated: boolean;
-	email?: string | null;
-	planType?: string | null;
-	error?: string;
-	login?: { verificationUrl: string; userCode: string; expiresAt: number };
-	limits?: Array<{ name: string; usedPercent: number; resetsAt: number | null }>;
-}
-
-export interface CodexModel {
-	id: string;
-	label: string;
-	/** Reasoning levels the provider reports for this model. */
-	efforts?: ReasoningEffort[];
-	defaultEffort?: ReasoningEffort;
 }
 
 /**

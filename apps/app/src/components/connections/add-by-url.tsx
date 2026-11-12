@@ -1,67 +1,45 @@
 'use client';
 
 import { Button, Field, Input } from '@recoder/ui';
-import { useState, type FormEvent, type Ref } from 'react';
+import type { FormEvent, Ref } from 'react';
 
-import { trackedKeys, useConnections } from '@/lib/connections/connections-store';
-import { parseRepoInput, repoKey } from '@/lib/connections/repo-input';
+import type { AddByUrl as AddByUrlState } from '@/lib/connections/use-add-by-url';
 
-import { useAddRepo } from './use-add-repo';
+interface AddByUrlProps {
+	url: AddByUrlState;
+	/** The field, so the dialog can put focus on it. */
+	inputRef: Ref<HTMLInputElement>;
+}
 
 /**
- * Tracks a repository from what someone pastes: `owner/name`, a link to it
- * or to any page in it, or an SSH address. A typo shows under the field
- * before anything reaches the server. `inputRef` lets the dialog focus it.
+ * Tracks a repository from what someone pastes: `owner/name`, a link or an
+ * SSH address. A refusal shows under the field; a success names the
+ * repository there. The button's faces are icons only, because the line
+ * under the field already says what happened.
  */
-export function AddByUrl({ inputRef }: { inputRef: Ref<HTMLInputElement> }) {
-	const gitlabHost = useConnections((state) => state.auth?.gitlab.host ?? null);
-	const [text, setText] = useState('');
-	const [error, setError] = useState<string | null>(null);
-	const [added, setAdded] = useState<string | null>(null);
-	const [status, add] = useAddRepo();
-
-	async function submit(event: FormEvent): Promise<void> {
+export function AddByUrl({ url, inputRef }: AddByUrlProps) {
+	function submit(event: FormEvent): void {
 		event.preventDefault();
-
-		if (status === 'pending') return;
-
-		const parsed = parseRepoInput(text, gitlabHost);
-
-		if (!parsed.ok) return setError(parsed.error);
-
-		if (trackedKeys(useConnections.getState().repos).has(repoKey(parsed.repo.url))) {
-			return setError(`Already tracking ${parsed.repo.name}.`);
-		}
-
-		const result = await add(parsed.repo);
-
-		if ('error' in result) return setError(result.error);
-
-		setText('');
-		setAdded(result.repo.name);
+		void url.submit();
 	}
 
 	return (
-		<form className="add-url" noValidate onSubmit={(event) => void submit(event)}>
+		<form className="add-url" noValidate onSubmit={submit}>
 			<Field
 				label="Add by URL"
-				hint={added ? `Now tracking ${added}.` : 'A GitHub or GitLab repository.'}
-				error={error ?? undefined}
+				hint={url.added ? `Now tracking ${url.added}.` : undefined}
+				error={url.error ?? undefined}
 			>
 				<div className="add-url-row">
 					<Input
 						ref={inputRef}
-						value={text}
+						value={url.text}
 						placeholder="owner/name or a repository link"
 						autoComplete="off"
 						spellCheck={false}
-						onChange={(event) => {
-							setText(event.target.value);
-							setError(null);
-							setAdded(null);
-						}}
+						onChange={(event) => url.setText(event.target.value)}
 					/>
-					<Button type="submit" variant="outline" status={status} disabled={!text.trim() && status === 'idle'}>
+					<Button type="submit" variant="outline" status={url.status} disabled={!url.canSubmit}>
 						Add
 					</Button>
 				</div>

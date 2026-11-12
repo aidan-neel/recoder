@@ -3,14 +3,16 @@ import { fileHunks } from '../change-model/change-model.js';
 import { languageFor } from '../change-model/languages.js';
 import { innermost } from '../change-model/owners.js';
 import { withTree } from '../change-model/parser.js';
-import { byCodePoint, readAt, readTracked, trackedFiles } from '../change-model/repo.js';
+import { byCodePoint, readAt, readTracked } from '../change-model/repo.js';
 import { isTestPath } from '../change-model/test-files.js';
 import type { ChangedSymbol, ChangeModel } from '../change-model/types.js';
 import type { InventoryFile, ReviewInventory } from '../inventory.js';
+import { repoPaths, type RepoInventory } from '../repo-inventory/repo-inventory.js';
 import { partitionUnits } from '../units.js';
-import { obligationsNewCodeOn } from './config.js';
+import { obligationsNewCodeOn, obligationsTransitionsOn } from './config.js';
 import { collectMarks, type Mark } from './marks.js';
 import { squash } from './syntax.js';
+import { collectTransitionMarks } from './transition-marks.js';
 import { QUESTIONS, TRIGGERS, triggerHits, type TriggerHit } from './triggers.js';
 
 /** Grammars the trigger rules are written for; other changed files derive nothing. */
@@ -20,14 +22,21 @@ const LANGUAGES = new Set(['typescript', 'tsx', 'javascript', 'svelte']);
 const SPECIALISTS: Partial<Record<ObligationTrigger, string>> = {
 	'removed-guard': 'security',
 	'error-contract': 'api-contract',
-	'resource-release': 'concurrency'
+	'resource-release': 'concurrency',
+	'state-transition': 'concurrency'
 };
 
 /**
  * Triggers about the code under test, which a test's own conditions, timers,
- * scratch directories and stub errors would only trip; test files derive none.
+ * scratch directories, stub errors and fixture states would only trip; test files derive none.
  */
-const SOURCE_ONLY = new Set<ObligationTrigger>(['truthy-default', 'boundary', 'resource-release', 'error-contract']);
+const SOURCE_ONLY = new Set<ObligationTrigger>([
+	'truthy-default',
+	'boundary',
+	'resource-release',
+	'error-contract',
+	'state-transition'
+]);
 
 /** Tests and callers listed per obligation, at most. */
 const MAX_HINTS = 3;
@@ -36,6 +45,8 @@ const MAX_HINTS = 3;
 export interface DeriveInput {
 	inventory: ReviewInventory;
 	changeModel: ChangeModel | null;
+	/** Every file at the PR head; only tracked files are read. */
+	repo: RepoInventory;
 	checkoutPath: string;
 	/** Without the merge base only head-side triggers can fire. */
 	baseSha: string | null;
@@ -49,8 +60,8 @@ type Draft = Omit<Obligation, 'id'>;
  * model calls: the same checkout and diff always give the same obligations.
  */
 export async function deriveObligations(input: DeriveInput): Promise<Obligation[]> {
-	const { inventory, checkoutPath, signal } = input;
-	const tracked = new Set(await trackedFiles(checkoutPath, signal));
+	const { inventory, signal } = input;
+	const tracked = new Set(repoPaths(input.repo));
 	const units = partitionUnits(inventory);
 	const drafts: Draft[] = [];
 
@@ -136,10 +147,19 @@ async function fileDrafts(
 	});
 }
 
+/** The marks on `lines`, with the state transitions among them when `RECODER_OBLIGATIONS_TRANSITIONS` is on. */
 async function marksOf(path: string, source: string | null, lines: number[], test: boolean): Promise<Mark[]> {
 	if (source === null || !lines.length) return [];
 
-	return (await withTree(path, source, (root) => collectMarks(root, new Set(lines), test))) ?? [];
+	const wanted = new Set(lines);
+	const transitions = obligationsTransitionsOn();
+
+	const marks = await withTree(path, source, (root) => [
+		...collectMarks(root, wanted, test),
+		...(transitions ? collectTransitionMarks(root, wanted) : [])
+	]);
+
+	return marks ?? [];
 }
 
 /**

@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -13,4 +13,12 @@ export async function fakeBin(name: string, script: string): Promise<{ env: Reco
 	await chmod(join(dir, name), 0o755);
 
 	return { env: { PATH: `${dir}:${process.env.PATH ?? ''}` } };
+}
+
+/** The JSON lines a fake appended to `log`, one per call, in order. */
+export async function loggedCalls(log: string): Promise<unknown[]> {
+	return (await readFile(log, 'utf8'))
+		.trim()
+		.split('\n')
+		.map((line): unknown => JSON.parse(line));
 }

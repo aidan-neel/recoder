@@ -8,11 +8,11 @@ export const metadata: Metadata = { title: 'Page not found · Recoder' };
 export default function NotFound() {
 	return (
 		<div className="site-column">
-			<h1 className="site-brief">
-				<span className="site-brief-lead">This page doesn’t exist.</span>
+			<h1 className="site-headline">
+				<span className="site-headline-lead">This page doesn’t exist.</span>
 			</h1>
-			<div className="mt-[22px] flex">
-				<Button asChild variant="primary" className="brief-action">
+			<div className="site-actions">
+				<Button asChild>
 					<Link href="/">Back to home</Link>
 				</Button>
 			</div>

@@ -5,6 +5,7 @@ import {
 	DEFAULT_TOKEN_BUDGET,
 	REASONING_EFFORTS,
 	SUBAGENT_CAPS,
+	isRoutedModelId,
 	migrateSubagentCap,
 	TOKEN_BUDGETS,
 	type ModelEntryPatch,
@@ -14,6 +15,7 @@ import {
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
 import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
+import { isChatGptSignInEntry, moveChatGptModels, SAVED_ENTRY_PROVIDERS } from './chatgpt-migration.js';
 
 const runtimeSchema = z.object({
 	temperature: z.number().min(0).max(2).nullable().optional(),
@@ -22,7 +24,7 @@ const runtimeSchema = z.object({
 });
 
 const modelEntrySchema = z.object({
-	provider: z.enum(['openai-compatible', 'codex']).optional(),
+	provider: z.literal('openai-compatible').optional(),
 	/** Hosted provider id; the entry uses that provider's endpoint and connected key. */
 	source: z.string().max(40).optional(),
 	id: z.string().max(100).optional(),
@@ -43,8 +45,10 @@ export const reviewSettingsSchema = z.object({
 	sharedModelId: z.string().max(100).nullable().optional(),
 	orchestratorModelId: z.string().max(100).nullable().optional(),
 	specialistModelId: z.string().max(100).nullable().optional(),
+	verifierModelId: z.string().max(100).nullable().optional(),
 	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
+	verifierEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	subagentCap: z.literal(SUBAGENT_CAPS).optional(),
 	tokenBudget: z.enum(TOKEN_BUDGETS).optional(),
 	reportLowSeverity: z.boolean().optional(),
@@ -55,11 +59,15 @@ export const reviewSettingsSchema = z.object({
 
 export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
 
+/** A saved entry, which may be one from before the Codex CLI that used Recoder's own ChatGPT sign-in. */
+const savedEntrySchema = modelEntrySchema.extend({ provider: z.enum(SAVED_ENTRY_PROVIDERS).optional() });
+
 /**
- * Saved files from before models were just Review and a second model carried per-role picks,
- * and files from before subagents carried a specialist dispatch level.
+ * Saved files from before models were just Review and a second model carried per-role picks, files from before
+ * subagents carried a specialist dispatch level, and files from before the Codex CLI carried ChatGPT entries.
  */
 const storedFileSchema = reviewSettingsSchema.extend({
+	models: z.array(savedEntrySchema).max(50).optional(),
 	subagentCap: z.union([z.literal(SUBAGENT_CAPS), z.number().int().nonnegative()]).optional(),
 	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional(),
 	roles: z.record(z.string().max(40), z.string().max(200)).optional(),
@@ -86,6 +94,7 @@ function hasRetiredCap(data: StoredFile): boolean {
 function hasLegacyFields(data: StoredFile): boolean {
 	return (
 		hasRetiredCap(data) ||
+		!!data.models?.some(isChatGptSignInEntry) ||
 		[data.roles, data.roleEfforts, data.applyToSpecialists, data.specialistDispatch].some(
 			(field) => field !== undefined
 		)
@@ -95,9 +104,10 @@ function hasLegacyFields(data: StoredFile): boolean {
 /**
  * Old per-role picks become one second-model pick: correctness (always ran) speaks for them all.
  * An old dispatch level becomes the subagent cap it stands for, and a cap that no longer exists the nearest one.
+ * A ChatGPT entry leaves the list, and each pick of one names the same model through the Codex CLI.
  */
 function migrateLegacy(data: StoredFile): ReviewSettingsInput {
-	const { roles, roleEfforts, applyToSpecialists, specialistDispatch, subagentCap, ...rest } = data;
+	const { roles, roleEfforts, applyToSpecialists, specialistDispatch, subagentCap, models, ...rest } = data;
 	const next: ReviewSettingsInput = { ...rest };
 
 	if (subagentCap !== undefined) next.subagentCap = migrateSubagentCap(subagentCap);
@@ -112,7 +122,7 @@ function migrateLegacy(data: StoredFile): ReviewSettingsInput {
 			next.specialistEffort = roleEfforts.correctness;
 	}
 
-	return next;
+	return { ...next, ...moveChatGptModels(next, models) };
 }
 
 /** A saved model entry: the settings patch's entry, always with an id. */
@@ -130,12 +140,19 @@ interface StoredSettings extends Omit<ModelSettingsPatch, 'models'> {
 let localOverrides: StoredSettings = {};
 
 const sharedStoredSchema = reviewSettingsSchema.extend({
-	models: z.array(modelEntrySchema.extend({ id: z.string().min(1).max(100) })).optional(),
+	models: z.array(savedEntrySchema.extend({ id: z.string().min(1).max(100) })).optional(),
 	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional()
 });
 
+/** The shared settings, read in the current shape: a ChatGPT entry saved before the Codex CLI moves as in a file. */
+function sharedOverrides(): StoredSettings {
+	const { models, ...rest } = sharedStoredSchema.parse(readSharedSetting('review-settings') ?? {});
+
+	return { ...rest, ...moveChatGptModels(rest, models) };
+}
+
 function currentOverrides(): StoredSettings {
-	return sharedSettingsActive() ? sharedStoredSchema.parse(readSharedSetting('review-settings') ?? {}) : localOverrides;
+	return sharedSettingsActive() ? sharedOverrides() : localOverrides;
 }
 
 function replaceOverrides(settings: StoredSettings): void {
@@ -292,11 +309,11 @@ function mergeModelEntry(
 
 	const source = entry.source ?? kept?.source;
 
-	if (source && next.provider !== 'codex') next.source = source;
+	if (source) next.source = source;
 
 	const baseUrl = entry.baseUrl?.replace(/\/$/, '');
 
-	if (baseUrl && next.provider !== 'codex' && !next.source) next.baseUrl = baseUrl;
+	if (baseUrl && !next.source) next.baseUrl = baseUrl;
 	if (entry.efforts?.length) next.efforts = entry.efforts;
 	if (entry.defaultEffort) next.defaultEffort = entry.defaultEffort;
 
@@ -308,7 +325,7 @@ function mergeModelEntry(
 
 	if (runtime && Object.keys(runtime).length) next.runtime = runtime;
 
-	if (next.provider !== 'codex' && !next.source) {
+	if (!next.source) {
 		if (entry.apiKey) next.apiKey = entry.apiKey;
 		else if (kept?.apiKey) next.apiKey = kept.apiKey;
 	}
@@ -316,13 +333,15 @@ function mergeModelEntry(
 	return next;
 }
 
-/** Drop routing pointers to model entries that no longer exist. */
+/** Drop routing pointers to stored model entries that no longer exist, keeping agent and vLLM routed ids. */
 function dropDeletedRoutes(settings: StoredSettings, models: StoredModelEntry[]): void {
 	const ids = new Set(models.map((e) => e.id));
+	const keep = (id: string | null | undefined) => !id || ids.has(id) || isRoutedModelId(id);
 
-	if (settings.sharedModelId && !ids.has(settings.sharedModelId)) delete settings.sharedModelId;
-	if (settings.orchestratorModelId && !ids.has(settings.orchestratorModelId)) delete settings.orchestratorModelId;
-	if (settings.specialistModelId && !ids.has(settings.specialistModelId)) delete settings.specialistModelId;
+	if (!keep(settings.sharedModelId)) delete settings.sharedModelId;
+	if (!keep(settings.orchestratorModelId)) delete settings.orchestratorModelId;
+	if (!keep(settings.specialistModelId)) delete settings.specialistModelId;
+	if (!keep(settings.verifierModelId)) delete settings.verifierModelId;
 }
 
 /** Merge a validated patch over the stored settings and persist. */
@@ -345,8 +364,10 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 
 	if (patch.orchestratorModelId !== undefined) clean.orchestratorModelId = patch.orchestratorModelId || null;
 	if (patch.specialistModelId !== undefined) clean.specialistModelId = patch.specialistModelId || null;
+	if (patch.verifierModelId !== undefined) clean.verifierModelId = patch.verifierModelId || null;
 	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
 	if (patch.specialistEffort !== undefined) clean.specialistEffort = patch.specialistEffort;
+	if (patch.verifierEffort !== undefined) clean.verifierEffort = patch.verifierEffort;
 	if (patch.subagentCap !== undefined) clean.subagentCap = patch.subagentCap;
 	if (patch.tokenBudget !== undefined) clean.tokenBudget = patch.tokenBudget;
 	if (patch.reportLowSeverity !== undefined) clean.reportLowSeverity = patch.reportLowSeverity;
@@ -390,8 +411,8 @@ export function effectiveReviewEnv(): {
 		baseUrl: pick(overrides.baseUrl, process.env.RECODER_REVIEW_BASE_URL).replace(/\/$/, ''),
 		apiKey: pick(overrides.apiKey, process.env.RECODER_REVIEW_API_KEY),
 		model: shared?.model ?? pick(undefined, process.env.RECODER_REVIEW_MODEL),
-		maxFiles: pickNumber(overrides.maxFiles, process.env.RECODER_REVIEW_MAX_FILES, 20),
-		maxDiffChars: pickNumber(overrides.maxDiffChars, process.env.RECODER_REVIEW_MAX_DIFF_CHARS, 60000),
+		maxFiles: pickNumber(overrides.maxFiles, process.env.RECODER_REVIEW_MAX_FILES, 200),
+		maxDiffChars: pickNumber(overrides.maxDiffChars, process.env.RECODER_REVIEW_MAX_DIFF_CHARS, 600000),
 		maxFileChars: pickNumber(overrides.maxFileChars, process.env.RECODER_REVIEW_MAX_FILE_CHARS, 12000)
 	};
 }

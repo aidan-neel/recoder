@@ -1,12 +1,13 @@
 import { existsSync, rmSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentStatus } from '@recoder/shared';
+import type { AgentStatus, ModelEntry, ModelFailure, ReasoningEffort } from '@recoder/shared';
 import { LlmError, cancelledError, timedOutError } from '../models/llm/errors';
 import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../models/llm/types';
 import { serverDataDir } from '../util/data-dir';
-import type { AgentAdapter } from './registry';
+import { cliFailure } from './cli-failure';
+import type { AgentAdapter, AgentModelSettings, AgentRun, AgentRunOptions, ProcessCeiling } from './contract';
 
 type Env = Record<string, string | undefined>;
 
@@ -59,6 +60,48 @@ export async function probeVersion(path: string, env: Env): Promise<string | nul
 	return parseVersion(out);
 }
 
+/** How to run a short CLI command: its environment, the directory it runs in, and when to give up on it. */
+interface CliCommand {
+	env: Record<string, string>;
+	cwd?: string;
+	timeoutMs: number;
+	signal?: AbortSignal;
+}
+
+/**
+ * Runs a short CLI command to its end, killing it after `timeoutMs`, or when `signal` aborts. Both streams are
+ * read to their end so a chatty command never stalls on a full pipe; what a non-zero exit means is the caller's.
+ */
+export async function cliOutput(
+	argv: string[],
+	command: CliCommand
+): Promise<{ code: number; stdout: string; stderr: string }> {
+	const proc = Bun.spawn(argv, {
+		...(command.cwd ? { cwd: command.cwd } : {}),
+		stdin: 'ignore',
+		stdout: 'pipe',
+		stderr: 'pipe',
+		env: command.env,
+		...(command.signal ? { signal: command.signal } : {})
+	});
+
+	const timer = setTimeout(() => proc.kill(), command.timeoutMs);
+
+	try {
+		const [stdout, stderr, code] = await Promise.all([
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+			proc.exited
+		]);
+
+		if (command.signal?.aborted) throw cancelledError();
+
+		return { code, stdout, stderr };
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 /**
  * A directory with nothing in it under the data dir, so an agent CLI never
  * sees the user's files or the PR checkout. Agents scope a session's project
@@ -70,6 +113,24 @@ export async function emptyDirectory(name: string): Promise<string> {
 	await mkdir(dir, { recursive: true });
 
 	return dir;
+}
+
+/**
+ * A fresh temp dir recorded in `scratch`, so the agent's `stop` removes it even when the run that made it dies
+ * before its own cleanup runs. A run that finishes removes it with {@link removeScratchDir}.
+ */
+export async function scratchDir(scratch: Set<string>, prefix: string): Promise<string> {
+	const dir = await mkdtemp(join(tmpdir(), prefix));
+
+	scratch.add(dir);
+
+	return dir;
+}
+
+/** Forgets `dir` in `scratch` and deletes it, ignoring a dir that is already gone. */
+export async function removeScratchDir(scratch: Set<string>, dir: string): Promise<void> {
+	scratch.delete(dir);
+	await rm(dir, { recursive: true, force: true });
 }
 
 /** The server's environment minus every variable whose upper-cased name matches `stripped`, and every unset entry. */
@@ -148,7 +209,7 @@ export interface CallDeadline {
 	failure(error: unknown, fallback: string): LlmError;
 }
 
-export function callDeadline(opts: ChatOptions): CallDeadline {
+export function callDeadline(opts: Pick<ChatOptions, 'timeoutMs' | 'signal'>): CallDeadline {
 	const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 	const timeout = AbortSignal.timeout(timeoutMs);
 
@@ -199,9 +260,18 @@ export abstract class CliAgent implements AgentAdapter {
 	protected scratch = new Set<string>();
 	protected apiKeySource: string | null = null;
 
+	abstract readonly processCeiling: ProcessCeiling | null;
+	abstract readonly signInFix: string;
+
 	constructor(protected readonly env: Env = process.env) {}
 
-	abstract models(): ReturnType<AgentAdapter['models']>;
+	abstract models(signal?: AbortSignal): ReturnType<AgentAdapter['models']>;
+
+	abstract modelSettings(model: string, requested: ReasoningEffort | undefined): AgentModelSettings;
+
+	abstract complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string>;
+
+	abstract openRun(options: AgentRunOptions): Promise<AgentRun>;
 
 	protected abstract find(): string | null;
 
@@ -230,6 +300,24 @@ export abstract class CliAgent implements AgentAdapter {
 		if (!base.error) Object.assign(base, await this.signIn(path));
 
 		return (this.status = base);
+	}
+
+	/** The version and sign-in check, which starts nothing that outlives it. */
+	quickStatus(): Promise<AgentStatus> {
+		return this.detect();
+	}
+
+	installed(): boolean {
+		return this.find() !== null;
+	}
+
+	/** A CLI that lists its models by running; one with a fixed list overrides this. */
+	fixedModels(): ModelEntry[] | null {
+		return null;
+	}
+
+	describeFailure(err: LlmError, fallback: string): ModelFailure {
+		return cliFailure(this, err, fallback);
 	}
 
 	/** Kill every running call's process group and delete its scratch dir; synchronous, for exit. */

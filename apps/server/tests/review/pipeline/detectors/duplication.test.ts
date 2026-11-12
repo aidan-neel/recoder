@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRun } from '../../../../src/review/pipeline/harness/context';
 import { runDetectors } from '../../../../src/review/pipeline/detectors/detectors';
+import { repoInventoryStage } from '../../../../src/review/pipeline/harness/repo-inventory-stage';
 import { git } from '../../../helpers/git';
 import { twoCommitRepo } from '../harness-fixtures';
 
@@ -49,6 +50,8 @@ test('reports added code that repeats an existing file, pointing at the other co
 		sandboxPath: null,
 		revision: { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' }
 	});
+
+	await repoInventoryStage(run);
 
 	const results = (await runDetectors(run)).filter((result) => result.detector === 'duplication');
 

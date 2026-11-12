@@ -1,0 +1,352 @@
+/* ───────── Changes: the file tree beside the diff ───────── */
+.changes {
+	display: grid;
+	min-height: 0;
+	flex: 1;
+	grid-template-columns: 264px minmax(0, 1fr);
+}
+.changes-side {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 8px 0 10px;
+	border-right: 1px solid var(--line-subtle);
+}
+.changes-main {
+	min-width: 0;
+	min-height: 0;
+	overflow-y: auto;
+	padding: 12px 16px 48px;
+	scrollbar-width: thin;
+	scrollbar-color: var(--line-strong) transparent;
+	scroll-padding-top: 12px;
+}
+.changes-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+/* File tree: a folder row, then its files one step in. */
+.tree {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	overflow-y: auto;
+	padding-bottom: 12px;
+	scrollbar-width: none;
+}
+.tree-row {
+	display: flex;
+	width: 100%;
+	height: 28px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+	padding: 0 8px 0 calc(8px + var(--depth, 0) * 14px);
+	border-radius: 7px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	outline: none;
+	text-align: left;
+	transition: color var(--dur-hover) ease-out;
+}
+.tree-row:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--focus-color);
+}
+.tree-row:hover {
+	color: var(--text-primary);
+}
+.tree-row[data-kind='file'] {
+	padding-left: calc(26px + var(--depth, 0) * 14px);
+	color: var(--text-secondary);
+}
+.tree-row[data-kind='file'][data-viewed] {
+	color: var(--text-faint);
+}
+.tree-row[data-kind='file'][data-current] {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+.tree-row[data-change='deleted'] .tree-name {
+	text-decoration: line-through;
+	text-decoration-color: var(--text-ghost);
+}
+.tree-chevron {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.tree-row[data-open] .tree-chevron {
+	rotate: 90deg;
+}
+.tree-name {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.tree-end {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.tree-end svg {
+	width: 12px;
+	height: 12px;
+}
+.tree-end [data-sign='add'] {
+	color: var(--success);
+}
+.tree-end [data-sign='del'] {
+	color: var(--danger);
+}
+.tree-bug {
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--sev-high-icon);
+}
+.tree-empty {
+	padding: 8px 10px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+
+/* File card: a header that stays in view while its diff scrolls under it. */
+.file-card {
+	border-radius: 10px;
+	background: var(--bg-canvas);
+	box-shadow: 0 0 0 1px var(--line-card);
+	scroll-margin-top: 12px;
+}
+.file-head {
+	position: sticky;
+	z-index: 2;
+	top: -12px;
+	display: flex;
+	height: 40px;
+	align-items: center;
+	gap: 8px;
+	padding: 0 12px 0 6px;
+	border-radius: 10px;
+	background: var(--bg-raised);
+	font-size: var(--font-size-label);
+}
+.file-card[data-open] > .file-head {
+	border-bottom: 1px solid var(--line-card);
+	border-bottom-right-radius: 0;
+	border-bottom-left-radius: 0;
+}
+.file-toggle {
+	display: flex;
+	min-width: 0;
+	height: 28px;
+	flex: 0 1 auto;
+	align-items: center;
+	gap: 8px;
+	padding: 0 8px 0 6px;
+	border-radius: 7px;
+	outline: none;
+	text-align: left;
+}
+.file-toggle:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.file-toggle > svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.file-card[data-open] .file-toggle > svg {
+	rotate: 90deg;
+}
+.file-path {
+	overflow: hidden;
+	color: var(--text-muted);
+	direction: rtl;
+	font-family: var(--font-code);
+	font-size: 12.5px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.file-path bdi {
+	direction: ltr;
+}
+.file-path strong {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+.file-card[data-viewed] .file-path,
+.file-card[data-viewed] .file-path strong {
+	color: var(--text-faint);
+}
+.file-head-end {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 12px;
+	margin-left: auto;
+}
+.file-viewed {
+	display: inline-flex;
+	height: 28px;
+	align-items: center;
+	gap: 8px;
+	padding: 0 4px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	user-select: none;
+}
+
+/* A hunk: its range line in the accent, then its lines. */
+.hunk-head {
+	display: flex;
+	height: 28px;
+	align-items: center;
+	overflow: hidden;
+	padding: 0 12px;
+	background: var(--accent-tint);
+	color: var(--accent-text);
+	font-family: var(--font-code);
+	font-size: 12px;
+	white-space: pre;
+}
+.hunk + .hunk .hunk-head {
+	border-top: 1px solid var(--line-card);
+}
+.file-body > :last-child {
+	overflow: hidden;
+	border-bottom-right-radius: 10px;
+	border-bottom-left-radius: 10px;
+}
+.file-body [data-ui='code-lines'] {
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+}
+.file-body [data-ui='code-lines-body'] {
+	padding: 2px 0;
+}
+/* A line a bug points at wears the bug's red, not the review's amber. */
+.file-body [data-ui='code-line'][data-flagged] {
+	background-color: var(--sev-high-tint);
+	box-shadow: inset 2px 0 0 var(--sev-high-icon);
+}
+
+/* What stands in a diff's place before it mounts, when it is too large to open by itself, or when it has no lines. */
+.file-quiet {
+	display: flex;
+	min-height: 44px;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 14px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+}
+
+/* A bug where it happens: one line under the code that opens the bug. */
+.line-bug {
+	display: flex;
+	max-width: 760px;
+	align-items: center;
+	gap: 10px;
+	padding: 7px 10px 7px 12px;
+	border-radius: 8px;
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 18px;
+	outline: none;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.line-bug:hover {
+	background: var(--bg-hover);
+}
+.line-bug:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.line-bug-title {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.file-bugs {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--line-card);
+}
+
+/* Guide: the parts of the change in reading order, each over its files. */
+.guide-part-head {
+	display: flex;
+	align-items: baseline;
+	gap: 12px;
+	padding: 14px 4px 2px;
+}
+.guide-part:first-child .guide-part-head {
+	padding-top: 2px;
+}
+.guide-number {
+	width: 20px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 12px;
+}
+.guide-part-text {
+	min-width: 0;
+	flex: 1;
+}
+.guide-part-title {
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+}
+.guide-part-reason {
+	max-width: 68ch;
+	margin-top: 2px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 19px;
+}
+.guide-row {
+	height: auto;
+	min-height: 32px;
+	align-items: baseline;
+	gap: 10px;
+	padding: 6px 8px;
+}
+.guide-row .tree-name {
+	white-space: normal;
+}
+
+.changes-skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.changes-skeleton > div {
+	height: 180px;
+	border-radius: 10px;
+	box-shadow: 0 0 0 1px var(--line-card);
+}

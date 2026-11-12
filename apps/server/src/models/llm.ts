@@ -1,14 +1,14 @@
 /**
  * Model calls for every role. One entry point per call shape; the transport
- * (OpenAI-compatible chat completions or the ChatGPT subscription) is picked
- * from `ChatOptions.provider` in `llm/transports.ts`.
+ * (OpenAI-compatible chat completions or an agent CLI) is picked from
+ * `ChatOptions.provider` in `llm/transports.ts`.
  */
 
 import { runChat } from './llm/run';
 import type { ChatOptions } from './llm/types';
 
 export { ChatConversation } from './llm/conversation';
-export { asLlmError, CapacityError, isTransientLlmError, LlmError } from './llm/errors';
+export { asLlmError, CapacityError, isTransientLlmError, LlmError, OutOfTimeError } from './llm/errors';
 export { resetLlmLimiter } from './llm/limiter';
 export { reasoningFields } from './llm/request-fields';
 export type { ChatMessage, ChatOptions } from './llm/types';

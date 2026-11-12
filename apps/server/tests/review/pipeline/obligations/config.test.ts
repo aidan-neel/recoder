@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { obligationCap, obligationTurns, obligationsOn } from '../../../../src/review/pipeline/obligations/config';
-import { restoreEnvAfterEach } from './fixtures';
+import { restoreEnvAfterEach } from '../../../helpers/env';
 
 const ENV = ['RECODER_OBLIGATIONS', 'RECODER_OBLIGATION_CAP', 'RECODER_OBLIGATION_TURNS'] as const;
 

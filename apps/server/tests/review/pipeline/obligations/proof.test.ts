@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { createRun, poolContext } from '../../../../src/review/pipeline/harness/context';
 import { investigate } from '../../../../src/review/pipeline/obligations/investigate';
 import { deriveObligationsStage } from '../../../../src/review/pipeline/obligations/stage';
+import { repoInventoryStage } from '../../../../src/review/pipeline/harness/repo-inventory-stage';
 import type { RunResult } from '../../../../src/sandbox/exec-sandbox';
 import type { ExecWorkspace } from '../../../../src/sandbox/exec-workspace';
 import { finding, modelReply, restoreAfterEach, useTestModel } from '../harness-fixtures';
@@ -69,6 +70,7 @@ async function investigateWith(sandbox: FakeSandbox, final: (runId: string) => R
 			: final(runId())
 	);
 
+	await repoInventoryStage(run);
 	await deriveObligationsStage(run);
 	run.workspace = sandbox as unknown as ExecWorkspace;
 	run.evidence.exec = run.workspace;

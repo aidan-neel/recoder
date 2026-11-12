@@ -64,7 +64,7 @@ Useful flags:
 
 - \`--repo <path>\` reviews another repository.
 - \`--budget low|medium|high\` sets how much the review spends. \`low\` is the default, since agents run reviews often.
-- \`--reviewer <model id>\` and \`--worker <model id>\` pick the models for one run. \`recoder models\` lists the ids.
+- \`--reviewer <model id>\`, \`--worker <model id>\` and \`--verifier <model id>\` pick the models for one run: the reviewers, their subagents and the verifiers. Verifiers follow the reviewers' model unless you name one. \`recoder models\` lists the ids.
 - \`--instructions <text>\` says what to look for or leave out.
 - \`--min-severity\` and \`--include-unconfirmed\` filter the report; \`--fail-on <severity>\` exits 1 when a finding meets it.
 - \`--no-exec\` runs no code, so bugs are reported unverified.
@@ -107,7 +107,7 @@ A review outlasts most agents' shell time limits, so an agent starts it with \`-
 | \`recoder cancel [run]\` | Stop a running review. |
 | \`recoder init\` | Set Recoder up for your agents, in this project or on this machine. |
 | \`recoder doctor\` | Check that a review can run on this machine. |
-| \`recoder models\` | List the model ids \`--reviewer\` and \`--worker\` accept. |
+| \`recoder models\` | List the model ids \`--reviewer\`, \`--worker\` and \`--verifier\` accept. |
 | \`recoder upgrade\` | Replace this program with the latest release. |
 | \`recoder skill install\` | Install the agent skill by itself. |
 | \`recoder mcp\` | Serve these commands as MCP tools. See [MCP](/docs/mcp). |

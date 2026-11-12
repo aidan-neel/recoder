@@ -1,8 +1,10 @@
+'use client';
+
 import { useMemo } from 'react';
 
-import { cn } from '../../lib/cn';
-import { CopyButton } from '../display/copy-button';
-import { highlightCode } from './highlight';
+import { escapeHtml } from './highlight';
+import { CodeBlockView, codeSource } from './code-block-view';
+import { useHighlighter } from './use-highlighter';
 
 interface CodeBlockProps {
 	code: string;
@@ -15,31 +17,20 @@ interface CodeBlockProps {
 	className?: string;
 }
 
-/** A highlighted block of code on the code surface, the one fenced code in Markdown uses. */
+/**
+ * A highlighted block of code on the code surface, the one fenced code in
+ * Markdown uses. The highlighter and the grammar load on the first block in
+ * a known language: until then the code shows plain, on the same lines, and
+ * the colors swap in with no motion. Once loaded, blocks paint colored at once.
+ */
 export function CodeBlock({ code, lang = null, copy = false, wrap = false, className }: CodeBlockProps) {
-	const source = code.replace(/\n$/, '');
-	const html = useMemo(() => highlightCode(source, lang), [source, lang]);
+	const source = codeSource(code);
+	const highlighter = useHighlighter(lang);
 
-	return (
-		<div
-			data-ui="code-block"
-			data-layout={source.includes('\n') ? 'multi-line' : 'single-line'}
-			data-wrap={wrap || undefined}
-			data-copy={copy || undefined}
-			className={cn(
-				'relative min-w-0 overflow-hidden rounded-[10px] bg-code font-mono text-[12.5px] leading-5 text-(--syn-plain)',
-				'shadow-[0_0_0_1px_var(--line-card)] [tab-size:4]',
-				className
-			)}
-		>
-			<pre data-ui="code-block-content" className="thin-scroll">
-				<code dangerouslySetInnerHTML={{ __html: html }} />
-			</pre>
-			{copy ? (
-				<div data-ui="code-block-copy">
-					<CopyButton value={source} iconOnly label="Copy code" className="bg-code" />
-				</div>
-			) : null}
-		</div>
+	const html = useMemo(
+		() => (highlighter ? highlighter.highlightCode(source, lang) : escapeHtml(source)),
+		[highlighter, source, lang]
 	);
+
+	return <CodeBlockView source={source} html={html} copy={copy} wrap={wrap} className={className} />;
 }

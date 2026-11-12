@@ -139,12 +139,13 @@ const COMMAND_HELP: Record<Exclude<HelpTopic, 'main'>, CommandHelp> = {
 					['recoder review --uncommitted', 'Everything not committed yet'],
 					['recoder review --pull 214 --budget medium', 'A pull request, reviewed more deeply'],
 					['recoder review --lens correctness,security', 'Two lenses only'],
+					['recoder review --full', 'The whole change again, after an earlier review'],
 					['recoder review --detach', 'In the background; recoder wait follows it']
 				]
 			}
 		],
 		notes: [
-			`Choose at most one of ${listFlags(NON_RANGE_TARGETS)}. With none, the commits on the current branch since it left the default branch are reviewed.`
+			`Choose at most one of ${listFlags(NON_RANGE_TARGETS)}. With none, the commits on the current branch since it left the default branch are reviewed. A later review covers only the commits added since the last one; --full reviews the whole change.`
 		]
 	},
 	init: {
@@ -198,7 +199,7 @@ const COMMAND_HELP: Record<Exclude<HelpTopic, 'main'>, CommandHelp> = {
 	models: {
 		usage: 'recoder models [--provider <name>] [--search <text>]',
 		about:
-			'Lists the models --reviewer and --worker accept on this machine, grouped by provider, with the saved picks marked. OpenCode and Devin list their models by running, so each may take up to 10 seconds.',
+			'Lists the models --reviewer, --worker and --verifier accept on this machine, grouped by provider, with the saved picks marked. OpenCode and Devin list their models by running, so each may take up to 10 seconds.',
 		sections: flagSections(MODELS_FLAGS),
 		notes: [
 			'With -p it prints one line of JSON: { reviewer, worker, models: [{ id, name, provider, efforts, defaultEffort }], problems }. reviewer and worker are the saved picks, or null. An agent that cannot list its models adds a line to problems, and the other models are still listed.',

@@ -25,52 +25,23 @@ const openAiCompatible: Transport = (opts, onToken) =>
 	);
 
 /**
- * ChatGPT through the user's subscription. The adapter is loaded lazily because
- * it imports the `models/llm` entry. A non-streaming call hides non-LLM
- * failures behind a generic message.
+ * A model an agent CLI runs (OpenCode, Claude Code, Devin, a custom command…), through its adapter in the agent
+ * registry. The registry is loaded lazily because its adapters import the `models/llm` entry.
  */
-const chatgpt: Transport = async (opts, onToken) => {
-	const { codex } = await import('../../agents/codex/codex');
+const agentCli: Transport = async (opts, onToken) => {
+	const { agentById } = await import('../../agents/registry');
+	const agent = agentById(opts.provider);
 
-	if (onToken) return codex.complete(opts, onToken);
+	if (!agent) throw new LlmError(0, `No agent CLI runs models of provider ${String(opts.provider)}.`);
 
-	try {
-		return await codex.complete(opts);
-	} catch (error) {
-		if (error instanceof LlmError) throw error;
-		throw new LlmError(0, 'ChatGPT request failed');
-	}
+	return agent.complete(opts, onToken);
 };
 
-/** A model reached through the user's OpenCode CLI. Loaded lazily for the same reason as ChatGPT. */
-const openCode: Transport = async (opts, onToken) => {
-	const { opencode } = await import('../../agents/opencode/opencode');
-
-	return opencode.complete(opts, onToken);
-};
-
-/** A model reached through the user's Claude Code CLI, one process per call. Loaded lazily like the others. */
-const claudeCodeCli: Transport = async (opts, onToken) => {
-	const { claudeCode } = await import('../../agents/claude-code/claude-code');
-
-	return claudeCode.complete(opts, onToken);
-};
-
-/** A model reached through the user's Devin CLI, one process per call. Loaded lazily like the others. */
-const devinCli: Transport = async (opts, onToken) => {
-	const { devin } = await import('../../agents/devin/devin');
-
-	return devin.complete(opts, onToken);
-};
-
-const TRANSPORTS: Record<ModelProvider, Transport> = {
-	'openai-compatible': openAiCompatible,
-	codex: chatgpt,
-	opencode: openCode,
-	'claude-code': claudeCodeCli,
-	devin: devinCli
+/** The transports of the providers that are not agent CLIs; every other provider is one. */
+const TRANSPORTS: Partial<Record<ModelProvider, Transport>> = {
+	'openai-compatible': openAiCompatible
 };
 
 export function transportFor(provider: ChatOptions['provider']): Transport {
-	return TRANSPORTS[provider ?? 'openai-compatible'];
+	return TRANSPORTS[provider ?? 'openai-compatible'] ?? agentCli;
 }

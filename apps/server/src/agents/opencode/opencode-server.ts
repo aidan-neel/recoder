@@ -145,6 +145,17 @@ export class OpenCodeServer {
 		return (await this.ensure()).api;
 	}
 
+	/**
+	 * Starts the server when it is not running, and returns a check that stays true while that same `serve` process
+	 * runs and still answers. A request sent after it ended or went quiet starts a new server, which does not run
+	 * what the old one was running.
+	 */
+	async liveness(): Promise<() => boolean> {
+		const server = await this.ensure();
+
+		return () => this.running === server && server.proc.exitCode === null && server.proc.signalCode === null;
+	}
+
 	/** Open the server's event stream (SSE). It stays open until `signal` aborts. */
 	async stream(path: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
 		const response = await this.send(path, {}, signal);

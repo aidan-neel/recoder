@@ -43,7 +43,7 @@ async function runWith(runner: ReviewRunner, setup: RunSetup = {}) {
 		progress: () => {},
 		loadRunner: async () => runner,
 		destination,
-		onEndRecorded: () => {}
+		recordEnd: (write) => write()
 	})
 		.then((exitCode) => ({ exitCode, error: null }))
 		.catch((error: unknown) => ({ exitCode: null, error }));

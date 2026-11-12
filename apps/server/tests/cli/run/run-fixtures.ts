@@ -19,6 +19,8 @@ const REPORT_TARGET: ReportTarget = {
 	baseSha: null,
 	mergeBaseSha: null,
 	headSha: null,
+	since: null,
+	sinceRunId: null,
 	url: null,
 	changedFiles: 1
 };
@@ -35,6 +37,7 @@ export function reviewOptions(overrides: Partial<ReviewOptions> = {}): ReviewOpt
 			subagents: null,
 			reviewerModel: null,
 			workerModel: null,
+			verifierModel: null,
 			reviewerEffort: null,
 			workerEffort: null,
 			lenses: null,

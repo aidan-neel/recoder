@@ -14,7 +14,7 @@ Every command here is written with `-p` (`--programmatic`), which makes it print
 | `recoder result -p <run-id>` | Print a finished run's report.                                             |
 | `recoder cancel -p <run-id>` | Ask a running review to stop.                                              |
 | `recoder runs -p`            | List recent runs as JSON, newest first.                                    |
-| `recoder models -p`          | List the model ids `--reviewer` and `--worker` accept, as JSON.            |
+| `recoder models -p`          | List the model ids `--reviewer`, `--worker` and `--verifier` accept, as JSON.            |
 | `recoder skill`              | Print or install the agent skill.                                          |
 | `recoder init`               | Set Recoder up for coding agents. A person runs it, not you.               |
 | `recoder upgrade`            | Replace the program with the latest release. A person runs it, not you.    |
@@ -26,7 +26,7 @@ Every review is recorded as a run, foreground ones too, so `recoder result -p <r
 
 ## `recoder review` flags
 
-Choose at most one of `--staged`, `--uncommitted`, `--pull` and `--diff`. With none, `review` reviews the commits on `--head` since it left `--base`.
+Choose at most one of `--staged`, `--uncommitted`, `--pull` and `--diff`. With none, `review` reviews the commits on `--head` since it left `--base`. A review of commits continues after the last complete review of them, covering only the commits added since; `--full` reviews the whole change.
 
 Target:
 
@@ -38,7 +38,8 @@ Target:
 | `--staged`               |                       | Review what is staged.                                                                         |
 | `--uncommitted`          |                       | Review all uncommitted changes, untracked files included.                                      |
 | `--pull <number or url>` |                       | Review a pull or merge request on the repository forge.                                        |
-| `--since <commit>`       |                       | With `--pull`: review only the commits after this one. It must be in the pull request's history. |
+| `--since <commit>`       |                       | With `--pull`: review only the commits after this one, such as the head of an earlier review. It must be in the pull request's history. |
+| `--full`                 |                       | Review the whole change, also when an earlier review covered part of it.                              |
 | `--diff <file or ->`     |                       | Review a unified diff from a file, or from standard input when the value is `-`. No code runs. |
 
 Scope:
@@ -65,7 +66,8 @@ Tuning:
 | `--budget <low\|medium\|high>` | `low`                    | How much to spend.                                                             |
 | `--subagents <n\|uncapped>`    | the budget's cap         | Most subagents the review may run.                                             |
 | `--reviewer <model id>`        | the saved Review model   | Model the reviewers run on. List the ids with `recoder models -p`.             |
-| `--worker <model id>`          | the saved pick           | Model the workers (subagents and verifiers) run on.                            |
+| `--worker <model id>`          | the saved pick           | Model the subagents run on.                                                    |
+| `--verifier <model id>`        | the saved pick           | Model the verifiers run on. Without one they follow the reviewers' model.      |
 | `--reviewer-effort <level>`    | the budget's             | Reviewer reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. |
 | `--worker-effort <level>`      | the budget's             | Worker reasoning effort, same levels.                                          |
 | `--lens <id>`                  | all                      | Run only these lenses. Repeatable or comma-separated.                          |
@@ -135,7 +137,7 @@ A signal stops the wait with exit 130. The run goes on.
 | `--repo <path>` | every repository | List only the runs of this repository directory. |
 | `--limit <n>`   | 20               | List at most this many runs.                     |
 
-`recoder models -p [--provider <name>] [--search <text>]` prints the model ids that `--reviewer` and `--worker` accept on this machine, as one line of JSON: `{ reviewer, worker, models: [{ id, name, provider, efforts, defaultEffort }], problems }`. `reviewer` and `worker` are the saved picks, or null. A model with no effort levels has `efforts: []` and `defaultEffort: null`. An agent that could not list its models adds a line to `problems`; the other models are still listed. It exits 0, also for an empty list.
+`recoder models -p [--provider <name>] [--search <text>]` prints the model ids that `--reviewer`, `--worker` and `--verifier` accept on this machine, as one line of JSON: `{ reviewer, worker, models: [{ id, name, provider, efforts, defaultEffort }], problems }`. `reviewer` and `worker` are the saved picks, or null. A model with no effort levels has `efforts: []` and `defaultEffort: null`. An agent that could not list its models adds a line to `problems`; the other models are still listed. It exits 0, also for an empty list.
 
 | Flag                | Default        | Meaning                                                                                |
 | ------------------- | -------------- | -------------------------------------------------------------------------------------- |
@@ -229,6 +231,8 @@ A run whose process died without finishing reads as `failed`, with the error `th
 | `repoPath`                           | string or null                                   | absolute path of the repository; null for a bare diff |
 | `base`, `head`                       | string or null                                   | refs, as named or detected                            |
 | `baseSha`, `mergeBaseSha`, `headSha` | string or null                                   | commits; the change starts at `mergeBaseSha`          |
+| `since`                              | string or null                                   | the commit the review started after; null for a whole change |
+| `sinceRunId`                         | string or null                                   | the run whose head `since` is; null for `--since` and a whole review |
 | `url`                                | string or null                                   | the pull request's address                            |
 | `changedFiles`                       | number                                           | files in the reviewed diff                            |
 
@@ -241,6 +245,7 @@ A run whose process died without finishing reads as `failed`, with the error `th
 | `reviewerModel`, `workerModel`   | string or null          | null is the saved model                                       |
 | `reviewerEffort`, `workerEffort` | string or null          | `minimal`, `low`, `medium`, `high`, `xhigh`, `max`            |
 | `lenses`                         | string[] or null        | null means every lens that applies ran                        |
+| `include`, `exclude`             | string[]                | the `--include` and `--exclude` path globs; empty when the review saw every path |
 | `reportLowSeverity`              | boolean                 | whether `info` findings were kept                             |
 | `exec`                           | boolean                 | whether code could run; false means bugs are `unverified`     |
 | `execReason`                     | string or null          | why code could not run (`--no-exec`, no sandbox, a bare diff) |

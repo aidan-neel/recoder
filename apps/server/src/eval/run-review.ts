@@ -1,4 +1,10 @@
-import { REVIEW_CANCELLED, type Finding, type Review, type ReviewProgress } from '@recoder/shared';
+import {
+	REVIEW_CANCELLED,
+	type Finding,
+	type ProgressSummary,
+	type Review,
+	type ReviewProgress
+} from '@recoder/shared';
 import {
 	cancelReview,
 	getReview,
@@ -6,8 +12,7 @@ import {
 	hiddenFromSummary,
 	progressSummary,
 	readProgress,
-	startReview,
-	type ProgressSummary
+	startReview
 } from './client';
 import { unsettledTasks } from '../review/session/task-state';
 import type { EvalFinding } from './metrics';
@@ -91,7 +96,8 @@ export function toEvalFinding(finding: Finding): EvalFinding {
 		severity: finding.severity,
 		title: finding.title,
 		verification: finding.verification,
-		memberIds: finding.memberIds
+		memberIds: finding.memberIds,
+		decision: finding.decision
 	};
 }
 

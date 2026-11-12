@@ -32,9 +32,10 @@ async function commit(dir: string, files: Record<string, string>, message: strin
  * A repo laid out like a GitHub one: merged PR #3 (squashed onto main) and
  * open PR #7 on top of it, each with `refs/pull/N/head`, plus the metadata
  * file in the git dir. PR #7 closes issue #5 and has a review thread.
+ * `dirPrefix` lets a test put the repo under a path with a space in it.
  */
-export async function localForgeFixture(): Promise<LocalForgeFixture> {
-	const dir = await mkdtemp(join(tmpdir(), 'recoder-local-forge-'));
+export async function localForgeFixture(dirPrefix = 'recoder-local-forge-'): Promise<LocalForgeFixture> {
+	const dir = await mkdtemp(join(tmpdir(), dirPrefix));
 
 	git(dir, ['init', '-b', 'main']);
 

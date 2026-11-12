@@ -2,6 +2,8 @@ import { app } from './app';
 import { env } from './env';
 import { serverDataDir } from './util/data-dir';
 import { opencode } from './agents/opencode/opencode';
+import { deleteChatGptTokens } from './review/session/chatgpt-migration';
+import { registeredAgents } from './agents/registry';
 import { initReviewSettings } from './review/session/review-settings';
 import { initVllmServers } from './models/vllm/vllm-store';
 import { startVllmSync } from './models/vllm/vllm-sync';
@@ -13,12 +15,21 @@ import { startReviewWorkers } from './review/runtime/worker';
 import { executeReviewActor } from './review/runtime/actor';
 import { startSharedMaintenance } from './review/runtime/maintenance';
 
-/** Start the agent now so Settings never waits on a cold start, and warm its provider catalog. */
-function warmAgent(): void {
+/**
+ * Start the agents' checks now so Settings never waits on a cold start:
+ * OpenCode with its provider catalog, and every other agent CLI's install and
+ * sign-in check, so the first Check again after a restart can answer from it
+ * instead of waiting on the CLI.
+ */
+function warmAgents(): void {
 	void opencode
 		.detect()
 		.then((status) => (status.error ? undefined : opencode.providers()))
 		.catch(() => {});
+
+	for (const agent of registeredAgents()) {
+		if (agent !== opencode) void agent.detect().catch(() => {});
+	}
 }
 
 /**
@@ -40,7 +51,31 @@ function isLongLived(path: string): boolean {
 	return LONG_LIVED.some((pattern) => pattern.test(path));
 }
 
+/**
+ * Where a stray rejection came from: its error's name and stack frames. The
+ * message is left out, since a failed request's message can carry a token or
+ * a key.
+ */
+function rejectionTrace(reason: unknown): string {
+	if (!(reason instanceof Error)) return typeof reason;
+
+	const frames = (reason.stack ?? '').split('\n').filter((line) => line.trimStart().startsWith('at '));
+
+	return [reason.name, ...frames.slice(0, 8)].join('\n');
+}
+
+/**
+ * Bun exits on a rejection nobody handled, which would end every running
+ * review over one dropped promise. Log where it came from and keep serving.
+ */
+function logStrayRejections(): void {
+	process.on('unhandledRejection', (reason) => console.error('[recoder] unhandled rejection', rejectionTrace(reason)));
+}
+
+logStrayRejections();
+
 await initializeStorage();
+await deleteChatGptTokens(serverDataDir());
 
 let stopWorkers: (() => Promise<void>) | undefined;
 const stopMaintenance = postgres ? startSharedMaintenance(postgres) : undefined;
@@ -62,7 +97,7 @@ if (coordinator) {
 	initReviewSettings();
 	initVllmServers();
 	await recoverStaleReviews();
-	warmAgent();
+	warmAgents();
 	startVllmSync();
 	restartWatcher();
 }

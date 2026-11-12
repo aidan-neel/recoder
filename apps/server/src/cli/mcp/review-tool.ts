@@ -51,6 +51,7 @@ const DESCRIPTION = [
 	'Next, call recoder_wait with the runId until state is not running, then call recoder_result.',
 	'Each property stands for the command-line flag its description starts with: a boolean for a flag without a value, a list for a repeatable one, and a string otherwise.',
 	'With no target property, it reviews the commits on the current branch since the default branch.',
+	'A later review of the same commits covers only those after the last complete review, and full: true reviews the whole change.',
 	"The repository is the server's working directory unless repo is given.",
 	"Relative paths resolve against the server's working directory.",
 	'diff, body-file and instructions-file must each name a regular file.',

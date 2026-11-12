@@ -1,5 +1,5 @@
-import type { Obligation } from '@recoder/shared';
-import { afterEach, beforeEach } from 'bun:test';
+import type { Obligation, ObligationTrigger } from '@recoder/shared';
+import { beforeEach } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +8,8 @@ import { buildChangeModel } from '../../../../src/review/pipeline/change-model/c
 import type { AdaptiveReviewInput } from '../../../../src/review/pipeline/harness/types';
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import { deriveObligations } from '../../../../src/review/pipeline/obligations/derive';
+import { loadRepoInventory } from '../../../../src/review/pipeline/repo-inventory/repo-inventory';
+import { restoreEnvAfterEach } from '../../../helpers/env';
 import { git } from '../../../helpers/git';
 import {
 	NOTHING,
@@ -30,9 +32,10 @@ export async function deriveFrom(base: Record<string, string>, head: Record<stri
 		const { targetSha } = await twoCommitRepo(root, { base, head });
 		const inventory = buildInventory(git(root, ['diff', targetSha, 'HEAD']) + '\n', []);
 		const signal = new AbortController().signal;
-		const changeModel = await buildChangeModel({ inventory, checkoutPath: root, signal, baseSha: targetSha });
+		const repo = await loadRepoInventory(root, 'HEAD', signal, []);
+		const changeModel = await buildChangeModel({ inventory, repo, checkoutPath: root, signal, baseSha: targetSha });
 
-		return await deriveObligations({ inventory, changeModel, checkoutPath: root, baseSha: targetSha, signal });
+		return await deriveObligations({ inventory, changeModel, repo, checkoutPath: root, baseSha: targetSha, signal });
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
@@ -41,6 +44,20 @@ export async function deriveFrom(base: Record<string, string>, head: Record<stri
 /** One file's two versions, as lines. */
 export function file(path: string, base: string[], head: string[]) {
 	return { base: { [path]: base.join('\n') + '\n' }, head: { [path]: head.join('\n') + '\n' } };
+}
+
+/** The triggers a change sets off on `path`, with the side and line of each: `boundary new:2`. */
+export async function hits(change: ReturnType<typeof file>, path?: string): Promise<string[]> {
+	const obligations = await deriveFrom(change.base, change.head);
+
+	return obligations
+		.filter((entry) => !path || entry.location.file === path)
+		.map((entry) => `${entry.trigger} ${entry.location.side}:${entry.location.line}`);
+}
+
+/** The trigger of each of `hits`' entries; the cast is safe because `hits` starts every entry with one. */
+export function triggers(found: string[]): ObligationTrigger[] {
+	return found.map((entry) => entry.split(' ')[0] as ObligationTrigger);
 }
 
 /** `pageSize` before the change: an undefined check and a strict upper bound. */
@@ -122,18 +139,6 @@ export function stubInvestigations(
 	}) as unknown as typeof fetch;
 }
 
-/** Puts each of `keys` back as it was before the calling file's tests, after each one. */
-export function restoreEnvAfterEach(keys: string[]): void {
-	const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
-
-	afterEach(() => {
-		for (const key of keys) {
-			if (original[key] === undefined) delete process.env[key];
-			else process.env[key] = original[key];
-		}
-	});
-}
-
 /**
  * Each test in the calling file gets its own data directory and runs with code
  * execution off, so no sandbox decides what an investigator can do; the
@@ -143,6 +148,7 @@ export function isolateEachTest(): void {
 	restoreEnvAfterEach([
 		'RECODER_OBLIGATIONS',
 		'RECODER_OBLIGATIONS_NEW_CODE',
+		'RECODER_OBLIGATIONS_TRANSITIONS',
 		'RECODER_OBLIGATION_CAP',
 		'RECODER_OBLIGATION_TURNS',
 		'RECODER_EXEC',

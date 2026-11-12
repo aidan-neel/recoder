@@ -1,10 +1,18 @@
-import { settleAssignments, type CommandRun, type Repo, type Review, type ReviewProgress } from '@recoder/shared';
+import {
+	settleAssignments,
+	type CommandRun,
+	type ProgressSummaries,
+	type ProgressSummary,
+	type Repo,
+	type Review,
+	type ReviewProgress
+} from '@recoder/shared';
 import { sqlite as getDb } from './storage/sqlite';
 import { collection as createCollection, closeStorage, postgres, sharedDiffs } from './storage/backend';
 import { progressWrites, metricWrites } from './storage/persistence-queue';
 import type { ReviewCheckpoint } from './review/session/review-checkpoint';
 import type { PipelineRun, RunTokenCall } from './models/metrics';
-import { settleTasks } from './review/session/task-state';
+import { isTerminalTask, settleTasks } from './review/session/task-state';
 
 async function flushPersistence(): Promise<void> {
 	await progressWrites.drainAll();
@@ -32,6 +40,17 @@ let progressTimer: ReturnType<typeof setTimeout> | null = null;
 const PROGRESS_CACHE_SIZE = 24;
 /** How long a snapshot may sit in memory before it reaches SQLite. */
 const PROGRESS_FLUSH_MS = 750;
+
+/** A snapshot in counts: tasks done of all, and reviewers at work. */
+function summarize(progress: ReviewProgress): ProgressSummary {
+	const tasks = Object.values(progress.tasks ?? {});
+
+	return {
+		tasksTotal: tasks.length,
+		tasksDone: tasks.filter(isTerminalTask).length,
+		agents: (progress.assignments ?? []).filter((assignment) => assignment.status === 'running').length
+	};
+}
 
 /**
  * Write every pending snapshot to SQLite now. A snapshot stays pending until
@@ -77,11 +96,23 @@ async function flushOnTimer(): Promise<void> {
  * latest snapshot shortly after, on a terminal event, and at exit.
  */
 export const reviewProgress = {
-	list: async (): Promise<ReviewProgress[]> => {
-		await progressWrites.drainAll();
-		await flushReviewProgress();
+	/**
+	 * Task and reviewer counts for every review still queued or running. It reads
+	 * only those reviews' snapshots, from memory when cached, so it sees reviews an
+	 * executor on another replica is running too.
+	 */
+	summaries: async (): Promise<ProgressSummaries> => {
+		const running: ProgressSummaries = {};
 
-		return (await progressTable.list()).map((item) => progressCache.get(item.id) ?? item);
+		for (const review of await db.reviews.list()) {
+			if (review.status !== 'queued' && review.status !== 'running') continue;
+
+			const progress = await reviewProgress.get(review.id);
+
+			if (progress) running[review.id] = summarize(progress);
+		}
+
+		return running;
 	},
 	get: async (id: string): Promise<ReviewProgress | undefined> => {
 		await progressWrites.drain(id);

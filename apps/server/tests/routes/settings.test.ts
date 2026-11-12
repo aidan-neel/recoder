@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, expect, test } from 'bun:test';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { app } from '../../src/app';
 import {
@@ -12,24 +11,27 @@ import {
 	setReviewOverrides
 } from '../../src/review/session/review-settings';
 import { configForOrchestrator, configForSubagent, isReviewConfigured } from '../../src/models/models';
+import { isolateDataDir, isolateSettings } from '../helpers/settings-env';
 
-const ENV_KEYS = ['RECODER_REVIEW_BASE_URL', 'RECODER_REVIEW_API_KEY', 'RECODER_REVIEW_MODEL', 'RECODER_DATA_DIR'];
-const savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
+isolateSettings();
 
-afterEach(() => {
-	for (const k of ENV_KEYS) {
-		if (savedEnv[k] === undefined) delete process.env[k];
-		else process.env[k] = savedEnv[k];
+/** Two models on one local endpoint, for the Review and second picks. */
+const LEAD_AND_WORKER = [
+	{
+		id: 'lead',
+		label: 'Lead',
+		model: 'lead-model',
+		provider: 'openai-compatible',
+		baseUrl: 'http://localhost:8000/v1'
+	},
+	{
+		id: 'worker',
+		label: 'Worker',
+		model: 'worker-model',
+		provider: 'openai-compatible',
+		baseUrl: 'http://localhost:8000/v1'
 	}
-
-	setReviewOverrides({});
-});
-
-function isolateDataDir(): void {
-	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-settings-'));
-}
-
-beforeEach(isolateDataDir);
+];
 
 describe('review settings', () => {
 	test('orchestrator and specialist models route independently and survive reload', async () => {
@@ -37,10 +39,7 @@ describe('review settings', () => {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({
-				models: [
-					{ id: 'lead', label: 'Lead', model: 'lead-model', provider: 'codex' },
-					{ id: 'worker', label: 'Worker', model: 'worker-model', provider: 'codex' }
-				],
+				models: LEAD_AND_WORKER,
 				orchestratorModelId: 'lead',
 				specialistModelId: 'worker'
 			})
@@ -60,7 +59,17 @@ describe('review settings', () => {
 	});
 
 	test('Review and Specialist efforts persist across reload and survive a model change', async () => {
-		setReviewOverrides({ models: [{ id: 'sub', label: 'Subscription', model: 'test-model', provider: 'codex' }] });
+		setReviewOverrides({
+			models: [
+				{
+					id: 'sub',
+					label: 'Subscription',
+					model: 'test-model',
+					provider: 'openai-compatible',
+					baseUrl: 'http://localhost:8000/v1'
+				}
+			]
+		});
 
 		const patch = await app.request('/api/settings/models', {
 			method: 'PATCH',
@@ -78,7 +87,17 @@ describe('review settings', () => {
 		const changedModel = await app.request('/api/settings/models', {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ models: [{ id: 'new', label: 'New', model: 'new-model', provider: 'codex' }] })
+			body: JSON.stringify({
+				models: [
+					{
+						id: 'new',
+						label: 'New',
+						model: 'new-model',
+						provider: 'openai-compatible',
+						baseUrl: 'http://localhost:8000/v1'
+					}
+				]
+			})
 		});
 
 		expect(changedModel.status).toBe(200);
@@ -111,7 +130,18 @@ describe('review settings', () => {
 	});
 
 	test('a token budget saves with the cap and efforts it sets, survives a restart, and a file from before budgets reads as Medium', async () => {
-		setReviewOverrides({ models: [{ id: 'sub', label: 'Subscription', model: 'test-model', provider: 'codex' }] });
+		setReviewOverrides({
+			models: [
+				{
+					id: 'sub',
+					label: 'Subscription',
+					model: 'test-model',
+					provider: 'openai-compatible',
+					baseUrl: 'http://localhost:8000/v1'
+				}
+			]
+		});
+
 		expect((await (await app.request('/api/settings/models')).json()).tokenBudget).toBe('medium');
 
 		const patch = await app.request('/api/settings/models', {
@@ -174,10 +204,7 @@ describe('review settings', () => {
 			writeFileSync(
 				join(process.env.RECODER_DATA_DIR!, 'review-config.json'),
 				JSON.stringify({
-					models: [
-						{ id: 'lead', label: 'Lead', model: 'lead-model', provider: 'codex' },
-						{ id: 'worker', label: 'Worker', model: 'worker-model', provider: 'codex' }
-					],
+					models: LEAD_AND_WORKER,
 					orchestratorModelId: 'lead',
 					roles: { correctness: 'worker', security: 'lead' },
 					roleEfforts: { correctness: 'high', docs: 'low' },
@@ -267,61 +294,6 @@ describe('review settings', () => {
 		expect(effectiveReviewEnv().model).toBe('ui-model');
 		setReviewOverrides({});
 		expect(effectiveReviewEnv().model).toBe('env-model');
-	});
-
-	test('codex subscription model is listed, selectable as shared, and stays selected beside an API model', async () => {
-		isolateDataDir();
-
-		const codexId = 'codex-shared-1';
-
-		const put = await app.request('/api/settings/models', {
-			method: 'PUT',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({
-				models: [{ provider: 'codex', id: codexId, label: 'GPT 5 · subscription', model: 'gpt-5', apiKey: '' }],
-				sharedModelId: codexId
-			})
-		});
-
-		expect(put.status).toBe(200);
-
-		const saved = await put.json();
-
-		expect(getStoredSettings().models).toHaveLength(1);
-		expect(getStoredSettings().models?.[0]).toMatchObject({ provider: 'codex', id: codexId, model: 'gpt-5' });
-		expect(saved.sharedModelId).toBe(codexId);
-		expect(saved.model).toBe('gpt-5');
-		expect(saved.configured).toBe(true);
-		expect(isReviewConfigured()).toBe(true);
-
-		const apiId = 'api-1';
-
-		const put2 = await app.request('/api/settings/models', {
-			method: 'PUT',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({
-				models: [
-					{ provider: 'codex', id: codexId, label: 'GPT 5 · subscription', model: 'gpt-5', apiKey: '' },
-					{
-						provider: 'openai-compatible',
-						id: apiId,
-						label: 'Qwen',
-						model: 'qwen/x',
-						baseUrl: 'https://x/v1',
-						apiKey: ''
-					}
-				],
-				sharedModelId: codexId
-			})
-		});
-
-		expect(put2.status).toBe(200);
-
-		const saved2 = await put2.json();
-
-		expect(getStoredSettings().models).toHaveLength(2);
-		expect(saved2.sharedModelId).toBe(codexId);
-		expect(saved2.configured).toBe(true);
 	});
 });
 

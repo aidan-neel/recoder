@@ -1,5 +1,15 @@
 import type { PrPerson, PullFile, PullRequest, RemoteRepo } from '@recoder/shared';
-import { extractJson, forgeCliAvailable, forgeCliUser, GhError, runForgeCli } from './cli.js';
+import {
+	extractJson,
+	forgeCliAvailable,
+	forgeCliUser,
+	GhError,
+	GITHUB_RATE_LIMIT,
+	githubRateLimit,
+	isJsonObject,
+	runForgeCli
+} from './cli.js';
+import { withoutCredentials } from '../util/redact.js';
 
 export { extractJson, GhError } from './cli.js';
 
@@ -10,10 +20,14 @@ export function parseRepoSlug(url: string): string {
 
 	if (m) return m[1];
 	if (/^[^/\s]+\/[^/\s]+$/.test(clean)) return clean;
-	throw new GhError('unknown', `cannot parse repo slug from ${url}`);
+	throw new GhError('unknown', `cannot parse repo slug from ${withoutCredentials(url)}`);
 }
 
-/** A failed `gh` run's logs as an auth, not-found or unknown GhError. */
+/**
+ * A failed `gh` run's logs as an auth, rate-limit, not-found or unknown
+ * GhError. `gh` only calls GitHub signed in, so a rate limit it meets is the
+ * signed-in limit, which a token in Connections would not raise.
+ */
 function classifyFailure(logs: string): GhError {
 	const text = logs.toLowerCase();
 
@@ -29,6 +43,8 @@ function classifyFailure(logs: string): GhError {
 		return new GhError('auth', `gh not authenticated: ${logs.slice(-500)}`);
 	}
 
+	if (GITHUB_RATE_LIMIT.test(logs)) return githubRateLimit(true);
+
 	if (text.includes('not found') || text.includes('no pull requests') || text.includes('could not resolve')) {
 		return new GhError('not-found', logs.slice(-500));
 	}
@@ -37,7 +53,7 @@ function classifyFailure(logs: string): GhError {
 }
 
 /** Run `gh`, capturing stdout. Never throws raw — always GhError. */
-function gh(args: string[], env?: Record<string, string>): Promise<string> {
+export function gh(args: string[], env?: Record<string, string>): Promise<string> {
 	return runForgeCli('gh', args, env, classifyFailure);
 }
 
@@ -109,30 +125,58 @@ export async function listGhRepos(env?: Record<string, string>): Promise<RemoteR
 	});
 }
 
+/** The `gh pr view` fields every pull request read asks for. */
+const VIEW_FIELDS = [
+	'number',
+	'title',
+	'url',
+	'author',
+	'baseRefName',
+	'headRefName',
+	'headRefOid',
+	'additions',
+	'deletions',
+	'changedFiles',
+	'createdAt',
+	'body'
+];
+
+/** A pull request with the JSON row `gh` printed for it, so a caller that asked for more fields can read them. */
+export interface PullRow {
+	pr: PullRequest;
+	row: Record<string, unknown>;
+}
+
 /** PR metadata + unified diff via the gh CLI. Throws GhError. */
 export async function fetchPullRequest(
 	repoUrl: string,
 	prNumber: number,
 	opts?: { env?: Record<string, string>; metadataOnly?: boolean }
 ): Promise<FetchedPull> {
-	const slug = parseRepoSlug(repoUrl);
+	const { pr } = await viewPullRow(repoUrl, prNumber, { env: opts?.env });
 
-	const view = (await gh(
-		[
-			'pr',
-			'view',
-			String(prNumber),
-			'--repo',
-			slug,
-			'--json',
-			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,createdAt,body'
-		],
-		opts?.env
-	).then(extractJson)) as Record<string, unknown>;
+	const diff = opts?.metadataOnly
+		? ''
+		: await gh(['pr', 'diff', String(prNumber), '--repo', parseRepoSlug(repoUrl)], opts?.env);
 
-	const diff = opts?.metadataOnly ? '' : await gh(['pr', 'diff', String(prNumber), '--repo', slug], opts?.env);
+	return { pr, diff };
+}
 
-	return { pr: parsePullRow(view, prNumber), diff };
+/** One pull request in any state with `fields` beyond the usual metadata. Throws GhError. */
+export async function viewPullRow(
+	repoUrl: string,
+	prNumber: number,
+	opts: { env?: Record<string, string>; fields?: string[] }
+): Promise<PullRow> {
+	const fields = [...VIEW_FIELDS, ...(opts.fields ?? [])].join(',');
+
+	const row = extractJson(
+		await gh(['pr', 'view', String(prNumber), '--repo', parseRepoSlug(repoUrl), '--json', fields], opts.env)
+	);
+
+	if (!isJsonObject(row)) throw new GhError('unknown', 'gh pr view returned non-object JSON');
+
+	return { pr: parsePullRow(row, prNumber), row };
 }
 
 /** Open PRs for a repo, newest first. Throws GhError. */
@@ -140,29 +184,40 @@ export async function listPullRequests(
 	repoUrl: string,
 	opts?: { env?: Record<string, string>; limit?: number }
 ): Promise<PullRequest[]> {
-	const slug = parseRepoSlug(repoUrl);
+	return (await listPullRows(repoUrl, opts ?? {})).map((row) => row.pr);
+}
 
-	const rows = (await gh(
-		[
-			'pr',
-			'list',
-			'--repo',
-			slug,
-			'--state',
-			'open',
-			'--limit',
-			String(opts?.limit ?? 20),
-			'--json',
-			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,createdAt,body,assignees'
-		],
-		opts?.env
-	).then(extractJson)) as unknown;
+/**
+ * Open PRs for a repo, newest first, in one `gh pr list` call with `fields`
+ * beyond the usual metadata; `gh` reads as many pages as `limit` needs. Throws GhError.
+ */
+export async function listPullRows(
+	repoUrl: string,
+	opts: { env?: Record<string, string>; limit?: number; fields?: string[] }
+): Promise<PullRow[]> {
+	const fields = [...VIEW_FIELDS, 'assignees', ...(opts.fields ?? [])].join(',');
+
+	const rows = extractJson(
+		await gh(
+			[
+				'pr',
+				'list',
+				'--repo',
+				parseRepoSlug(repoUrl),
+				'--state',
+				'open',
+				'--limit',
+				String(opts.limit ?? 20),
+				'--json',
+				fields
+			],
+			opts.env
+		)
+	);
 
 	if (!Array.isArray(rows)) throw new GhError('unknown', 'gh pr list returned non-array JSON');
 
-	return rows.flatMap((row) =>
-		typeof row === 'object' && row !== null ? [parsePullRow(row as Record<string, unknown>, 0)] : []
-	);
+	return rows.filter(isJsonObject).map((row) => ({ pr: parsePullRow(row, 0), row }));
 }
 
 /** Normalize one `gh pr view`/`pr list` JSON row to a PullRequest. */

@@ -2,7 +2,14 @@
 
 import { AnimatePresence, motion } from 'motion/react';
 import { Popover as PopoverPrimitive } from 'radix-ui';
-import { createContext, useContext, type ReactElement, type ReactNode } from 'react';
+import {
+	createContext,
+	useContext,
+	type PointerEventHandler,
+	type ReactElement,
+	type ReactNode,
+	type RefObject
+} from 'react';
 
 import { cn } from '../../lib/cn';
 import { menuMotion } from '../../motion/presets';
@@ -30,6 +37,14 @@ export function Popover({ children, ...state }: OpenProps) {
 	);
 }
 
+/**
+ * Anchors the popover to an element it does not own (an embed inside an
+ * editable field), measured through `virtualRef`, in place of a trigger.
+ */
+export function PopoverAnchor({ virtualRef }: { virtualRef: RefObject<HTMLElement | null> }) {
+	return <PopoverPrimitive.Anchor virtualRef={virtualRef} />;
+}
+
 /** The control that toggles the popover; it renders its child and marks it `data-state="open"` while open. */
 export function PopoverTrigger({ children }: { children: ReactElement }) {
 	return <PopoverPrimitive.Trigger asChild>{children}</PopoverPrimitive.Trigger>;
@@ -44,6 +59,10 @@ interface PopoverContentProps {
 	children?: ReactNode;
 	/** Runs when the panel opens and takes focus; prevent it to keep focus where it was. */
 	onOpenAutoFocus?: (event: Event) => void;
+	/** Runs when the panel closes and hands focus back to its trigger; prevent it to leave focus alone. */
+	onCloseAutoFocus?: (event: Event) => void;
+	onPointerEnter?: PointerEventHandler<HTMLDivElement>;
+	onPointerLeave?: PointerEventHandler<HTMLDivElement>;
 }
 
 /**
@@ -57,7 +76,10 @@ export function PopoverContent({
 	sideOffset = 8,
 	className,
 	children,
-	onOpenAutoFocus
+	onOpenAutoFocus,
+	onCloseAutoFocus,
+	onPointerEnter,
+	onPointerLeave
 }: PopoverContentProps) {
 	const open = useContext(PopoverOpen);
 	const variants = useMotionVariants(menuMotion);
@@ -74,11 +96,14 @@ export function PopoverContent({
 						sideOffset={sideOffset}
 						collisionPadding={8}
 						onOpenAutoFocus={onOpenAutoFocus}
+						onCloseAutoFocus={onCloseAutoFocus}
 					>
 						<motion.div
 							{...PRESENCE}
 							data-ui="popover-content"
 							variants={variants}
+							onPointerEnter={onPointerEnter}
+							onPointerLeave={onPointerLeave}
 							className={cn(
 								'z-[130] max-h-(--radix-popover-content-available-height) max-w-(--radix-popover-content-available-width)',
 								'origin-(--radix-popover-content-transform-origin) overflow-auto overscroll-contain',

@@ -1,54 +1,55 @@
 'use client';
 
-import type { GuidelinesOverview, RepoGuidelines } from '@recoder/shared';
-import { Button, cn, Skeleton } from '@recoder/ui';
+import type { GuidelinesOverview } from '@recoder/shared';
+import { Button, Skeleton, SkeletonText } from '@recoder/ui';
 
-import { useAction } from '@/lib/shell/use-action';
-import { editLayer, useGuidelinesEditor, type ScopeKey } from '@/lib/guidelines/editor-store';
-import { useGuidelines } from '@/lib/guidelines/guidelines-store';
-import { firstRule, seedText } from '@/lib/guidelines/rules';
+import { useLearnedRules } from '@/lib/guidelines/use-learned-rules';
+import { useRepoRow, type RepoRowError } from '@/lib/guidelines/use-repo-row';
 
-import { GuidelinesEditor } from './guidelines-editor';
 import { GuidelinesRow } from './guidelines-row';
+import { LayerRow } from './layer-row';
+import { LearnedRules } from './learned-rules';
 import { RepoStatus } from './repo-status';
 
-type TrackedRepo = GuidelinesOverview['repos'][number];
-
 interface RepoRowProps {
-	repo: TrackedRepo;
+	repo: GuidelinesOverview['repos'][number];
 	overview: GuidelinesOverview;
 }
 
-/** The row's line: the first rule in force (or pending), or that the file is missing. */
-function repoSummary(data: RepoGuidelines): string {
-	return firstRule(data.pending?.content ?? data.content) ?? `No ${data.path} yet`;
-}
+/** The summary's line height, so the bar that stands in for it takes the same room. */
+const SUMMARY_LINE_HEIGHT = 18;
 
-/** Placeholder widths, picked by repository so loading rows don't read as copies. */
-const SKELETON_WIDTHS = ['w-[44%]', 'w-[36%]', 'w-[52%]'];
+/** Summary bar widths, picked by repository so loading rows do not look stamped. */
+const SUMMARY_WIDTHS = ['44%', '36%', '52%'] as const;
 
-function skeletonWidth(id: string): string {
+/** The summary bar's width for one repository: the same one on every load. */
+function summaryWidth(id: string): string {
 	const sum = [...id].reduce((total, char) => total + char.charCodeAt(0), 0);
 
-	return SKELETON_WIDTHS[sum % SKELETON_WIDTHS.length];
+	return SUMMARY_WIDTHS[sum % SUMMARY_WIDTHS.length];
+}
+
+/** The file is still being read through the forge: the name, with bars where the summary and the button land. */
+function LoadingRow({ id, name }: { id: string; name: string }) {
+	return (
+		<GuidelinesRow
+			name={name}
+			summary={<SkeletonText count={1} widths={[summaryWidth(id)]} lineHeight={SUMMARY_LINE_HEIGHT} />}
+			open={false}
+			action={<Skeleton className="guidelines-action-skeleton" />}
+		/>
+	);
 }
 
 /** A read that failed (the forge said no, or the server is down): the reason, and a retry. */
-function FailedRow({ repo, error }: { repo: TrackedRepo; error: string }) {
-	const retry = useAction();
-
+function FailedRow({ view }: { view: RepoRowError }) {
 	return (
 		<GuidelinesRow
-			name={repo.name}
-			summary={error}
-			failed
+			name={view.name}
+			failure={view.summary}
 			open={false}
 			action={
-				<Button
-					variant="outline"
-					status={retry.status}
-					onClick={() => retry.run(() => useGuidelines.getState().loadRepo(repo.id))}
-				>
+				<Button variant="outline" status={view.retry.status} onClick={view.retry.run}>
 					Try again
 				</Button>
 			}
@@ -57,60 +58,27 @@ function FailedRow({ repo, error }: { repo: TrackedRepo; error: string }) {
 }
 
 /**
- * One tracked repository and its `RECODER.md`: the first rule, the
- * file's state (active on the default branch, pending in a pull request),
- * and Write or Edit. Saving opens a pull request; the file applies once it
- * merges.
+ * One tracked repository and its guidelines file: its first rule, what
+ * Recoder learned there, where the file stands, and Edit or Write. Saving
+ * opens a pull request; the file applies once it merges.
  */
 export function RepoRow({ repo, overview }: RepoRowProps) {
-	const state = useGuidelines((store) => store.repos[repo.id]);
-	const key: ScopeKey = `repo:${repo.id}`;
-	const open = useGuidelinesEditor((store) => store.open === key);
-	const opened = useGuidelinesEditor((store) => store.sessions[key]?.opened);
+	const view = useRepoRow(repo, overview);
+	const learned = useLearnedRules(repo.id);
 
-	if (state?.status === 'error') return <FailedRow repo={repo} error={state.error} />;
-
-	if (state?.status !== 'ready') {
-		return (
-			<GuidelinesRow
-				key="loading"
-				name={repo.name}
-				summary={<Skeleton className={cn('my-[3px] h-2.5', skeletonWidth(repo.id))} />}
-				open={false}
-				action={<Skeleton className="h-[26px] w-[52px] rounded-[8px]" />}
-			/>
-		);
-	}
-
-	const { data } = state;
-	const written = data.content !== null || data.pending !== null;
+	if (view.kind === 'error') return <FailedRow view={view} />;
+	if (view.kind === 'loading') return <LoadingRow id={repo.id} name={view.name} />;
 
 	return (
-		<GuidelinesRow
-			key="ready"
-			name={repo.name}
-			summary={repoSummary(data)}
-			status={<RepoStatus data={data} />}
-			open={open}
-			action={
-				<Button
-					variant="outline"
-					onClick={() => editLayer(key, seedText(data.pending?.content ?? data.content, overview.template))}
-				>
-					{written ? 'Edit' : 'Write'}
-				</Button>
+		<LayerRow
+			name={view.name}
+			status={
+				<>
+					<LearnedRules view={learned} repoName={view.name} />
+					<RepoStatus data={view.data} />
+				</>
 			}
-		>
-			{opened === undefined ? null : (
-				<GuidelinesEditor
-					key={opened}
-					scope={key}
-					open={open}
-					repo={data}
-					maxChars={overview.maxChars}
-					label={`${repo.name} guidelines`}
-				/>
-			)}
-		</GuidelinesRow>
+			view={view}
+		/>
 	);
 }

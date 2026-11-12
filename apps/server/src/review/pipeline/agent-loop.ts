@@ -10,8 +10,9 @@ import { reviewNow, reviewPausePoint } from '../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
 import { compactTranscript } from './agent-loop/compaction.js';
 import { DELEGATE_SHAPE, commandsRun, executeTurn } from './agent-loop/delegation.js';
-import { agentDeadlines, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
-import { runOpenCodeAgent } from './agent-loop/opencode-engine.js';
+import { agentDeadlines, callSettleAt, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
+import { runNativeAgent } from './agent-loop/native-engine.js';
+import { agentById } from '../../agents/registry.js';
 import type { JsonAgentOptions } from './agent-loop/options.js';
 import { streamTurn, type TurnResult } from './agent-loop/stream-turn.js';
 
@@ -41,6 +42,9 @@ function cutOffNote(overthought: boolean, dropped: boolean, truncated: boolean):
 	return undefined;
 }
 
+/** The note on a reply cut off to leave the agent time for its final turn. */
+const OUT_OF_TIME_NOTE = 'Out of time. Asking for an answer now.';
+
 /**
  * Decides what follows a failed model call: a repair prompt to retry with,
  * or the error to stop on. Throws when the whole review must stop, because
@@ -54,7 +58,7 @@ function afterFailedCall<T>(
 ): { retry?: string; error: string } {
 	const { err, overthought } = failure;
 	const retrying = !opts.signal.aborted && canRepair;
-	const dropped = !overthought && err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message);
+	const dropped = !overthought && err instanceof LlmError && /stalled|socket|connection/i.test(err.message);
 	const truncated = err instanceof Error && /output truncated/i.test(err.message);
 
 	failure.settle(retrying ? cutOffNote(overthought, dropped, truncated) : undefined);
@@ -115,15 +119,17 @@ function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean
 }
 
 /**
- * Run an agent to its answer. OpenCode runs the agent itself, calling
- * Recoder's tools as it goes. Every other provider is only a model: Recoder
- * runs the loop, asking for JSON action requests turn by turn. Those calls
- * share one conversation, so a transport that keeps a session reuses the
- * provider's prompt cache.
+ * Run an agent to its answer. An agent CLI (see `agents/registry.ts`) runs
+ * the agent itself, calling Recoder's tools as it goes. Every other provider
+ * is only a model: Recoder runs the loop, asking for JSON action requests
+ * turn by turn. Those calls share one conversation, so a transport that keeps
+ * a session reuses the provider's prompt cache.
  */
 export function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
 	return withTokenStage(opts.stage, async () => {
-		if (opts.config.provider === 'opencode') return runOpenCodeAgent(opts);
+		const agent = agentById(opts.config.provider);
+
+		if (agent) return runNativeAgent(opts, agent);
 
 		const conversation = new ChatConversation();
 
@@ -205,10 +211,23 @@ async function runTurns<T>(
 		if (stubbed) opts.onLog?.(`${opts.label} compacted ${stubbed} earlier tool results`);
 
 		const started = Date.now();
-		const result = await streamTurn(opts, messages, conversation, turn, lastTurn, deadlineAt);
+		const settleAt = callSettleAt(limits, lastTurn);
+		const result = await streamTurn(opts, messages, conversation, turn, lastTurn, settleAt);
 
 		if (result.kind === 'paused') {
 			opts.budget.used = Math.max(0, opts.budget.used - 1);
+			call--;
+			continue;
+		}
+
+		if (result.kind === 'out-of-time' && settleAt >= deadlineAt) {
+			result.settle();
+
+			return { value: null, error: deadlineError(opts, limits) };
+		}
+
+		if (result.kind === 'out-of-time') {
+			result.settle(opts.budget.canSpend(1, spendOpts) ? OUT_OF_TIME_NOTE : undefined);
 			call--;
 			continue;
 		}

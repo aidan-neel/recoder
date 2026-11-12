@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { TokenUsage } from '@recoder/shared';
 import { DevinAgent } from '../../../src/agents/devin/devin';
-import { LlmError } from '../../../src/models/llm/errors';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { fakeDevin } from '../../helpers/fake-devin';
+import { testCallFailures } from '../../helpers/native-agent';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	return {
@@ -59,7 +60,6 @@ describe('DevinAgent.complete', () => {
 
 		await new DevinAgent(env).complete(call());
 
-		await Bun.sleep(300);
 		expect(await readFile(`${env.FAKE_DEVIN_LOG}.rm`, 'utf8')).toBe('quiet-owl\n');
 	});
 
@@ -77,20 +77,15 @@ describe('DevinAgent.complete', () => {
 		expect(usages).toHaveLength(1);
 	});
 
-	test.each([
-		['signedout', 401, /signed out/],
-		['crash', 0, /boom/],
-		['limited', 429, /free model rate limit.*00:01 UTC/],
-		['empty', 0, /without a reply/]
-	] as const)('a %s call fails as an LlmError with status %d', async (mode, status, message) => {
-		const error = await new DevinAgent(await fakeDevin({ FAKE_DEVIN_MODE: mode }))
-			.complete(call())
-			.catch((e: unknown) => e);
-
-		expect(error).toBeInstanceOf(LlmError);
-		expect((error as LlmError).status).toBe(status);
-		expect((error as LlmError).message).toMatch(message);
-	});
+	testCallFailures(
+		async (mode) => new DevinAgent(await fakeDevin({ FAKE_DEVIN_MODE: mode })).complete(call()),
+		[
+			{ mode: 'signedout', status: 401, message: /signed out/, error: LlmError },
+			{ mode: 'crash', status: 0, message: /boom/, error: LlmError },
+			{ mode: 'limited', status: 429, message: /free model rate limit.*00:01 UTC/, error: UsageLimitError },
+			{ mode: 'empty', status: 0, message: /without a reply/, error: LlmError }
+		]
+	);
 });
 
 test('detect reports the version and whether the CLI is signed in', async () => {

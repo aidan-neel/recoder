@@ -44,8 +44,6 @@ export interface JsonAgentOptions<T> {
 	 * running into `maxWallMs`, where it stops without an answer.
 	 */
 	timeLimit?: { finalTurnAfterMs: number; maxWallMs: number };
-	/** One model call's limit; `REVIEW_POLICY.perCallDeadlineMs` when absent. */
-	callDeadlineMs?: number;
 	/** A minimal valid final answer, quoted back when the model gets the shape wrong. */
 	finalExample?: string;
 	/** The agent may run commands and write scratch files in the sandbox, not only read. */
@@ -59,7 +57,7 @@ export interface JsonAgentOptions<T> {
 	onProgress?: (state: 'queued' | 'running' | 'retrieval', elapsedMs: number, detail: string) => void;
 	onLog?: (message: string) => void;
 	/** Accumulated provider reasoning for a turn, upserted by `id`. */
-	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status' | 'summary' | 'outputRate'>) => void;
+	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status' | 'outputRate'>) => void;
 	onTool?: (tool: ToolCallReport) => void;
 	onMessage?: (message: Pick<ReviewChatMessage, 'id' | 'text' | 'status' | 'cutOff' | 'outputRate'>) => void;
 	getDiscussion?: () => Promise<string>;

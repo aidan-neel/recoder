@@ -48,6 +48,8 @@ const reportShape = z.looseObject({
 		base: nullableText,
 		head: nullableText,
 		headSha: nullableText,
+		since: nullableText.optional(),
+		sinceRunId: nullableText.optional(),
 		url: nullableText,
 		repoPath: nullableText,
 		changedFiles: z.number()
@@ -57,9 +59,12 @@ const reportShape = z.looseObject({
 		subagents: z.union([z.number(), text]),
 		reviewerModel: nullableText,
 		workerModel: nullableText,
+		verifierModel: nullableText.optional(),
 		reviewerEffort: nullableText,
 		workerEffort: nullableText,
 		lenses: z.array(text).nullable(),
+		include: z.array(text).optional(),
+		exclude: z.array(text).optional(),
 		reportLowSeverity: z.boolean(),
 		exec: z.boolean(),
 		execReason: nullableText

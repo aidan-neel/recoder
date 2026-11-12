@@ -47,7 +47,7 @@ describe('with no flags', () => {
 		const options = parse();
 
 		expect(options.repoPath).toBe(CWD);
-		expect(options.target).toEqual({ kind: 'range', base: null, head: 'HEAD' });
+		expect(options.target).toEqual({ kind: 'range', base: null, head: 'HEAD', start: { kind: 'continue' } });
 	});
 
 	test('it takes the low budget, runs code, uses the baseline cache and leaves the saved settings alone', () => {
@@ -80,11 +80,14 @@ describe('with no flags', () => {
 });
 
 const TARGETS: [string[], ReviewTarget][] = [
-	[['--base', 'main', '--head', 'topic'], { kind: 'range', base: 'main', head: 'topic' }],
+	[['--base', 'main', '--head', 'topic'], { kind: 'range', base: 'main', head: 'topic', start: { kind: 'continue' } }],
+	[['--full'], { kind: 'range', base: null, head: 'HEAD', start: { kind: 'whole' } }],
 	[['--staged'], { kind: 'staged' }],
 	[['--uncommitted'], { kind: 'uncommitted' }],
-	[['--pull', '12'], { kind: 'pull', pull: '12', since: null }],
-	[['--pull', '12', '--since', 'abc1234'], { kind: 'pull', pull: '12', since: 'abc1234' }],
+	[['--full', '--uncommitted'], { kind: 'uncommitted' }],
+	[['--pull', '12'], { kind: 'pull', pull: '12', start: { kind: 'continue' } }],
+	[['--pull', '12', '--full'], { kind: 'pull', pull: '12', start: { kind: 'whole' } }],
+	[['--pull', '12', '--since', 'abc1234'], { kind: 'pull', pull: '12', start: { kind: 'named', commit: 'abc1234' } }],
 	[['--diff', '-'], { kind: 'diff', source: '-' }]
 ];
 
@@ -98,6 +101,7 @@ const CONFLICTS: [string[], string][] = [
 	[['--staged', '--base', 'main'], '--base'],
 	[['--pull', '1', '--head', 'topic'], '--pull'],
 	[['--since', 'abc1234'], '--since needs --pull'],
+	[['--pull', '1', '--full', '--since', 'abc1234'], '--full and --since cannot be used together'],
 	[['--body', 'a', '--body-file', 'b'], '--body and --body-file'],
 	[['--instructions', 'a', '--instructions-file', 'b'], '--instructions and --instructions-file'],
 	[['--lens', 'security', '--skip-lens', 'rules'], '--lens and --skip-lens'],
@@ -108,11 +112,12 @@ test.each(CONFLICTS)('%j is a usage error naming %s', (argv, named) => {
 	expect(usageMessage(...argv)).toContain(named);
 });
 
-test('--reviewer, --worker and their efforts set the model picks of the review', () => {
+test('--reviewer, --worker, --verifier and the efforts set the model picks of the review', () => {
 	const { tuning } = parse(
 		'--reviewer',
 		'claude-code:opus',
 		'--worker=devin:swe',
+		'--verifier=opencode:openai/gpt-6',
 		'--reviewer-effort',
 		'high',
 		'--worker-effort=low'
@@ -121,6 +126,7 @@ test('--reviewer, --worker and their efforts set the model picks of the review',
 	expect(tuning).toMatchObject({
 		reviewerModel: 'claude-code:opus',
 		workerModel: 'devin:swe',
+		verifierModel: 'opencode:openai/gpt-6',
 		reviewerEffort: 'high',
 		workerEffort: 'low'
 	});

@@ -45,7 +45,14 @@ const settings: ModelSettings = {
 const server: ServerIdentity = {
 	flags: { RECODER_LLM_RETRIES: '2' },
 	policy: { analysisDeadlineMs: 1_800_000 },
-	caches: { intent: 'source:1', 'rule-ledger': 'source:2', 'baseline-cache': 'source:3', 'review-checkpoint': 'v2' },
+	caches: {
+		intent: 'source:1',
+		'rule-ledger': 'source:2',
+		'baseline-cache': 'source:3',
+		'review-checkpoint': 'v2',
+		'parsed-symbols': 'source:4',
+		'commit-prs': 'source:5'
+	},
 	tools: { bun: '1.4.2', node: 'v24.0.0', opencode: 'not installed' },
 	host: {
 		os: 'linux 6',
@@ -105,7 +112,7 @@ test('tasks carry their base from the local forge, and a repo it cannot read rec
 	expect(identity.dataset.forges.remote).toEqual({ head: 'unknown', metadata: 'unknown' });
 });
 
-test('an unset second model follows the review model and its effort; the judge records its seed', async () => {
+test('unset second and verifier models follow the review model and its effort; the judge records its seed', async () => {
 	const { models, judge, host } = await capture();
 
 	expect(models.orchestrator).toEqual({
@@ -117,10 +124,19 @@ test('an unset second model follows the review model and its effort; the judge r
 	});
 
 	expect(models.specialist).toEqual(models.orchestrator);
+	expect(models.verifier).toEqual(models.orchestrator);
 	expect(judge.seed).toBe(7);
 	expect(host.inference).toEqual({ weightRevision: 'unknown', quantization: 'unknown' });
 
-	const split = await capture({ settings: { ...settings, specialistModelId: 'small', specialistEffort: 'low' } });
+	const split = await capture({
+		settings: {
+			...settings,
+			specialistModelId: 'small',
+			specialistEffort: 'low',
+			verifierModelId: 'small',
+			verifierEffort: 'medium'
+		}
+	});
 
 	expect(split.models.specialist).toMatchObject({
 		model: 'gpt-mini',
@@ -130,15 +146,29 @@ test('an unset second model follows the review model and its effort; the judge r
 		contextSize: 'default'
 	});
 
+	expect(split.models.verifier).toMatchObject({
+		model: 'gpt-mini',
+		provider: 'openai-compatible',
+		effort: 'medium',
+		sampling: { temperature: 0 },
+		contextSize: 'default'
+	});
+
 	expect(split.hash).not.toBe((await capture()).hash);
 
-	const unlisted = await capture({ settings: { ...settings, specialistModelId: 'opencode:zen/gpt-big' } });
+	for (const [id, expected] of [
+		['opencode:zen/gpt-big', { model: 'zen/gpt-big', provider: 'opencode', contextSize: 'unknown' }],
+		['claude-code:claude-sonnet-4-5', { model: 'claude-sonnet-4-5', provider: 'claude-code', contextSize: 'unknown' }],
+		['devin:claude-opus-4-1', { model: 'claude-opus-4-1', provider: 'devin', contextSize: 'unknown' }],
+		[
+			'vllm:srv1/Qwen/Qwen2.5-Coder',
+			{ model: 'Qwen/Qwen2.5-Coder', provider: 'openai-compatible', contextSize: 'unknown' }
+		]
+	] as const) {
+		const unlisted = await capture({ settings: { ...settings, verifierModelId: id } });
 
-	expect(unlisted.models.specialist).toMatchObject({
-		model: 'zen/gpt-big',
-		provider: 'opencode',
-		contextSize: 'unknown'
-	});
+		expect(unlisted.models.verifier).toMatchObject(expected);
+	}
 });
 
 test('a changed label file changes the labels hash and the identity hash', async () => {
@@ -192,6 +222,8 @@ test('a changed server flag changes the hash; a server without the route records
 		'rule-ledger': 'unknown',
 		'baseline-cache': 'unknown',
 		'review-checkpoint': 'unknown',
+		'parsed-symbols': 'unknown',
+		'commit-prs': 'unknown',
 		'benchmark-judge': `v${JUDGE_VERSION}`
 	});
 });

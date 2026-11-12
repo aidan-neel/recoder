@@ -43,7 +43,6 @@
 		placeholder,
 		awaitingPrompt = false,
 		onStartReview = null,
-		signInShown = false,
 		intro,
 		folded = [],
 		resume = null
@@ -69,8 +68,6 @@
 		awaitingPrompt?: boolean;
 		/** Draft (interactive) reviews: the orchestrator offers the full review, so its latest reply carries the button. */
 		onStartReview?: (() => Promise<void>) | null;
-		/** A sign-in notice already shows above the transcript. */
-		signInShown?: boolean;
 		/** Opening card at the top of a new session; it carries Run full review while it shows. */
 		intro?: Snippet;
 		/** Agents whose work reads as this conversation's own: the units the main thread reviews. */
@@ -98,11 +95,7 @@
 		)
 	);
 
-	/** Only the latest sign-in failure carries the notice; earlier ones would repeat it. */
-	const lastSignInIndex = $derived(
-		signInShown ? -1 : entries.findLastIndex((entry) => entry.kind === 'message' && !!entry.message.failure?.signIn)
-	);
-
+	/** Only the latest usage-limit failure carries the notice; earlier ones would repeat it. */
 	const lastUsageIndex = $derived(
 		entries.findLastIndex((entry) => entry.kind === 'message' && !!entry.message.failure?.usageLimit)
 	);
@@ -214,7 +207,6 @@
 					{@const message = row.message}
 					<ReviewMessage
 						{message}
-						quietSignIn={row.index !== lastSignInIndex}
 						quietUsage={row.index !== lastUsageIndex}
 						onRetry={message.status === 'error' && message.discussion && !generating ? retryFor(row.index) : null}
 						{startingReview}

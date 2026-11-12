@@ -56,15 +56,15 @@ Know the image’s limits before you choose it:
 
 ## First review
 
-Until reviews can run, the app shows three steps in place of the queue:
+Until reviews can run, the app shows three steps in place of the pull request list:
 
 1. **Connect a model provider.** Add one through OpenCode, or sign in to Claude Code or Devin.
 2. **Pick a model.** The Review model runs the reviewers.
 3. **Track a repository.** Connect GitHub or GitLab to browse yours, or add one by URL.
 
-Then the queue lists the open pull requests of every repository you track. Select one with \`j\` and \`k\` and press \`r\`, or press its Review button. To review a pull request from somewhere else, press \`⌘K\` (\`Ctrl K\`), choose **Review a pull request…** and paste its link or type its number.
+Then the pull request list shows the open pull requests of every repository you track. Select one with \`j\` and \`k\` and press \`r\`, or press its Review button. To review a pull request from somewhere else, press \`c\` for a new review and paste its link.
 
-To look around first, choose **Open the sample review** on the first-run screen or in the search.
+To look around first, choose **Look at a sample** on the first-run screen.
 
 ## Review from a terminal or an agent
 

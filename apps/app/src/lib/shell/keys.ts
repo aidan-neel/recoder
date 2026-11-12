@@ -5,22 +5,19 @@
 export type KeyMap = Record<string, (event: KeyboardEvent) => unknown>;
 
 /** Keycaps stay pressed this long after their key fires, so the press reads at 60fps. */
-export const FLASH_MS = 140;
+const FLASH_MS = 140;
 
 /** Keys that move or scroll, which may repeat while held. Every other key fires once per press. */
 const REPEATS = new Set(['j', 'k', 'ArrowDown', 'ArrowUp', ' ', 'PageDown', 'PageUp']);
 
-/** Keys that walk a list. They stand down inside a region that reads its own content. */
+/** Keys that walk a list. */
 const MOVES = new Set(['j', 'k', 'ArrowDown', 'ArrowUp']);
 
 /** Arrow keys, which a focused control may use for itself. */
 const ARROWS = new Set(['ArrowDown', 'ArrowUp']);
 
-/** Regions whose own keys win over the page's moves: the ask panel scrolls and reads its conversation. */
-const OWN_MOVES = '[data-ask-panel]';
-
-/** The top bar: its tabs, search trigger and settings gear sit outside the page and never use a move key. */
-const CHROME = '[data-ui="top-bar"]';
+/** The sidebar and a page's bar: their links and buttons sit outside the page's content and never use a move key. */
+const CHROME = '[data-chrome]';
 
 /** Open overlays that silence page keys. One playing its closing animation (`data-state="closed"`) does not count. */
 const OVERLAYS = ['dialog', 'alertdialog', 'menu', 'listbox']
@@ -50,8 +47,8 @@ function focusedElement(target: EventTarget | null): Element | null {
 
 /**
  * Enter and Space on a focused button or link belong to that control. A
- * control marked `data-page-keys="all"` (a rail row that is already
- * selected, so pressing it would do nothing) hands them to the page.
+ * control marked `data-page-keys="all"` (a row that is already selected, so
+ * pressing it would do nothing) hands them to the page.
  */
 function activates(event: KeyboardEvent): boolean {
 	const target = focusedElement(event.target);
@@ -63,26 +60,23 @@ function activates(event: KeyboardEvent): boolean {
 }
 
 /**
- * True when a focused control keeps a move key for itself. Moves stand down
- * inside a region that reads its own content; arrows also stand down on any
- * focused element except the page itself, the top bar's controls and
- * elements marked `data-page-keys` (rail rows, the reading pane), which let
- * the page step through them.
+ * True when a focused control keeps an arrow key for itself: any focused
+ * element except the page itself, the chrome's controls and elements marked
+ * `data-page-keys` (list rows, file cards), which let the page step through
+ * them.
  */
-function keepsMove(key: string, target: EventTarget | null): boolean {
-	if (!MOVES.has(key)) return false;
+function keepsArrow(key: string, target: EventTarget | null): boolean {
+	if (!ARROWS.has(key)) return false;
 
 	const element = focusedElement(target);
 
-	if (element?.closest(OWN_MOVES)) return true;
-
-	return ARROWS.has(key) && !!element && !element.hasAttribute('data-page-keys') && !element.closest(CHROME);
+	return !!element && !element.hasAttribute('data-page-keys') && !element.closest(CHROME);
 }
 
 /**
- * A move the page took lets go of a top-bar control still focused from a
- * click (a tab link, the search trigger, the settings gear), so the next
- * Enter goes to the page instead of that control.
+ * A move the page took lets go of a chrome control still focused from a
+ * click (a sidebar link, a tab, a bar button), so the next Enter goes to the
+ * page instead of that control.
  */
 function leaveChrome(key: string, target: EventTarget | null): void {
 	const element = focusedElement(target);
@@ -99,7 +93,7 @@ function overlayOpen(): boolean {
  * Press every keycap labelled for `key` (`<kbd data-ui="keycap" data-key="a">`),
  * so a shortcut visibly presses the button it names.
  */
-export function flashKey(key: string): void {
+function flashKey(key: string): void {
 	for (const cap of document.querySelectorAll<HTMLElement>(`[data-ui="keycap"][data-key="${CSS.escape(key)}"]`)) {
 		cap.dataset.pressed = '';
 		setTimeout(() => delete cap.dataset.pressed, FLASH_MS);
@@ -108,7 +102,7 @@ export function flashKey(key: string): void {
 
 /** True when a plain key should stand down: the person types, a dialog is open, or a focused control owns the key. */
 function standsDown(event: KeyboardEvent, key: string): boolean {
-	return typing(event.target) || overlayOpen() || activates(event) || keepsMove(key, event.target);
+	return typing(event.target) || overlayOpen() || activates(event) || keepsArrow(key, event.target);
 }
 
 /**

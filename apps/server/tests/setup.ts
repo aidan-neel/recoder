@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { AGENT_BIN_PINS } from './helpers/agent-bins';
 
 /** Point storage at temp dirs before any module opens the database or reads credentials. */
 function isolateStorage(): void {
@@ -13,10 +14,13 @@ function isolateStorage(): void {
 	delete process.env.RECODER_INSTANCE_ID;
 }
 
-/** Never start the developer's real OpenCode or Claude Code (or touch their logins); agent tests bring a fake one. */
+/**
+ * Never start the developer's real OpenCode, Claude Code, Devin or custom command (or touch their logins); agent
+ * tests bring a fake one.
+ */
 function keepRealAgentsOut(): void {
-	process.env.RECODER_OPENCODE_BIN = '';
-	process.env.RECODER_CLAUDE_BIN = '';
+	for (const pin of AGENT_BIN_PINS) process.env[pin] = '';
+	delete process.env.RECODER_CUSTOM_AGENT;
 }
 
 /** Tests simulate provider failures and expect them to surface at once; llm-retry.test.ts opts back in. */

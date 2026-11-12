@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { ScoredRun } from '../../src/eval/benchmark-report';
-import { mixedReviewer, runReviewer } from '../../src/eval/run-reviewer';
+import { failedWhenNoCallCompleted, mixedReviewer, runReviewer } from '../../src/eval/run-reviewer';
+import type { RunRecord } from '../../src/eval/report';
 import type { StoredMetrics } from '../../src/models/metrics';
 
 /** The models the report declares: orchestrator, then specialist. */
@@ -12,9 +13,16 @@ const DECLARED = ['muse', 'muse-mini'];
  */
 function row(locks: (string | null)[] | null, calls: [string, number?][]): StoredMetrics {
 	const runs = locks?.map((lock, index) => {
-		const [orchestrator, subagent] = lock ? lock.split('/') : [null, null];
+		const [orchestrator, subagent, verifier] = lock ? lock.split('/') : [null, null, undefined];
 
-		return { index, startedAt: '2026-10-06T19:00:00.000Z', orchestrator, subagent, lockMisses: 0 };
+		return {
+			index,
+			startedAt: '2026-10-06T19:00:00.000Z',
+			orchestrator,
+			subagent,
+			...(verifier !== undefined ? { verifier } : {}),
+			lockMisses: 0
+		};
 	});
 
 	const call = (model: string, scope: 'pipeline' | 'discussion', run?: number) => ({
@@ -75,7 +83,9 @@ test('a review that called a model outside its locked picks makes the report mix
 		tokens: [
 			{ stage: 'other', model: 'muse', calls: 1, input: 3, cached: 0, written: 0, output: 2 },
 			{ stage: 'other', model: 'muse-mini', calls: 1, input: 3, cached: 0, written: 0, output: 2 }
-		]
+		],
+		completedCalls: 2,
+		failedCalls: 0
 	});
 
 	expect(strayed).toMatchObject({ calledModels: ['luna', 'muse'], verdict: 'MIXED', mixed: true });
@@ -145,4 +155,75 @@ test('an unlocked run, a missing row and a report without reviewers are told apa
 	expect(missing).toMatchObject({ orchestrator: 'not recorded', calledModels: [], verdict: 'MISSING', mixed: false });
 	expect(mixedReviewer(asRuns(missing))).toBe(false);
 	expect(mixedReviewer([{} as ScoredRun])).toBe('not recorded');
+});
+
+/** A passed run of review `review` whose summary says it found nothing. */
+const passed = {
+	index: 1,
+	reviewId: 'review',
+	outcome: 'passed',
+	summary: 'Review complete. 0 findings.'
+} as RunRecord;
+
+test('a passed run whose review completed no model call is reported as a failed run with the provider error', () => {
+	const stored = row(['muse/muse-mini'], []);
+
+	stored.calls.push({ ...stored.calls[0]!, scope: 'pipeline', status: 'failed', error: 'Go usage limit exceeded' });
+
+	const reviewer = runReviewer(stored, DECLARED);
+
+	expect(reviewer).toMatchObject({ completedCalls: 0, failedCalls: 1, lastError: 'Go usage limit exceeded' });
+
+	expect(failedWhenNoCallCompleted(passed, reviewer)).toMatchObject({
+		outcome: 'failed',
+		summary:
+			'No model call completed (1 failed; the last failed with: Go usage limit exceeded). Review complete. 0 findings.'
+	});
+});
+
+test('a passed run whose review completed model calls, or whose calls were not recorded, stays passed', () => {
+	expect(failedWhenNoCallCompleted(passed, runReviewer(row(['muse/muse-mini'], [['muse', 0]]), DECLARED))).toBe(passed);
+	expect(failedWhenNoCallCompleted(passed, undefined)).toBe(passed);
+});
+
+test('a run with a separate verifier pick is clean when calls stay within its three picks and mixed when verifier differs', () => {
+	const declared = ['muse', 'muse-mini', 'judge'];
+
+	const clean = runReviewer(
+		row(
+			['muse/muse-mini/judge'],
+			[
+				['muse', 0],
+				['judge', 0]
+			]
+		),
+		declared
+	);
+
+	expect(clean).toMatchObject({
+		orchestrator: { model: 'muse', effort: 'not recorded' },
+		specialist: { model: 'muse-mini', effort: 'not recorded' },
+		verifier: { model: 'judge', effort: 'not recorded' },
+		verdict: 'CLEAN',
+		mixed: false,
+		reasons: []
+	});
+
+	const mismatched = runReviewer(
+		row(
+			['muse/muse-mini/other-judge'],
+			[
+				['muse', 0],
+				['other-judge', 0]
+			]
+		),
+		['muse', 'muse-mini', 'judge']
+	);
+
+	expect(mismatched).toMatchObject({
+		verifier: { model: 'other-judge', effort: 'not recorded' },
+		mixed: true
+	});
+
+	expect(mismatched.reasons).toContain('locked muse/muse-mini/other-judge, the report declares muse/muse-mini/judge');
 });

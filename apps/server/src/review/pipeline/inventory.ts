@@ -74,6 +74,18 @@ function hunkStats(hunk: DiffHunk): { additions: number; deletions: number } {
 	return { additions, deletions };
 }
 
+/** Whether the non-excluded files include executable changes and whether all of them are docs. */
+export function inventoryFlags(files: readonly InventoryFile[]): Pick<ReviewInventory, 'executable' | 'docsOnly'> {
+	const reviewable = files.filter((file) => !file.excludeReason);
+
+	return {
+		executable: reviewable.some(
+			(file) => file.classification === 'source' || file.classification === 'test' || file.classification === 'config'
+		),
+		docsOnly: reviewable.length > 0 && reviewable.every((file) => file.classification === 'docs')
+	};
+}
+
 export function buildInventory(diff: string, extras: string[] = extraExcludes()): ReviewInventory {
 	const diffs = parseUnifiedDiff(diff);
 	const files: InventoryFile[] = [];
@@ -114,14 +126,6 @@ export function buildInventory(diff: string, extras: string[] = extraExcludes())
 		for (const hunk of hunks) hunksById.set(hunk.id, { file: entry, hunk });
 	}
 
-	const reviewable = files.filter((file) => !file.excludeReason);
-
-	const executable = reviewable.some(
-		(file) => file.classification === 'source' || file.classification === 'test' || file.classification === 'config'
-	);
-
-	const docsOnly = reviewable.length > 0 && reviewable.every((file) => file.classification === 'docs');
-
 	return {
 		files,
 		hunksById,
@@ -129,8 +133,7 @@ export function buildInventory(diff: string, extras: string[] = extraExcludes())
 		instructionFiles: [],
 		guidelines: null,
 		relatedPaths: [],
-		executable,
-		docsOnly
+		...inventoryFlags(files)
 	};
 }
 

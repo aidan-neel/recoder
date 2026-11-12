@@ -100,7 +100,7 @@ export async function investigate(item: ReviewUnit, records: ReviewAssignment[],
 		);
 
 		const settled = result.value
-			? await settle(result.value, ctx, agentId)
+			? withTransitionEvidence(obligation, await settle(result.value, ctx, agentId))
 			: blankAnswer('unresolved', noAnswerReason(result.error, tally.calls, ctx.maxTurns));
 
 		const answer = settled.result === 'confirmed' ? publish(item, ctx, cfg.model, result.value!, settled) : settled;
@@ -200,6 +200,30 @@ async function settle(value: InvestigatorOutput, ctx: InvestigationContext, agen
 		evidenceIds: [...new Set([...runs.map((run) => run.id), ...cited])].filter(
 			(id): id is string => typeof id === 'string' && ctx.evidence.get(id) !== undefined
 		)
+	};
+}
+
+/**
+ * A disproved state-transition answer stands only with the transitions it
+ * checked and evidence beyond a passing test: a counterexample run of its own,
+ * or a type, doc, source or intent citation. Without them a passing test would
+ * close a transition nothing ran, so the answer becomes unresolved and says why.
+ */
+function withTransitionEvidence(obligation: Obligation, settled: Settled): Settled {
+	if (obligation.trigger !== 'state-transition' || settled.result !== 'disproved') return settled;
+
+	const checked = settled.inputPartition.length > 0;
+	const ran = Boolean(settled.attemptedCounterexample?.command);
+	const supported = ran || settled.contractEvidence.some((entry) => entry.kind !== 'test');
+
+	if (checked && supported) return settled;
+
+	const missing = checked ? 'cites only tests and ran nothing of its own' : 'names no transition it checked';
+
+	return {
+		...settled,
+		result: 'unresolved',
+		reason: `Disproved, but it ${missing}, and a passing test does not close a transition it does not run. ${settled.reason}`
 	};
 }
 
