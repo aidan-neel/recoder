@@ -126,6 +126,41 @@ Motion explains a change and never makes the person wait.
   goes back when the save fails.
 - **One primary button per region**, in cream. Everything else is quiet at
   rest: no background until hover.
+
+## Buttons
+
+A button is compact and calm: a 13px label in the regular weight (the
+primary alone is medium), a hairline edge drawn inside the box so it lines
+up with fields, and a soft lift instead of a border. The side an icon sits
+on gets 2px less padding than a side with text.
+
+| Size | Height | Padding (text / icon side) | Radius | Use |
+| --- | --- | --- | --- | --- |
+| `md` (default) | 28px | 10 / 8px | 8px | Everywhere, including the 44px page bar and list rows. Omit `size`. |
+| `sm` | 24px | 8 / 6px, 12.5px label | 6px | Inside a line of text or a dense group: a retry in a sentence, suggestion chips, actions on collapsed bug lines. |
+| `lg` | 32px | 12 / 10px, 13.5px label | 9px | Not used in the app today. |
+| `icon` | 28px square | none | 8px | Every icon-only action. |
+
+| Variant | At rest | Use |
+| --- | --- | --- |
+| `primary` | Cream (black in light), a sheen and a bevel | The one next step of a region: Post to pull request, Merge, Save. Never repeated down a list. |
+| `secondary` | Raised fill, hairline, lift | A standalone action with no primary beside it: Try again in an error notice, Back to pull requests. |
+| `outline` | Hairline only | The action beside a primary, and the action a list row offers (Review, Track, Connect). |
+| `ghost` | Muted text, nothing else | Tertiary actions and row controls: Accept, Dismiss, Disconnect, Cancel, icon buttons. |
+| `quiet` | Full-strength text, nothing else | Triggers that name their value: the filter, the model picker. |
+| `destructive` | Red text on a red tint | A step that deletes, inside its confirmation. |
+
+- **Hover and press** lay a wash over whatever is behind a see-through
+  button, so it still shows inside a hovered row. A press shrinks the button
+  to 0.97 and shades it within `--dur-hover`; reduced motion keeps the shade
+  and drops the shrink.
+- **Status** keeps the idle width. Pending shows a spinner, success a green
+  check and error a red cross on a red-tinted button, each in the label's
+  place. Pass `successLabel` or `errorLabel` only when the word adds
+  something (Connected, Checked), and accept that the button is as wide as
+  that face.
+- **No forced widths.** A button is as wide as its label. Set a width only
+  where two labels swap in one place and the row must not move.
 - **Nothing is posted or merged without a click.** Posting findings, a
   comment or a merge is one explicit action, and a second click posts nothing
   twice.

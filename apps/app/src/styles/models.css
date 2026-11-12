@@ -12,7 +12,6 @@
 .effort-trigger {
 	gap: 6px;
 	padding: 0 8px 0 10px;
-	font-weight: 400;
 }
 .model-trigger {
 	max-width: 240px;
@@ -133,8 +132,7 @@
 /* The disclosure's chevron lines up with the model ids above it. */
 .server-more {
 	align-self: flex-start;
-	margin: 4px 0 0 -12px;
-	font-weight: 400;
+	margin: 4px 0 0 -8px;
 }
 /* Open is not a held state here: the kit's ghost fill is for a trigger with a menu under it. */
 .server-more[data-state='open']:not(:hover) {

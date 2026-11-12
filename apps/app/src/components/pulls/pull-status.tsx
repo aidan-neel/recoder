@@ -74,14 +74,14 @@ export function PullStatus({ status, starting, onReview }: PullStatusProps) {
 
 	if (status.kind === 'outdated') {
 		return (
-			<Button variant="outline" size="sm" status={pending} onClick={onReview}>
+			<Button variant="ghost" status={pending} onClick={onReview}>
 				Review again
 			</Button>
 		);
 	}
 
 	return (
-		<Button variant="primary" size="sm" status={pending} onClick={onReview}>
+		<Button variant="outline" status={pending} onClick={onReview}>
 			Review
 		</Button>
 	);

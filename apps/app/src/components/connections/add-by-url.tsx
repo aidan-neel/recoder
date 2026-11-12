@@ -39,14 +39,7 @@ export function AddByUrl({ url, inputRef }: AddByUrlProps) {
 						spellCheck={false}
 						onChange={(event) => url.setText(event.target.value)}
 					/>
-					<Button
-						type="submit"
-						variant="outline"
-						status={url.status}
-						successLabel={null}
-						errorLabel={null}
-						disabled={!url.canSubmit}
-					>
+					<Button type="submit" variant="outline" status={url.status} disabled={!url.canSubmit}>
 						Add
 					</Button>
 				</div>

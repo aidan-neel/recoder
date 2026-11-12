@@ -57,14 +57,7 @@ function TrackButton({ repo }: { repo: RemoteRepo }) {
 	const { status, track } = useTrackRepo();
 
 	return (
-		<Button
-			variant="outline"
-			status={status}
-			successLabel={null}
-			errorLabel={null}
-			aria-label={`Track ${repo.name}`}
-			onClick={() => void track(repo)}
-		>
+		<Button variant="outline" status={status} aria-label={`Track ${repo.name}`} onClick={() => void track(repo)}>
 			Track
 		</Button>
 	);

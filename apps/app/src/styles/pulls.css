@@ -37,7 +37,7 @@
 	display: grid;
 	min-height: 60px;
 	align-items: center;
-	grid-template-columns: 16px minmax(0, 1fr) auto 104px 30px;
+	grid-template-columns: 16px minmax(0, 1fr) auto 104px var(--size-icon-md);
 	gap: 0 14px;
 	padding: 0 8px 0 14px;
 	--row-button-radius: 10px;
