@@ -35,6 +35,7 @@ function plan(findings: Finding[], overrides: Partial<PlanInput> = {}) {
 		pullDiff: PULL_DIFF,
 		settings: { ignoredPaths: [], maxInlineComments: 25 },
 		posted: new Map(),
+		summarized: new Set(),
 		reportedBefore: false,
 		...overrides
 	});

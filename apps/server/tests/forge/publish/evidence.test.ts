@@ -94,3 +94,11 @@ test('an unverified finding says so with the reason', () => {
 
 	expect(body).toBe('**Evidence:** Not verified\n\nno checks could run');
 });
+
+test('a verifier reason holding a suggestion fence renders as prose that no forge applies', () => {
+	const reason = 'Replace it:\n```suggestion\nfixed\n```\n~~~suggestion\nalso\n~~~';
+	const body = renderEvidence(verified({ reason, method: 'trace' }));
+
+	expect(body).not.toMatch(/`{3}|~{3}/);
+	expect(body).toContain('suggestion\nfixed');
+});

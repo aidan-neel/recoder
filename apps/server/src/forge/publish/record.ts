@@ -42,14 +42,29 @@ export async function saveFindingComment(
 	return await save(reviewId, (review) => ({ findingComments: { ...review.findingComments, [findingId]: comment } }));
 }
 
-/** Merge `patch` into the findings review's record and add the finding comments it posted or found, in one write. */
+/** What one findings review submission leaves on its review. */
+interface FindingsReviewOutcome {
+	record: CommentStatePatch;
+	/** The finding comments it posted or found, by finding id. */
+	comments: Record<string, ReviewFindingComment>;
+	/** Fingerprints of the findings its summary showed in full. */
+	summarized: readonly string[];
+}
+
+/** Merge the outcome into the findings review's record, finding comments and summarized fingerprints, in one write. */
 export async function saveFindingsReview(
 	reviewId: string,
-	patch: CommentStatePatch,
-	comments: Record<string, ReviewFindingComment>
+	outcome: FindingsReviewOutcome
 ): Promise<Review | undefined> {
 	return await save(reviewId, (review) => ({
-		findingsReview: mergedState(review.findingsReview, patch),
-		findingComments: { ...review.findingComments, ...comments }
+		findingsReview: mergedState(review.findingsReview, outcome.record),
+		findingComments: { ...review.findingComments, ...outcome.comments },
+		...withSummarized(review, outcome.summarized)
 	}));
+}
+
+function withSummarized(review: Review, fingerprints: readonly string[]): Pick<Review, 'summarizedFindings'> {
+	if (!fingerprints.length) return {};
+
+	return { summarizedFindings: [...new Set([...(review.summarizedFindings ?? []), ...fingerprints])] };
 }

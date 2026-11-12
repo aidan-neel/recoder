@@ -7,7 +7,8 @@ import {
 	type VerificationBaseline
 } from '@recoder/shared';
 import { fenceBlock, inlineCode } from '../../cli/output/markdown-code';
-import { clip, quiet, quoteBlock } from './markdown';
+import { clip, inertProse, quoteBlock } from './markdown';
+import { locationText } from './render';
 
 /**
  * What supports a finding, in the evidence terms the app uses (#74): the
@@ -65,7 +66,7 @@ function reproduced(verification: FindingVerification): string[] {
 
 function baselineText(baseline: VerificationBaseline): string {
 	if (baseline.result) return BASE_RESULT_TEXT[baseline.result];
-	if ('unavailable' in baseline) return `not compared: ${quiet(clip(baseline.unavailable, MAX_REASON))}`;
+	if ('unavailable' in baseline) return `not compared: ${inertProse(clip(baseline.unavailable, MAX_REASON))}`;
 
 	const exit = baseline.exitCode === null ? 'no exit code' : `exit code ${baseline.exitCode}`;
 
@@ -82,7 +83,7 @@ function traced(finding: Finding): string[] {
 	if (!steps.length) return [];
 
 	const lines = steps.map((step) => {
-		const note = step.note?.trim() ? ` ${quiet(step.note.trim())}` : '';
+		const note = step.note?.trim() ? ` ${inertProse(step.note.trim())}` : '';
 
 		return `- ${inlineCode(`${step.file}:${step.line}`)}${note}`;
 	});
@@ -96,14 +97,13 @@ function ruleSupport(finding: Finding): string[] {
 
 	if (!rule) return finding.ruleId ? [`Rule ${inlineCode(finding.ruleId)}`] : [];
 
-	const { path, line, endLine } = rule.source;
-	const lines = line ? `:${line}${endLine && endLine > line ? `-${endLine}` : ''}` : '';
+	const source = locationText(rule.source.path, rule.source);
 
-	return [quoteBlock(rule.text), `Rule ${inlineCode(rule.id)} from ${inlineCode(`${path}${lines}`)}`];
+	return [quoteBlock(rule.text), `Rule ${inlineCode(rule.id)} from ${inlineCode(source)}`];
 }
 
 function reasonLine(verification: FindingVerification): string[] {
 	const reason = verification.reason.trim();
 
-	return reason ? [quiet(clip(reason, MAX_REASON))] : [];
+	return reason ? [inertProse(clip(reason, MAX_REASON))] : [];
 }

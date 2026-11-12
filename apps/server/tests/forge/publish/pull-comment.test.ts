@@ -4,7 +4,7 @@ import { publishPullComment } from '../../../src/forge/publish/pull-comment';
 import { pullCommentMarker } from '../../../src/forge/publish/render';
 import { db } from '../../../src/store';
 import { restoreFetch, stubForge, type ForgeCall } from '../../helpers/forge-fetch';
-import { forgetRepo, trackGithubRepo } from '../../helpers/github-repo';
+import { forgetRepo, trackGithubRepo } from '../../helpers/forge-repo';
 import { testReview } from '../../helpers/review';
 
 const ISSUE_COMMENTS = 'https://api.github.com/repos/acme/app/issues/7/comments';

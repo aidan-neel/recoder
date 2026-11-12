@@ -57,9 +57,14 @@ export function pullCommentMarker(prNumber: number): string {
 	return `<!-- recoder:review pr=${prNumber} -->`;
 }
 
+/** What identifies a finding across reviews of a pull request: its fingerprint, else its id. */
+export function findingFingerprint(finding: Finding): string {
+	return finding.fingerprint ?? finding.id;
+}
+
 /** Hidden in a finding's comment, keyed by its fingerprint, so posting it again edits it. */
 export function findingMarker(finding: Finding): string {
-	return `<!-- recoder:finding ${(finding.fingerprint ?? finding.id).replace(/[^\w:.-]/g, '')} -->`;
+	return `<!-- recoder:finding ${findingFingerprint(finding).replace(/[^\w:.-]/g, '')} -->`;
 }
 
 /** The short commit, or null before the review has resolved the head. */
@@ -67,13 +72,13 @@ export function shortSha(sha: string): string | null {
 	return sha && sha !== 'unknown' ? sha.slice(0, 7) : null;
 }
 
-/** `src/a.ts:12-14`, or the file alone without a line. */
-function locationText(finding: Finding): string {
-	if (!finding.line) return finding.file;
+/** `src/a.ts:12-14`, or the path alone without a line. */
+export function locationText(path: string, span: { line?: number; endLine?: number }): string {
+	if (!span.line) return path;
 
-	const end = finding.endLine && finding.endLine > finding.line ? `-${finding.endLine}` : '';
+	const end = span.endLine && span.endLine > span.line ? `-${span.endLine}` : '';
 
-	return `${finding.file}:${finding.line}${end}`;
+	return `${path}:${span.line}${end}`;
 }
 
 /**
@@ -94,7 +99,7 @@ function diffLink(target: DiffLinkTarget, finding: Finding): string | null {
 }
 
 function linkedLocation(target: DiffLinkTarget, finding: Finding): string {
-	const text = `\`${locationText(finding).replace(/`/g, '')}\``;
+	const text = `\`${locationText(finding.file, finding).replace(/`/g, '')}\``;
 	const link = diffLink(target, finding);
 
 	return link ? `[${text}](${link})` : text;

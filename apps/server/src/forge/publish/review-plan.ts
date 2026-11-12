@@ -8,7 +8,7 @@ import {
 import { matchesGlob } from '../../review/chat/directive';
 import { inlineTarget } from './finding-comment';
 import type { InlineTarget } from './forge';
-import { findingMarker } from './render';
+import { findingFingerprint, findingMarker } from './render';
 import { suggestedChange, type SuggestedChange } from './suggestion';
 
 /** One finding to post on its diff line, with the suggestion its patch makes when it makes one. */
@@ -39,6 +39,8 @@ export interface PlanInput {
 	settings: Pick<AutoReviewSettings, 'ignoredPaths' | 'maxInlineComments'>;
 	/** Comments already on the pull request, by finding marker: found there, or recorded by an earlier review. */
 	posted: ReadonlyMap<string, ReviewFindingComment>;
+	/** Fingerprints of the findings an earlier summary on the pull request showed in full. */
+	summarized: ReadonlySet<string>;
 	/** An earlier review of the pull request submitted its findings, so a finding carried from it was shown there. */
 	reportedBefore: boolean;
 }
@@ -70,8 +72,8 @@ function isIgnoredPath(path: string, ignoredPaths: readonly string[]): boolean {
 /**
  * Split the reportable findings into inline comments, summary entries and
  * findings already on the pull request. A finding is not posted again when a
- * comment for it exists, or when it was carried from an earlier review that
- * submitted its findings. A suggestion's range anchors the comment when the
+ * comment for it exists, when an earlier summary showed it, or when it was
+ * carried from an earlier review that submitted its findings. A suggestion's range anchors the comment when the
  * patch makes one; else the finding's own line, when the diff shows it.
  */
 export function planFindingsReview(input: PlanInput): ReviewPlan {
@@ -86,7 +88,7 @@ export function planFindingsReview(input: PlanInput): ReviewPlan {
 			continue;
 		}
 
-		if (shownBefore(finding, input.reportedBefore)) continue;
+		if (shownBefore(finding, input.reportedBefore) || input.summarized.has(findingFingerprint(finding))) continue;
 
 		const inline = plan.inline.length < input.settings.maxInlineComments && anchor(finding, marker, input.pullDiff);
 

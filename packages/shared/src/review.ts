@@ -116,6 +116,12 @@ export interface Review {
 	findingComments?: Record<string, ReviewFindingComment>;
 	/** The forge review of verified findings (summary plus inline comments) Recoder submitted once the review finished. */
 	findingsReview?: ReviewPullComment;
+	/**
+	 * Fingerprints of the findings that review's summary showed in full rather
+	 * than on a line, so a later review of the pull request does not show an
+	 * unchanged one again.
+	 */
+	summarizedFindings?: string[];
 	/** When analysis began; draft sessions may exist before a review is requested. */
 	startedAt?: string;
 	createdAt: string;

@@ -4,7 +4,7 @@ import { db, reviewDiffs } from '../../store';
 import { readAutoReviewSettings } from '../watch/settings';
 import { PublishConflictError, reviewForge, type PostedComment, type PullReviewForge, type ReviewDraft } from './forge';
 import { otherPullReviews, saveFindingsReview } from './record';
-import { findingMarker, renderFindingComment, shortSha } from './render';
+import { findingFingerprint, findingMarker, renderFindingComment, shortSha } from './render';
 import { findingsReviewMarker, renderFindingsReview } from './review-body';
 import { checkStatus } from './review-check';
 import { planFindingsReview, reportableFindings, type InlinePlan, type ReviewPlan } from './review-plan';
@@ -29,6 +29,11 @@ interface Submission {
 	resolved: readonly ResolvedFinding[];
 	/** Comments already on the pull request, by finding marker. */
 	posted: ReadonlyMap<string, ReviewFindingComment>;
+	/**
+	 * Findings on their lines that no review recorded: an earlier attempt
+	 * posted them and stopped before its summary, which still owes them.
+	 */
+	unsummarized: readonly Finding[];
 }
 
 /**
@@ -79,7 +84,12 @@ async function submitLocked(reviewId: string, session?: PublicationSession): Pro
 	try {
 		return await submit(await prepare(review), session);
 	} catch (error) {
-		await saveFindingsReview(reviewId, { state: 'failed', error: failureText(error) }, {});
+		await saveFindingsReview(reviewId, {
+			record: { state: 'failed', error: failureText(error) },
+			comments: {},
+			summarized: []
+		});
+
 		throw error;
 	}
 }
@@ -90,25 +100,30 @@ async function prepare(review: Review): Promise<Submission> {
 	const resolved = review.resolved ?? [];
 	const sources = [...(await earlierReviews(review)), review];
 	const markers = [...review.findings, ...resolved.map((item) => item.finding)].map(findingMarker);
-	const posted = knownComments(sources, await reviews.inlineByMarker(markers));
+	const recorded = recordedComments(sources);
+	const posted = new Map([...recorded, ...inlineComments(await reviews.inlineByMarker(markers))]);
 
 	const plan = planFindingsReview({
 		findings: review.findings,
 		pullDiff: await reviewDiffs.get(review.id),
 		settings,
 		posted,
+		summarized: new Set(sources.flatMap((source) => source.summarizedFindings ?? [])),
 		reportedBefore: sources.some((source) => source.findingsReview?.state === 'posted')
 	});
 
-	return { review, reviews, provider, limit: forge.limit, settings, plan, resolved, posted };
+	const unsummarized = review.findings.filter(
+		(finding) => plan.carried[finding.id] && !recorded.has(findingMarker(finding))
+	);
+
+	return { review, reviews, provider, limit: forge.limit, settings, plan, resolved, posted, unsummarized };
 }
 
-/** Post the summary and comments (when there is anything new), resolve fixed threads, set the check, and save. */
+/** Post the summary and comments (when a summary is owed), resolve fixed threads, set the check, and save. */
 async function submit(submission: Submission, session?: PublicationSession): Promise<Review> {
-	const { review, reviews, settings, plan, resolved } = submission;
-	const hasNews = plan.inline.length > 0 || plan.listed.length > 0 || resolved.length > 0;
-	const summary = hasNews ? await submitOnce(submission, session) : null;
-	const comments = { ...plan.carried, ...(await inlineRecords(reviews, plan.inline)) };
+	const { review, reviews, settings, plan } = submission;
+	const summary = owesSummary(submission) ? await submitOnce(submission, session) : null;
+	const inline = await inlineRecords(reviews, plan.inline);
 
 	await resolveFixed(submission);
 
@@ -121,13 +136,31 @@ async function submit(submission: Submission, session?: PublicationSession): Pro
 
 	if (status) await reviews.setStatus(status);
 
-	const saved = await saveFindingsReview(
-		review.id,
-		{ state: 'posted', ...(summary ?? {}), error: undefined },
-		comments
-	);
+	const saved = await saveFindingsReview(review.id, {
+		record: { state: 'posted', ...(summary ?? {}), error: undefined },
+		comments: { ...plan.carried, ...inline },
+		summarized: summary ? summarizedFingerprints(plan, inline) : []
+	});
 
 	return saved ?? review;
+}
+
+/**
+ * A summary is owed for anything new on the pull request, and for inline
+ * comments an earlier attempt posted without one: on GitLab the discussions
+ * go up before the summary note, so a failed note leaves them behind.
+ */
+function owesSummary(submission: Submission): boolean {
+	const { plan, resolved, unsummarized } = submission;
+
+	return plan.inline.length > 0 || plan.listed.length > 0 || resolved.length > 0 || unsummarized.length > 0;
+}
+
+/** Fingerprints of the planned findings the summary shows in full: listed there, or refused a line by the forge. */
+function summarizedFingerprints(plan: ReviewPlan, inline: Record<string, ReviewFindingComment>): string[] {
+	const refused = plan.inline.filter((item) => !inline[item.finding.id]).map((item) => item.finding);
+
+	return [...plan.listed, ...refused].map(findingFingerprint);
 }
 
 /** Other reviews of the same pull request created before this one. */
@@ -135,24 +168,24 @@ async function earlierReviews(review: Review): Promise<Review[]> {
 	return (await otherPullReviews(review)).filter((other) => other.createdAt <= review.createdAt);
 }
 
-/** Comments that already show a finding, by its marker: recorded on a review of the pull request, or found on the forge. */
-function knownComments(
-	sources: readonly Review[],
-	onForge: ReadonlyMap<string, PostedComment>
-): Map<string, ReviewFindingComment> {
-	const known = new Map<string, ReviewFindingComment>();
+/** Comments a review of the pull request recorded for a finding, by the finding's marker. */
+function recordedComments(sources: readonly Review[]): Map<string, ReviewFindingComment> {
+	const recorded = new Map<string, ReviewFindingComment>();
 
 	for (const source of sources) {
 		for (const finding of source.findings) {
 			const comment = source.findingComments?.[finding.id];
 
-			if (comment) known.set(findingMarker(finding), comment);
+			if (comment) recorded.set(findingMarker(finding), comment);
 		}
 	}
 
-	for (const [marker, comment] of onForge) known.set(marker, { ...comment, inline: true });
+	return recorded;
+}
 
-	return known;
+/** Inline comments found on the forge, by marker, as finding comment records. */
+function inlineComments(onForge: ReadonlyMap<string, PostedComment>): [string, ReviewFindingComment][] {
+	return [...onForge].map(([marker, comment]) => [marker, { ...comment, inline: true }]);
 }
 
 /** The summary and inline comments, submitted once: a summary already on the pull request is kept as it is. */
@@ -208,7 +241,7 @@ function summaryBody(submission: Submission, refused: readonly ReviewDraft[]): s
 		prUrl: review.prUrl,
 		prNumber: review.prNumber,
 		headSha: review.headSha,
-		inline: findings(plan.inline.filter((item) => !isRefused(item))),
+		inline: [...submission.unsummarized, ...findings(plan.inline.filter((item) => !isRefused(item)))],
 		listed: [...findings(plan.inline.filter(isRefused)), ...plan.listed],
 		resolved: submission.resolved,
 		limit: submission.limit

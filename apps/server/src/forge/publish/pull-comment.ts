@@ -10,6 +10,7 @@ import { postgres } from '../../storage/backend';
 import { currentLease } from '../../review/runtime/ownership';
 import type { PublicationSession } from '../../storage/postgres-publication';
 import { missingComment, publicationLock, publicationOperation, rejectedCreate } from './shared-publication';
+import { keyedQueue } from '../../util/keyed-queue';
 
 /**
  * Recoder's one summary comment on a pull request: posted when someone asks
@@ -31,27 +32,13 @@ interface Tracker {
 const trackers = new Map<string, Tracker>();
 
 /** Each review's writes run one at a time, so an edit never races the create before it. */
-const queues = new Map<string, Promise<unknown>>();
+const reviewWrites = keyedQueue();
 
 /** The body each running review last wrote, so an event that changes nothing visible costs no edit. */
 const lastBodies = new Map<string, string>();
 
 function serial<T>(reviewId: string, work: () => Promise<T>): Promise<T> {
-	const execute = () => publicationOperation(work);
-	const run = (queues.get(reviewId) ?? Promise.resolve()).then(execute, execute);
-
-	const settled = run.then(
-		() => undefined,
-		() => undefined
-	);
-
-	queues.set(reviewId, settled);
-
-	void settled.then(() => {
-		if (queues.get(reviewId) === settled) queues.delete(reviewId);
-	});
-
-	return run;
+	return reviewWrites(reviewId, () => publicationOperation(work));
 }
 
 function inFlight(review: Review): boolean {

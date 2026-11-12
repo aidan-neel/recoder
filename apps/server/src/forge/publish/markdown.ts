@@ -6,12 +6,23 @@ export function quiet(text: string): string {
 	return text.replace(/(^|[^\w`])@(?=[\w-])/g, '$1@​');
 }
 
+/**
+ * Untrusted prose that renders as plain text: mentions broken as `quiet`
+ * does, and every run of three or more backticks or tildes split by
+ * zero-width spaces, so the text can open no code fence. A fenced
+ * `suggestion` block in a model's or a run's words would otherwise show as a
+ * change the reader can apply; only a checked patch may make one.
+ */
+export function inertProse(text: string): string {
+	return quiet(text).replace(/`{3,}|~{3,}/g, (run) => [...run].join('\u200B'));
+}
+
 /** Text as a markdown quote, every line marked, so a quoted line cannot end the quote and start markup of its own. */
 export function quoteBlock(text: string): string {
 	return text
 		.trim()
 		.split('\n')
-		.map((line) => `> ${quiet(line)}`)
+		.map((line) => `> ${inertProse(line)}`)
 		.join('\n');
 }
 
