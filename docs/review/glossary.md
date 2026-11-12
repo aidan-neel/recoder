@@ -40,7 +40,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Brief question.** An open question the brief pins to a changed line, ids `Q1`, `Q2`. Type `BriefQuestion` in `packages/shared/src/questions.ts`. Result is `BriefQuestionResult`: `confirmed`, `disproved`, `unresolved`. The ledger is `apps/server/src/review/pipeline/question-ledger.ts`.
 
-**Obligation.** A question about changed behavior derived mechanically from the change model, never a finding. Type `Obligation` in `packages/shared/src/obligations.ts`. Triggers are `ObligationTrigger` (eight kinds). Result is `ObligationResult`: `confirmed`, `disproved`, `not-applicable`, `unresolved`. Runs only when `RECODER_OBLIGATIONS` is on.
+**Obligation.** A question about changed behavior derived mechanically from the change model, never a finding. Type `Obligation` in `packages/shared/src/obligations.ts`. Triggers are `ObligationTrigger`: eight kinds, and state-transition with `RECODER_OBLIGATIONS_TRANSITIONS`. Result is `ObligationResult`: `confirmed`, `disproved`, `not-applicable`, `unresolved`. Runs only when `RECODER_OBLIGATIONS` is on.
 
 **Checkpoint.** A review's saved progress, so it can continue or replay. Type `ReviewCheckpoint` in `apps/server/src/review/session/review-checkpoint.ts`.
 
@@ -95,3 +95,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 **Identity.** Everything that decides a result, hashed so two reports can be told apart. Type `RunIdentity` in `apps/server/src/eval/identity.ts`.
 
 **Defect stage.** How far one planted defect got in one run: `found`, `verified`, `published`. Type `DefectStage` in `apps/server/src/eval/benchmark-stages.ts`.
+
+**Independent pass.** The `independent-pass` arm of `RECODER_REVIEW_VARIANT`: a second reviewer per slice (`independent-reviewer-N`) that never sees the first pass's findings. Built by `independentPassUnits` in `apps/server/src/review/pipeline/variants/independent-pass.ts`.
+
+**Specialist tree.** The `specialist-tree` arm of `RECODER_REVIEW_VARIANT`: a coordinator assigns slices to one-lens specialists (`specialist-<lens>`), each with at most 3 subagents. Planned by `planSpecialists` in `apps/server/src/review/pipeline/variants/specialist-plan.ts`; its record is `SpecialistPlan`.

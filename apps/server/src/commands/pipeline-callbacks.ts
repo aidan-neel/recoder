@@ -1,5 +1,6 @@
 import type { runAdaptiveReview } from '../review/pipeline/harness';
-import { discussionContext, recordChatMessage } from '../review/chat/review-chat';
+import { developerDiscussion, discussionContext, recordChatMessage } from '../review/chat/review-chat';
+import { isIndependentReviewer } from '../review/pipeline/variants/independent-pass';
 import {
 	enqueueReviewWrite,
 	emitReviewEvent,
@@ -32,7 +33,9 @@ export function harnessCallbacks(
 			recordChatMessage(reviewId, { ...message, from: 'assistant', at: new Date().toISOString() }),
 		getDiscussion: async (assignmentId) =>
 			[
-				await discussionContext(reviewId),
+				assignmentId && isIndependentReviewer(assignmentId)
+					? await developerDiscussion(reviewId)
+					: await discussionContext(reviewId),
 				assignmentId && assignmentId !== '__pipeline' ? await discussionContext(reviewId, assignmentId) : ''
 			]
 				.filter(Boolean)

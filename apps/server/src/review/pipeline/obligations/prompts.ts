@@ -15,13 +15,29 @@ export function investigatorRole(
 
 Procedure:
 1. Find the contract: the types, tests, docs or comments, and the change's stated intent that say what the code at the location must do. Cite each in "contractEvidence".
-2. Partition the inputs that reach the location: below, at and above a boundary, or the equivalent classes (empty, zero, false, normalized and not). Put them in "inputPartition" with what the contract expects for each.
+2. ${partitionStep(obligation)}
 3. Drop inputs that upstream validation, types or callers make unreachable; never build a case the code cannot be given. If none is left, answer "not-applicable".
 4. Try the input most likely to break the contract. ${counterexample} Record it in "attemptedCounterexample" with the run's evidence id.
-5. Answer in "obligation.result": "confirmed" when the counterexample broke the contract (and report that defect in "findings", citing the run), "disproved" when the code met the contract for every reachable class, "not-applicable" when the question does not apply here, "unresolved" when you could not tell within your turns. A behavior change the intent asks for or permits is not a defect.
+5. Answer in "obligation.result": "confirmed" when the counterexample broke the contract (and report that defect in "findings", citing the run), "disproved" when the code met the contract for every reachable class, "not-applicable" when the question does not apply here, "unresolved" when you could not tell within your turns. A behavior change the intent asks for or permits is not a defect.${closingRule(obligation)}
 
 Your final result has every field above plus a required "obligation" object:
 {"contractEvidence":[{"kind":"type"|"test"|"doc"|"intent"|"source","location":string,"note":string}],"inputPartition":[{"label":string,"input":string,"expected":string}],"expectedBehavior":string,"attemptedCounterexample":{"input":string,"evidenceId":string|null,"observed":string}|null,"result":"confirmed"|"disproved"|"not-applicable"|"unresolved","reason":string}`;
+}
+
+/** How the inputs are split: transitions for a state change, input classes for every other trigger. */
+function partitionStep(obligation: Obligation): string {
+	if (obligation.trigger !== 'state-transition') {
+		return 'Partition the inputs that reach the location: below, at and above a boundary, or the equivalent classes (empty, zero, false, normalized and not). Put them in "inputPartition" with what the contract expects for each.';
+	}
+
+	return 'Partition the transitions that reach the location. Each is an initial state, a sequence of operations and the final state the contract expects. Cover success, a failure midway, a retry of the same operation, a restart that reads what was saved, a cancellation and a newer call that supersedes this one; for a cache, insertion, replacement, expiry, bypass and invalidation are separate transitions; for an update, adjacent edits, a conflict and a saved merge base. Put each in "inputPartition": "label" names the transition, "input" the initial state and the operations, "expected" the final state. When no type, doc, test or rule says which moves are allowed, answer "unresolved" and name the missing contract in "reason".';
+}
+
+/** What a disproved state-transition answer must carry beyond a passing test. */
+function closingRule(obligation: Obligation): string {
+	if (obligation.trigger !== 'state-transition') return '';
+
+	return ' An existing test that passes closes only the transitions it runs: a "disproved" answer needs a run of your own, or a type, doc, source or intent citation, for the transitions no test runs.';
 }
 
 /** The unit's reason line: the question, where it applies, and the hints toward its contract. */

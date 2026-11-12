@@ -1,8 +1,9 @@
 import type { ObligationTrigger } from '@recoder/shared';
 import type { Mark } from './marks.js';
 import { squash } from './syntax.js';
+import { transitionHits } from './transitions.js';
 
-/** The question each trigger obliges an investigation to answer (issue #66). */
+/** The question each trigger obliges an investigation to answer (issues #66 and #99). */
 export const QUESTIONS: Record<ObligationTrigger, string> = {
 	'truthy-default': 'Can zero, false, or an empty string be valid?',
 	boundary: 'What happens below, at, and above the boundary?',
@@ -11,7 +12,9 @@ export const QUESTIONS: Record<ObligationTrigger, string> = {
 	'resource-release': 'Does each exit path release the resource?',
 	'count-validation': 'Are fractions and negative values permitted?',
 	'error-contract': 'Which documented or tested contract applies?',
-	'weaker-assertion': 'Which required behavior could now pass incorrectly?'
+	'weaker-assertion': 'Which required behavior could now pass incorrectly?',
+	'state-transition':
+		'Is every reachable move between states allowed, and what state is left after a failure midway, a retry or a cancellation?'
 };
 
 /** Trigger order for sorting and for taking one of each kind under the cap. */
@@ -55,7 +58,8 @@ export function triggerHits(hunk: HunkMarks): TriggerHit[] {
 		...normalizationHits(hunk),
 		...headHits(hunk, 'acquire', 'resource-release'),
 		...errorHits(hunk),
-		...assertionHits(hunk)
+		...assertionHits(hunk),
+		...transitionHits(hunk)
 	];
 }
 

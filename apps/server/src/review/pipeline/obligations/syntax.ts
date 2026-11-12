@@ -21,6 +21,31 @@ export function lineOf(node: Node): number {
 	return node.startPosition.row + 1;
 }
 
+/** The 1-based line a node ends on. */
+export function endLineOf(node: Node): number {
+	return node.endPosition.row + 1;
+}
+
+/** The first of the sorted lines that falls inside the node, or null when none does. */
+export function firstLineIn(node: Node, sorted: number[]): number | null {
+	let low = 0;
+	let high = sorted.length;
+
+	while (low < high) {
+		const mid = (low + high) >> 1;
+
+		if (sorted[mid] < lineOf(node)) low = mid + 1;
+		else high = mid;
+	}
+
+	return low < sorted.length && sorted[low] <= endLineOf(node) ? sorted[low] : null;
+}
+
+/** The functions inside `node`, such as a callback passed to a call. */
+export function functionsIn(node: Node): Node[] {
+	return node.descendantsOfType([...FUNCTION_TYPES]).filter((entry): entry is Node => entry !== null);
+}
+
 /** Text with every run of whitespace removed, so reformatted code compares equal. */
 export function squash(text: string): string {
 	return text.replace(/\s+/g, '');

@@ -4,7 +4,7 @@ import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { selectionReports } from '../lenses/lenses.js';
 import { questionRecord } from '../question-ledger.js';
 import { planSecondLook } from '../second-look/stage.js';
-import { planBriefSubagents, planSubagents, type BriefPlanInput, type UnitRequest } from '../subagents.js';
+import { planBriefSubagents, type BriefPlanInput, type UnitRequest } from '../subagents.js';
 import { unitRecord, type ReviewUnit } from '../units.js';
 import {
 	extendDeadlines,
@@ -15,6 +15,7 @@ import {
 	saveCheckpoint,
 	type ReviewRun
 } from './context.js';
+import { planRequestedSubagents } from '../variants/children.js';
 import { runUnitPool } from './pool.js';
 
 /** Model calls one subagent or second look can make: each turn, plus the repair calls a failed or malformed turn takes. */
@@ -53,7 +54,7 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 		const limit = subagentLimit(run, cap);
 
 		const plan =
-			cap === 0 ? { units: [], dropped: [] } : planSubagents(state.requests, run.units, run.inventory, limit);
+			cap === 0 ? { units: [], dropped: [] } : planRequestedSubagents(state.requests, run.units, run.inventory, limit);
 
 		const brief = { questions: briefQuestions(run), records: run.questions, candidates: run.candidates };
 		const fromBrief = planBriefSubagents(brief, plan.units, run.units, run.inventory, limit - plan.units.length);

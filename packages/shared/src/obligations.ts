@@ -1,6 +1,9 @@
 import type { VerificationBaseline } from './findings';
 
-/** The eight kinds of risky change that oblige an investigation (issue #66). */
+/**
+ * The kinds of risky change that oblige an investigation: eight from issue #66,
+ * and `state-transition` (issue #99) for code that moves an entity between states.
+ */
 export type ObligationTrigger =
 	| 'truthy-default'
 	| 'boundary'
@@ -9,7 +12,8 @@ export type ObligationTrigger =
 	| 'resource-release'
 	| 'count-validation'
 	| 'error-contract'
-	| 'weaker-assertion';
+	| 'weaker-assertion'
+	| 'state-transition';
 
 /**
  * A specific question about changed behavior, derived mechanically from the
