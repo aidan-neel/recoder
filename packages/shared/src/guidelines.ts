@@ -55,6 +55,21 @@ export interface RepoGuidelines {
 	canPropose: boolean;
 }
 
+/**
+ * Why Recoder cannot open a pull request with a repository's guidelines file:
+ * a local repository takes none, a hosted one needs a token. The server's
+ * refusal and each client's hint say the same words.
+ */
+export function proposeRefusal(provider: Provider): string {
+	if (provider === 'local') {
+		return 'Local repositories are read-only; edit the guidelines file in the repository instead.';
+	}
+
+	const forge = provider === 'gitlab' ? 'GitLab' : 'GitHub';
+
+	return `Connect a ${forge} token with write access in Settings → Connections to open a pull request.`;
+}
+
 export interface GuidelinesProposal {
 	number: number;
 	url: string;

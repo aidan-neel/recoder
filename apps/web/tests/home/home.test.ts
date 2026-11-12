@@ -1,6 +1,13 @@
 import { expect, test } from 'bun:test';
 import { repoLabels, type PullRequest, type Repo, type Review } from '@recoder/shared';
-import { actionPrLabel, briefActions, briefSegments, fallbackBrief, type BriefPick } from '../../src/lib/home/home';
+import {
+	actionPrLabel,
+	briefActions,
+	briefSegments,
+	chipLabels,
+	fallbackBrief,
+	type BriefPick
+} from '../../src/lib/home/home';
 import { matchesPr } from '../../src/lib/home/pr-filter';
 
 function makeRepo(id: string, name: string, url: string, provider: Repo['provider'] = 'github'): Repo {
@@ -157,4 +164,15 @@ test('emphasized pull request references resolve inside strong text without shif
 	const prSegments = segments.filter((seg) => seg.kind === 'pr');
 
 	expect(prSegments.map((seg) => (seg.kind === 'pr' ? seg.item?.repo.id : null))).toEqual(['r-beta', 'r-acme']);
+});
+
+test('two repositories with the same short name get their full labels on the filter chips, the rest stay short', () => {
+	const acme = makeRepo('r-acme', 'acme/api', 'https://github.com/acme/api');
+	const beta = makeRepo('r-beta', 'beta/api', 'https://github.com/beta/api');
+	const web = makeRepo('r-web', 'acme/web', 'https://github.com/acme/web');
+	const repos = [acme, beta, web];
+
+	const chips = chipLabels(repos, repoLabels(repos));
+
+	expect([...chips.values()]).toEqual(['acme/api', 'beta/api', 'web']);
 });
