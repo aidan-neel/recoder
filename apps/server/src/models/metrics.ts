@@ -10,8 +10,10 @@ import {
 	type TokenBudget,
 	type TokenUsage
 } from '@recoder/shared';
+import type { TopicTally } from '../review/guidelines/learned/votes';
 import { db, reviewMetrics } from '../store';
 import { metricWrites } from '../storage/persistence-queue';
+import { providerErrorText } from './error-text';
 import { lockedModels } from './llm/locked-models';
 
 /**
@@ -28,6 +30,35 @@ export interface PipelineRun {
 	lockMisses: number;
 	/** The token budget the run's limits came from; unset on runs older than budgets and on runs that stopped before the harness. */
 	tokenBudget?: TokenBudget;
+	/** The repository history the run received, so an evaluation can audit or replay it; unset on runs older than recording it. */
+	history?: RunHistory;
+}
+
+/** One history source the brief was given, without its text. */
+export interface HistorySource {
+	/** `pr-history`, `commit`, `past-review` or `related-review`. */
+	kind: string;
+	/** `pr:#31`, `commit:abc1234`, `merge:abc1234`, `review:#31`, or `history:unavailable` for commits nothing explains. */
+	ref: string;
+	/** The commit the source was read from. */
+	revision?: string;
+	/** The commits that landed together, `parent..tip`. */
+	range?: string;
+	/** True when a retrieved PR record backs it, false when only a commit or merge message names it. */
+	recorded?: boolean;
+}
+
+/**
+ * Which of the repository's history a pipeline run received. A part is absent
+ * when the run never read it, and empty when it read it and found nothing.
+ */
+export interface RunHistory {
+	/** Earlier PRs, commits, merges and reviews of the changed code the brief was given. */
+	sources?: HistorySource[];
+	/** The fingerprints of the findings people dismissed in this repository, newest first. */
+	dismissals?: string[];
+	/** People's votes on each topic's findings, which rank the rules and quiet findings. */
+	topics?: Record<string, TopicTally>;
 }
 
 /** A stored call: `run` is the index of the pipeline run that made it, `lockMiss` marks one made without locked models. */
@@ -155,6 +186,13 @@ export function recordTokenBudget(tokenBudget: TokenBudget): void {
 	});
 }
 
+/** Adds what the running pipeline run read of the repository's history to its record. */
+export function recordHistory(history: RunHistory): void {
+	updateCurrentRun((run) => {
+		run.history = { ...run.history, ...history };
+	});
+}
+
 export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 	const owner = context.getStore();
 	const tally = tallies.getStore();
@@ -209,8 +247,14 @@ export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 			call.apiKeySource = source;
 			save();
 		},
-		finish: (success: boolean) => {
-			call.status = success ? 'completed' : 'failed';
+		complete: () => {
+			call.status = 'completed';
+			save();
+		},
+		/** Records the call as failed with the provider's error, without any of `secrets` the call was given. */
+		fail: (err: unknown, secrets: readonly (string | undefined)[] = []) => {
+			call.status = 'failed';
+			call.error = providerErrorText(err, secrets);
 			save();
 		}
 	};

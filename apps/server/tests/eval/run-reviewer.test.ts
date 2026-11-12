@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { ScoredRun } from '../../src/eval/benchmark-report';
-import { mixedReviewer, runReviewer } from '../../src/eval/run-reviewer';
+import { mixedReviewer, runReviewer, withoutModelCalls } from '../../src/eval/run-reviewer';
+import type { RunRecord } from '../../src/eval/report';
 import type { StoredMetrics } from '../../src/models/metrics';
 
 /** The models the report declares: orchestrator, then specialist. */
@@ -75,7 +76,9 @@ test('a review that called a model outside its locked picks makes the report mix
 		tokens: [
 			{ stage: 'other', model: 'muse', calls: 1, input: 3, cached: 0, written: 0, output: 2 },
 			{ stage: 'other', model: 'muse-mini', calls: 1, input: 3, cached: 0, written: 0, output: 2 }
-		]
+		],
+		completedCalls: 2,
+		failedCalls: 0
 	});
 
 	expect(strayed).toMatchObject({ calledModels: ['luna', 'muse'], verdict: 'MIXED', mixed: true });
@@ -145,4 +148,33 @@ test('an unlocked run, a missing row and a report without reviewers are told apa
 	expect(missing).toMatchObject({ orchestrator: 'not recorded', calledModels: [], verdict: 'MISSING', mixed: false });
 	expect(mixedReviewer(asRuns(missing))).toBe(false);
 	expect(mixedReviewer([{} as ScoredRun])).toBe('not recorded');
+});
+
+/** A passed run of review `review` whose summary says it found nothing. */
+const passed = {
+	index: 1,
+	reviewId: 'review',
+	outcome: 'passed',
+	summary: 'Review complete. 0 findings.'
+} as RunRecord;
+
+test('a passed run whose review completed no model call is reported as a failed run with the provider error', () => {
+	const stored = row(['muse/muse-mini'], []);
+
+	stored.calls.push({ ...stored.calls[0]!, scope: 'pipeline', status: 'failed', error: 'Go usage limit exceeded' });
+
+	const reviewer = runReviewer(stored, DECLARED);
+
+	expect(reviewer).toMatchObject({ completedCalls: 0, failedCalls: 1, lastError: 'Go usage limit exceeded' });
+
+	expect(withoutModelCalls(passed, reviewer)).toMatchObject({
+		outcome: 'failed',
+		summary:
+			'No model call completed (1 failed; the last failed with: Go usage limit exceeded). Review complete. 0 findings.'
+	});
+});
+
+test('a passed run whose review completed model calls, or whose calls were not recorded, stays passed', () => {
+	expect(withoutModelCalls(passed, runReviewer(row(['muse/muse-mini'], [['muse', 0]]), DECLARED))).toBe(passed);
+	expect(withoutModelCalls(passed, undefined)).toBe(passed);
 });

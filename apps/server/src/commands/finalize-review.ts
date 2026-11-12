@@ -1,4 +1,4 @@
-import type { Finding } from '@recoder/shared';
+import type { Finding, ReviewAssignment } from '@recoder/shared';
 import type { AdaptiveReviewResult } from '../review/pipeline/harness/types';
 import { db, reviewProgress, keepForReplay, settlePipelineStreams } from '../store';
 import { storageTransaction } from '../storage/backend';
@@ -6,7 +6,16 @@ import { metricWrites } from '../storage/persistence-queue';
 import { emitReviewEvent, flushReviewEvents, reportReviewTask, settleReviewTasks } from '../review/session/events';
 import { touch } from './review-session';
 
-export async function finalizeReview(reviewId: string, result: AdaptiveReviewResult): Promise<void> {
+/** Roles that are not a reviewer of the change: subagents and obligation investigators work on what reviewers raised. */
+const NOT_REVIEWERS = new Set(['subagent', 'obligation']);
+
+/**
+ * Saves a finished run. A run that completed although none of its reviewers
+ * could run is saved as failed, with the first reviewer's reason.
+ */
+export async function finalizeReview(reviewId: string, finished: AdaptiveReviewResult): Promise<void> {
+	const result = withReviewerFailure(finished);
+
 	await flushReviewEvents(reviewId);
 
 	await metricWrites.drain(reviewId);
@@ -79,6 +88,30 @@ export async function finalizeReview(reviewId: string, result: AdaptiveReviewRes
 		await settleRun(reviewId);
 		await flushReviewEvents(reviewId);
 	});
+}
+
+/**
+ * A completed run whose every reviewer stopped with an error or was never
+ * launched, and raised nothing, reviewed none of the change: a provider that
+ * rejects every call leaves only what detectors found. It fails with the
+ * reason the first reviewer stopped, instead of passing with those findings.
+ */
+function withReviewerFailure(result: AdaptiveReviewResult): AdaptiveReviewResult {
+	if (result.outcome !== 'complete') return result;
+
+	const reviewers = result.assignments.filter((record) => !NOT_REVIEWERS.has(record.role));
+
+	if (!reviewers.length || !reviewers.every(didNotReview)) return result;
+
+	const stopped = reviewers.find((record) => record.status === 'error') ?? reviewers[0];
+	const summary = `No reviewer could run: ${stopped.currentOperation ?? 'every reviewer failed'}`;
+
+	return { ...result, outcome: 'failed', summary, error: summary };
+}
+
+/** A reviewer that stopped with an error or never started, and reported no candidate. */
+function didNotReview(record: ReviewAssignment): boolean {
+	return (record.status === 'error' || record.status === 'skipped') && !record.candidateCount;
 }
 
 /**

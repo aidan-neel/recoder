@@ -108,7 +108,7 @@ Evals add one more place. `StoppedAt` in `apps/server/src/eval/benchmark-stages.
 - `supersedeWebhookReviews` cancels in-flight webhook reviews of the same pull request with "Superseded by a newer push." It is in `apps/server/src/review/session/supersede.ts`.
 - `queueReview`, `startReviewSession` and `runReviewPipeline` are in `apps/server/src/commands/pipeline.ts`. `queueReview` refuses when `isReviewConfigured` is false.
 - Inputs: a repository, a pull request number, optional developer instructions.
-- Outputs: `ReviewStatus` moves draft, queued, running, then passed or failed. It is defined in `packages/shared/src/review.ts`. The harness returns `ReviewOutcome`, `complete` or `failed`, defined in `packages/shared/src/progress.ts`. `complete` maps to passed.
+- Outputs: `ReviewStatus` moves draft, queued, running, then passed or failed. It is defined in `packages/shared/src/review.ts`. The harness returns `ReviewOutcome`, `complete` or `failed`, defined in `packages/shared/src/progress.ts`. `complete` maps to passed. `finalizeReview` in `apps/server/src/commands/finalize-review.ts` saves a `complete` run as failed when every reviewer stopped with an error or never started and none raised a candidate, with the summary "No reviewer could run: <the first reviewer's reason>": a provider that rejects every call must not pass with what detectors found alone.
 - A review that runs out of time after units were cut still ends `complete`. Findings verified by then are shown, and the summary says the time ran out (`finishOutOfTime` in `apps/server/src/review/pipeline/harness/summary.ts`).
 - Drops: none.
 - Tests:
@@ -162,6 +162,8 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
 - `distillIntent` turns the gathered sources into goals, constraints, non-goals, observed changes and open questions, plus a brief per unit.
 - `ChangeIntent` and `GatheredContext` are defined in `apps/server/src/review/pipeline/intent/types.ts`.
 - Each unit brief has a status of included, partial or omitted. An omitted brief records a `BriefOmission`: size, time, budget or model.
+- The unit briefs run under a signal of the stage's own (`briefUnits` in `apps/server/src/review/pipeline/intent/distill.ts`). A unit call that throws (a blocked model, a cancelled review) aborts it: the calls in flight stop, no queued unit starts, and the error is thrown only after every started call has settled, so no brief call writes after the stage ends.
+- The history sources the brief was given (`pr-history`, `past-review`, `related-review`, `history:unavailable` included) are recorded without their text on the pipeline run, `PipelineRun.history.sources` (`recordHistorySources` in `apps/server/src/review/pipeline/harness/history-record.ts`). The dismissals and topic votes the run read are recorded there at its start (`recordLearnedHistory`).
 - The stage never throws. A failure leaves `run.intent` null and the review goes on.
 - Drops: none.
 - Tests:

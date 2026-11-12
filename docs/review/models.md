@@ -131,15 +131,16 @@ Stored in the SQLite table `review_metrics` (`reviewMetrics` in `apps/server/src
 - `calls`: every tracked call.
 - `runs`: one `PipelineRun` per pipeline run. Rows written before runs were recorded have none.
 
-`PipelineRun` fields: `index`, `startedAt`, `orchestrator` and `subagent` (the locked model ids, null when the run went unlocked), `lockMisses`.
+`PipelineRun` fields: `index`, `startedAt`, `orchestrator` and `subagent` (the locked model ids, null when the run went unlocked), `lockMisses`, `tokenBudget`, and `history`: which repository history the run received (`RunHistory`: `sources`, the brief's history sources without their text; `dismissals`, the fingerprints of dismissed findings; `topics`, the votes per topic). A part the run never read is absent; one it read and found empty is empty.
 
-`trackTokenCall` in `apps/server/src/models/metrics.ts` opens a call record. `runChat` and the OpenCode agent engine (`apps/server/src/review/pipeline/agent-loop/opencode-relay.ts`) call it. A call is saved only when it runs under `withReviewMetrics` for an existing review.
+`trackTokenCall` in `apps/server/src/models/metrics.ts` opens a call record. `runChat` and the OpenCode agent engine (`apps/server/src/review/pipeline/agent-loop/opencode-relay.ts`) call it. A call is saved only when it runs under `withReviewMetrics` for an existing review. Its `complete()` or `fail(err, secrets)` closes it. An OpenCode prompt that fails before its first step starts (a spent plan, a rejected key) is still saved as one failed call.
 
 A call record (`TokenCall` in `packages/shared/src/metrics.ts`, extended by `RunTokenCall`):
 
 - `id` (UUID), `model`, `provider`.
 - `scope`: `pipeline`, `discussion` or `fix`. Chat counts as `discussion`.
 - `status`: `pending`, `completed` or `failed`.
+- `error`: a failed call's provider error, its last lines with the call's key, key and token shapes, authorization headers and home paths removed (`providerErrorText` in `apps/server/src/models/error-text.ts`).
 - `usage`: `inputTokens`, `outputTokens`, `totalTokens`, `cachedInputTokens`, `cacheWriteInputTokens`, `reasoningOutputTokens`.
 - `apiKeySource`: optional. What paid for a Claude Code call, as the CLI reports it.
 - `run`: index of the pipeline run that made the call. Pipeline calls only.

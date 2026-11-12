@@ -15,6 +15,7 @@ import {
 	type ReviewRun
 } from './context.js';
 import { deriveObligationsStage, runUnitsWithObligations } from '../obligations/stage.js';
+import { recordLearnedHistory } from './history-record.js';
 import { intentStage } from './intent-stage.js';
 import { repoInventoryStage } from './repo-inventory-stage.js';
 import { runUnitPool } from './pool.js';
@@ -56,6 +57,9 @@ export async function runAdaptiveReview(
 	if (input.resume) assertSameSelection(input.resume.selection, input.lenses);
 
 	const run = createRun(input, events);
+
+	recordLearnedHistory(run);
+
 	const onAbort = () => run.controller.abort();
 
 	input.signal?.addEventListener('abort', onAbort, { once: true });

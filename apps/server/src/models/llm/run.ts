@@ -96,7 +96,6 @@ export async function runChat(opts: ChatOptions, onToken?: (text: string) => voi
 	const endpoint = llmEndpoint(opts);
 	let acquired = false;
 	let tracking: TokenTracking | undefined;
-	let success = false;
 	const scope = requestScope(opts.signal);
 
 	try {
@@ -130,7 +129,7 @@ export async function runChat(opts: ChatOptions, onToken?: (text: string) => voi
 
 		const result = await withHardDeadline(work, deadline, Math.max(1, deadline - Date.now()), opts.signal);
 
-		success = true;
+		tracking.complete();
 		recordLlmSuccess(endpoint);
 		rate.finish();
 
@@ -138,11 +137,12 @@ export async function runChat(opts: ChatOptions, onToken?: (text: string) => voi
 	} catch (err) {
 		if (acquired && isRateLimitError(err, opts.provider)) recordLlmRateLimit(endpoint);
 
+		tracking?.fail(err, [opts.apiKey]);
+
 		throw err;
 	} finally {
 		scope.end();
 		progress.stop();
 		if (acquired) releaseLlmSlot(endpoint);
-		tracking?.finish(success);
 	}
 }

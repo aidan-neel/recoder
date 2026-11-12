@@ -5,6 +5,7 @@ import { distillIntent } from '../intent/distill.js';
 import { gatherHistory } from '../intent/history.js';
 import type { ChangeIntent, IntentSource } from '../intent/types.js';
 import { publishBudget, type ReviewRun } from './context.js';
+import { recordHistorySources } from './history-record.js';
 
 const TASK = { id: 'intent', label: 'Reading what the change is for' } as const;
 
@@ -102,6 +103,9 @@ export async function intentStage(run: ReviewRun): Promise<void> {
 
 		const related = await relatedSources(run, history);
 		const sources = sortSources([...ownSources(run), ...history, ...related]);
+
+		recordHistorySources(sources);
+
 		const stack = input.context?.stack ?? { parent: null, children: [] };
 
 		run.intent = await distillIntent(run, sources, stack);

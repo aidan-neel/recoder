@@ -43,6 +43,8 @@ export interface TokenCall {
 	/** Unset on calls made outside an agent run and on rows stored before stages were recorded. */
 	stage?: TokenStage;
 	status: 'pending' | 'completed' | 'failed';
+	/** A failed call's provider error, with keys, tokens, auth headers and home paths removed; absent on other calls. */
+	error?: string;
 	usage: TokenUsage;
 	/** What paid for a Claude Code call, as the CLI reports it: `none` is the signed-in subscription, not a key. */
 	apiKeySource?: string;
