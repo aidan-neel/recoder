@@ -5,17 +5,16 @@ import { tmpdir } from 'node:os';
 import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { CopilotAgent } from '../../../src/agents/copilot/copilot';
-import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
-import { fakeCopilot } from '../../helpers/fake-copilot';
-import { fixtureReview, testPromptStops } from '../../helpers/native-agent';
+import { COPILOT_FAILURES, fakeCopilot } from '../../helpers/fake-copilot';
+import { fixtureReview, testOutputCapPrompt, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
-/** What the fake logged for one call: its argv, working directory, prompt, `COPILOT_HOME` and the settings there. */
+/** What the fake logged for one call: its argv, prompt, working directory, `COPILOT_HOME` and the settings there. */
 const callSchema = z.object({
 	args: z.array(z.string()),
-	cwd: z.string(),
 	prompt: z.string(),
+	cwd: z.string(),
 	home: z.string(),
 	settings: z.string()
 });
@@ -94,7 +93,7 @@ describe('CopilotAgent.openRun', () => {
 		expect(after(call.args, '--session-id')).toBeString();
 	});
 
-	test('a run without tools passes no MCP server and allows none', async () => {
+	test('a run without tools gives the model no tool at all: an unmatched --available-tools and no MCP config', async () => {
 		const { run, calls } = await openRun('reply', []);
 
 		await run.prompt('Answer.', PROMPT);
@@ -104,8 +103,8 @@ describe('CopilotAgent.openRun', () => {
 		await run.close();
 
 		expect(call.args).not.toContain('--additional-mcp-config');
-		expect(call.args).not.toContain('--available-tools');
 		expect(call.args).not.toContain('--allow-tool');
+		expect(after(call.args, '--available-tools')).toBe('recoder-no-tools');
 	});
 
 	test('a final prompt with tools off is given no MCP server, so the model cannot call one', async () => {
@@ -119,8 +118,8 @@ describe('CopilotAgent.openRun', () => {
 		await run.close();
 
 		expect(final.args).not.toContain('--additional-mcp-config');
-		expect(final.args).not.toContain('--available-tools');
 		expect(final.args).not.toContain('--allow-tool');
+		expect(after(final.args, '--available-tools')).toBe('recoder-no-tools');
 	});
 
 	test('runs under an empty COPILOT_HOME, so the user’s hooks and MCP servers are not in it', async () => {
@@ -138,15 +137,15 @@ describe('CopilotAgent.openRun', () => {
 	});
 
 	test('the answer streams as text and reasoning within one step, which ends with the prompt’s usage', async () => {
-		const { run, events } = await openRun();
+		const { run, events } = await openRun('reply');
 
 		const reply = await run.prompt('Review it.', PROMPT);
 
 		await run.close();
 
-		expect(reply.text).toBe('the reply');
-
 		const steps = events.filter((event) => event.type !== 'activity');
+
+		expect(reply.text).toBe('the reply');
 
 		expect(steps).toEqual([
 			{ type: 'step-start' },
@@ -186,32 +185,19 @@ describe('CopilotAgent.openRun', () => {
 		expect(usage).toEqual([1000, 500]);
 	});
 
-	test.each([
-		['auth', 401, /copilot login/],
-		['limit', 429, /resets at 3pm/],
-		['crash', 0, /boom/]
-	] as const)('a %s prompt fails with status %d', async (mode, status, message) => {
-		const { run } = await openRun(mode, ['read_diff']);
+	test('each model call is a step, and the prompt still reports one usage', async () => {
+		const { run, events } = await openRun('tool');
 
 		const reply = await run.prompt('Review it.', PROMPT);
 
 		await run.close();
 
-		if (!(reply.error instanceof LlmError)) throw new Error(`expected LlmError, got ${String(reply.error)}`);
-
-		expect(reply.error.status).toBe(status);
-		expect(reply.error.message).toMatch(message);
+		expect(reply.error).toBeUndefined();
+		expect(events.filter((event) => event.type === 'step-start')).toHaveLength(2);
+		expect(events.filter((event) => event.type === 'usage')).toHaveLength(1);
 	});
 
-	test('a usage-cap prompt fails as a UsageLimitError', async () => {
-		const { run } = await openRun('limit');
-
-		const reply = await run.prompt('Review it.', PROMPT);
-
-		await run.close();
-
-		expect(reply.error).toBeInstanceOf(UsageLimitError);
-	});
+	testPromptFailures(openRun, COPILOT_FAILURES);
 
 	test('output that is not JSONL fails the prompt, and the error does not carry the fake credential', async () => {
 		const { run, events } = await openRun('garbage');
@@ -227,15 +213,7 @@ describe('CopilotAgent.openRun', () => {
 		expect(quoted).toContain('Welcome to GitHub Copilot CLI!');
 	});
 
-	test('output past the cap stops the CLI and fails the prompt', async () => {
-		const { run } = await openRun('flood');
-
-		const reply = await run.prompt('Review it.', PROMPT);
-
-		await run.close();
-
-		expect(reply.error?.message).toMatch(/printed more than/);
-	});
+	testOutputCapPrompt(openRun);
 
 	testPromptStops(() => openRun('spawn'));
 

@@ -3,6 +3,13 @@ import type { ModelEntry, ReasoningEffort } from '@recoder/shared';
 /** Prefix of a Copilot model's id in the Model select, so routing knows the CLI runs it. */
 const COPILOT_MODEL_PREFIX = 'copilot:';
 
+/**
+ * The model id that lets the CLI pick the model. It is offered no effort levels: the CLI's help says the
+ * supported levels depend on the model, so Recoder cannot know a level `auto` accepts, and no `--reasoning-effort`
+ * is passed for it.
+ */
+export const AUTO_MODEL = 'auto';
+
 /** The levels `--reasoning-effort` takes that Recoder offers; the CLI also takes `none`, which Recoder does not list. */
 const CLI_EFFORTS: ReasoningEffort[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -30,7 +37,7 @@ interface CopilotModel {
  * at call time.
  */
 const MODELS: CopilotModel[] = [
-	{ model: 'auto', label: 'Auto (Copilot picks)' },
+	{ model: AUTO_MODEL, label: 'Auto (Copilot picks)' },
 	{ model: 'claude-sonnet-5.5', label: 'Claude Sonnet 5.5' },
 	{ model: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
 	{ model: 'claude-fable-5.2', label: 'Claude Fable 5.2' },
@@ -60,14 +67,20 @@ const MODELS: CopilotModel[] = [
 	{ model: 'kimi-k3', label: 'Kimi K3' }
 ];
 
-/** The levels every model is offered, with the level the picker shows selected. */
+/**
+ * The levels every model but `auto` is offered, with the level the picker shows selected. Which levels a given
+ * model honors is per-model and not confirmed, so the same list is shown for all of them.
+ */
 export function copilotEfforts(): Pick<ModelEntry, 'efforts' | 'defaultEffort'> {
 	return { efforts: CLI_EFFORTS, defaultEffort: DEFAULT_EFFORT };
 }
 
-/** The `--reasoning-effort` flags for a call: the picked level, or none so the model keeps its own default. */
-export function effortArgs(requested: ReasoningEffort | undefined): string[] {
-	return requested ? ['--reasoning-effort', requested] : [];
+/**
+ * The `--reasoning-effort` flags for a call on `model`: the picked level, or none so the model keeps its own
+ * default. `auto` takes none, since the model it picks decides which levels it accepts.
+ */
+export function effortArgs(model: string, requested: ReasoningEffort | undefined): string[] {
+	return model !== AUTO_MODEL && requested ? ['--reasoning-effort', requested] : [];
 }
 
 /** The static list the Model select shows under GitHub Copilot; the CLI has no command that lists models. */
@@ -80,6 +93,6 @@ export function copilotModels(): ModelEntry[] {
 		baseUrl: null,
 		apiKeyPreview: null,
 		contextWindow: CONTEXT_WINDOW,
-		...copilotEfforts()
+		...(model === AUTO_MODEL ? {} : copilotEfforts())
 	}));
 }

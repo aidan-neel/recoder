@@ -1,15 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TokenUsage } from '@recoder/shared';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
+import { removeScratchDir, scratchDir } from '../cli-process';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
 import { ProcessRun } from '../process-run';
 import type { ToolLease } from '../tools/mcp-host';
+import { usageDelta } from '../usage-delta';
 import { effortArgs } from './copilot-models';
-import { addedUsage, EventReader, readUsage } from './copilot-output';
+import { EventReader, readUsage } from './copilot-output';
 import { copilotEnvWithHome } from './copilot-process';
 
 type Env = Record<string, string | undefined>;
@@ -43,8 +44,15 @@ export const PROMPT_ARGS = [
 	'shell,write,read,url,memory',
 	'--sync-session=off',
 	'--secret-env-vars',
-	'COPILOT_GITHUB_TOKEN,GITHUB_TOKEN,GH_TOKEN'
+	'COPILOT_GITHUB_TOKEN'
 ];
+
+/**
+ * The `--available-tools` flags for a call with no tools: a name no MCP server and no built-in tool has, so the
+ * CLI gives the model no tool at all. With no `--available-tools` at all the model keeps built-ins the excluded
+ * list and deny kinds do not cover (`web_fetch`, `semantic_code_search`).
+ */
+export const NO_TOOLS_ARGS = ['--available-tools', 'recoder-no-tools'];
 
 /** What a run needs of the adapter: the binary, the server's environment, and the sets its `stop` empties. */
 export interface CopilotHost {
@@ -69,9 +77,12 @@ function runPlace(root: string): RunPlace {
 /**
  * The flags that give the CLI Recoder's MCP server and allow its tools, and nothing else: the server is the only
  * one whose tools the model may see (`--available-tools`), and its calls are approved without asking
- * (`--allow-tool` names the server, per the tool-kind docs).
+ * (`--allow-tool` names the server, per the tool-kind docs). A prompt with no tools gets {@link NO_TOOLS_ARGS}
+ * instead, so the model cannot even see a tool to call.
  */
-function toolArgs(lease: ToolLease): string[] {
+function toolArgs(lease: ToolLease | null): string[] {
+	if (!lease) return NO_TOOLS_ARGS;
+
 	const config = JSON.stringify({ mcpServers: { [lease.name]: { type: 'http', url: lease.url } } });
 
 	return ['--additional-mcp-config', config, '--available-tools', lease.name, '--allow-tool', lease.name];
@@ -98,9 +109,7 @@ export class CopilotRun extends ProcessRun {
 	}
 
 	static async open(host: CopilotHost, options: AgentRunOptions): Promise<CopilotRun> {
-		const place = runPlace(await mkdtemp(join(tmpdir(), 'recoder-copilot-run-')));
-
-		host.scratch.add(place.root);
+		const place = runPlace(await scratchDir(host.scratch, 'recoder-copilot-run-'));
 
 		const run = new CopilotRun(host, options, place);
 
@@ -129,7 +138,6 @@ export class CopilotRun extends ProcessRun {
 		const carried = this.prompts === 0 ? `${this.options.system}\n\n${asked}` : asked;
 
 		this.prompts++;
-		this.options.onEvent({ type: 'step-start' });
 
 		try {
 			const exit = await streamCli({
@@ -158,17 +166,16 @@ export class CopilotRun extends ProcessRun {
 
 	/** Deletes the run's scratch dir, whose `COPILOT_HOME` holds the session the CLI saved for this run. */
 	protected override async cleanUp(): Promise<void> {
-		this.host.scratch.delete(this.place.root);
-		await rm(this.place.root, { recursive: true, force: true });
+		await removeScratchDir(this.host.scratch, this.place.root);
 	}
 
 	private args(lease: ToolLease | null): string[] {
 		return [
 			...PROMPT_ARGS,
-			...(lease ? toolArgs(lease) : []),
+			...toolArgs(lease),
 			'--model',
 			this.options.model,
-			...effortArgs(this.options.reasoningEffort),
+			...effortArgs(this.options.model, this.options.reasoningEffort),
 			'--session-id',
 			this.session,
 			'--usage-output-file',
@@ -187,7 +194,7 @@ export class CopilotRun extends ProcessRun {
 
 		if (!total) return undefined;
 
-		const usage = addedUsage(total, this.seen);
+		const usage = usageDelta(total, this.seen);
 
 		this.seen = total;
 		this.options.onEvent({ type: 'usage', usage });

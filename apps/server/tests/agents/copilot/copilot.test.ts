@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import type { ReasoningEffort, TokenUsage } from '@recoder/shared';
 import { CopilotAgent } from '../../../src/agents/copilot/copilot';
-import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
-import { fakeCopilot } from '../../helpers/fake-copilot';
+import { COPILOT_FAILURES, fakeCopilot } from '../../helpers/fake-copilot';
+import { testCallFailures } from '../../helpers/native-agent';
 
 function chat(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	return {
@@ -50,7 +50,7 @@ function after(args: string[], flag: string): string | undefined {
 	return args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined;
 }
 
-test('the fixed models are the ids copilot help config documents, each offered the CLI’s effort levels', async () => {
+test('the fixed models are the ids copilot help config documents, each but auto offered the CLI’s effort levels', async () => {
 	const agent = new CopilotAgent(await fakeCopilot());
 	const efforts: ReasoningEffort[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 	const models = await agent.models();
@@ -64,10 +64,13 @@ test('the fixed models are the ids copilot help config documents, each offered t
 		label: 'Auto (Copilot picks)',
 		baseUrl: null,
 		apiKeyPreview: null,
-		contextWindow: 200_000,
-		efforts,
-		defaultEffort: 'medium'
+		contextWindow: 200_000
 	});
+
+	expect(models[0]).not.toHaveProperty('efforts');
+	expect(models[0]).not.toHaveProperty('defaultEffort');
+
+	for (const entry of models.slice(1)) expect(entry).toMatchObject({ efforts, defaultEffort: 'medium' });
 
 	expect(models.map((entry) => entry.model)).toContain('claude-sonnet-5.5');
 	expect(models.map((entry) => entry.model)).toContain('gpt-6.1-sol');
@@ -91,11 +94,13 @@ describe('CopilotAgent.complete', () => {
 		expect(after(call.args, '--deny-tool')).toBe('shell,write,read,url,memory');
 		expect(call.args).toContain('--disable-builtin-mcps');
 		expect(call.args).not.toContain('--additional-mcp-config');
+		expect(after(call.args, '--available-tools')).toBe('recoder-no-tools');
+		expect(after(call.args, '--secret-env-vars')).toBe('COPILOT_GITHUB_TOKEN');
 		expect(after(call.args, '--model')).toBe('gpt-5.6-sol');
 		expect(call.args).toContain('--usage-output-file');
 		expect(call.prompt).toContain('Review the diff.');
 		expect(call.prompt).toContain('diff --git a/x b/x');
-		expect(childEnv.GH_TOKEN).toBe('t');
+		expect(childEnv.GH_TOKEN).toBeUndefined();
 		expect(childEnv.COPILOT_MODEL).toBeUndefined();
 		expect(childEnv.RECODER_SECRET_KEY).toBeUndefined();
 		expect(childEnv.COPILOT_AUTO_UPDATE).toBe('false');
@@ -109,18 +114,48 @@ describe('CopilotAgent.complete', () => {
 		});
 	});
 
-	test('passes the picked effort as --reasoning-effort and none when the request names none', async () => {
+	test('only COPILOT_GITHUB_TOKEN crosses to the CLI; the server’s forge tokens stay behind', async () => {
+		const env = await fakeCopilot({
+			GH_TOKEN: 'forge-gh',
+			GITHUB_TOKEN: 'forge-github',
+			COPILOT_GITHUB_TOKEN: 'copilot-token',
+			XDG_CONFIG_HOME: '/xdg/config',
+			GH_CONFIG_DIR: '/gh/config'
+		});
+
+		await new CopilotAgent(env).complete(chat());
+
+		const { childEnv } = await logged(env);
+		const { HOME, PATH } = env;
+
+		if (HOME === undefined || PATH === undefined) throw new Error('the fake env has no HOME or PATH');
+
+		expect(childEnv.COPILOT_GITHUB_TOKEN).toBe('copilot-token');
+		expect(childEnv.GH_TOKEN).toBeUndefined();
+		expect(childEnv.GITHUB_TOKEN).toBeUndefined();
+		expect(childEnv.HOME).toBe(HOME);
+		expect(childEnv.PATH).toBe(PATH);
+		expect(childEnv.XDG_CONFIG_HOME).toBe('/xdg/config');
+		expect(childEnv.GH_CONFIG_DIR).toBe('/gh/config');
+	});
+
+	test('passes the picked effort as --reasoning-effort, none when the request names none, and none for auto', async () => {
 		const env = await fakeCopilot();
 		const agent = new CopilotAgent(env);
 
 		await agent.complete(chat({ reasoningEffort: 'high' }));
 		await agent.complete(chat());
+		await agent.complete(chat({ model: 'auto', reasoningEffort: 'high' }));
 
 		const lines = (await readFile(env.FAKE_COPILOT_LOG ?? '', 'utf8')).trim().split('\n');
-		const [picked, unpicked] = lines.map((line) => z.object({ args: z.array(z.string()) }).parse(JSON.parse(line)));
+
+		const [picked, unpicked, auto] = lines.map((line) =>
+			z.object({ args: z.array(z.string()) }).parse(JSON.parse(line))
+		);
 
 		expect(after(picked.args, '--reasoning-effort')).toBe('high');
 		expect(unpicked.args).not.toContain('--reasoning-effort');
+		expect(auto.args).not.toContain('--reasoning-effort');
 	});
 
 	test('leaves the session the call saved and its scratch COPILOT_HOME deleted', async () => {
@@ -134,28 +169,10 @@ describe('CopilotAgent.complete', () => {
 		expect(existsSync(call.home)).toBe(false);
 	});
 
-	test.each([
-		['auth', 401, /copilot login/],
-		['limit', 429, /resets at 3pm/],
-		['crash', 0, /boom/]
-	] as const)('a %s call fails as an LlmError with status %d', async (mode, status, message) => {
-		const error = await new CopilotAgent(await fakeCopilot({ FAKE_COPILOT_MODE: mode }))
-			.complete(chat())
-			.catch((e: unknown) => e);
-
-		if (!(error instanceof LlmError)) throw new Error(`expected LlmError, got ${String(error)}`);
-
-		expect(error.status).toBe(status);
-		expect(error.message).toMatch(message);
-	});
-
-	test('a usage-cap failure is a UsageLimitError, which the app reports as out of usage', async () => {
-		const error = await new CopilotAgent(await fakeCopilot({ FAKE_COPILOT_MODE: 'limit' }))
-			.complete(chat())
-			.catch((e: unknown) => e);
-
-		expect(error).toBeInstanceOf(UsageLimitError);
-	});
+	testCallFailures(
+		async (mode) => new CopilotAgent(await fakeCopilot({ FAKE_COPILOT_MODE: mode })).complete(chat()),
+		COPILOT_FAILURES
+	);
 });
 
 test('detect reports the version and leaves sign-in unknown, since the CLI has no status command', async () => {
@@ -190,10 +207,11 @@ test('a VS Code shim on PATH is not taken for the CLI', async () => {
 	expect((await agent.detect()).installed).toBe(false);
 });
 
-test('the picked effort is what a model runs at, and with none picked the model keeps its own default', () => {
+test('the picked effort is what a model runs at, auto takes none, and with none picked the model keeps its own default', () => {
 	const agent = new CopilotAgent();
 
 	expect(agent.modelSettings('gpt-5.6-sol', 'medium')).toEqual({ reasoningEffort: 'medium' });
 	expect(agent.modelSettings('gpt-5.6-sol', 'max')).toEqual({ reasoningEffort: 'max' });
 	expect(agent.modelSettings('gpt-5.6-sol', undefined)).toEqual({});
+	expect(agent.modelSettings('auto', 'high')).toEqual({});
 });

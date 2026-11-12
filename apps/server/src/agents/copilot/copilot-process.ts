@@ -11,12 +11,12 @@ type Env = Record<string, string | undefined>;
 const STRIPPED = [/^RECODER_/, /^COPILOT_/, /^GITHUB_COPILOT_/, /_TOKEN$/, /_API_KEY$/, /SECRET/, /PASSWORD/];
 
 /**
- * The token variables `copilot login --help` documents for headless sign-in, in its precedence order. They are
- * the user's own sign-in, so they pass through the strip; the CLI manages them itself and Recoder never reads
- * their values. Its stored sign-in lives in the OS credential store or under `COPILOT_HOME`, which Recoder
- * points at an empty scratch dir it deletes after the run.
+ * The one credential variable forwarded to the CLI: `COPILOT_GITHUB_TOKEN` is the headless sign-in for Copilot
+ * alone, so it is the user's own sign-in and passes through the strip like the CLI's stored one, which Recoder
+ * never reads. The server's `GH_TOKEN` and `GITHUB_TOKEN` are its forge credentials, not the CLI's, and stay
+ * stripped with every other token, key, secret and password variable.
  */
-const AUTH_TOKENS = ['COPILOT_GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN'] as const;
+const AUTH_TOKENS = ['COPILOT_GITHUB_TOKEN'] as const;
 
 /**
  * Set on every child: auto-update would download a new CLI (and plugin updates) mid-review instead of running

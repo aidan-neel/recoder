@@ -2,8 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { TokenUsage } from '@recoder/shared';
-import { addedUsage, EventReader, parseEvent, readUsage } from '../../../src/agents/copilot/copilot-output';
+import { EventReader, parseEvent, readUsage } from '../../../src/agents/copilot/copilot-output';
 import type { AgentEvent } from '../../../src/agents/contract';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { CliExit } from '../../../src/agents/cli-stream';
@@ -58,6 +57,11 @@ describe('parseEvent', () => {
 			{ type: 'session.error', data: { errorType: 'rate_limit', message: '429 slow down', statusCode: 429 } },
 			{ type: 'failure', message: '429 slow down', statusCode: 429, errorType: 'rate_limit' }
 		],
+		[
+			'model.call_start',
+			{ type: 'model.call_start', data: { turnId: '0', model: 'gpt-5.6-sol' } },
+			{ type: 'step-start' }
+		],
 		['session.start', { type: 'session.start', data: { sessionId: 's1' } }, { type: 'activity' }],
 		['a bare string', 'not json at all', { type: 'invalid' }],
 		['a line with no type', { data: {} }, { type: 'invalid' }]
@@ -103,26 +107,44 @@ describe('EventReader', () => {
 		]);
 	});
 
-	test('several message parts join into the reply, and unrelated events are activity', () => {
-		const { events, reply } = feed([
-			jsonl({ type: 'session.start', data: { sessionId: 's' } }),
-			jsonl({ type: 'assistant.message', data: { messageId: 'm1', content: 'one ' } }),
-			jsonl({ type: 'assistant.message', data: { messageId: 'm2', content: 'two' } }),
-			jsonl({ type: 'result', usage: { premiumRequests: 0 } })
+	test('each model call is a step of its own', () => {
+		const { events } = feed([
+			jsonl({ type: 'model.call_start', data: { turnId: '0', model: 'm' } }),
+			jsonl({ type: 'assistant.message', data: { messageId: 'm1', content: 'one' } }),
+			jsonl({ type: 'model.call_start', data: { turnId: '1', model: 'm' } }),
+			jsonl({ type: 'assistant.message', data: { messageId: 'm2', content: 'two' } })
 		]);
 
-		expect(reply.text).toBe('one two');
-		expect(events.filter((event) => event.type === 'activity')).toHaveLength(2);
+		expect(events.filter((event) => event.type === 'step-start')).toEqual([
+			{ type: 'step-start' },
+			{ type: 'step-start' }
+		]);
 	});
 
-	test('a line that is not JSONL is an error event, and the prompt can still finish', () => {
+	test('a tool turn’s narration is not part of the reply: only the last message is', () => {
 		const { events, reply } = feed([
-			'Welcome to GitHub Copilot CLI!',
+			jsonl({
+				type: 'assistant.message',
+				data: { messageId: 'm1', content: 'Let me read the diff. ', toolRequests: [{ name: 'read_diff' }] }
+			}),
+			jsonl({ type: 'assistant.message', data: { messageId: 'm2', content: '{"answer":"final"}', toolRequests: [] } })
+		]);
+
+		expect(reply.text).toBe('{"answer":"final"}');
+		expect(events).toContainEqual({ type: 'text', delta: 'Let me read the diff. ', partId: 'm1' });
+	});
+
+	test('a line that is not JSONL is an error event whose credential is redacted, and the prompt can still finish', () => {
+		const { events, reply } = feed([
+			'Authorization: Bearer fake-copilot-credential',
 			jsonl({ type: 'assistant.message', data: { messageId: 'm1', content: 'ok' } })
 		]);
 
 		expect(events[0]).toMatchObject({ type: 'error' });
-		expect((events[0] as { message: string }).message).not.toContain('fake-copilot-credential');
+
+		if (events[0]?.type !== 'error') throw new Error('expected an error event');
+
+		expect(events[0].message).not.toContain('fake-copilot-credential');
 		expect(reply.text).toBe('ok');
 	});
 });
@@ -149,7 +171,25 @@ describe('EventReader.finish', () => {
 
 		expect(reply.error).toBeInstanceOf(LlmError);
 		expect(reply.error?.status).toBe(401);
-		expect(reply.error?.message).toContain('copilot login');
+		expect(reply.error?.message).toContain('gh auth login');
+	});
+
+	test('a session.error quoting a tool slot URL never puts its token in the error', () => {
+		const { reply } = feed(
+			[
+				jsonl({
+					type: 'session.error',
+					data: {
+						errorType: 'query',
+						message: 'request failed: http://127.0.0.1:43123/mcp/kX9mP2vQ7rT4wZ8nB3yH6jF5dS1aG0cV',
+						statusCode: 400
+					}
+				})
+			],
+			{ code: 1, stderr: '' }
+		);
+
+		expect(reply.error?.message).not.toContain('kX9mP2vQ7rT4wZ8nB3yH6jF5dS1aG0cV');
 	});
 
 	test('a session.error naming a spent plan is a UsageLimitError', () => {
@@ -234,34 +274,5 @@ describe('usage files', () => {
 
 		expect(await readUsage(join(dir, 'missing.json'))).toBeNull();
 		expect(await readUsage(await writeUsage({ nope: true }))).toBeNull();
-	});
-
-	test('the added usage is the cumulative file less what earlier prompts counted', () => {
-		const before: TokenUsage = {
-			inputTokens: 400,
-			outputTokens: 10,
-			totalTokens: 410,
-			cachedInputTokens: 100,
-			cacheWriteInputTokens: null,
-			reasoningOutputTokens: null
-		};
-
-		const now: TokenUsage = {
-			inputTokens: 1000,
-			outputTokens: 20,
-			totalTokens: 1020,
-			cachedInputTokens: 600,
-			cacheWriteInputTokens: 5,
-			reasoningOutputTokens: null
-		};
-
-		expect(addedUsage(now, before)).toEqual({
-			inputTokens: 600,
-			outputTokens: 10,
-			totalTokens: 610,
-			cachedInputTokens: 500,
-			cacheWriteInputTokens: 5,
-			reasoningOutputTokens: null
-		});
 	});
 });

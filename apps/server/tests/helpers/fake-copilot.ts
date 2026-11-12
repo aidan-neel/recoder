@@ -1,7 +1,9 @@
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { LlmError, UsageLimitError } from '../../src/models/llm/errors';
 import { fakeBin } from './fake-bin';
+import type { CallFailure } from './native-agent';
 
 /**
  * What the `tool` mode runs inside the fake: one MCP `tools/call` to the server Recoder put in
@@ -418,6 +420,17 @@ if (mode === 'tool') {
 	finish(0);
 }
 `;
+
+/**
+ * The failure each `FAKE_COPILOT_MODE` produces, shared by the `complete()` and run-prompt contract tests: the
+ * sign-in hint names `gh auth login`, the usage cap is a {@link UsageLimitError}, and the crash is an
+ * {@link LlmError} quoting stderr.
+ */
+export const COPILOT_FAILURES: CallFailure[] = [
+	{ mode: 'auth', status: 401, message: /gh auth login/, error: LlmError },
+	{ mode: 'limit', status: 429, message: /resets at 3pm/, error: UsageLimitError },
+	{ mode: 'crash', status: 0, message: /boom/, error: LlmError }
+];
 
 /** The user's own Copilot config the fake gets unless a test passes another: a hook and an MCP server. */
 const USER_SETTINGS = {

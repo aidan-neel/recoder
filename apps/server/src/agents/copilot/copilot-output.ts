@@ -6,7 +6,13 @@ import type { CliExit } from '../cli-stream';
 import type { AgentEvent, AgentReply } from '../contract';
 import { quotedLine } from '../quoted-line';
 
-export const COPILOT_LOGIN = 'copilot login';
+/**
+ * The sign-in a Copilot run can see: `gh auth login` signs the GitHub CLI in, and with an empty scratch
+ * `COPILOT_HOME` and no `COPILOT_GITHUB_TOKEN` the CLI falls back to `gh auth token`. `copilot login` does not
+ * work here: it saves the account under `COPILOT_HOME`, and every run gets an empty scratch one that is deleted
+ * after the call, so that sign-in is invisible to the next.
+ */
+export const GH_LOGIN = 'gh auth login';
 
 /** Longest stretch of the CLI's output quoted in an error or an error event. */
 const QUOTED_CHARS = 300;
@@ -51,12 +57,13 @@ const failureData = z.object({
 	statusCode: z.number().optional()
 });
 
-/** The event one line carries: a streamed piece, an authoritative message, reasoning, a failure, life, or garbage. */
+/** The event one line carries: a streamed piece, an authoritative message, reasoning, a model call starting, a failure, life, or garbage. */
 export type ParsedLine =
 	| { type: 'delta'; messageId: string; content: string }
 	| { type: 'message'; messageId: string; content: string }
 	| { type: 'reasoning-delta'; partId: string; content: string }
 	| { type: 'reasoning-message'; partId: string; content: string }
+	| { type: 'step-start' }
 	| { type: 'failure'; message: string; statusCode: number | null; errorType: string | null }
 	| { type: 'activity' }
 	| { type: 'invalid' };
@@ -91,20 +98,20 @@ export function parseEvent(line: string): ParsedLine {
 
 	if (type === 'assistant.reasoning_delta' || type === 'assistant.reasoning') {
 		const parsed = reasoningData.safeParse(data);
+
+		if (!parsed.success) return { type: 'activity' };
+
 		const streamed = type === 'assistant.reasoning_delta';
+		const content = streamed ? streamedReasoning(parsed.data) : wholeReasoning(parsed.data);
 
-		const content = parsed.success
-			? streamed
-				? (parsed.data.deltaContent ?? parsed.data.delta ?? parsed.data.text)
-				: (parsed.data.content ?? parsed.data.deltaContent ?? parsed.data.text)
-			: undefined;
-
-		if (!parsed.success || content === undefined) return { type: 'activity' };
+		if (content === undefined) return { type: 'activity' };
 
 		const partId = parsed.data.reasoningId ?? parsed.data.messageId ?? parsed.data.turnId ?? 'reasoning';
 
 		return { type: streamed ? 'reasoning-delta' : 'reasoning-message', partId, content };
 	}
+
+	if (type === 'model.call_start') return { type: 'step-start' };
 
 	if (type === 'session.error') {
 		const parsed = failureData.safeParse(data);
@@ -120,6 +127,16 @@ export function parseEvent(line: string): ParsedLine {
 	}
 
 	return { type: 'activity' };
+}
+
+/** The text a streamed `assistant.reasoning_delta` carries, under whichever of its fields the CLI used. */
+function streamedReasoning(data: z.infer<typeof reasoningData>): string | undefined {
+	return data.deltaContent ?? data.delta ?? data.text;
+}
+
+/** The whole text an authoritative `assistant.reasoning` message carries. */
+function wholeReasoning(data: z.infer<typeof reasoningData>): string | undefined {
+	return data.content ?? data.deltaContent ?? data.text;
 }
 
 /** Where the reader sends streamed text as it arrives. */
@@ -164,6 +181,12 @@ export class EventReader {
 			return;
 		}
 
+		if (event.type === 'step-start') {
+			this.onEvent({ type: 'step-start' });
+
+			return;
+		}
+
 		if (event.type === 'failure') {
 			this.failure = event;
 			this.onEvent({ type: 'error', message: quotedLine(event.message, QUOTED_CHARS) });
@@ -175,7 +198,7 @@ export class EventReader {
 			const part = this.thought(event.partId);
 
 			part.content += event.content;
-			this.think(event.partId, event.content);
+			this.emit(this.reasoning, event.partId, event.content, 'reasoning');
 
 			return;
 		}
@@ -184,7 +207,13 @@ export class EventReader {
 			const part = this.thought(event.partId);
 
 			part.content = event.content;
-			this.think(event.partId, event.content.length > part.sent ? event.content.slice(part.sent) : '');
+
+			this.emit(
+				this.reasoning,
+				event.partId,
+				event.content.length > part.sent ? event.content.slice(part.sent) : '',
+				'reasoning'
+			);
 
 			return;
 		}
@@ -193,18 +222,27 @@ export class EventReader {
 
 		if (event.type === 'message') {
 			part.content = event.content;
-			this.send(event.messageId, event.content.length > part.sent ? event.content.slice(part.sent) : '');
+
+			this.emit(
+				this.parts,
+				event.messageId,
+				event.content.length > part.sent ? event.content.slice(part.sent) : '',
+				'text'
+			);
 
 			return;
 		}
 
 		part.content += event.content;
-		this.send(event.messageId, event.content);
+		this.emit(this.parts, event.messageId, event.content, 'text');
 	};
 
-	/** The reply as the message contents hold it, and the error that ended the prompt, if one did. */
+	/**
+	 * The reply as the last message part holds it — a tool turn's earlier messages are narration, and the last
+	 * model call's text is the answer — and the error that ended the prompt, if one did.
+	 */
 	finish(exit: CliExit): AgentReply {
-		const text = [...this.parts.values()].map((part) => part.content).join('');
+		const text = [...this.parts.values()].at(-1)?.content ?? '';
 
 		if (exit.code !== 0) return { text, error: exitError(exit, this.last, this.failure) };
 
@@ -212,7 +250,11 @@ export class EventReader {
 			return {
 				text,
 				error: this.failure
-					? copilotFailure(this.failure.message, this.failure.statusCode, this.failure.errorType)
+					? copilotFailure(
+							quotedLine(this.failure.message, QUOTED_CHARS),
+							this.failure.statusCode,
+							this.failure.errorType
+						)
 					: new LlmError(0, 'GitHub Copilot ended without a reply.')
 			};
 		}
@@ -220,24 +262,24 @@ export class EventReader {
 		return { text };
 	}
 
-	/** Emits the piece of a message not sent yet, so the text events add up to the reply and never repeat it. */
-	private send(id: string, piece: string): void {
+	/**
+	 * Emits the piece of a streamed part not sent yet, as text or reasoning, so the events add up to the part's
+	 * content and never repeat it.
+	 */
+	private emit(
+		parts: Map<string, { content: string; sent: number }>,
+		id: string,
+		piece: string,
+		type: 'text' | 'reasoning'
+	): void {
 		if (!piece) return;
 
-		const part = this.part(id);
+		const part = this.slot(parts, id);
 
 		part.sent += piece.length;
-		this.onEvent({ type: 'text', delta: piece, partId: id });
-	}
 
-	/** Emits the piece of a reasoning part not sent yet, so reasoning events add up to it and never repeat it. */
-	private think(id: string, piece: string): void {
-		if (!piece) return;
-
-		const part = this.thought(id);
-
-		part.sent += piece.length;
-		this.onEvent({ type: 'reasoning', delta: piece, partId: id });
+		if (type === 'text') this.onEvent({ type: 'text', delta: piece, partId: id });
+		else this.onEvent({ type: 'reasoning', delta: piece, partId: id });
 	}
 
 	private part(id: string): { content: string; sent: number } {
@@ -267,10 +309,7 @@ export class EventReader {
  */
 function copilotFailure(text: string, statusCode: number | null, errorType: string | null): LlmError {
 	if (SIGNED_OUT.test(text)) {
-		return new LlmError(
-			401,
-			`GitHub Copilot is signed out. Run: ${COPILOT_LOGIN}, set COPILOT_GITHUB_TOKEN, GH_TOKEN or GITHUB_TOKEN, or run: gh auth login`
-		);
+		return new LlmError(401, `GitHub Copilot is signed out. Run: ${GH_LOGIN}, or set COPILOT_GITHUB_TOKEN.`);
 	}
 
 	if (isSpentPlan(text) || PREMIUM_CAP.test(text) || errorType === 'quota' || errorType === 'usage_limit') {
@@ -295,7 +334,9 @@ function exitError(
 	lastStdout: string | null,
 	reported: { message: string; statusCode: number | null; errorType: string | null } | null
 ): LlmError {
-	if (reported) return copilotFailure(reported.message, reported.statusCode, reported.errorType);
+	if (reported) {
+		return copilotFailure(quotedLine(reported.message, QUOTED_CHARS), reported.statusCode, reported.errorType);
+	}
 
 	const quoted = errorLine(exit.stderr) ?? errorLine(lastStdout);
 
@@ -326,30 +367,6 @@ const usageFileSchema = z.object({
 
 type CountField =
 	'inputTokens' | 'outputTokens' | 'cachedInputTokens' | 'cacheWriteInputTokens' | 'reasoningOutputTokens';
-
-/**
- * The usage one prompt added to a session's file: the file's cumulative totals less what earlier prompts of the
- * session already reported. A count the file does not report stays unknown, never zero.
- */
-export function addedUsage(now: TokenUsage, before: TokenUsage | null): TokenUsage {
-	const added = (field: CountField): number | null => {
-		const count = now[field];
-
-		return count === null ? null : count - (before?.[field] ?? 0);
-	};
-
-	const inputTokens = added('inputTokens');
-	const outputTokens = added('outputTokens');
-
-	return {
-		inputTokens,
-		outputTokens,
-		totalTokens: inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null,
-		cachedInputTokens: added('cachedInputTokens'),
-		cacheWriteInputTokens: added('cacheWriteInputTokens'),
-		reasoningOutputTokens: added('reasoningOutputTokens')
-	};
-}
 
 type UsageFileField = 'inputTokens' | 'outputTokens' | 'cacheReadTokens' | 'cacheWriteTokens' | 'reasoningTokens';
 
