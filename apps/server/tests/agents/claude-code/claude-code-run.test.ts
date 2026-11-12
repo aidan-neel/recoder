@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { ClaudeCodeAgent } from '../../../src/agents/claude-code/claude-code';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import { fakeClaudeAgent, fakeClaudeCalls } from '../../helpers/fake-claude-agent';
 import { fakeClaudeLog } from '../../helpers/fake-claude';
 import { fixtureReview, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
@@ -144,8 +145,8 @@ describe('ClaudeCodeAgent.openRun', () => {
 	});
 
 	testPromptFailures(openRun, [
-		{ mode: 'auth', status: 401, message: /claude auth login/ },
-		{ mode: 'limit', status: 429, message: /resets 3pm/, usageLimit: true }
+		{ mode: 'auth', status: 401, message: /claude auth login/, error: LlmError },
+		{ mode: 'limit', status: 429, message: /resets 3pm/, error: UsageLimitError }
 	]);
 
 	test('output that is not stream-json is reported and fails the prompt with the line quoted', async () => {

@@ -5,6 +5,7 @@ import { dirname } from 'node:path';
 import { z } from 'zod';
 import { CodexAgent } from '../../../src/agents/codex/codex';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import { FAKE_CODEX_CREDENTIAL, FAKE_CODEX_SESSION, fakeCodex } from '../../helpers/fake-codex';
 import {
 	fixtureReview,
@@ -181,8 +182,8 @@ describe('CodexAgent.openRun', () => {
 	});
 
 	testPromptFailures(openRun, [
-		{ mode: 'auth', status: 401, message: /^Codex is signed out\. Run: codex login$/ },
-		{ mode: 'limit', status: 429, message: /try again at 5:28 AM/, usageLimit: true }
+		{ mode: 'auth', status: 401, message: /^Codex is signed out\. Run: codex login$/, error: LlmError },
+		{ mode: 'limit', status: 429, message: /try again at 5:28 AM/, error: UsageLimitError }
 	]);
 
 	test.each([

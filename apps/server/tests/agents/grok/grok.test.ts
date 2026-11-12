@@ -129,10 +129,10 @@ describe('GrokAgent.complete', () => {
 	testCallFailures(
 		async (mode) => new GrokAgent(await fakeGrok({ FAKE_GROK_MODE: mode })).complete(call()),
 		[
-			{ mode: 'auth', status: 401, message: /grok login/ },
-			{ mode: 'limit', status: 429, message: /usage limit/, usageLimit: true },
-			{ mode: 'crash', status: 0, message: /boom/ },
-			{ mode: 'empty', status: 0, message: /could not be parsed/ }
+			{ mode: 'auth', status: 401, message: /grok login/, error: LlmError },
+			{ mode: 'limit', status: 429, message: /usage limit/, error: UsageLimitError },
+			{ mode: 'crash', status: 0, message: /boom/, error: LlmError },
+			{ mode: 'empty', status: 0, message: /could not be parsed/, error: LlmError }
 		]
 	);
 

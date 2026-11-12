@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { z } from 'zod';
 import { CursorAgent } from '../../../src/agents/cursor/cursor';
 import type { AgentEvent, AgentPromptOptions, AgentReply, AgentRun } from '../../../src/agents/contract';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import { cursorCalls, fakeCursor, type CursorCall } from '../../helpers/fake-cursor';
 import { fixtureReview, testOutputCapPrompt, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
@@ -176,8 +177,8 @@ describe('CursorAgent.openRun', () => {
 	});
 
 	testPromptFailures(openRun, [
-		{ mode: 'auth', status: 401, message: /cursor-agent login/ },
-		{ mode: 'limit', status: 429, message: /usage limit/, usageLimit: true }
+		{ mode: 'auth', status: 401, message: /cursor-agent login/, error: LlmError },
+		{ mode: 'limit', status: 429, message: /usage limit/, error: UsageLimitError }
 	]);
 
 	test('output that is not stream-json is reported and fails the prompt with the line quoted', async () => {

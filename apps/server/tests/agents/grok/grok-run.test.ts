@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import type { AgentEvent, AgentRun, AgentRunOptions } from '../../../src/agents/contract';
 import { GrokAgent } from '../../../src/agents/grok/grok';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import { fakeGrok, fakeGrokCalls, fakeGrokEnv } from '../../helpers/fake-grok';
 import { fixtureReview, testOutputCapPrompt, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
@@ -188,9 +189,9 @@ describe('GrokAgent.openRun', () => {
 	});
 
 	testPromptFailures(openRun, [
-		{ mode: 'auth', status: 401, message: /grok login/ },
-		{ mode: 'limit', status: 429, message: /usage limit/, usageLimit: true },
-		{ mode: 'crash', status: 0, message: /boom/ }
+		{ mode: 'auth', status: 401, message: /grok login/, error: LlmError },
+		{ mode: 'limit', status: 429, message: /usage limit/, error: UsageLimitError },
+		{ mode: 'crash', status: 0, message: /boom/, error: LlmError }
 	]);
 
 	test('a prompt that fails before its result line never quotes a credential from stderr', async () => {

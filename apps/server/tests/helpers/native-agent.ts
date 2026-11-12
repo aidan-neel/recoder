@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
 import type { AgentAdapter, AgentEvent, AgentRun, AgentRunOptions } from '../../src/agents/contract';
-import { LlmError, UsageLimitError } from '../../src/models/llm/errors';
+import { LlmError } from '../../src/models/llm/errors';
 import { EvidenceStore } from '../../src/evidence/evidence';
 import { ModelBudget } from '../../src/review/pipeline/agent-loop/budget';
 import { runNativeAgent } from '../../src/review/pipeline/agent-loop/native-engine';
@@ -127,19 +127,19 @@ export function testOutputCapPrompt(open: (mode: string) => Promise<{ run: Agent
 
 /**
  * One failure a fake mode produces, for a prompt or a `complete()` call: the mode, the error status, what its
- * message matches, and whether the error is a usage cap.
+ * message matches, and the error class it must be — `UsageLimitError` for a usage cap, `LlmError` otherwise.
  */
 export interface CallFailure {
 	mode: string;
 	status: number;
 	message: RegExp;
-	usageLimit?: boolean;
+	error: typeof LlmError;
 }
 
 /**
  * Registers the contract tests every run keeps: a prompt in each fake mode fails the run's reply as an
- * {@link LlmError} with the mapped status and message — a {@link UsageLimitError} too when `usageLimit` is set.
- * `open` starts a run on the fake in `mode`.
+ * {@link LlmError} with the mapped status, message and error class the row names. `open` starts a run on the
+ * fake in `mode`.
  */
 export function testPromptFailures(
 	open: (mode: string) => Promise<{ run: AgentRun }>,
@@ -147,17 +147,14 @@ export function testPromptFailures(
 ): void {
 	test.each([...cases])(
 		'a prompt in $mode mode fails with status $status',
-		async ({ mode, status, message, usageLimit }: CallFailure) => {
+		async ({ mode, status, message, error }: CallFailure) => {
 			const { run } = await open(mode);
 
 			const reply = await run.prompt('Review it.', PROMPT);
 
 			await run.close();
 
-			expect(reply.error).toBeInstanceOf(LlmError);
-
-			if (usageLimit) expect(reply.error).toBeInstanceOf(UsageLimitError);
-
+			expect(reply.error).toBeInstanceOf(error);
 			expect(reply.error).toMatchObject({ status, message: expect.stringMatching(message) });
 		}
 	);
@@ -165,20 +162,17 @@ export function testPromptFailures(
 
 /**
  * Registers the contract tests every `complete()` keeps: each fake mode's call fails as an {@link LlmError} with
- * the mapped status and message — a {@link UsageLimitError} too when `usageLimit` is set. `complete` makes the
- * call on the fake in `mode` and resolves with whatever it threw.
+ * the mapped status, message and error class the row names. `complete` makes the call on the fake in `mode` and
+ * resolves with whatever it threw.
  */
 export function testCallFailures(complete: (mode: string) => Promise<unknown>, cases: readonly CallFailure[]): void {
 	test.each([...cases])(
 		'a $mode call fails with status $status',
-		async ({ mode, status, message, usageLimit }: CallFailure) => {
-			const error = await complete(mode).catch((e: unknown) => e);
+		async ({ mode, status, message, error }: CallFailure) => {
+			const failure = await complete(mode).catch((e: unknown) => e);
 
-			expect(error).toBeInstanceOf(LlmError);
-
-			if (usageLimit) expect(error).toBeInstanceOf(UsageLimitError);
-
-			expect(error).toMatchObject({ status, message: expect.stringMatching(message) });
+			expect(failure).toBeInstanceOf(error);
+			expect(failure).toMatchObject({ status, message: expect.stringMatching(message) });
 		}
 	);
 }

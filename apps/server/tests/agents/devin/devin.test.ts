@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { TokenUsage } from '@recoder/shared';
 import { DevinAgent } from '../../../src/agents/devin/devin';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { fakeDevin } from '../../helpers/fake-devin';
 import { testCallFailures } from '../../helpers/native-agent';
@@ -79,10 +80,10 @@ describe('DevinAgent.complete', () => {
 	testCallFailures(
 		async (mode) => new DevinAgent(await fakeDevin({ FAKE_DEVIN_MODE: mode })).complete(call()),
 		[
-			{ mode: 'signedout', status: 401, message: /signed out/ },
-			{ mode: 'crash', status: 0, message: /boom/ },
-			{ mode: 'limited', status: 429, message: /free model rate limit.*00:01 UTC/, usageLimit: true },
-			{ mode: 'empty', status: 0, message: /without a reply/ }
+			{ mode: 'signedout', status: 401, message: /signed out/, error: LlmError },
+			{ mode: 'crash', status: 0, message: /boom/, error: LlmError },
+			{ mode: 'limited', status: 429, message: /free model rate limit.*00:01 UTC/, error: UsageLimitError },
+			{ mode: 'empty', status: 0, message: /without a reply/, error: LlmError }
 		]
 	);
 });

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { TokenUsage } from '@recoder/shared';
 import { PiAgent } from '../../../src/agents/pi/pi';
-import { LlmError } from '../../../src/models/llm/errors';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { fakePi, fakePiCalls } from '../../helpers/fake-pi';
 import { testCallFailures } from '../../helpers/native-agent';
@@ -81,9 +81,9 @@ describe('PiAgent.complete', () => {
 	testCallFailures(
 		async (mode) => new PiAgent(await fakePi({ FAKE_PI_MODE: mode })).complete(call()),
 		[
-			{ mode: 'auth', status: 401, message: /pi, then type \/login/ },
-			{ mode: 'limit', status: 429, message: /exceeded your current quota/, usageLimit: true },
-			{ mode: 'crash', status: 0, message: /boom/ }
+			{ mode: 'auth', status: 401, message: /pi, then type \/login/, error: LlmError },
+			{ mode: 'limit', status: 429, message: /exceeded your current quota/, error: UsageLimitError },
+			{ mode: 'crash', status: 0, message: /boom/, error: LlmError }
 		]
 	);
 });
