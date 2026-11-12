@@ -1,4 +1,4 @@
-import { parseUnifiedDiff, type DiffHunk, type FileDiff, type Finding } from '@recoder/shared';
+import { parseUnifiedDiff, type DiffHunk, type DiffLine, type FileDiff, type Finding } from '@recoder/shared';
 
 /** A review's pull request diff by file path. */
 export type DiffFiles = ReadonlyMap<string, FileDiff>;
@@ -17,13 +17,22 @@ export function diffFiles(diff: string): DiffFiles {
 	return new Map(parseUnifiedDiff(diff).map((file) => [file.path, file]));
 }
 
-/** The text of `line` on `side` of `file`, empty when the diff does not show it. */
-export function lineText(files: DiffFiles, file: string, line: number | undefined, side: 'old' | 'new'): string {
+/** Every line the diff shows of `file`, hunk after hunk; none when the diff does not change it. */
+export function diffLines(files: DiffFiles, file: string): DiffLine[] {
+	return files.get(file)?.hunks.flatMap((hunk) => hunk.lines) ?? [];
+}
+
+/** The text of the finding's line on its side, empty when the diff does not show it. */
+export function lineText(files: DiffFiles, finding: Finding): string {
+	const { line } = finding;
+
 	if (!line) return '';
 
-	const lines = files.get(file)?.hunks.flatMap((hunk) => hunk.lines) ?? [];
+	const side = finding.side ?? 'new';
 
-	return lines.find((entry) => (side === 'old' ? entry.oldNo : entry.newNo) === line)?.text ?? '';
+	return (
+		diffLines(files, finding.file).find((entry) => (side === 'old' ? entry.oldNo : entry.newNo) === line)?.text ?? ''
+	);
 }
 
 /**

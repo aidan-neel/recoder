@@ -1,7 +1,15 @@
 import { expect, test } from 'bun:test';
 import { diffFiles } from '../../../src/review/history/code-change';
 import { defectIdentity, sameDefect } from '../../../src/review/history/identity';
-import { CRASH_CLAIM, FIRST_PUSH, STALE_CLAIM, UNRELATED_PUSH, cacheFinding } from './fixtures';
+import {
+	CRASH_CLAIM,
+	FIRST_PUSH,
+	PAGE_PUSH,
+	STALE_CLAIM,
+	UNRELATED_PUSH,
+	cacheFinding,
+	negativeArgumentFinding
+} from './fixtures';
 
 const first = diffFiles(FIRST_PUSH);
 const later = diffFiles(UNRELATED_PUSH);
@@ -29,4 +37,12 @@ test('two different defects in one symbol keep separate identities', () => {
 	const crash = defectIdentity(cacheFinding('b', CRASH_CLAIM), first);
 
 	expect(sameDefect(stale, crash)).toBe(false);
+});
+
+test('the same missing check on two different arguments keeps separate identities', () => {
+	const paged = diffFiles(PAGE_PUSH);
+	const limit = defectIdentity(negativeArgumentFinding('a', 'limit'), paged);
+	const offset = defectIdentity(negativeArgumentFinding('b', 'offset'), paged);
+
+	expect(sameDefect(limit, offset)).toBe(false);
 });

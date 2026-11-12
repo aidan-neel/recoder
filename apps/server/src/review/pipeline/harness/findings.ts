@@ -116,7 +116,7 @@ function stem(word: string): string {
 }
 
 /** The stemmed terms of `text`, split at case changes and punctuation, lowercased and without filler. */
-function termsOf(text: string): string[] {
+export function termsOf(text: string): string[] {
 	const words = text
 		.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
 		.toLowerCase()

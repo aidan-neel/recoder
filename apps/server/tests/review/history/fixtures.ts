@@ -75,3 +75,53 @@ export function cacheFinding(id: string, claim: FindingClaim, overrides: Partial
 		...overrides
 	};
 }
+
+/** The first push of a paging helper that slices without checking its arguments. */
+export const PAGE_PUSH = diffOf('src/page.ts', [
+	{
+		start: 1,
+		lines: [
+			' export function page(items: Item[], limit: number, offset: number) {',
+			'+\treturn items.slice(offset, offset + limit);',
+			' }'
+		]
+	}
+]);
+
+/** A later push that rejects a negative `limit` and still takes any `offset`. */
+export const LIMIT_GUARD_PUSH = diffOf('src/page.ts', [
+	{
+		start: 1,
+		lines: [
+			' export function page(items: Item[], limit: number, offset: number) {',
+			"+\tif (limit < 0) throw new RangeError('limit');",
+			'+\treturn items.slice(offset, offset + limit);',
+			' }'
+		]
+	}
+]);
+
+/** A finding in `page` that a negative value of `operand` is never rejected. */
+export function negativeArgumentFinding(
+	id: string,
+	operand: 'limit' | 'offset',
+	overrides: Partial<Finding> = {}
+): Finding {
+	return {
+		id,
+		title: `Negative ${operand} is not rejected`,
+		file: 'src/page.ts',
+		line: 2,
+		severity: 'warning',
+		message: `[correctness] A negative ${operand} is not validated, so the slice returns the wrong rows`,
+		category: 'correctness',
+		symbol: 'page',
+		claim: {
+			trigger: `a caller passes a negative ${operand}`,
+			executionPath: [],
+			consequence: 'the slice counts from the end and returns the wrong rows',
+			violatedContract: 'page arguments are validated before use'
+		},
+		...overrides
+	};
+}

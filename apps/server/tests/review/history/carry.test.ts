@@ -5,11 +5,14 @@ import { diffFiles } from '../../../src/review/history/code-change';
 import {
 	CRASH_CLAIM,
 	FIRST_PUSH,
+	LIMIT_GUARD_PUSH,
+	PAGE_PUSH,
 	REVERTED_PUSH,
 	STALE_CLAIM,
 	TOUCHING_PUSH,
 	UNRELATED_PUSH,
-	cacheFinding
+	cacheFinding,
+	negativeArgumentFinding
 } from './fixtures';
 
 const DECIDED = { state: 'dismissed', reason: 'not-worth-fixing', decidedAt: '2026-11-01T00:00:00.000Z' } as const;
@@ -92,4 +95,20 @@ test('a different defect in the same symbol is new at this head and leaves the e
 		['crash', { firstSeenSha: 'sha-2', state: 'new' }],
 		['old-stale', { firstSeenSha: 'sha-1', state: 'carried' }]
 	]);
+});
+
+test('refuting one argument check resolves only that defect and keeps the same check on another argument', () => {
+	const limit = negativeArgumentFinding('old-limit', 'limit');
+	const offset = negativeArgumentFinding('old-offset', 'offset');
+	const paged = { headSha: 'sha-1', findings: [limit, offset], diff: diffFiles(PAGE_PUSH) };
+
+	const refuted = negativeArgumentFinding('hidden', 'limit', {
+		line: 3,
+		verification: { status: 'unverified', outcome: 'refuted', reason: 'a negative limit now throws' }
+	});
+
+	const { findings, resolved } = carryHistory(paged, pushed(LIMIT_GUARD_PUSH, [], [refuted]));
+
+	expect(resolved.map((entry) => entry.finding.id)).toEqual(['old-limit']);
+	expect(findings.map((finding) => finding.id)).toEqual(['old-offset']);
 });
