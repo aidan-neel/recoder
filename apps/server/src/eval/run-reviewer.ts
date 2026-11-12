@@ -1,7 +1,8 @@
-import type { PipelineRun, StoredMetrics } from '../models/metrics';
+import type { PipelineRun, RunHistory, StoredMetrics } from '../models/metrics';
 import { stageTokens, type StageTokens } from './benchmark-tokens';
 import type { BenchmarkReport, ScoredRun } from './benchmark-report';
 import { NOT_RECORDED, type ReviewerMix } from './identity';
+import type { RunRecord } from './report';
 
 /** The calls of one pipeline run; `run` is null for calls stored before runs were recorded. */
 export interface SegmentAudit {
@@ -53,6 +54,13 @@ export interface RunReviewer {
 	reasons: string[];
 	/** The review's pipeline tokens by stage and model; absent from reports older than recording it. */
 	tokens?: StageTokens[];
+	/** The review's pipeline calls that completed and that failed; absent from reports older than counting them. */
+	completedCalls?: number;
+	failedCalls?: number;
+	/** The provider error of the review's last failed pipeline call, sanitized by the server; absent when none failed. */
+	lastError?: string;
+	/** The repository history the review's last pipeline run received; absent when the server did not record it. */
+	history?: RunHistory;
 }
 
 /** The models the report says reviewed: its identity's stage models, else its reviewer manifest. */
@@ -171,7 +179,38 @@ export function runReviewer(stored: StoredMetrics | null, declared: string[] | n
 		verdict: verdict.status,
 		mixed: verdict.status === 'MIXED' || differs.length > 0,
 		reasons: [...verdict.reasons, ...differs],
-		...(stored && { tokens: stageTokens(stored.calls) })
+		...(stored && { tokens: stageTokens(stored.calls), ...callOutcomes(stored) }),
+		...(last?.history && { history: last.history })
+	};
+}
+
+/** How many of the review's pipeline calls completed and failed, and the last failure's error. */
+function callOutcomes(stored: StoredMetrics): Pick<RunReviewer, 'completedCalls' | 'failedCalls' | 'lastError'> {
+	const calls = stored.calls.filter((call) => call.scope === 'pipeline');
+	const failed = calls.filter((call) => call.status === 'failed');
+	const lastError = failed.flatMap((call) => (call.error ? [call.error] : [])).at(-1);
+
+	return {
+		completedCalls: calls.filter((call) => call.status === 'completed').length,
+		failedCalls: failed.length,
+		...(lastError && { lastError })
+	};
+}
+
+/**
+ * A passed run whose review completed no model call reviewed nothing with a
+ * model: its findings are the detectors' alone. It counts as failed, with
+ * why, instead of being scored as a clean review that found nothing.
+ */
+export function failedWhenNoCallCompleted(record: RunRecord, reviewer: RunReviewer | undefined): RunRecord {
+	if (record.outcome !== 'passed' || reviewer?.completedCalls !== 0) return record;
+
+	const why = reviewer.lastError ? `; the last failed with: ${reviewer.lastError}` : '';
+
+	return {
+		...record,
+		outcome: 'failed',
+		summary: `No model call completed (${reviewer.failedCalls ?? 0} failed${why}). ${record.summary ?? ''}`.trim()
 	};
 }
 

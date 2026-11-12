@@ -222,6 +222,7 @@ Shards run with `execution.mode` `partial`. When they cover the `full` task set 
 - `lows`: `LowTotals`, published below-the-bar findings by reason, each `published`, `matched`, `duplicates`, `unlabeled`.
 - `labels`: `LabelSummary`, finding classes (`planted`, `additional`, `false`, `unresolved`, `duplicate`) overall, by codebase, by evidence, and for control PRs.
 - `taskSet`, `mixedReviewer`.
+- `failedRuns`: runs whose review did not pass (failed, cancelled, timed out), which no total counts. The printout says `FAILED RUNS n of m, not scored` above the totals, so a report built from failed reviews never reads as a low score.
 
 `PrResult`: `id`, `taskId`, `baseSha`, `codebase`, `pull`, `verified` (copied from the label), `defects`, `control`, `staleHead` (a run reviewed another head), `agreement` (`strict` by fingerprint, `loose` by file, category and symbol), `runs`.
 
@@ -238,7 +239,7 @@ Shards run with `execution.mode` `partial`. When they cover the `full` task set 
 - `stages`: per defect a `DefectStage`: `found`, `verified`, `published`, `stoppedAt`, `reason`, `matches`, `lost`.
 - `lows`, `labeled` (classes from the adjudications), `judgeError`.
 
-Only `passed` runs are judged. A failed run, or one the judge failed on, has `score: null`.
+Only `passed` runs are judged. A failed run, or one the judge failed on, has `score: null`. A run whose review passed but completed no pipeline model call (`reviewer.completedCalls` is 0) is recorded as `failed` before judging (`failedWhenNoCallCompleted` in `apps/server/src/eval/run-reviewer.ts`), with the last failed call's error in its summary.
 
 ## Reviewer Audit
 
@@ -250,6 +251,8 @@ The benchmark reads it from `GET /api/reviews/<id>/metrics/stored` after the rev
 - `verdict`: `CLEAN`, `MIXED` or `MISSING` (no stored metrics).
 - `mixed`: `true` when the verdict is `MIXED` or a locked pick differs from the declared model.
 - `reasons`: why it is mixed.
+- `completedCalls`, `failedCalls`: the review's pipeline calls by status; `lastError`: the last failed call's sanitized provider error.
+- `history`: the repository history the last pipeline run received (`PipelineRun.history`), so a task's run can be audited or replayed with the same history.
 
 A review is `MIXED` when a pipeline call used a model outside its run's picks or the declared models, when its pipeline runs locked different picks, or when it has lock misses or unlocked calls.
 `summary.mixedReviewer` is `true` if any run is mixed, `false` if every recorded run is clean, and `not recorded` if none is recorded.

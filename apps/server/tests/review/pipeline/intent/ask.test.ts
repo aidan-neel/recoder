@@ -19,6 +19,7 @@ const call = (
 ): BriefCall<z.infer<typeof schema>> => ({
 	label: 'unit-1',
 	version,
+	signal: new AbortController().signal,
 	system,
 	user: 'Files: src/a.ts',
 	schema,

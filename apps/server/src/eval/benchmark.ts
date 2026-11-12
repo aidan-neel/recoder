@@ -39,7 +39,7 @@ import {
 import { captureIdentity } from './identity-capture';
 import { writeEvalFile } from './report';
 import { readReviewer, runReview, stopOnInterrupt } from './run-review';
-import { mixedReviewer, reportedModels } from './run-reviewer';
+import { failedWhenNoCallCompleted, mixedReviewer, reportedModels } from './run-reviewer';
 import { HOLDOUT_SET, readLabels, readTaskSet, selectTasks, subsetLines, type PrLabel, type TaskSet } from './task-set';
 import { runAgreement } from './benchmark-merge';
 import { benchmarkSummary } from './benchmark-score';
@@ -209,7 +209,8 @@ async function runAll(
 			);
 
 			const reviewer = await readReviewer(options.base, record.reviewId, declared);
-			const scored = await scoreRun(judge, label, record, options.base, adjudications);
+			const checked = failedWhenNoCallCompleted(record, reviewer);
+			const scored = await scoreRun(judge, label, checked, options.base, adjudications);
 
 			records[pr]![run] = stamped(
 				label,

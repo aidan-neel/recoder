@@ -185,6 +185,27 @@ function agreementLines(prs: PrResult[]): string[] {
 	return ['', 'Findings across runs', line('by fingerprint', 'strict'), line('by file+category', 'loose')];
 }
 
+/**
+ * "failed runs 15 of 25, not scored: …" with the first failure's reason, so a
+ * report built from failed reviews never reads as a low score; nothing when
+ * every run passed or the report predates counting them.
+ */
+function failedRunLines(report: BenchmarkReport): string[] {
+	const failed = report.summary.failedRuns;
+
+	if (!failed) return [];
+
+	const runs = report.prs.flatMap((pr) => pr.runs);
+
+	const reason =
+		runs
+			.find((run) => run.outcome !== 'passed')
+			?.summary?.split('\n')[0]
+			?.slice(0, 160) ?? '';
+
+	return [`  FAILED RUNS ${failed} of ${runs.length}, not scored${reason ? `: ${reason}` : ''}`];
+}
+
 function totalsLine(label: string, totals: Totals): string {
 	return `  ${label.padEnd(18)} recall ${percent(recall(totals))} (${totals.found}/${totals.planted})`;
 }
@@ -443,6 +464,7 @@ export function printBenchmark(report: BenchmarkReport): void {
 			...report.prs.map(prLine),
 			'',
 			'Overall',
+			...failedRunLines(report),
 			totalsLine('all', summary.overall),
 			...stability,
 			...agreementLines(report.prs),

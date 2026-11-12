@@ -58,9 +58,19 @@ function modelsByRun(calls: RunTokenCall[]): Record<string, string[]> {
 	return byRun;
 }
 
-/** A run's identity without its measured timings, which vary from run to run. */
+/**
+ * A run segment on `models`, without its measured timings, which vary from run to run. It received no history: the
+ * fixture repository has no dismissals, votes or earlier PRs.
+ */
 function segment(index: number, models: string[]): Omit<PipelineRun, 'startedAt' | 'queueDelay'> {
-	return { index, orchestrator: models[0]!, subagent: models[1]!, lockMisses: 0, tokenBudget: 'medium' };
+	return {
+		index,
+		orchestrator: models[0]!,
+		subagent: models[1]!,
+		lockMisses: 0,
+		tokenBudget: 'medium',
+		history: { dismissals: [], topics: {}, sources: [] }
+	};
 }
 
 test('a review keeps the models it started on for every call when the pick changes mid-run', async () => {

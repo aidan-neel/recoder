@@ -44,6 +44,9 @@ const ANSWER_STEPS = 2;
 /** How long to wait before resuming after a provider's transient failure, per attempt so far. */
 const RESUME_BACKOFF_MS = 5_000;
 
+/** Why a step still open when the run closes has failed: the session ended before the step did. */
+const SESSION_CLOSED = new Error('the OpenCode session closed before the model step finished');
+
 /**
  * One agent run with OpenCode as the agent. OpenCode drives the model step
  * after step and calls Recoder's tools itself; Recoder keeps what it must
@@ -174,7 +177,7 @@ class OpenCodeRun<T> {
 				timeoutMs: Math.max(1, this.limits.deadlineAt - reviewNow())
 			});
 
-			await this.relay.finishPrompt(reply.tokens, !reply.error);
+			await this.relay.finishPrompt(reply.tokens, reply.error);
 
 			return { reply, why: this.interrupt, final: final || this.finalTurn() };
 		} finally {
@@ -338,7 +341,7 @@ class OpenCodeRun<T> {
 	}
 
 	async close(): Promise<void> {
-		this.relay.settle(false);
+		this.relay.settle(SESSION_CLOSED);
 		await this.session?.close();
 	}
 }
