@@ -1,3 +1,6 @@
+import { spyOn } from 'bun:test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { AntigravityAgent } from '../../../src/agents/antigravity/antigravity';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { fakeAntigravity } from '../../helpers/fake-antigravity';
@@ -47,4 +50,28 @@ export async function openRun(
 	});
 
 	return { agent, run, events, log: env.FAKE_ANTIGRAVITY_LOG ?? '', home: env.HOME ?? '' };
+}
+
+/**
+ * Makes `jetbox_summaries_proto.pb` under `home` unreadable for the adapter: it starts with a group-start tag (wire
+ * type 3), which the CLI never writes. Entries the fake CLI appends later land behind it.
+ */
+export function breakSummariesSnapshot(home: string): void {
+	const cliDir = join(home, '.gemini', 'antigravity-cli');
+
+	mkdirSync(cliDir, { recursive: true });
+	writeFileSync(join(cliDir, 'jetbox_summaries_proto.pb'), Uint8Array.of(0x0b));
+}
+
+/** Runs `act` with the server's warnings kept off the test output, and returns what it warned, one line per warning. */
+export async function warningsFrom(act: () => unknown): Promise<string> {
+	const warn = spyOn(console, 'warn').mockImplementation(() => {});
+
+	try {
+		await act();
+
+		return warn.mock.calls.map((line) => line.join(' ')).join('\n');
+	} finally {
+		warn.mockRestore();
+	}
 }

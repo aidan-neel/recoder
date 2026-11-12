@@ -212,6 +212,17 @@ async function removeConversation(env: Env, id: string): Promise<void> {
 }
 
 /**
+ * Says on the server log that conversations stayed in the CLI's history, and why. Removal is best effort, as every
+ * adapter's history cleanup is: the failure is a locked or unreadable store on the user's side, and it must never
+ * replace a reply the call already has or stop the server's exit.
+ */
+function reportLeftConversations(ids: readonly string[], cause: unknown): void {
+	const reason = cause instanceof Error ? cause.message : String(cause);
+
+	console.warn(`[antigravity] could not remove ${ids.join(', ')} from the CLI's history: ${reason}`);
+}
+
+/**
  * Tracks conversations started by one completion or agent run, registering each ID in the adapter's shutdown sweep set
  * as soon as `init` announces it and removing it only after {@link removeAll} has deleted its files and summary rows.
  */
@@ -236,40 +247,58 @@ export class ConversationTracker {
 		this.active.add(entry);
 	};
 
+	/**
+	 * Deletes every conversation this tracker saw. Never rejects: one that could not be deleted is reported and stays
+	 * tracked, so a later call here or the shutdown sweep tries it again.
+	 */
 	async removeAll(): Promise<void> {
-		const entries = [...this.local.values()];
+		await Promise.all([...this.local.values()].map((entry) => this.remove(entry)));
+	}
 
-		await Promise.all(
-			entries.map((entry) =>
-				removeConversation(entry.env, entry.id).then(() => {
-					this.local.delete(entry.id);
-					this.active.delete(entry);
-				})
-			)
-		);
+	private async remove(entry: TrackedConversation): Promise<void> {
+		try {
+			await removeConversation(entry.env, entry.id);
+		} catch (removalError) {
+			reportLeftConversations([entry.id], removalError);
+
+			return;
+		}
+
+		this.local.delete(entry.id);
+		this.active.delete(entry);
 	}
 }
 
-/** Synchronously deletes every tracked in-flight conversation's files and summary rows when the server exits. */
+function sweepFiles(entry: TrackedConversation): void {
+	const artifacts = conversationArtifacts(entry.env, entry.id);
+
+	for (const target of artifacts?.paths ?? []) rmSync(target, { recursive: true, force: true });
+}
+
+function sweepSummaries(entry: TrackedConversation): void {
+	const artifacts = conversationArtifacts(entry.env, entry.id);
+
+	if (artifacts) deleteConversationSummaryRecords(artifacts.summariesDb, artifacts.summariesProto, entry.id);
+}
+
+/**
+ * Synchronously deletes every tracked in-flight conversation when the server exits. It runs inside the exit listeners,
+ * where a throw would stop the other adapters' cleanup, so it never throws. Each conversation's own files go first.
+ * The summary stores are shared, so the sweep gives them up at the first failure: a locked or unreadable store fails
+ * the same way for the rest, and each further try would hold the exit for the store's whole lock wait.
+ */
 export function sweepConversations(entries: Set<TrackedConversation>): void {
-	let firstFailure: unknown = null;
+	try {
+		for (const entry of entries) sweepFiles(entry);
 
-	for (const entry of [...entries]) {
-		const artifacts = conversationArtifacts(entry.env, entry.id);
-
-		if (!artifacts) {
+		for (const entry of [...entries]) {
+			sweepSummaries(entry);
 			entries.delete(entry);
-			continue;
 		}
-
-		try {
-			for (const target of artifacts.paths) rmSync(target, { recursive: true, force: true });
-			deleteConversationSummaryRecords(artifacts.summariesDb, artifacts.summariesProto, entry.id);
-			entries.delete(entry);
-		} catch (sweepError) {
-			firstFailure ??= sweepError;
-		}
+	} catch (sweepError) {
+		reportLeftConversations(
+			[...entries].map((entry) => entry.id),
+			sweepError
+		);
 	}
-
-	if (firstFailure !== null) throw firstFailure;
 }

@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync } from 'node:fs';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
 	fakeAntigravityCalls,
@@ -9,7 +11,31 @@ import {
 	summaryRowCount
 } from '../../helpers/fake-antigravity';
 import { allGone, spawnedPids } from '../../helpers/fake-claude';
-import { PROMPT, openRun } from './antigravity-fixture';
+import { PROMPT, breakSummariesSnapshot, openRun, warningsFrom } from './antigravity-fixture';
+
+/** A run whose prompt is still in flight, read as far as the line that names its conversation. */
+async function openInFlightRun(home?: string) {
+	let markInitRead = () => {};
+
+	const initRead = new Promise<void>((resolve) => {
+		markInitRead = resolve;
+	});
+
+	const opened = await openRun('spawn', {
+		home,
+		onEvent: (event) => {
+			if (event.type === 'reasoning') markInitRead();
+		}
+	});
+
+	const pending = opened.run.prompt('Review it.', PROMPT);
+	const [, pids] = await Promise.all([initRead, spawnedPids(opened.log)]);
+	const [logged] = await fakeAntigravityCalls(opened.log);
+
+	if (!logged) throw new Error('the fake CLI logged no call');
+
+	return { ...opened, pending, pids, logged };
+}
 
 describe('Antigravity conversation cleanup', () => {
 	test('closing a run deletes its config, lock and summary rows on succeeded and failed prompts while keeping others', async () => {
@@ -94,42 +120,44 @@ describe('Antigravity conversation cleanup', () => {
 	});
 
 	test('stopping the agent after init sweeps an in-flight run’s conversation files, lock and summary rows', async () => {
-		let markInitRead = () => {};
+		const opened = await openInFlightRun();
 
-		const initRead = new Promise<void>((resolve) => {
-			markInitRead = resolve;
-		});
-
-		const opened = await openRun('spawn', {
-			onEvent: (event) => {
-				if (event.type === 'reasoning') markInitRead();
-			}
-		});
-
-		const pending = opened.run.prompt('Review it.', PROMPT);
-		const [, pids] = await Promise.all([initRead, spawnedPids(opened.log)]);
-		const [logged] = await fakeAntigravityCalls(opened.log);
-
-		expect(logged).toBeDefined();
-		if (!logged) return;
-
-		expect(summaryRowCount(opened.home, logged.conversationId)).toBe(3);
+		expect(summaryRowCount(opened.home, opened.logged.conversationId)).toBe(3);
 
 		opened.agent.stop();
 
-		expect(existsSync(dirname(logged.cwd))).toBe(false);
-		expect(summaryRowCount(opened.home, logged.conversationId)).toBe(0);
+		expect(existsSync(dirname(opened.logged.cwd))).toBe(false);
+		expect(summaryRowCount(opened.home, opened.logged.conversationId)).toBe(0);
 
-		for (const target of savedConversationPaths(opened.home, logged.conversationId)) {
+		for (const target of savedConversationPaths(opened.home, opened.logged.conversationId)) {
 			expect(existsSync(target)).toBe(false);
 		}
 
-		await pending;
+		await opened.pending;
 		await opened.run.close();
-		expect(await allGone(pids)).toBe(true);
+		expect(await allGone(opened.pids)).toBe(true);
 	});
 
-	test('closing a run rejects instead of swallowing the error when its summary rows cannot be deleted', async () => {
+	test('stopping the agent with an unreadable history snapshot does not throw and still deletes the conversation’s files', async () => {
+		const home = await mkdtemp(join(tmpdir(), 'fake-agy-home-'));
+
+		breakSummariesSnapshot(home);
+
+		const opened = await openInFlightRun(home);
+		const warned = await warningsFrom(() => opened.agent.stop());
+
+		expect(warned).toContain(opened.logged.conversationId);
+
+		for (const target of savedConversationPaths(home, opened.logged.conversationId)) {
+			expect(existsSync(target)).toBe(false);
+		}
+
+		await opened.pending;
+		await warningsFrom(() => opened.run.close());
+		expect(await allGone(opened.pids)).toBe(true);
+	});
+
+	test('closing a run resolves when its summary rows cannot be deleted, and a later close deletes them', async () => {
 		const opened = await openRun('answer');
 
 		await opened.run.prompt('Review it.', PROMPT);
@@ -144,13 +172,10 @@ describe('Antigravity conversation cleanup', () => {
 		chmodSync(summariesDb, 0o444);
 
 		try {
-			const closeError = await opened.run.close().catch((caught: unknown) => caught);
+			const warned = await warningsFrom(() => opened.run.close());
 
-			expect(closeError).toBeInstanceOf(Error);
-
-			if (closeError instanceof Error) {
-				expect(closeError.message).toContain(logged.conversationId);
-			}
+			expect(warned).toContain(logged.conversationId);
+			expect(summaryRowCount(opened.home, logged.conversationId)).toBe(3);
 		} finally {
 			for (const suffix of ['', '-wal', '-shm']) {
 				const file = `${summariesDb}${suffix}`;

@@ -1,11 +1,17 @@
 import { Database } from 'bun:sqlite';
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeSync } from 'node:fs';
 
 const SUMMARY_DELETE_STATEMENTS: ReadonlyArray<{ table: string; sql: string }> = [
 	{ table: 'conversation_summaries', sql: 'DELETE FROM conversation_summaries WHERE conversation_id = ?' },
 	{ table: 'conversations_fts', sql: 'DELETE FROM conversations_fts WHERE conversation_id = ?' },
 	{ table: 'conversation_parents', sql: 'DELETE FROM conversation_parents WHERE conversation_id = ?' }
 ];
+
+/**
+ * How long a delete waits for another process's write lock on the summaries database. The delete runs synchronously
+ * on the server's one thread, so the wait is kept short; a conversation it gives up on is tried again at shutdown.
+ */
+const LOCK_WAIT_MS = 1000;
 
 interface VarintResult {
 	next: number;
@@ -149,11 +155,23 @@ function pruneSummariesProto(protoPath: string, id: string): void {
 	const tempPath = `${protoPath}.${process.pid}.${crypto.randomUUID()}.tmp`;
 
 	try {
-		writeFileSync(tempPath, Buffer.concat(kept), { mode: 0o600 });
+		writeDurably(tempPath, Buffer.concat(kept));
 		renameSync(tempPath, protoPath);
 	} catch (writeError) {
 		rmSync(tempPath, { force: true });
 		throw writeError;
+	}
+}
+
+/** Writes `bytes` to a new private file and flushes them to disk, so a crash right after the rename keeps them. */
+function writeDurably(path: string, bytes: Uint8Array): void {
+	const file = openSync(path, 'wx', 0o600);
+
+	try {
+		writeSync(file, bytes);
+		fsyncSync(file);
+	} finally {
+		closeSync(file);
 	}
 }
 
@@ -192,7 +210,7 @@ export function deleteConversationSummaryRecords(summariesDb: string, summariesP
 	}
 
 	try {
-		database.run('PRAGMA busy_timeout = 5000');
+		database.run(`PRAGMA busy_timeout = ${LOCK_WAIT_MS}`);
 
 		const tables = new Set(
 			database

@@ -15,6 +15,7 @@ import {
 	summaryRowCount
 } from '../../helpers/fake-antigravity';
 import { allGone, spawnedPids } from '../../helpers/fake-claude';
+import { breakSummariesSnapshot, warningsFrom } from './antigravity-fixture';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	return {
@@ -179,6 +180,22 @@ describe('AntigravityAgent.complete', () => {
 				expect(existsSync(target)).toBe(false);
 			}
 		}
+	});
+
+	test('a call keeps its reply when its conversation cannot be removed from the CLI’s history', async () => {
+		const env = await fakeAntigravity();
+		let reply = '';
+
+		breakSummariesSnapshot(env.HOME ?? '');
+
+		const warned = await warningsFrom(async () => {
+			reply = await new AntigravityAgent(env).complete(call());
+		});
+
+		const [logged] = await fakeAntigravityCalls(env.FAKE_ANTIGRAVITY_LOG ?? '');
+
+		expect(reply).toBe('Hi there');
+		expect(warned).toContain(logged?.conversationId ?? 'no call logged');
 	});
 
 	test('sends the prompt as stream-json on stdin in an antigravity-empty directory with all tools denied', async () => {
