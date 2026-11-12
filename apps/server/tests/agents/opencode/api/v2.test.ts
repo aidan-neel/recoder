@@ -178,27 +178,28 @@ describe('OpenCode 2 agent', () => {
 		expect(events).toEqual(['start', 'finish 17']);
 	});
 
-	test('a prompt ends with an error as soon as the server stops mid-turn, long before its own time runs out', async () => {
+	/** A prompt with a minute of its own, sent to a server that stops serving mid-turn: its reply, and how long it took. */
+	async function promptToStoppingServer(text: string): Promise<{ error: unknown; elapsedMs: number }> {
 		const session = await open(await start());
 		const started = Date.now();
-
-		const reply = await session.prompt('crash', { tools: true, timeoutMs: 60_000 });
+		const reply = await session.prompt(text, { tools: true, timeoutMs: 60_000 });
 
 		await session.close();
 
-		expect(reply.error).toBeInstanceOf(Error);
-		expect(Date.now() - started).toBeLessThan(3_000);
+		return { error: reply.error, elapsedMs: Date.now() - started };
+	}
+
+	test('a prompt ends with an error as soon as the server stops mid-turn, long before its own time runs out', async () => {
+		const { error, elapsedMs } = await promptToStoppingServer('crash');
+
+		expect(error).toBeInstanceOf(Error);
+		expect(elapsedMs).toBeLessThan(3_000);
 	});
 
 	test('a prompt ends with an error as soon as the server closes its port mid-turn, while its process still runs', async () => {
-		const session = await open(await start());
-		const started = Date.now();
+		const { error, elapsedMs } = await promptToStoppingServer('deaf');
 
-		const reply = await session.prompt('deaf', { tools: true, timeoutMs: 60_000 });
-
-		await session.close();
-
-		expect(reply.error).toBeInstanceOf(Error);
-		expect(Date.now() - started).toBeLessThan(3_000);
+		expect(error).toBeInstanceOf(Error);
+		expect(elapsedMs).toBeLessThan(3_000);
 	});
 });

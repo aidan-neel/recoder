@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { runJsonAgent } from '../../../../src/review/pipeline/agent-loop';
-import { doneAgentOptions } from '../../../helpers/done-agent';
+import { doneAgentOptions, type DoneAnswer } from '../../../helpers/done-agent';
 import { settleOnClock, useFakeClock } from '../../../helpers/fake-clock';
 import { messagesOf, stubFetch } from '../harness-fixtures';
 
@@ -82,10 +82,15 @@ test('a model call whose stream stays alive for minutes completes, sent once', a
 /** Final turn from 30 s, stopped at 80 s: a turn before the final one may run to 55 s, half of what is left. */
 const TIME_LIMIT = { finalTurnAfterMs: 30_000, maxWallMs: 80_000 };
 
+/** An agent with {@link TIME_LIMIT} on the stubbed model, run on the fake clock until it settles. */
+function runWithTimeLimit(): ReturnType<typeof runJsonAgent<DoneAnswer>> {
+	return settleOnClock(runJsonAgent(doneAgentOptions(CONFIG, { timeLimit: TIME_LIMIT })), 1_000, 600_000);
+}
+
 test('a call still running at the agent’s final-turn time may finish in half of the time that is left', async () => {
 	const prompts = liveModel(() => 45_000);
 
-	const result = await settleOnClock(runJsonAgent(doneAgentOptions(CONFIG, { timeLimit: TIME_LIMIT })), 1_000, 600_000);
+	const result = await runWithTimeLimit();
 
 	expect(result).toEqual({ value: { done: true } });
 	expect(prompts).toHaveLength(1);
@@ -94,7 +99,7 @@ test('a call still running at the agent’s final-turn time may finish in half o
 test('a call that outlasts that half is cut, and the agent answers in its final turn', async () => {
 	const prompts = liveModel((call) => (call === 1 ? null : 0));
 
-	const result = await settleOnClock(runJsonAgent(doneAgentOptions(CONFIG, { timeLimit: TIME_LIMIT })), 1_000, 600_000);
+	const result = await runWithTimeLimit();
 
 	expect(result).toEqual({ value: { done: true } });
 	expect(prompts).toHaveLength(2);
@@ -104,7 +109,7 @@ test('a call that outlasts that half is cut, and the agent answers in its final 
 test('an agent whose final call is still running at its deadline ends as out of time, with no further call', async () => {
 	const prompts = liveModel(() => null);
 
-	const result = await settleOnClock(runJsonAgent(doneAgentOptions(CONFIG, { timeLimit: TIME_LIMIT })), 1_000, 600_000);
+	const result = await runWithTimeLimit();
 
 	expect(result.value).toBeNull();
 	expect(result.error).toStartWith('Ran out of time');
