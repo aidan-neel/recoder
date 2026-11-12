@@ -1,4 +1,4 @@
-import { REVIEW_CANCELLED, type PullListItem, type Repo, type ReviewListItem } from '@recoder/shared';
+import { REVIEW_CANCELLED, repoLabels, type PullListItem, type Repo, type ReviewListItem } from '@recoder/shared';
 
 import { isOpenFinding } from '../api/reviews';
 import { repoName } from '../shell/format';
@@ -78,11 +78,20 @@ export function needsReview({ item, review }: ListedPull): boolean {
 	return review.headSha !== item.pull.headSha;
 }
 
-/** The repository's short name for a row, from the tracked list; its id until that list is known. */
+/**
+ * The repository's name for a row, from the tracked list: its short name, or
+ * the label that tells it apart when another tracked repository has the same
+ * short name. Its id until that list is known.
+ */
 export function shortRepoName(repos: Repo[] | null, repoId: string): string {
 	const repo = repos?.find((candidate) => candidate.id === repoId);
 
-	return repo ? repoName(repo.name) : repoId;
+	if (!repos || !repo) return repoId;
+
+	const short = repoName(repo.name);
+	const isShared = repos.some((other) => other.id !== repo.id && repoName(other.name) === short);
+
+	return isShared ? (repoLabels(repos).get(repo.id) ?? repo.name) : short;
 }
 
 /** One row of the list. */

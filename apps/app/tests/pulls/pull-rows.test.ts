@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { REVIEW_CANCELLED, type PullListItem, type PullStatus, type ReviewListItem } from '@recoder/shared';
+import { REVIEW_CANCELLED, type PullListItem, type PullStatus, type Repo, type ReviewListItem } from '@recoder/shared';
 
-import { needsReview, rowStatus } from '../../src/lib/pulls/pull-rows';
+import { needsReview, rowStatus, shortRepoName } from '../../src/lib/pulls/pull-rows';
 
 const HEAD = 'head1';
 
@@ -127,5 +127,31 @@ describe('needsReview', () => {
 		expect(needsReview({ item: item(), review: review({ status: 'failed', summary: 'Boom.' }) })).toBe(true);
 		expect(needsReview({ item: item(), review: review({ status: 'queued' }) })).toBe(false);
 		expect(needsReview({ item: item(), review: review() })).toBe(false);
+	});
+});
+
+function tracked(id: string, name: string): Repo {
+	return {
+		id,
+		name,
+		url: `https://github.com/${name}`,
+		provider: 'github',
+		defaultBranch: 'main',
+		createdAt: '',
+		updatedAt: ''
+	};
+}
+
+describe('the repository name a row shows', () => {
+	test('a repository alone with its short name shows only that name', () => {
+		const repos = [tracked('r1', 'acme/api'), tracked('r2', 'acme/web')];
+
+		expect(shortRepoName(repos, 'r1')).toBe('api');
+	});
+
+	test('two tracked repositories with one short name each show their owner', () => {
+		const repos = [tracked('r1', 'acme/api'), tracked('r2', 'globex/api')];
+
+		expect([shortRepoName(repos, 'r1'), shortRepoName(repos, 'r2')]).toEqual(['acme/api', 'globex/api']);
 	});
 });

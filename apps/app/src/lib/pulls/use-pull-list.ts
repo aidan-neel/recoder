@@ -80,8 +80,8 @@ export function usePullList(): PullListView {
 	const truncated = useMemo(
 		() =>
 			(pullList?.truncatedRepoIds ?? [])
-				.filter((repoId) => repos?.some((repo) => repo.id === repoId))
-				.map((repoId) => ({ repoId, repoName: shortRepoName(repos, repoId) })),
+				.filter((truncatedId) => repos?.some((repo) => repo.id === truncatedId))
+				.map((truncatedId) => ({ repoId: truncatedId, repoName: shortRepoName(repos, truncatedId) })),
 		[pullList, repos]
 	);
 
