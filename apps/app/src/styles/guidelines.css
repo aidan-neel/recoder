@@ -237,7 +237,8 @@ a.guidelines-pill:focus-visible {
 }
 .learned-panel {
 	display: flex;
-	width: 400px;
+	width: 480px;
+	max-width: calc(100vw - 32px);
 	flex-direction: column;
 	gap: 4px;
 	padding: 12px 12px 6px;
@@ -270,13 +271,12 @@ a.guidelines-pill:focus-visible {
 	flex-direction: column;
 	gap: 1px;
 }
+/* A rule's name is what the person decides on, so it wraps and is never cut. */
 .learned-name {
-	overflow: hidden;
 	color: var(--text-primary);
 	font-size: var(--font-size-label);
 	line-height: 18px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	text-wrap: pretty;
 }
 .learned-detail {
 	color: var(--text-subtle);

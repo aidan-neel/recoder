@@ -3,7 +3,7 @@
 import type { LearnedRuleState } from '@recoder/shared';
 import { useEffect, useMemo } from 'react';
 
-import { useLearnedRulesStore, type LearnedRuleEntry } from './learned-rules-store';
+import { useLearnedRulesStore, type LearnedRuleEntry, type RepoLearnedRules } from './learned-rules-store';
 
 /** One learned rule as the rules screen shows it. */
 export interface LearnedRuleRow {
@@ -52,40 +52,34 @@ function rowOf(entry: LearnedRuleEntry, repoId: string): LearnedRuleRow {
 	};
 }
 
+/** What a repository shows before its rules were asked for. */
+const NOT_LOADED: RepoLearnedRules = { status: 'loading', error: null, rules: [] };
+
 /**
  * The rules Recoder learned for `repoId`: proposals waiting for a person,
- * then decided ones, each newest first. It loads when `repoId` changes and
- * drops an answer that arrives for an earlier one. A decision is not
+ * then decided ones, each newest first. Every repository keeps its own
+ * rules, so several lists can be on one screen. A decision is not
  * optimistic: the row shows `pending`, then the server's answer replaces it;
  * a failure leaves the row as it was with the reason in `error`.
  */
 export function useLearnedRules(repoId: string): LearnedRulesView {
-	const storeRepoId = useLearnedRulesStore((state) => state.repoId);
-	const status = useLearnedRulesStore((state) => state.status);
-	const error = useLearnedRulesStore((state) => state.error);
-	const rules = useLearnedRulesStore((state) => state.rules);
+	const repo = useLearnedRulesStore((state) => state.repos[repoId]) ?? NOT_LOADED;
 	const load = useLearnedRulesStore((state) => state.load);
 
 	useEffect(() => {
 		void load(repoId);
 	}, [repoId, load]);
 
-	const current = storeRepoId === repoId;
-
 	return useMemo(() => {
-		const entries = current ? rules : [];
-
-		const rows = [
-			...entries.filter((entry) => entry.proposal.state === 'proposed'),
-			...entries.filter((entry) => entry.proposal.state !== 'proposed')
-		].map((entry) => rowOf(entry, repoId));
+		const proposed = repo.rules.filter((entry) => entry.proposal.state === 'proposed');
+		const decided = repo.rules.filter((entry) => entry.proposal.state !== 'proposed');
 
 		return {
-			status: current ? status : 'loading',
-			error: current ? error : null,
-			rules: rows,
-			proposed: entries.filter((entry) => entry.proposal.state === 'proposed').length,
+			status: repo.status,
+			error: repo.error,
+			rules: [...proposed, ...decided].map((entry) => rowOf(entry, repoId)),
+			proposed: proposed.length,
 			retry: () => void load(repoId)
 		};
-	}, [current, status, error, rules, repoId, load]);
+	}, [repo, repoId, load]);
 }
