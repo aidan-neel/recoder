@@ -2,7 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { fileURLToPath } from 'node:url';
 import { EXIT } from '../../../src/cli/exit';
 import type { ReviewTarget } from '../../../src/cli/review/options';
-import { resolveTarget, type ResolvedTarget } from '../../../src/cli/target/resolve-target';
+import { resolveTarget, type ResolvedTarget, type TargetRequest } from '../../../src/cli/target/resolve-target';
 import { git } from '../../helpers/git';
 import { runIdAt, storeReview, useFreshDataDir, type StoredReview } from '../runs/run-fixtures';
 import {
@@ -58,6 +58,30 @@ function earlierReview(headSha: string, baseSha: string, review: StoredReview = 
 	});
 }
 
+/** The review CONTINUE resolves to in `dir` when it continues run 1: it starts after `since`, that run's head. */
+async function continuedReview(dir: string, since: string): Promise<ResolvedTarget> {
+	const resolved = await resolveTarget(targetRequest(dir, CONTINUE));
+
+	expect(resolved.report.since).toBe(since);
+	expect(resolved.report.sinceRunId).toBe(runIdAt(1));
+
+	return resolved;
+}
+
+/** A feature branch of two commits whose first commit run 1 reviewed. */
+async function reviewedOnce(): Promise<{ dir: string; mainSha: string; heads: string[] }> {
+	const repo = await featureRepo([FIRST, SECOND]);
+
+	await earlierReview(repo.heads[0], repo.mainSha);
+
+	return repo;
+}
+
+/** CONTINUE in `dir`, narrowed to one path. */
+function narrowedTo(dir: string, path: string): TargetRequest {
+	return targetRequest(dir, CONTINUE, { scope: { include: [path], exclude: [] } });
+}
+
 /** The review CONTINUE resolves to in `dir` when no earlier run counts: the whole change from `mainSha`. */
 async function wholeReview(dir: string, mainSha: string): Promise<ResolvedTarget> {
 	const resolved = await resolveTarget(targetRequest(dir, CONTINUE));
@@ -70,14 +94,10 @@ async function wholeReview(dir: string, mainSha: string): Promise<ResolvedTarget
 }
 
 test('a second review of a branch covers only the commits after the last review', async () => {
-	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
+	const { dir, heads } = await reviewedOnce();
 
-	await earlierReview(heads[0], mainSha);
+	const resolved = await continuedReview(dir, heads[0]);
 
-	const resolved = await resolveTarget(targetRequest(dir, CONTINUE));
-
-	expect(resolved.report.since).toBe(heads[0]);
-	expect(resolved.report.sinceRunId).toBe(runIdAt(1));
 	expect(resolved.report.mergeBaseSha).toBe(heads[0]);
 	expect(resolved.revision?.mergeBaseSha).toBe(heads[0]);
 	expect(resolved.diff).toContain('b.ts');
@@ -87,9 +107,7 @@ test('a second review of a branch covers only the commits after the last review'
 });
 
 test('--full reviews the whole change after an earlier review', async () => {
-	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
-
-	await earlierReview(heads[0], mainSha);
+	const { dir, mainSha } = await reviewedOnce();
 
 	const resolved = await resolveTarget(targetRequest(dir, WHOLE));
 
@@ -145,14 +163,12 @@ async function mainMovesOn(dir: string): Promise<string> {
 }
 
 test('an earlier review still counts after the base moved forward', async () => {
-	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
+	const { dir, heads } = await reviewedOnce();
 
-	await earlierReview(heads[0], mainSha);
 	await mainMovesOn(dir);
 
-	const resolved = await resolveTarget(targetRequest(dir, CONTINUE));
+	const resolved = await continuedReview(dir, heads[0]);
 
-	expect(resolved.report.since).toBe(heads[0]);
 	expect(resolved.diff).toContain('b.ts');
 	expect(resolved.diff).not.toContain('+two');
 
@@ -216,15 +232,11 @@ test('an earlier review whose base was behind where the branch began does not co
 });
 
 test('a newer run that names a commit from elsewhere is skipped, and the review before it is continued', async () => {
-	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
+	const { dir, mainSha, heads } = await reviewedOnce();
 
-	await earlierReview(heads[0], mainSha);
 	await storeReview(runIdAt(2), { target: { headSha: 'f'.repeat(40), baseSha: mainSha, mergeBaseSha: mainSha } });
 
-	const resolved = await resolveTarget(targetRequest(dir, CONTINUE));
-
-	expect(resolved.report.since).toBe(heads[0]);
-	expect(resolved.report.sinceRunId).toBe(runIdAt(1));
+	const resolved = await continuedReview(dir, heads[0]);
 
 	await resolved.dispose();
 });
@@ -240,12 +252,9 @@ test('a stored head that is not a whole commit SHA does not count', async () => 
 });
 
 test('a review narrowed to some paths also continues after the last review', async () => {
-	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
+	const { dir, heads } = await reviewedOnce();
 
-	await earlierReview(heads[0], mainSha);
-
-	const narrowed = targetRequest(dir, CONTINUE, { scope: { include: ['b.ts'], exclude: [] } });
-	const resolved = await resolveTarget(narrowed);
+	const resolved = await resolveTarget(narrowedTo(dir, 'b.ts'));
 
 	expect(resolved.report.since).toBe(heads[0]);
 	expect(resolved.diff).toContain('b.ts');
@@ -254,12 +263,9 @@ test('a review narrowed to some paths also continues after the last review', asy
 });
 
 test('new commits that change nothing in scope are refused with the commit the review started after, its run and --full', async () => {
-	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
+	const { dir, heads } = await reviewedOnce();
 
-	await earlierReview(heads[0], mainSha);
-
-	const narrowed = targetRequest(dir, CONTINUE, { scope: { include: ['a.ts'], exclude: [] } });
-	const error = await rejection(resolveTarget(narrowed));
+	const error = await rejection(resolveTarget(narrowedTo(dir, 'a.ts')));
 
 	expect(error).toMatchObject({ exitCode: EXIT.usage });
 	expect(error.message).toContain(`between ${heads[0].slice(0, 7)} and feature`);
