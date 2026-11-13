@@ -33,7 +33,7 @@ A review outlasts a shell tool's time limit, so run it in the background and pol
    It exits 0 when the run ends and when the timeout passes. Read `state` in the JSON. Run it again while `state` is `running`. Without `--timeout` it does not return until the run ends, which can pass your shell limit.
 3. Read the result once `state` is not `running` (`result` on a running run exits 2):
    `recoder result -p <run-id> --format markdown`
-4. Act on the findings (see "Acting on findings"), then run the loop again on the touched files.
+4. If the change is yours to fix, act on the findings (see "Acting on findings"), then run the loop again on the touched files. If you were asked only to review it, stop here and report them.
 
 `recoder status -p <run-id>` prints the state without waiting. `recoder cancel -p <run-id>` asks a running review to stop. `recoder runs -p --repo .` lists the newest runs of this repository, so you can find a `runId` you lost.
 
@@ -89,6 +89,8 @@ A continued review reports findings only in the new commits. The findings of the
 Each finding has `severity` (`error`, `warning`, `info`), `file`, `line`, `title`, `message`, and sometimes `suggestion` and `patch`. `verification.status` is `verified` when something proved the finding: a command that reproduced it, a trace through the code, a detector, a repo rule or a convention (`verification.method` says which). It is `unverified` when nothing did, for example because no test command was found; `verification.reason` says why.
 
 ## Acting on findings
+
+Fix findings only in a change you are working on, or when the user asks you to fix them. A review of a pull request or of someone else's work ends with the report: post or relay the findings, and change no code, apply no `patch` and start no second review. Whoever owns the change fixes them.
 
 1. Read the code at `file:line` and confirm the problem before you change anything.
 2. Treat an `unverified` finding as a claim to check, not a fact.
