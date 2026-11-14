@@ -27,7 +27,7 @@ export function ensureSharedClone(opts: {
 	cloneUrl: string;
 	run: GitRun;
 }): Promise<string | null> {
-	const path = join(opts.workDir, 'shared', 'git', `${opts.repoSlug.split('/').join('__')}.git`);
+	const path = sharedClonePath(opts.workDir, opts.repoSlug);
 	const pending = running.get(path);
 
 	if (pending) return pending;
@@ -37,6 +37,11 @@ export function ensureSharedClone(opts: {
 	running.set(path, job);
 
 	return job;
+}
+
+/** Where the shared bare copy of a repository lives, whether or not a review has made it yet. */
+export function sharedClonePath(workDir: string, repoSlug: string): string {
+	return join(workDir, 'shared', 'git', `${repoSlug.split('/').join('__')}.git`);
 }
 
 async function refresh(path: string, opts: { workDir: string; cloneUrl: string; run: GitRun }): Promise<string | null> {

@@ -1,0 +1,418 @@
+/*
+ * The palettes picked in Settings → Appearance, as an attribute on <html>.
+ * Graphite, the tokens in tokens.css, is the default and sets no attribute.
+ * Each palette sets the anchors below for each theme; the rules at the end
+ * derive the other surface, line and text tokens from them. The same rules
+ * match a `[data-palette]` element inside the page, so a swatch can preview
+ * its palette whatever the page shows. Contrast is checked for every pair:
+ * body text 4.5:1, text on the primary 4.5:1, metadata 3:1.
+ */
+
+/* ───────── Neutral: warm grey surfaces, a soft white primary ───────── */
+:root.app-skin.dark[data-palette='neutral'],
+.dark [data-palette='neutral'] {
+	--bg-chrome: #191918;
+	--bg-canvas: #131314;
+	--bg-panel: #161616;
+	--bg-raised: #262624;
+	--bg-field: #30302e;
+	--bg-hover: #1e1e1d;
+	--bg-selected: #2a2a28;
+	--line-control: #30302e;
+	--text-primary: #faf9f5;
+	--text-muted: #a1a09a;
+	--text-faint: #878680;
+	--primary: #e8e8e8;
+	--primary-hover: #f6f6f5;
+	--on-primary: #000000;
+	--accent: #528cff;
+	--accent-text: #89afff;
+}
+:root.app-skin:not(.dark)[data-palette='neutral'],
+:root:not(.dark) [data-palette='neutral'] {
+	--bg-chrome: #f3f3f1;
+	--bg-canvas: #fbfbfa;
+	--bg-panel: #f7f7f5;
+	--bg-raised: #ffffff;
+	--bg-field: #efefec;
+	--bg-hover: #efefed;
+	--bg-selected: #e6e6e3;
+	--line-control: #dbdbd7;
+	--text-primary: #1a1a19;
+	--text-muted: #5d5c57;
+	--text-faint: #82817b;
+	--primary: #1a1a19;
+	--primary-hover: #000000;
+	--on-primary: #ffffff;
+	--accent: #2563eb;
+	--accent-text: #1d4ed8;
+}
+
+/* ───────── Blue: warm grey surfaces, a bright blue primary ───────── */
+:root.app-skin.dark[data-palette='blue'],
+.dark [data-palette='blue'] {
+	--bg-chrome: #171716;
+	--bg-canvas: #111112;
+	--bg-panel: #141414;
+	--bg-raised: #222220;
+	--bg-field: #30302e;
+	--bg-hover: #1b1b1a;
+	--bg-selected: #2a2a28;
+	--line-control: #3c3c39;
+	--text-primary: #faf9f5;
+	--text-muted: #a1a09a;
+	--text-faint: #878680;
+	--primary: #1c68ff;
+	--primary-hover: #1259e6;
+	--on-primary: #ffffff;
+	--accent: #528cff;
+	--accent-text: #89afff;
+}
+:root.app-skin:not(.dark)[data-palette='blue'],
+:root:not(.dark) [data-palette='blue'] {
+	--bg-chrome: #f4f4f3;
+	--bg-canvas: #ffffff;
+	--bg-panel: #fafaf9;
+	--bg-raised: #ffffff;
+	--bg-field: #f1f1ef;
+	--bg-hover: #f1f1f0;
+	--bg-selected: #e8e8e6;
+	--line-control: #d8d8d4;
+	--text-primary: #191918;
+	--text-muted: #5d5c58;
+	--text-faint: #86857f;
+	--primary: #1c68ff;
+	--primary-hover: #0f58e6;
+	--on-primary: #ffffff;
+	--accent: #1c68ff;
+	--accent-text: #1556d1;
+}
+
+/* ───────── Cobalt: cool black, an electric cobalt primary ───────── */
+:root.app-skin.dark[data-palette='cobalt'],
+.dark [data-palette='cobalt'] {
+	--bg-chrome: #151515;
+	--bg-canvas: #101010;
+	--bg-panel: #131313;
+	--bg-raised: #171717;
+	--bg-field: #1b1b1b;
+	--bg-hover: #1e1e1e;
+	--bg-selected: #232324;
+	--line-control: #27272a;
+	--text-primary: #ededed;
+	--text-muted: #8f8f8f;
+	--text-faint: #737373;
+	--primary: #1f45ff;
+	--primary-hover: #3355ff;
+	--on-primary: #ffffff;
+	--accent: #3d66ff;
+	--accent-text: #8ea4ff;
+}
+:root.app-skin:not(.dark)[data-palette='cobalt'],
+:root:not(.dark) [data-palette='cobalt'] {
+	--bg-chrome: #f5f5f5;
+	--bg-canvas: #ffffff;
+	--bg-panel: #fafafa;
+	--bg-raised: #ffffff;
+	--bg-field: #f3f3f3;
+	--bg-hover: #f1f1f1;
+	--bg-selected: #e8e8ea;
+	--line-control: #dcdce0;
+	--text-primary: #101010;
+	--text-muted: #595959;
+	--text-faint: #848484;
+	--primary: #0033ff;
+	--primary-hover: #0029cc;
+	--on-primary: #ffffff;
+	--accent: #0033ff;
+	--accent-text: #0033ff;
+}
+
+/* ───────── Stone: warm stone, a brass primary ───────── */
+:root.app-skin.dark[data-palette='stone'],
+.dark [data-palette='stone'] {
+	--bg-chrome: #1a1713;
+	--bg-canvas: #14110d;
+	--bg-panel: #171410;
+	--bg-raised: #1f1b17;
+	--bg-field: #1c1915;
+	--bg-hover: #24211d;
+	--bg-selected: #2b2723;
+	--line-control: #322e2a;
+	--text-primary: #efece8;
+	--text-muted: #aeaaa5;
+	--text-faint: #7f7b77;
+	--primary: #d9b97e;
+	--primary-hover: #e8c992;
+	--on-primary: #1b150c;
+	--accent: #cca45e;
+	--accent-text: #e3c287;
+}
+:root.app-skin:not(.dark)[data-palette='stone'],
+:root:not(.dark) [data-palette='stone'] {
+	--bg-chrome: #f6f3ef;
+	--bg-canvas: #fefcfb;
+	--bg-panel: #fbf8f5;
+	--bg-raised: #ffffff;
+	--bg-field: #f9f5f1;
+	--bg-hover: #f4f0eb;
+	--bg-selected: #ede8e2;
+	--line-control: #ddd8d2;
+	--text-primary: #1d1913;
+	--text-muted: #605a52;
+	--text-faint: #88827b;
+	--primary: #7b5020;
+	--primary-hover: #674012;
+	--on-primary: #ffffff;
+	--accent: #986a28;
+	--accent-text: #79511e;
+}
+
+/* ───────── Pine: green-grey, a mint primary ───────── */
+:root.app-skin.dark[data-palette='pine'],
+.dark [data-palette='pine'] {
+	--bg-chrome: #111916;
+	--bg-canvas: #0c1410;
+	--bg-panel: #0e1613;
+	--bg-raised: #161e1a;
+	--bg-field: #131b18;
+	--bg-hover: #1b231f;
+	--bg-selected: #222a26;
+	--line-control: #28322d;
+	--text-primary: #e9eeec;
+	--text-muted: #a4ada9;
+	--text-faint: #757e7a;
+	--primary: #5ed99e;
+	--primary-hover: #79e8b0;
+	--on-primary: #071a13;
+	--accent: #4fcc92;
+	--accent-text: #87e1b2;
+}
+:root.app-skin:not(.dark)[data-palette='pine'],
+:root:not(.dark) [data-palette='pine'] {
+	--bg-chrome: #f0f5f3;
+	--bg-canvas: #fbfdfc;
+	--bg-panel: #f6faf8;
+	--bg-raised: #ffffff;
+	--bg-field: #f2f7f5;
+	--bg-hover: #ecf3ef;
+	--bg-selected: #e3ebe7;
+	--line-control: #d3dbd7;
+	--text-primary: #141b18;
+	--text-muted: #545d59;
+	--text-faint: #7c8681;
+	--primary: #0b6f49;
+	--primary-hover: #005c3b;
+	--on-primary: #ffffff;
+	--accent: #17895b;
+	--accent-text: #0c6944;
+}
+
+/* ───────── Teal: blue-green slate, a teal primary ───────── */
+:root.app-skin.dark[data-palette='teal'],
+.dark [data-palette='teal'] {
+	--bg-chrome: #0f191b;
+	--bg-canvas: #0a1315;
+	--bg-panel: #0c1618;
+	--bg-raised: #141e20;
+	--bg-field: #111b1d;
+	--bg-hover: #192325;
+	--bg-selected: #202a2c;
+	--line-control: #263134;
+	--text-primary: #e8eeef;
+	--text-muted: #a2adb0;
+	--text-faint: #737e80;
+	--primary: #3dcfcb;
+	--primary-hover: #63deda;
+	--on-primary: #031a1e;
+	--accent: #2ec6c1;
+	--accent-text: #70dcd8;
+}
+:root.app-skin:not(.dark)[data-palette='teal'],
+:root:not(.dark) [data-palette='teal'] {
+	--bg-chrome: #eff5f6;
+	--bg-canvas: #fbfdfe;
+	--bg-panel: #f5fafb;
+	--bg-raised: #ffffff;
+	--bg-field: #f1f7f8;
+	--bg-hover: #ebf2f4;
+	--bg-selected: #e2eaec;
+	--line-control: #d2dbdd;
+	--text-primary: #131b1d;
+	--text-muted: #525d5f;
+	--text-faint: #7b8588;
+	--primary: #007275;
+	--primary-hover: #005f61;
+	--on-primary: #ffffff;
+	--accent: #01898a;
+	--accent-text: #00686b;
+}
+
+/* ───────── Violet: cool violet-grey, a violet primary ───────── */
+:root.app-skin.dark[data-palette='violet'],
+.dark [data-palette='violet'] {
+	--bg-chrome: #17161f;
+	--bg-canvas: #121019;
+	--bg-panel: #14131c;
+	--bg-raised: #1c1b24;
+	--bg-field: #191821;
+	--bg-hover: #212029;
+	--bg-selected: #282630;
+	--line-control: #2f2d38;
+	--text-primary: #edecf1;
+	--text-muted: #aba9b4;
+	--text-faint: #7c7a85;
+	--primary: #7a4fd9;
+	--primary-hover: #6c3fc8;
+	--on-primary: #ffffff;
+	--accent: #987aef;
+	--accent-text: #c0b0fe;
+}
+:root.app-skin:not(.dark)[data-palette='violet'],
+:root:not(.dark) [data-palette='violet'] {
+	--bg-chrome: #f4f3f8;
+	--bg-canvas: #fdfcff;
+	--bg-panel: #f9f8fc;
+	--bg-raised: #ffffff;
+	--bg-field: #f6f5fa;
+	--bg-hover: #f1f0f6;
+	--bg-selected: #e8e7ef;
+	--line-control: #d9d8e0;
+	--text-primary: #19181f;
+	--text-muted: #5b5963;
+	--text-faint: #83828b;
+	--primary: #7246cf;
+	--primary-hover: #6231ba;
+	--on-primary: #ffffff;
+	--accent: #7d53dc;
+	--accent-text: #6c42c3;
+}
+
+/* ───────── Ember: charcoal, an ember orange primary ───────── */
+:root.app-skin.dark[data-palette='ember'],
+.dark [data-palette='ember'] {
+	--bg-chrome: #1a1615;
+	--bg-canvas: #141110;
+	--bg-panel: #171312;
+	--bg-raised: #1f1b1a;
+	--bg-field: #1c1817;
+	--bg-hover: #24201f;
+	--bg-selected: #2b2726;
+	--line-control: #322e2d;
+	--text-primary: #f1ebea;
+	--text-muted: #aeaaa8;
+	--text-faint: #7f7b79;
+	--primary: #f3813f;
+	--primary-hover: #ff9555;
+	--on-primary: #1c0d06;
+	--accent: #ee8545;
+	--accent-text: #f8ae7b;
+}
+:root.app-skin:not(.dark)[data-palette='ember'],
+:root:not(.dark) [data-palette='ember'] {
+	--bg-chrome: #f6f3f2;
+	--bg-canvas: #fefcfc;
+	--bg-panel: #fbf8f7;
+	--bg-raised: #ffffff;
+	--bg-field: #f8f5f4;
+	--bg-hover: #f4f0ee;
+	--bg-selected: #ece7e5;
+	--line-control: #ddd8d6;
+	--text-primary: #1d1817;
+	--text-muted: #605957;
+	--text-faint: #888280;
+	--primary: #c2460d;
+	--primary-hover: #aa3606;
+	--on-primary: #ffffff;
+	--accent: #cc5824;
+	--accent-text: #a63c0c;
+}
+
+/* ───────── Rose: plum-grey, an orchid pink primary ───────── */
+:root.app-skin.dark[data-palette='rose'],
+.dark [data-palette='rose'] {
+	--bg-chrome: #1c1518;
+	--bg-canvas: #160f13;
+	--bg-panel: #191216;
+	--bg-raised: #211a1d;
+	--bg-field: #1e171b;
+	--bg-hover: #261f23;
+	--bg-selected: #2d2529;
+	--line-control: #352c31;
+	--text-primary: #f0ebee;
+	--text-muted: #b1a8ac;
+	--text-faint: #81797d;
+	--primary: #ea84ba;
+	--primary-hover: #f39ac8;
+	--on-primary: #201019;
+	--accent: #e77ab5;
+	--accent-text: #f2a7cc;
+}
+:root.app-skin:not(.dark)[data-palette='rose'],
+:root:not(.dark) [data-palette='rose'] {
+	--bg-chrome: #f7f2f5;
+	--bg-canvas: #fefcfd;
+	--bg-panel: #fbf8f9;
+	--bg-raised: #ffffff;
+	--bg-field: #f9f4f7;
+	--bg-hover: #f4eff2;
+	--bg-selected: #ede6ea;
+	--line-control: #ded7da;
+	--text-primary: #1d181b;
+	--text-muted: #60585c;
+	--text-faint: #888185;
+	--primary: #ae2c77;
+	--primary-hover: #971c65;
+	--on-primary: #ffffff;
+	--accent: #bc3a83;
+	--accent-text: #a1286e;
+}
+
+/* ───────── Derived from the anchors, for every palette ───────── */
+:root.app-skin.dark[data-palette],
+:root.app-skin:not(.dark)[data-palette],
+[data-palette] {
+	--bg-raised-2: color-mix(in srgb, var(--bg-raised) 50%, var(--bg-panel));
+	--bg-menu: var(--bg-raised);
+	--bg-bubble: color-mix(in srgb, var(--bg-raised) 50%, var(--bg-hover));
+	--bg-search: var(--bg-chrome);
+
+	--line-divider: color-mix(in srgb, var(--line-control) 42%, var(--bg-canvas));
+	--line-subtle: color-mix(in srgb, var(--line-control) 54%, var(--bg-canvas));
+	--line-subtle-2: color-mix(in srgb, var(--line-control) 62%, var(--bg-canvas));
+	--line-canvas: color-mix(in srgb, var(--line-control) 65%, var(--bg-canvas));
+	--line-card: color-mix(in srgb, var(--line-control) 76%, var(--bg-canvas));
+	--line-tab: color-mix(in srgb, var(--line-control) 86%, var(--bg-canvas));
+
+	--text-ai: color-mix(in srgb, var(--text-primary) 88%, var(--text-muted));
+	--text-secondary: color-mix(in srgb, var(--text-primary) 60%, var(--text-muted));
+	--text-tertiary: color-mix(in srgb, var(--text-primary) 37%, var(--text-muted));
+	--text-subtle: color-mix(in srgb, var(--text-muted) 65%, var(--text-faint));
+	--text-ghost: color-mix(in srgb, var(--text-faint) 73%, var(--bg-canvas));
+	--text-brief-body: var(--text-subtle);
+
+	/* The ring takes the palette's link colour, so it reads as this palette's own. */
+	--focus-color: color-mix(in srgb, var(--accent-text) 75%, transparent);
+}
+
+/* Dark: the stronger lines step toward the text; the accent washes stay faint. */
+:root.app-skin.dark[data-palette],
+.dark [data-palette] {
+	--line-menu: color-mix(in srgb, var(--text-primary) 2%, var(--line-control));
+	--line-strong: color-mix(in srgb, var(--text-primary) 5%, var(--line-control));
+	--line-hover: color-mix(in srgb, var(--text-primary) 9%, var(--line-control));
+	--line-focus: color-mix(in srgb, var(--text-primary) 14.5%, var(--line-control));
+	--accent-tint: color-mix(in srgb, var(--accent) 12%, transparent);
+	--selection: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+/* Light: the same steps, a little further, as Graphite's light lines do. */
+:root.app-skin:not(.dark)[data-palette],
+:root:not(.dark) [data-palette] {
+	--line-menu: color-mix(in srgb, var(--text-primary) 2%, var(--line-control));
+	--line-strong: color-mix(in srgb, var(--text-primary) 7.5%, var(--line-control));
+	--line-hover: color-mix(in srgb, var(--text-primary) 16.5%, var(--line-control));
+	--line-focus: color-mix(in srgb, var(--text-primary) 30%, var(--line-control));
+	--accent-tint: color-mix(in srgb, var(--accent) 8%, transparent);
+	--selection: color-mix(in srgb, var(--accent) 16%, transparent);
+}

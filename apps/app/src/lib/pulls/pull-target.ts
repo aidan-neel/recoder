@@ -26,7 +26,7 @@ export interface ReadTarget {
 }
 
 /** Punctuation between the reference and what the person asks: `#12: look at…`, `fix/lease — only…`. */
-const BRIEF_LEAD = /^[\s:,;—–-]+/;
+export const BRIEF_LEAD = /^[\s:,;—–-]+/;
 
 /** Why a sentence that links two pull requests has no target. */
 const SEVERAL_LINKED = 'More than one pull request is linked. Put the one to review first.';

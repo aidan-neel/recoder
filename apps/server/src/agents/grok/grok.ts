@@ -18,9 +18,9 @@ import {
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import { quotedLine } from '../quoted-line';
-import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { parseGrokModels } from './grok-models';
-import { grokEnv, prepareHome, realAuthPath } from './grok-process';
+import { GROK_CLI, grokEnv, grokHome, grokSetupEnv, prepareHome, realAuthPath } from './grok-process';
 import { ReplyReader, SIGNED_OUT } from './grok-reply';
 import { GROK_EMPTY_DIR, GrokRun, PRINT_ARGS } from './grok-run';
 
@@ -51,11 +51,22 @@ const COMPLETE_MAX_TURNS = '4';
 export class GrokAgent extends CliAgent {
 	readonly id = 'grok';
 	readonly name = 'Grok Build';
+	/** `--prompt-json` takes content blocks, but Grok Build documents no image block for it. */
+	readonly readsImages = false;
 	readonly install = INSTALL;
 	readonly login = LOGIN;
 	/** Each call runs one CLI process, so four run at once unless `RECODER_GROK_CONCURRENCY` says otherwise. */
 	readonly processCeiling = { env: 'RECODER_GROK_CONCURRENCY', fallback: 4 };
 	readonly signInFix = `Sign in with \`${LOGIN}\`, or pick another model in Recoder settings.`;
+	/**
+	 * The setup Settings runs: the vendor install script, piped to `bash` by the job runner, and
+	 * `grok login --device-auth`, the CLI's headless sign-in — it prints the URL and user code and polls until the
+	 * browser authorizes it. It runs under {@link grokSetupEnv}, so the credential lands in the user's `~/.grok`.
+	 */
+	readonly setup: AgentSetup = {
+		install: { argv: ['bash', '-s'], stdinUrl: 'https://x.ai/cli/install.sh' },
+		signIn: { argv: ['grok', 'login', '--device-auth'] }
+	};
 
 	/** The home the status checks share: prepared once, kept until `stop`, so `models` and sign-in see one config. */
 	private homeDir: string | null = null;
@@ -173,7 +184,7 @@ export class GrokAgent extends CliAgent {
 	}
 
 	protected find(): string | null {
-		return findCli({ pin: 'RECODER_GROK_BIN', command: 'grok', installed: ['.grok', 'bin', 'grok'] }, this.env);
+		return findCli(GROK_CLI, this.env);
 	}
 
 	/** The binary, or the error every entry point raises when it is not installed. */
@@ -188,6 +199,18 @@ export class GrokAgent extends CliAgent {
 	/** The environment every call gets: stripped keys, the call's own home, compat surfaces and memory off. */
 	protected childEnv(): Record<string, string> {
 		return grokEnv(this.env, this.statusHome(), realAuthPath(this.env));
+	}
+
+	/**
+	 * The environment a `grok login` job gets: the call's stripped env but the user's real home, since the job's
+	 * purpose is to write the sign-in where the user's own CLI reads it.
+	 */
+	override setupEnv(): Record<string, string> {
+		return grokSetupEnv(this.env);
+	}
+
+	protected configDir(): string {
+		return grokHome(this.env);
 	}
 
 	/**

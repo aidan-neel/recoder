@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
-import { withReviewMetrics } from '../../models/metrics';
+import { withUsageMetrics } from '../../models/metrics';
 import { LlmError } from '../../models/llm';
+import { withReviewModels } from '../../models/model-policy';
 import { configForAgent } from '../../models/models';
 import { patchApplies, suggestFix, suggestFixRequestSchema } from '../../review/fixes/fix';
 import { CheckoutError, ensureReviewCheckout } from '../../review/session/review-checkout';
@@ -27,7 +28,7 @@ app.post('/:id/fixes/suggest', async (c) => {
 
 	const { review, body, diff } = loaded;
 
-	configForAgent(body.agent);
+	await withReviewModels(review.id, () => configForAgent(body.agent));
 
 	let sandboxPath: string;
 
@@ -41,15 +42,16 @@ app.post('/:id/fixes/suggest', async (c) => {
 	}
 
 	try {
-		const result = await withReviewMetrics(review.id, 'fix', () =>
-			suggestFix({ agent: body.agent, ...body.finding, diff, sandboxPath })
+		const result = await withReviewModels(review.id, () =>
+			withUsageMetrics(review.id, 'fix', () => suggestFix({ agent: body.agent, ...body.finding, diff, sandboxPath }))
 		);
 
 		const applies = await patchApplies(sandboxPath, result.patch);
 
 		return c.json({ ...result, applies });
 	} catch (err) {
-		if (err instanceof LlmError) return fixModelFailure(c, err, configForAgent(body.agent));
+		if (err instanceof LlmError)
+			return fixModelFailure(c, err, await withReviewModels(review.id, () => configForAgent(body.agent)));
 
 		throw err;
 	}

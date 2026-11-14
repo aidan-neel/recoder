@@ -62,6 +62,7 @@ export class ApiError extends Error {
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
 	const res = await fetch(`${base}${path}`, {
 		...init,
+		credentials: 'include',
 		headers: { 'content-type': 'application/json', ...init?.headers }
 	});
 
@@ -97,6 +98,7 @@ async function getReviewFiles(id: string, signal?: AbortSignal): Promise<FileDif
 	const cached = reviewFiles.get(id);
 
 	const res = await fetch(`${base}/api/reviews/${id}/files`, {
+		credentials: 'include',
 		signal,
 		headers: cached ? { 'if-none-match': cached.etag } : undefined
 	});
@@ -194,6 +196,7 @@ export const serverApi = {
 		signal?: AbortSignal
 	): Promise<DiscussResponse> => {
 		const res = await fetch(`${base}/api/reviews/${reviewId}/discuss/stream`, {
+			credentials: 'include',
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(input),
@@ -233,6 +236,7 @@ export const serverApi = {
 		signal?: AbortSignal
 	): Promise<string> => {
 		const res = await fetch(`${base}/api/guidelines/draft`, {
+			credentials: 'include',
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(input),

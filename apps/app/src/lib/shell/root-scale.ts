@@ -2,12 +2,12 @@
 
 import { useSyncExternalStore } from 'react';
 
-/** The root font size over 16px: 1 at most widths, more at 1920px and 2400px, where every CSS px (compiled to rem) grows. */
+/** The root font size over 16px: 1 unless the browser's default font size was changed, which every CSS px (compiled to rem) follows. */
 function rootScale(): number {
 	return Number.parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
 }
 
-/** The root font size follows the window width, so a resize can change it. */
+/** A browser zoom or font setting can change the root size; both fire a resize. */
 function subscribe(notify: () => void): () => void {
 	window.addEventListener('resize', notify);
 

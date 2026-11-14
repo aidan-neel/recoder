@@ -1,8 +1,17 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { ReasoningEffort } from '@recoder/shared';
-import { cliEnv } from '../cli-process';
+import { cliEnv, type CliLocation } from '../cli-process';
 import type { ToolLease } from '../tools/mcp-host';
 
 type Env = Record<string, string | undefined>;
+
+/** Where the `codex` binary is: `RECODER_CODEX_BIN`, else PATH, else the installer's `~/.local/bin`. */
+export const CODEX_CLI: CliLocation = {
+	pin: 'RECODER_CODEX_BIN',
+	command: 'codex',
+	installed: ['.local', 'bin', 'codex']
+};
 
 /**
  * Variables the CLI must not inherit from the server: the server's own settings and keys, `CODEX_*` overrides of
@@ -24,6 +33,11 @@ const STRIPPED = [
 
 export function codexEnv(env: Env): Record<string, string> {
 	return cliEnv(env, STRIPPED);
+}
+
+/** The CLI's home, where it keeps its config and its sign-in: `CODEX_HOME`, else `~/.codex`. */
+export function codexHome(env: Env): string {
+	return env.CODEX_HOME || join(env.HOME || homedir(), '.codex');
 }
 
 /**

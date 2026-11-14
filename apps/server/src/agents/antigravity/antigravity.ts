@@ -1,5 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { supportedEffort, type AgentStatus, type ModelEntry, type ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
@@ -7,12 +7,14 @@ import type { ChatOptions } from '../../models/llm/types';
 import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter } from '../cli-stream';
-import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { ConversationLedger, ConversationTracker } from './antigravity-conversations';
 import { antigravityEfforts, effortArgs, parseAntigravityModels } from './antigravity-models';
 import { ReplyReader, antigravityError, isSignedOutOutput } from './antigravity-output';
 import {
+	ANTIGRAVITY_CLI,
 	ANTIGRAVITY_LOGIN,
+	ANTIGRAVITY_PROBE_DIR,
 	ANTIGRAVITY_STREAM_ARGS,
 	antigravityEnv,
 	stdinPrompt,
@@ -26,8 +28,6 @@ const STATUS_TIMEOUT_MS = 10_000;
 
 const MODELS_TIMEOUT_MS = 20_000;
 
-const ANTIGRAVITY_PROBE_DIR = 'antigravity-probe';
-
 /**
  * Antigravity CLI (`agy`), run as one headless `stream-json` process per call.
  *
@@ -38,11 +38,22 @@ const ANTIGRAVITY_PROBE_DIR = 'antigravity-probe';
 export class AntigravityAgent extends CliAgent {
 	readonly id = 'antigravity';
 	readonly name = 'Antigravity';
+	/** Its `stream-json` input documents no image message. */
+	readonly readsImages = false;
 	readonly install = INSTALL;
 	readonly login = ANTIGRAVITY_LOGIN;
 	/** Each call starts one `agy` process, capped at four at once unless `RECODER_ANTIGRAVITY_CONCURRENCY` overrides it. */
 	readonly processCeiling = { env: 'RECODER_ANTIGRAVITY_CONCURRENCY', fallback: 4 };
 	readonly signInFix = `Sign in with \`${ANTIGRAVITY_LOGIN}\`, or pick another model in Recoder settings.`;
+	/**
+	 * The setup Settings runs: the vendor install script, piped to `bash` by the job runner, and `agy acp --login`,
+	 * the CLI's documented non-browser sign-in — it prints the Google sign-in URL and waits for the pasted code.
+	 * `HOME` is kept, so the credential lands in the user's own `~/.gemini`.
+	 */
+	readonly setup: AgentSetup = {
+		install: { argv: ['bash', '-s'], stdinUrl: 'https://antigravity.google/cli/install.sh' },
+		signIn: { argv: ['agy', 'acp', '--login'], needsInput: true }
+	};
 
 	private readonly known = new Map<string, ModelEntry>();
 	private readonly conversations = new ConversationLedger(this.env, this.running);
@@ -159,11 +170,16 @@ export class AntigravityAgent extends CliAgent {
 	}
 
 	protected find(): string | null {
-		return findCli({ pin: 'RECODER_ANTIGRAVITY_BIN', command: 'agy', installed: ['.local', 'bin', 'agy'] }, this.env);
+		return findCli(ANTIGRAVITY_CLI, this.env);
 	}
 
 	protected childEnv(): Record<string, string> {
 		return antigravityEnv(this.env);
+	}
+
+	/** The CLI's app-data dir under the user's `~/.gemini`, where its OAuth token file lives. */
+	protected configDir(): string {
+		return join(this.env.HOME || homedir(), '.gemini', 'antigravity-cli');
 	}
 
 	/**

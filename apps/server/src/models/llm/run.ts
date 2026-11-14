@@ -107,7 +107,7 @@ export async function runChat(opts: ChatOptions, onToken?: (text: string) => voi
 		const deadline = Math.min(Date.now() + budget, settleBy);
 
 		progress.running();
-		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
+		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible', opts.reasoningEffort);
 
 		const rate = rateReporter(opts.onRate);
 		const call = scopedOptions(opts, scope, tracking, rate, deadline);
@@ -148,6 +148,7 @@ export async function runChat(opts: ChatOptions, onToken?: (text: string) => voi
 		scope.end();
 		progress.stop();
 		if (acquired) releaseLlmSlot(endpoint);
+		await tracking?.flush();
 	}
 }
 

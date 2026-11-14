@@ -3,9 +3,11 @@
 import { Check } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
-import { useContext, useState, type ComponentProps, type ReactNode } from 'react';
+import { useContext, useEffect, useState, type ComponentProps, type ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
+import { watchInput } from '../overlay/input-modality';
+import { menuOpener, returnFocusQuietly } from '../overlay/return-focus';
 import { MENU_SEPARATOR, MenuItemBody, MenuOpen, MenuPanel, menuItemRoot, type MenuItemProps } from './menu-parts';
 import { useOpened } from './use-opened';
 
@@ -28,6 +30,8 @@ export function DropdownMenu({
 }: DropdownMenuProps) {
 	const [ownOpen, setOwnOpen] = useState(defaultOpen);
 	const open = openProp ?? ownOpen;
+
+	useEffect(watchInput, []);
 
 	/** Keeps the local state in step so an uncontrolled menu still animates out. */
 	function change(next: boolean): void {
@@ -71,13 +75,13 @@ interface DropdownMenuContentProps {
 }
 
 /**
- * The menu panel: at least 180px or the trigger's width, fading and scaling
+ * The menu panel: at least 160px or the trigger's width, fading and scaling
  * in from the trigger. It renders nothing until the menu first opens.
  */
 export function DropdownMenuContent({
 	align = 'start',
 	side = 'bottom',
-	sideOffset = 6,
+	sideOffset = 4,
 	className,
 	children
 }: DropdownMenuContentProps) {
@@ -98,11 +102,12 @@ export function DropdownMenuContent({
 						side={side}
 						sideOffset={sideOffset}
 						collisionPadding={8}
+						onCloseAutoFocus={returnToTrigger}
 					>
 						<MenuPanel
 							data-ui="dropdown-menu-content"
 							className={cn(
-								'min-w-[max(180px,var(--radix-dropdown-menu-trigger-width))]',
+								'min-w-[max(160px,var(--radix-dropdown-menu-trigger-width))]',
 								'max-h-(--radix-dropdown-menu-content-available-height)',
 								'origin-(--radix-dropdown-menu-content-transform-origin)',
 								className
@@ -115,6 +120,11 @@ export function DropdownMenuContent({
 			) : null}
 		</AnimatePresence>
 	);
+}
+
+/** Hands focus back to the trigger the menu panel names, without the ring after a pointer press. */
+function returnToTrigger(event: Event): void {
+	returnFocusQuietly(event, event.target instanceof Element ? menuOpener(event.target) : null);
 }
 
 /** A row in a dropdown menu: optional icon, label and shortcut keycap. */

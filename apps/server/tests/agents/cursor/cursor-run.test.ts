@@ -97,7 +97,7 @@ describe('CursorAgent.openRun', () => {
 		expect(call.dataDir).toContain('recoder-cursor-run-');
 		expect(call.dataDir).not.toContain(opened.env.HOME ?? '\u0000');
 		expect(call.cwdFiles).toEqual([]);
-		expect(call.auth).toBe('none');
+		expect(call.auth).toBe(`${opened.env.XDG_CONFIG_HOME}/cursor/auth.json`);
 		expect(call.prompt).toContain('Review the diff.');
 	});
 

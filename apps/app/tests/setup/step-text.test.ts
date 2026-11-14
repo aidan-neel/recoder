@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { AgentStatus, ModelSettings } from '@recoder/shared';
+import type { ModelSettings } from '@recoder/shared';
 import { prettyModelName } from '@recoder/shared';
 
 import { joinNames } from '../../src/lib/shell/format';
@@ -12,22 +12,7 @@ import {
 	shortList,
 	trackingLine
 } from '../../src/lib/setup/step-text';
-
-function agent(patch: Partial<AgentStatus>): AgentStatus {
-	return {
-		id: 'opencode',
-		name: 'OpenCode',
-		installed: true,
-		version: '1.0.0',
-		path: '/usr/bin/opencode',
-		error: null,
-		install: 'npm i -g opencode',
-		signedIn: null,
-		login: null,
-		providers: true,
-		...patch
-	};
-}
+import { openCodeStatus } from '../fixtures';
 
 describe('shortening a list of names', () => {
 	test('three or fewer join plainly; past that the tail folds into a count', () => {
@@ -66,26 +51,30 @@ describe('the connected line', () => {
 
 describe('why providers can’t be added yet', () => {
 	test('a failed check, a missing agent and a broken one each say so', () => {
-		expect(blockedLine(agent({}), 'check exploded')).toBe('check exploded');
+		expect(blockedLine(openCodeStatus({}), 'check exploded')).toBe('check exploded');
 		expect(blockedLine(undefined, null)).toBe('Can’t find OpenCode on this machine.');
-		expect(blockedLine(agent({ installed: false }), null)).toBe('Reviews run through OpenCode, which isn’t installed.');
-		expect(blockedLine(agent({ error: 'too old' }), null)).toBe('too old');
-		expect(blockedLine(agent({ signedIn: false }), null)).toBe('OpenCode isn’t ready.');
+
+		expect(blockedLine(openCodeStatus({ installed: false }), null)).toBe(
+			'Reviews run through OpenCode, which isn’t installed.'
+		);
+
+		expect(blockedLine(openCodeStatus({ error: 'too old' }), null)).toBe('too old');
+		expect(blockedLine(openCodeStatus({ signedIn: false }), null)).toBe('OpenCode isn’t ready.');
 	});
 
 	test('ready means the check passed and the agent is installed, healthy and signed in', () => {
-		expect(providerReady(agent({}), null)).toBe(true);
-		expect(providerReady(agent({}), 'x')).toBe(false);
+		expect(providerReady(openCodeStatus({}), null)).toBe(true);
+		expect(providerReady(openCodeStatus({}), 'x')).toBe(false);
 		expect(providerReady(undefined, null)).toBe(false);
-		expect(providerReady(agent({ installed: false }), null)).toBe(false);
-		expect(providerReady(agent({ error: 'x' }), null)).toBe(false);
-		expect(providerReady(agent({ signedIn: false }), null)).toBe(false);
+		expect(providerReady(openCodeStatus({ installed: false }), null)).toBe(false);
+		expect(providerReady(openCodeStatus({ error: 'x' }), null)).toBe(false);
+		expect(providerReady(openCodeStatus({ signedIn: false }), null)).toBe(false);
 	});
 });
 
 describe('the provider step’s description', () => {
 	test('done reports what is connected; not done invites adding one or explains the wait', () => {
-		const manager = agent({});
+		const manager = openCodeStatus({});
 
 		expect(providerDescription({ done: true, providers: [], models: null, manager, agentError: null })).toBe(
 			'Set by the RECODER_REVIEW_* variables'
@@ -113,12 +102,15 @@ describe('the review model’s display name', () => {
 			configured: true,
 			baseUrl: '',
 			model,
-			apiKeyPreview: null,
+			apiKeySet: false,
 			sharedModelId: null,
 			models: [],
 			subagentCap: 8,
 			tokenBudget: 'medium',
 			reportLowSeverity: true,
+			disabledProviders: [],
+			hiddenModels: [],
+			modelPolicy: { kind: 'choose' },
 			limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 }
 		};
 	}

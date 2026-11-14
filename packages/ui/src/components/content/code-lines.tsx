@@ -116,12 +116,12 @@ export function CodeLines({
 			data-fresh={fresh || undefined}
 			data-numbers={showOldNumbers ? 'both' : 'new'}
 			className={cn(
-				'min-w-0 overflow-hidden rounded-[10px] bg-code font-mono text-[12.5px] leading-[22px] text-(--syn-plain)',
+				'min-w-0 overflow-hidden rounded-(--radius-row) bg-code font-mono text-[12.5px] leading-[22px] text-(--syn-plain)',
 				'shadow-[0_0_0_1px_var(--line-card)] [tab-size:4]',
 				className
 			)}
 		>
-			<div data-ui="code-lines-scroll" className="thin-scroll overflow-x-auto">
+			<div data-ui="code-lines-scroll" className="overflow-x-auto">
 				<div data-ui="code-lines-body">
 					{above > 0 && <Gap count={above} where="above" />}
 					{lines.map((line, index) => {

@@ -13,12 +13,15 @@ export type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
 /** Variant names every overlay animates through: in from `closed`, out back to it. */
 export const PRESENCE = { initial: 'closed', animate: 'open', exit: 'closed' } as const;
 
-/** The panel title: 15px, 500, a hair of negative tracking. */
+/**
+ * The panel title: 15px, 500, a hair of negative tracking, on the panel's
+ * `--modal-title-line`, which the X centres on.
+ */
 export const TITLE_CLASS =
-	'text-[length:var(--font-size-title)] leading-[1.375] font-medium tracking-[-0.005em] text-balance text-fg';
+	'text-[length:var(--font-size-title)] leading-(--modal-title-line) font-medium tracking-[-0.005em] text-balance text-fg';
 
-/** The line under a title: body size, loose leading, subtle ink. */
-export const DESCRIPTION_CLASS = 'text-[length:var(--font-size-body)] leading-[1.625] text-pretty text-fg-subtle';
+/** The line under a title: body size on a 20px line, subtle ink. */
+export const DESCRIPTION_CLASS = 'text-[length:var(--font-size-body)] leading-5 text-pretty text-fg-subtle';
 
 const SIZES: Record<ModalSize, string> = {
 	sm: 'max-w-[24rem]',
@@ -34,9 +37,9 @@ const SIZES: Record<ModalSize, string> = {
  * merges nothing.
  */
 const PANEL = [
-	'fixed top-1/2 left-1/2 flex w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-4 p-5',
-	'overflow-y-auto overscroll-contain rounded-[16px] bg-raised-2 text-fg shadow-(--shadow-modal) outline-none',
-	'thin-scroll data-[state=closed]:pointer-events-none!'
+	'fixed top-1/2 left-1/2 flex w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-3 p-(--modal-inset)',
+	'overflow-y-auto overscroll-contain rounded-(--radius-card) bg-raised-2 text-fg shadow-(--shadow-modal) outline-none',
+	'data-[state=closed]:pointer-events-none!'
 ].join(' ');
 
 /**

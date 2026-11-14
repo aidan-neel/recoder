@@ -6,8 +6,8 @@ import { memo, useId, useState } from 'react';
 import { useAskView } from '@/lib/ask/use-ask';
 import type { BugsView, BugView } from '@/lib/bugs/types';
 
+import { AskComposer } from '@/components/ask/ask-composer';
 import { AskSuggestions, AskThread } from '@/components/ask/ask-thread';
-import { Composer } from '@/components/ask/composer';
 
 import { BugActions } from './bug-actions';
 import { BugEvidence } from './bug-evidence';
@@ -28,14 +28,7 @@ function BugAsk({ bugId }: { bugId: string }) {
 		<div className="bug-ask">
 			<AskThread ask={ask} />
 			<AskSuggestions ask={ask} />
-			<Composer
-				label="Ask about this bug"
-				placeholder="Ask about this bug"
-				limit={ask.limit}
-				busy={ask.replying}
-				onStop={ask.stop}
-				onSend={ask.send}
-			/>
+			<AskComposer ask={ask} label="Ask about this bug" />
 		</div>
 	);
 }

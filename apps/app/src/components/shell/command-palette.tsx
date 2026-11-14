@@ -10,10 +10,22 @@ import {
 	CommandList,
 	type CommandHint
 } from '@recoder/ui';
-import { BookOpen, Clock, CornerDownLeft, GitPullRequest, Keyboard, Plus, Settings, SunMoon } from 'lucide-react';
+import {
+	BookOpen,
+	Clock,
+	CornerDownLeft,
+	GitPullRequest,
+	Keyboard,
+	Palette,
+	Plus,
+	Settings,
+	ShieldUser,
+	SunMoon
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type ComponentType } from 'react';
 
+import { useIsAdmin } from '@/lib/account/use-is-admin';
 import { useApi } from '@/lib/api/client';
 import type { PullRow, PullTarget } from '@/lib/pulls/types';
 import { useOpenPull } from '@/lib/pulls/use-open-pull';
@@ -77,6 +89,7 @@ export function CommandPalette() {
 	const setOpen = useChrome((state) => state.setPaletteOpen);
 	const setShortcutsOpen = useChrome((state) => state.setShortcutsOpen);
 	const toggleTheme = useTheme((state) => state.toggle);
+	const admin = useIsAdmin();
 	const entries = useRowEntries();
 	const opener = useOpenPull();
 	const [query, setQuery] = useState('');
@@ -105,8 +118,10 @@ export function CommandPalette() {
 		{ id: 'pulls', label: 'Pull requests', icon: GitPullRequest, run: () => go(pullsHref(base)) },
 		{ id: 'automations', label: 'Automations', icon: Clock, run: () => go(AUTOMATIONS_HREF) },
 		{ id: 'guidelines', label: 'Guidelines', icon: BookOpen, run: () => go(GUIDELINES_HREF) },
+		...(admin ? [{ id: 'admin', label: 'Admin', icon: ShieldUser, run: () => go(settingsHref('admin')) }] : []),
 		{ id: 'settings', label: 'Settings', icon: Settings, shortcut: 'mod+,', run: () => go(settingsHref()) },
 		{ id: 'theme', label: 'Switch theme', icon: SunMoon, run: toggleTheme },
+		{ id: 'palette', label: 'Change palette', icon: Palette, run: () => go(settingsHref('appearance')) },
 		{ id: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, shortcut: '?', run: () => setShortcutsOpen(true) }
 	];
 

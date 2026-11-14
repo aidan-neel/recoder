@@ -5,6 +5,11 @@
  * `className` (utilities layer) and an app's own unlayered CSS both win.
  */
 @layer components {
+	/* ───────── Agent mark: in the text color, unless the brand keeps its own ───────── */
+	[data-ui='agent-mark'][data-agent='claude-code'] {
+		color: var(--brand-claude);
+	}
+
 	/* ───────── Status glyph: one 16px face per state ───────── */
 	[data-ui='status-glyph'] {
 		position: relative;
@@ -161,53 +166,9 @@
 		}
 	}
 
-	/* ───────── Scroll area: a thin bar that fades in on hover or scroll, never cues ───────── */
+	/* ───────── Scroll area: no bar shows ───────── */
 	[data-ui='scroll-area-scrollbar'] {
-		display: flex;
-		padding: 2px;
-		opacity: 0;
-		touch-action: none;
-		user-select: none;
-		transition: opacity var(--dur-toggle) ease-out;
-	}
-	[data-ui='scroll-area-scrollbar'][data-orientation='vertical'] {
-		width: 10px;
-	}
-	[data-ui='scroll-area-scrollbar'][data-orientation='horizontal'] {
-		height: 10px;
-		flex-direction: column;
-	}
-	[data-ui='scroll-area-scrollbar']:not(:has([data-ui='scroll-area-thumb'])) {
-		visibility: hidden;
-		pointer-events: none;
-	}
-	[data-ui='scroll-area']:hover > [data-ui='scroll-area-scrollbar'],
-	[data-ui='scroll-area'][data-scrolling] > [data-ui='scroll-area-scrollbar'],
-	[data-ui='scroll-area-scrollbar']:active {
-		opacity: 1;
-	}
-	[data-ui='scroll-area-thumb'] {
-		position: relative;
-		flex: 1;
-		border-radius: 99px;
-		background-color: var(--line-strong);
-		transition: background-color var(--dur-hover) ease-out;
-	}
-	/* A 16px hit area around the 6px thumb. */
-	[data-ui='scroll-area-thumb']::before {
-		position: absolute;
-		top: 50%;
-		left: 50%;
-		width: 100%;
-		min-width: 16px;
-		height: 100%;
-		min-height: 16px;
-		content: '';
-		translate: -50% -50%;
-	}
-	[data-ui='scroll-area-scrollbar']:hover [data-ui='scroll-area-thumb'],
-	[data-ui='scroll-area-scrollbar']:active [data-ui='scroll-area-thumb'] {
-		background-color: var(--line-hover);
+		display: none;
 	}
 
 	/* ───────── Meter: a 3px track; the fill springs, or a short bar slides while unknown ───────── */
@@ -231,6 +192,18 @@
 		animation: ui-meter-slide var(--dur-skeleton) cubic-bezier(0.65, 0, 0.35, 1) infinite;
 	}
 
+	/* ───────── Collapsible: the chevron that leads a trigger hangs its ink on the trigger's edge ───────── */
+	/*
+	 * Lucide's chevron-right starts its ink 8 units into its 24-unit box (a third of its size: 4.6px of 14px,
+	 * measured by scanning the drawn glyph), so it is pulled left by that much. It turns about (13.5, 13.5), so the
+	 * open chevron's ink starts on the same edge and stays centred on the line. A chevron that is not 14px sets
+	 * --disclosure-chevron-size to its size.
+	 */
+	[data-ui='collapsible-trigger'] > svg.lucide-chevron-right:first-child {
+		margin-left: calc(var(--disclosure-chevron-size, 14px) / -3);
+		transform-origin: 56.25% 56.25%;
+	}
+
 	/* ───────── Hover list: one layer that snaps to the hovered row and fades ───────── */
 	[data-ui='hover-list-highlight'] {
 		position: absolute;
@@ -238,7 +211,7 @@
 		left: 0;
 		z-index: -1;
 		display: block;
-		border-radius: 10px;
+		border-radius: var(--radius-row);
 		background-color: rgb(var(--wash-rgb) / 0.05);
 		list-style: none;
 		opacity: 0;
@@ -276,101 +249,6 @@
 		height: 10px;
 	}
 
-	/* ───────── Status notice: what a page, a section or a line says in place of its content ───────── */
-	[data-ui='status-notice'] {
-		display: flex;
-		min-width: 0;
-		flex-direction: column;
-		gap: 12px;
-	}
-	[data-ui='status-notice-text'] {
-		margin: 0;
-		font-weight: 400;
-	}
-	[data-ui='status-notice-title'] {
-		color: var(--text-primary);
-	}
-	[data-ui='status-notice-detail'] {
-		color: var(--text-subtle);
-		overflow-wrap: anywhere;
-	}
-	[data-ui='status-notice'][data-tone='danger']:not([data-variant='page']) [data-ui='status-notice-title'] {
-		color: var(--danger);
-	}
-	[data-ui='status-notice-actions'] {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
-
-	/* Page: the serif voice in a centred column, the title in ink and the rest in the brief's body color. */
-	[data-ui='status-notice'][data-variant='page'] {
-		width: 100%;
-		max-width: 640px;
-		margin: 0 auto;
-		padding: 96px 32px;
-		gap: 24px;
-	}
-	[data-variant='page'] > [data-ui='status-notice-text'] {
-		color: var(--text-brief-body);
-		font-family: var(--font-ai);
-		font-size: 27px;
-		letter-spacing: -0.005em;
-		line-height: 1.38;
-		text-wrap: pretty;
-	}
-	[data-variant='page'] > [data-ui='status-notice-text'] > [data-ui='status-notice-detail'] {
-		color: inherit;
-	}
-	@media (max-width: 640px) {
-		[data-ui='status-notice'][data-variant='page'] {
-			padding: 48px 16px;
-		}
-	}
-
-	/* Section: centred in the space the panel or list would fill, the reason on its own line. */
-	[data-ui='status-notice'][data-variant='section'] {
-		height: 100%;
-		align-items: center;
-		justify-content: center;
-		padding: 32px;
-		font-size: 13px;
-		line-height: 1.5;
-		text-align: center;
-	}
-	[data-variant='section'] [data-ui='status-notice-title'] {
-		color: var(--text-secondary);
-	}
-	[data-variant='section'] [data-ui='status-notice-detail'] {
-		display: block;
-		margin-top: 2px;
-		font-size: 12px;
-	}
-	[data-variant='section'] > [data-ui='status-notice-actions'] {
-		justify-content: center;
-	}
-
-	/* Inline: one quiet line in the flow, at least a control tall so an action never resizes it. */
-	[data-ui='status-notice'][data-variant='inline'] {
-		min-height: var(--size-control-md);
-		flex-direction: row;
-		align-items: center;
-		gap: 8px;
-		font-size: 12.5px;
-		line-height: 18px;
-	}
-	[data-variant='inline'] > [data-ui='status-notice-text'] {
-		min-width: 0;
-		flex: 1;
-	}
-	[data-variant='inline'] [data-ui='status-notice-title'] {
-		color: var(--text-muted);
-	}
-	[data-variant='inline'] > [data-ui='status-notice-actions'] {
-		flex-shrink: 0;
-		flex-wrap: nowrap;
-	}
-
 	/* ───────── Row button: a list row that is one click target; the hover list paints its hover ───────── */
 	[data-ui='row-button'] {
 		position: relative;
@@ -381,7 +259,7 @@
 		gap: 10px;
 		padding: 7px 10px;
 		border: 0;
-		border-radius: var(--row-button-radius, 8px);
+		border-radius: var(--row-button-radius, var(--radius-row));
 		background: none;
 		color: var(--text-secondary);
 		font: inherit;
@@ -412,7 +290,7 @@
 		position: absolute;
 		z-index: 0;
 		inset: 0;
-		border-radius: var(--row-button-radius, 8px);
+		border-radius: var(--row-button-radius, var(--radius-row));
 		content: '';
 	}
 	[data-ui='row-button'][data-cover]:focus-visible {

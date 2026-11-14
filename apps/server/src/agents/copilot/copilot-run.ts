@@ -11,7 +11,7 @@ import type { ToolLease } from '../tools/mcp-host';
 import { usageDelta } from '../usage-delta';
 import { effortArgs } from './copilot-models';
 import { EventReader, readUsage } from './copilot-output';
-import { copilotEnvWithHome } from './copilot-process';
+import { copilotEnvWithHome, linkCopilotSignIn } from './copilot-process';
 
 type Env = Record<string, string | undefined>;
 
@@ -116,6 +116,7 @@ export class CopilotRun extends ProcessRun {
 		try {
 			await mkdir(place.home, { recursive: true });
 			await mkdir(place.cwd, { recursive: true });
+			await linkCopilotSignIn(host.env, place.home);
 		} catch (error) {
 			await run.close();
 			throw error;

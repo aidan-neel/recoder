@@ -1,5 +1,6 @@
 import { LlmError, cancelledError, isProviderThrottle, isTransientLlmError, timedOutError } from './errors';
 import type { ChatOptions } from './types';
+import { redacted } from '../../util/redact';
 
 function llmRetries(): number {
 	const raw = Number(process.env.RECODER_LLM_RETRIES);
@@ -63,7 +64,7 @@ export async function withRetries<T>(
 				Date.now() + wait >= deadline - 5_000
 			)
 				throw err;
-			console.warn(`[llm] ${(err as Error).message} — retrying in ${wait / 1000}s (${tries + 1}/${max})`);
+			console.warn(`[llm] ${redacted((err as Error).message, [])} — retrying in ${wait / 1000}s (${tries + 1}/${max})`);
 			await sleep(wait, opts.signal);
 		}
 	}

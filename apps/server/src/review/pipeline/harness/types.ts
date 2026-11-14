@@ -3,6 +3,7 @@ import type {
 	CoverageGap,
 	CoverageSummary,
 	Finding,
+	ImageUpload,
 	ModelFailure,
 	ObligationReport,
 	ReviewAssignment,
@@ -70,6 +71,8 @@ export interface AdaptiveReviewInput {
 	signal?: AbortSignal;
 	/** What the developer asked for in the session before starting the review, verbatim. */
 	instructions?: string | null;
+	/** Images the developer attached to the brief; each reviewer on the Review model reads them with it. */
+	images?: readonly ImageUpload[];
 	/** Subagents the review may run in all, from Settings (any count in tests); the shared default when unset. */
 	subagentCap?: SubagentCap | number;
 	/** How many tokens the review may spend, from Settings; Medium when unset. Sets how many reviewers run, their turns and the model-call ceiling; which lenses run is `lenses`. */

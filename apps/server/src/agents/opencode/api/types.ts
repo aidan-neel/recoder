@@ -1,4 +1,4 @@
-import type { TokenUsage } from '@recoder/shared';
+import type { ImageUpload, TokenUsage } from '@recoder/shared';
 import { LlmError } from '../../../models/llm/errors';
 import type { SessionHandlers } from '../opencode-events';
 
@@ -24,6 +24,8 @@ export interface Prompt {
 	session: string;
 	directory: string;
 	text: string;
+	/** Images that go with the text, sent inline as `data:` URLs. */
+	images: readonly ImageUpload[];
 	model: string;
 	system: string;
 	variant?: string;

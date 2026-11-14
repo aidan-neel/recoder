@@ -18,7 +18,8 @@ export interface VllmServer {
 	host: string;
 	/** The working OpenAI-compatible base, ending in `/v1`. */
 	baseUrl: string;
-	apiKeyPreview: string | null;
+	/** Whether a key is saved. The key itself is never returned, not even in part. */
+	apiKeySet: boolean;
 	/** When the model list last matched the server, in ms; null until the first sync. */
 	syncedAt: number | null;
 	/** Why the latest sync failed, in plain words; null when it worked. The models are the last good list. */

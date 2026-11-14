@@ -2,7 +2,8 @@ import { ORCHESTRATOR_ID, parseUnifiedDiff, type ReviewChatMessage } from '@reco
 import { db, reviewDiffs } from '../../store';
 import { configForOrchestrator } from '../../models/models';
 import { streamChatCompletion } from '../../models/llm';
-import { withReviewMetrics } from '../../models/metrics';
+import { withUsageMetrics } from '../../models/metrics';
+import { withReviewModels } from '../../models/model-policy';
 import { fetchPull } from '../../forge/pull-preview';
 import { modelFailure } from '../../models/model-failure';
 import { keyFor, pending, recordChatMessage } from './chat-replies';
@@ -66,7 +67,7 @@ async function startDraftOpener(
 
 	if (pending.has(key)) return;
 
-	const config = configForOrchestrator();
+	const config = await withReviewModels(reviewId, configForOrchestrator);
 	const controller = new AbortController();
 
 	pending.set(key, controller);
@@ -84,7 +85,7 @@ async function startDraftOpener(
 
 	recordChatMessage(reviewId, reply);
 
-	await withReviewMetrics(reviewId, 'discussion', async () => {
+	await withUsageMetrics(reviewId, 'discussion', async () => {
 		let lastUpdate = 0;
 
 		const flush = async (status: 'streaming' | 'done' | 'error') => {

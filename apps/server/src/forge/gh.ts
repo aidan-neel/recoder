@@ -147,17 +147,18 @@ export interface PullRow {
 	row: Record<string, unknown>;
 }
 
-/** PR metadata + unified diff via the gh CLI. Throws GhError. */
+/** PR metadata + unified diff via the gh CLI; the two reads are independent, so they run together. Throws GhError. */
 export async function fetchPullRequest(
 	repoUrl: string,
 	prNumber: number,
 	opts?: { env?: Record<string, string>; metadataOnly?: boolean }
 ): Promise<FetchedPull> {
-	const { pr } = await viewPullRow(repoUrl, prNumber, { env: opts?.env });
-
-	const diff = opts?.metadataOnly
-		? ''
-		: await gh(['pr', 'diff', String(prNumber), '--repo', parseRepoSlug(repoUrl)], opts?.env);
+	const [{ pr }, diff] = await Promise.all([
+		viewPullRow(repoUrl, prNumber, { env: opts?.env }),
+		opts?.metadataOnly
+			? Promise.resolve('')
+			: gh(['pr', 'diff', String(prNumber), '--repo', parseRepoSlug(repoUrl)], opts?.env)
+	]);
 
 	return { pr, diff };
 }
@@ -187,15 +188,12 @@ export async function listPullRequests(
 	return (await listPullRows(repoUrl, opts ?? {})).map((row) => row.pr);
 }
 
-/**
- * Open PRs for a repo, newest first, in one `gh pr list` call with `fields`
- * beyond the usual metadata; `gh` reads as many pages as `limit` needs. Throws GhError.
- */
-export async function listPullRows(
+/** Open PRs for a repo, newest first, in one `gh pr list` call; `gh` reads as many pages as `limit` needs. Throws GhError. */
+async function listPullRows(
 	repoUrl: string,
-	opts: { env?: Record<string, string>; limit?: number; fields?: string[] }
+	opts: { env?: Record<string, string>; limit?: number }
 ): Promise<PullRow[]> {
-	const fields = [...VIEW_FIELDS, 'assignees', ...(opts.fields ?? [])].join(',');
+	const fields = [...VIEW_FIELDS, 'assignees'].join(',');
 
 	const rows = extractJson(
 		await gh(
@@ -220,8 +218,8 @@ export async function listPullRows(
 	return rows.filter(isJsonObject).map((row) => ({ pr: parsePullRow(row, 0), row }));
 }
 
-/** Normalize one `gh pr view`/`pr list` JSON row to a PullRequest. */
-function parsePullRow(view: Record<string, unknown>, fallbackNumber: number): PullRequest {
+/** Normalize one `gh pr view`/`pr list` JSON row, or a GraphQL pull request node with the same field names, to a PullRequest. */
+export function parsePullRow(view: Record<string, unknown>, fallbackNumber: number): PullRequest {
 	const author =
 		typeof view.author === 'object' && view.author !== null
 			? String((view.author as Record<string, unknown>).login ?? 'unknown')

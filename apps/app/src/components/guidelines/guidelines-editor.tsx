@@ -78,7 +78,7 @@ export function GuidelinesEditor(spec: GuidelinesEditorSpec) {
 					invalid={edit.over}
 					spellCheck
 					aria-label={`${spec.label} (Markdown)`}
-					className="guidelines-field thin-scroll"
+					className="guidelines-field"
 					onChange={(event) => edit.edit(event.target.value)}
 				/>
 			)}

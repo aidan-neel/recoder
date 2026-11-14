@@ -14,10 +14,11 @@ import {
 } from '../cli-process';
 import { systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
-import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { claudeCodeEfforts, claudeCodeModels, effortArgs } from './claude-code-models';
 import { FailedCallDump } from './claude-code-debug';
-import { claudeCodeEnv } from './claude-code-process';
+import { claudeCodeInput } from './claude-code-input';
+import { claudeCodeEnv, claudeConfigDir } from './claude-code-process';
 import { ReplyReader } from './claude-code-reply';
 import { ClaudeCodeRun, CLAUDE_CODE_EMPTY_DIR } from './claude-code-run';
 import { sessionCall, sweepSessions, type SessionCall } from './claude-code-session';
@@ -67,19 +68,31 @@ const BASE_ARGS = [
 /**
  * Claude Code, run as one `claude -p` process per model call.
  *
- * The CLI signs in with the user's own subscription. Recoder never reads its
- * credential files and never calls the Anthropic API with its token; it only
- * runs the CLI, without the server's keys in its environment, and reads what
- * the CLI prints.
+ * The CLI signs in with the user's own subscription. Model calls never use its
+ * token: Recoder only runs the CLI, without the server's keys in its
+ * environment, and reads what the CLI prints. The one read of its sign-in is
+ * the subscription's usage limits Settings shows (`limits.ts`), which no CLI
+ * command prints.
  */
 export class ClaudeCodeAgent extends CliAgent {
 	readonly id = 'claude-code';
 	readonly name = 'Claude Code';
+	/** Images go in as image blocks of a `stream-json` user message, see {@link claudeCodeInput}. */
+	readonly readsImages = true;
 	readonly install = INSTALL;
 	readonly login = LOGIN;
 	/** Each call runs one CLI process, so eight run at once unless `RECODER_CLAUDE_CODE_CONCURRENCY` says otherwise. */
 	readonly processCeiling = { env: 'RECODER_CLAUDE_CODE_CONCURRENCY', fallback: 8 };
 	readonly signInFix = `Sign in with \`${LOGIN}\`, or pick another model in Recoder settings.`;
+	/**
+	 * The setup Settings runs: the vendor install script, piped to `bash` by the job runner, and `claude auth login`,
+	 * which prints the sign-in URL and waits for the pasted code. The sign-in lands in `CLAUDE_CONFIG_DIR` — the
+	 * environment keeps it — so it is the user's own.
+	 */
+	readonly setup: AgentSetup = {
+		install: { argv: ['bash', '-s'], stdinUrl: 'https://claude.ai/install.sh' },
+		signIn: { argv: ['claude', 'auth', 'login'], needsInput: true }
+	};
 
 	/** The latest `claude auth status` call while it runs, which a check that may take an older answer joins. */
 	private signInCall: Promise<SignIn> | null = null;
@@ -211,12 +224,14 @@ export class ClaudeCodeAgent extends CliAgent {
 			reader.line(line);
 		});
 
+		const input = claudeCodeInput(where.session.prompt, where.session.images);
+
 		try {
 			const exit = await streamCli({
-				argv: [path, ...args],
+				argv: [path, ...args, ...input.args],
 				cwd: where.cwd,
 				env: claudeCodeEnv(this.env),
-				stdin: where.session.prompt,
+				stdin: input.stdin,
 				signal,
 				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
 				onOutput: lines.push,
@@ -235,6 +250,10 @@ export class ClaudeCodeAgent extends CliAgent {
 
 	protected childEnv(): Record<string, string> {
 		return claudeCodeEnv(this.env);
+	}
+
+	protected configDir(): string {
+		return claudeConfigDir(this.env);
 	}
 
 	/**

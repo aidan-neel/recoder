@@ -1,0 +1,47 @@
+/* ───────── Chat: a conversation about a repository, one reading column over a docked composer ───────── */
+/*
+ * The thread scrolls; the composer stays at the page's foot. Both use the same centred column, as wide as the
+ * New review composer.
+ */
+.chat-scroll {
+	min-height: 0;
+	flex: 1;
+	overflow-y: auto;
+}
+.chat-column {
+	width: min(720px, 100% - 2 * var(--page-gutter));
+	margin-inline: auto;
+}
+.chat-thread {
+	padding: 32px 0 24px;
+}
+.chat-dock {
+	flex-shrink: 0;
+	padding: 8px 0 20px;
+}
+.chat-dock-column {
+	position: relative;
+}
+/*
+ * A line over the composer: the stream reconnecting, or a stop that failed. It lies over the thread's bottom
+ * padding instead of taking room, so the thread keeps its height and its last line stays in view.
+ */
+.chat-note {
+	position: absolute;
+	bottom: calc(100% + 4px);
+	inset-inline: 0;
+	background: var(--bg-canvas);
+}
+
+/* Loading: the first question at the right, the start of its reply under it. */
+.chat-skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+.chat-skeleton-question {
+	width: 300px;
+	max-width: 85%;
+	height: 32px;
+	align-self: flex-end;
+}

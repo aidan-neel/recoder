@@ -149,14 +149,8 @@ export async function prepareSandbox(opts: {
 	if (!inside) {
 		opts.onProgress?.('Cloning repository into the review checkout');
 
-		const cloneUrl = opts.provider === 'github' ? 'https://github.com/' + repoSlug + '.git' : repoUrl;
-
-		const shared = await ensureSharedClone({
-			workDir: env.RECODER_WORKDIR,
-			repoSlug,
-			cloneUrl,
-			run: (cwd, args, label) => git(cwd, args, label, remote)
-		});
+		const cloneUrl = cloneUrlOf(repoSlug, repoUrl, opts.provider);
+		const shared = await ensureRepoClone({ repoSlug, repoUrl, provider: opts.provider, env: opts.env, signal });
 
 		await git(
 			env.RECODER_WORKDIR,
@@ -186,6 +180,34 @@ export async function prepareSandbox(opts: {
 	const headSha = await git(path, ['rev-parse', 'HEAD'], 'sandbox sha', { signal });
 
 	return { key, path, repoSlug, prNumber, headSha };
+}
+
+/**
+ * The shared bare copy of a hosted repository (`ensureSharedClone`), cloned
+ * with the forge's credentials on first use and fetched at most once a minute.
+ * Null when git cannot make it.
+ */
+export function ensureRepoClone(opts: {
+	repoSlug: string;
+	repoUrl: string;
+	provider?: Provider;
+	env?: Record<string, string>;
+	/** Stops the clone or fetch; a stopped one leaves no copy behind. */
+	signal?: AbortSignal;
+}): Promise<string | null> {
+	const remote: GitAccess = { overrides: opts.env, provider: opts.provider, signal: opts.signal };
+
+	return ensureSharedClone({
+		workDir: env.RECODER_WORKDIR,
+		repoSlug: opts.repoSlug,
+		cloneUrl: cloneUrlOf(opts.repoSlug, opts.repoUrl, opts.provider),
+		run: (cwd, args, label) => git(cwd, args, label, remote)
+	});
+}
+
+/** The URL git clones a repository from; GitHub's is rebuilt from the slug so a pasted web URL still clones. */
+function cloneUrlOf(repoSlug: string, repoUrl: string, provider: Provider | undefined): string {
+	return provider === 'github' ? 'https://github.com/' + repoSlug + '.git' : repoUrl;
 }
 
 /** Fetch the target branch, record immutable SHAs, and compute the merge-base patch. */

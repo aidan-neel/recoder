@@ -9,6 +9,7 @@ import { JSON_MODE_INSTRUCTION } from '../../../src/models/llm/request-fields';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { fakeBin } from '../../helpers/fake-bin';
 import { allGone, fakeClaude, fakeClaudeLog, spawnedPids } from '../../helpers/fake-claude';
+import { imageUpload } from '../../helpers/images';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	return {
@@ -193,6 +194,37 @@ describe('ClaudeCodeAgent.complete', () => {
 		expect(written).toContain('[--model] [claude-opus-5-5] [--effort] [high]');
 		expect(written).not.toContain('diff --git a/x b/x]');
 		expect(written).toMatch(/cwd: .*claude-code-empty\n/);
+	});
+
+	test('sends attached images with the prompt as one stream-json user message', async () => {
+		const log = await fakeClaudeLog();
+		const agent = new ClaudeCodeAgent(await fakeClaude({ FAKE_CLAUDE_LOG: log }));
+		const image = imageUpload();
+
+		await agent.complete(
+			call({
+				messages: [
+					{ role: 'system', content: 'Review the diff.' },
+					{ role: 'user', content: 'diff --git a/x b/x', images: [image] }
+				]
+			})
+		);
+
+		const written = await readFile(log, 'utf8');
+		const prompt = written.match(/^prompt: (.*)$/m)?.[1] ?? '';
+
+		expect(written).toContain('[--input-format] [stream-json]');
+
+		expect(JSON.parse(prompt)).toEqual({
+			type: 'user',
+			message: {
+				role: 'user',
+				content: [
+					{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: image.data } },
+					{ type: 'text', text: 'diff --git a/x b/x' }
+				]
+			}
+		});
 	});
 
 	test('the CLI never sees the server keys, tokens, secrets or Claude Code settings, only the basics', async () => {

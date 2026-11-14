@@ -5,6 +5,9 @@ server:
   database:
     existingSecret: ''
     secretKey: RECODER_DATABASE_URL
+  encryptionKey:
+    existingSecret: ''
+    secretKey: RECODER_SECRET_KEY
   image:
     repository: ''
     tag: ''

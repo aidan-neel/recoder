@@ -178,10 +178,12 @@ export async function fetchMergeRequest(
 
 	const slug = parseSlug(repoUrl);
 
-	const view = await viewMerge(slug, iid, opts?.env);
-	const author = mergeAuthor(view);
+	const [view, diff] = await Promise.all([
+		viewMerge(slug, iid, opts?.env),
+		glab(['mr', 'diff', String(iid), '-R', slug, '--raw'], opts?.env)
+	]);
 
-	const diff = await glab(['mr', 'diff', String(iid), '-R', slug, '--raw'], opts?.env);
+	const author = mergeAuthor(view);
 
 	return {
 		pr: {
@@ -224,19 +226,22 @@ export async function listMergeRequests(
  */
 export async function listMergeRows(
 	repoUrl: string,
-	opts?: { env?: Record<string, string>; limit?: number }
+	opts?: { env?: Record<string, string>; limit?: number; page?: number }
 ): Promise<MergeRow[]> {
-	if (useGitlabApi(opts?.env)) return apiMergeRows(repoUrl, opts!.env!, opts?.limit);
+	if (useGitlabApi(opts?.env)) return apiMergeRows(repoUrl, opts!.env!, opts?.limit, opts?.page);
 
 	const slug = parseSlug(repoUrl);
 
-	const rows = await firstRows(opts?.limit ?? 20, async (perPage, page) =>
-		extractJson(
-			await glab(
-				['mr', 'list', '-R', slug, '-F', 'json', '--per-page', String(perPage), '--page', String(page)],
-				opts?.env
-			)
-		)
+	const rows = await firstRows(
+		opts?.limit ?? 20,
+		async (perPage, page) =>
+			extractJson(
+				await glab(
+					['mr', 'list', '-R', slug, '-F', 'json', '--per-page', String(perPage), '--page', String(page)],
+					opts?.env
+				)
+			),
+		opts?.page
 	);
 
 	const merges = rows.flatMap((item) => {

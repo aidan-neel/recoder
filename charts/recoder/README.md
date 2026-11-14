@@ -44,9 +44,28 @@ app:
     tag: REVISION
 ```
 
+Create a Secret that holds the key that seals the credentials Recoder saves, and name it in `server.encryptionKey`.
+Make the key with `openssl rand -base64 32`. The chart requires it on every release: the server's home is a temporary
+volume, so a key it made for itself would be lost on restart and leave the saved credentials unreadable. Keep the key
+in your secret manager too, since a lost key cannot be recovered.
+
+```yaml
+server:
+  encryptionKey:
+    existingSecret: recoder-encryption
+    secretKey: RECODER_SECRET_KEY
+```
+
+The chart passes it to the API as `RECODER_SECRET_KEY` and rejects the variable in `server.env`. Replicas share the
+key, so every one opens what another sealed. See [stored credentials](../../docs/review/configuration.md#stored-credentials).
+Upgrading a release that predates the key: add the Secret before the upgrade; the first start seals the tokens already saved.
+
 Create the `recoder-credentials` Secret in the release namespace through your existing secret management process.
 Its keys become API server environment variables. Supported keys include `RECODER_REVIEW_API_KEY`, `GITHUB_TOKEN`,
-`GITLAB_TOKEN`, `GITHUB_WEBHOOK_SECRET`, and `GITLAB_WEBHOOK_SECRET`. Omit `existingSecret` when credentials are unnecessary.
+`GITLAB_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `GITLAB_WEBHOOK_SECRET`, `RECODER_GITHUB_CLIENT_SECRET`,
+`RECODER_GITLAB_CLIENT_SECRET`, and `RECODER_API_TOKEN` (required for
+bearer access with more than one replica). The OAuth client ids `RECODER_GITHUB_CLIENT_ID` and `RECODER_GITLAB_CLIENT_ID`
+are public, so set them under `server.env`. Omit `existingSecret` when credentials are unnecessary.
 Never put credentials in Helm values or command-line overrides. See [server configuration](../../.env.example).
 
 The chart creates two private `ClusterIP` services, `<release>-recoder-server` on port 3001 and

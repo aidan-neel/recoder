@@ -46,14 +46,17 @@ interface AgentAdapter {
 	modelSettings(model: string, requested: ReasoningEffort | undefined): AgentModelSettings;
 	complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string>; // one call, no tools
 	openRun(options: AgentRunOptions): Promise<AgentRun>; // the CLI as the agent, with Recoder's tools
+	readonly setup: AgentSetup | null; // the install/sign-in Settings may run; null steps when it can't
+	setupEnv(): Record<string, string>; // the environment a setup job runs with
 	describeFailure(err: LlmError, fallback: string, source: string | undefined): ModelFailure;
 	stop(): void; // kill processes, delete scratch files; synchronous
 }
 ```
 
 An adapter that extends `CliAgent` (`apps/server/src/agents/cli-process.ts`) inherits `quickStatus` (its
-`detect`), `installed` (`find() !== null`), `fixedModels` (`null`) and `describeFailure` (`cliFailure` in
-`apps/server/src/agents/cli-failure.ts`); it declares `processCeiling` and `signInFix` itself.
+`detect`), `installed` (`find() !== null`), `fixedModels` (`null`), `setupEnv` (`childEnv()`) and `describeFailure`
+(`cliFailure` in `apps/server/src/agents/cli-failure.ts`); it declares `processCeiling`, `signInFix`, `setup` and
+`configDir()` itself.
 
 `modelSettings` gets the model id without the prefix. It returns the effort the model runs at (use
 `supportedEffort` from `@recoder/shared` against the model's levels) and, for a CLI that routes to hosted
@@ -147,13 +150,63 @@ The CLI is the whole agent, and Recoder's tools are its only tools:
 4. `runTool` is `ToolGate` (`apps/server/src/review/pipeline/agent-loop/tool-gate.ts`): it applies the turn
    limits and runs each call through the evidence store, where reads are permitted reads and `run` executes in
    the review sandbox.
-5. The child environment drops the server's keys and tokens (`cliEnv` with a `STRIPPED` list). Recoder never
-   reads the CLI's credential files and never logs its output past what a failure message quotes.
+5. The child environment drops the server's keys and tokens (`cliEnv` with a `STRIPPED` list). A run never reads
+   the CLI's credential files and never logs its output past what a failure message quotes. The one read of a
+   sign-in is a usage-limits reader's, below.
 
 Never pass a shell string: `streamCli` (`apps/server/src/agents/cli-stream.ts`) takes an argv array, starts the
 CLI in its own process group, caps stdout (`CLI_OUTPUT_CAP_BYTES`), and kills the whole group on abort, timeout,
 runaway output or exit. Parse every line the CLI prints with a zod schema; a line that does not parse is an
 `error` event or a failed prompt, never something to execute.
+
+## Setup jobs
+
+Settings can install a missing CLI and sign it in for the user, through the job runner in
+`apps/server/src/agents/setup/`. The adapter owns the commands; a request never sends one:
+
+```ts
+interface AgentSetupStep {
+	argv: readonly string[]; // the fixed command, spawned as an argv array, never a shell string
+	stdinUrl?: string; // a vendor installer script the runner fetches and pipes to the process (bash -s)
+	env?: Record<string, string>; // on top of setupEnv (NO_OPEN_BROWSER=1, so a login prints its URL)
+	needsInput?: boolean; // the CLI may wait for a pasted code on stdin; Settings shows an input box
+}
+
+interface AgentSetup {
+	install: AgentSetupStep | null; // null when there is no headless install
+	signIn: AgentSetupStep | null; // null when sign-in is only interactive (Pi's /login, OpenCode's picker)
+}
+```
+
+The routes (`apps/server/src/routes/agent.ts`, admin writes like every `/api/agent` write):
+
+| Route                             | Answer        | Runs                                                            |
+| --------------------------------- | ------------- | --------------------------------------------------------------- |
+| `POST /api/agent/:id/install`     | `{ job }`     | `setup.install`                                                 |
+| `POST /api/agent/:id/sign-in`     | `{ job }`     | `setup.signIn` — `argv[0]` is replaced by the binary `find()` gave |
+| `GET /api/agent/jobs/:job`        | `job`         | the job's state                                                 |
+| `POST /api/agent/jobs/:job/input` | `job`         | `{ text }` to the CLI's stdin; the text becomes a redact secret |
+| `DELETE /api/agent/jobs/:job`     | `{ ok: true }` | kills the process group                                        |
+
+`job` is the shared `AgentSetupJob`: `id`, `agent`, `step`, `status` (`running`/`done`/`failed`/`cancelled`),
+`output` (the last ~200 lines, secrets redacted), `url` (the first https URL the CLI printed — the browser
+sign-in), `needsInput`, `error`. One job per agent runs at once (a second is a 409); a finished job is kept ten
+minutes; `JOB_DEADLINE_MS` kills the process group and fails the job. A settled job re-runs `detect(true)` and
+drops the model lists; the shutdown hook kills every running job.
+
+`setupEnv()` is the environment a job runs with: the call environment unless a call's isolation would send the
+sign-in somewhere the user's own CLI never reads. Where an adapter points a call at a scratch home
+(Cursor's `CURSOR_CONFIG_DIR`, Grok's `HOME`/`GROK_HOME`), it overrides `setupEnv` to restore the real one; where
+a call's isolation lives outside the environment (Devin's generated `XDG_CONFIG_HOME`, applied per call), the
+default is already the user's real environment. `configDir()` reports the directory that sign-in lands in as the
+status `config`, so Settings can show where it goes.
+
+Sign-in reaches a run the same way, per CLI: Claude Code, Codex, Devin, Antigravity and Pi already read the
+user's own config dir in a call. Grok's call gets `GROK_AUTH_PATH` naming the user's own `auth.json`; Cursor's
+and Copilot's scratch homes get a symlink to the user's own `auth.json`/`config.json` — linked, never copied or
+read, so the CLI refreshes the real file in place and nothing else of the user's config is imported. A CLI
+whose sign-in lives in the OS keychain (Cursor and Copilot on macOS) needs no link; the keychain reaches a run
+untouched.
 
 ## Shared building blocks
 
@@ -168,6 +221,40 @@ runaway output or exit. Parse every line the CLI prints with a zod schema; a lin
 | kill everything at exit                   | `stopOnShutdown(id, () => adapter.stop())`             |
 | quote CLI output in an error or event     | `quotedLine` in `quoted-line.ts` (redacts credentials) |
 | word a failure for the developer          | `cliFailure` in `cli-failure.ts` (`CliAgent` uses it)  |
+
+## Usage limits
+
+`GET /api/agent/limits/:key` (`apps/server/src/routes/agent.ts`) answers with one provider's `ProviderLimits`
+(`packages/shared/src/provider-limits.ts`). The key is a URL-encoded provider key (`cli%3Acodex`,
+`opencode%3Aopencode-go`); a key `parseProviderKey` rejects is a 400. `ProviderLimitsReader` in
+`apps/server/src/agents/limits.ts` picks the reader, keeps each answer for a minute (`?refresh=1` reads afresh),
+stamps `checkedAt`, and turns a `LimitsError` into `{ status: 'error', reason }`. Any other failure is logged,
+redacted, and shown as a plain error. A key with no reader is `unsupported`.
+
+Each reader is `apps/server/src/agents/<cli>/limits.ts`: a read that returns a `LimitsReading`, and a pure
+normaliser that parses the answer with zod and builds each window with `usageWindow` (`limits-read.ts`), which
+clamps the share to 0–100.
+
+| Key                    | Source                                                     | Sign-in                                                                   |
+| ---------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `cli:claude-code`      | `GET https://api.anthropic.com/api/oauth/usage`            | the OAuth token in `.credentials.json` of the CLI's config dir            |
+| `cli:codex`            | `account/rateLimits/read` over `codex app-server`          | the CLI's own                                                             |
+| `cli:grok`             | `_x.ai/billing` over `grok agent stdio`                    | the CLI's own, in its isolated home                                       |
+| `cli:antigravity`      | `agy -p /usage --output-format json` (agy 1.1.11 or later) | the CLI's own                                                             |
+| `opencode:opencode-go` | `GET https://opencode.ai/zen/go/v1/usage`                  | the `opencode-go` key in OpenCode's `opencode.db`, else its `auth.json`   |
+
+Cursor has no reader: its usage is on cursor.com behind a browser session, and where `cursor-agent` keeps its
+sign-in is not documented.
+
+- Read over HTTP with `fetchUsage` (`limits-read.ts`): a 10 s timeout, and errors that give the status, never the
+  body. Ask a JSON-RPC CLI with `exchangeRpc` (`limits-rpc.ts`): it keeps stdin open until every request has its
+  answer, since `codex app-server` and `grok agent stdio` exit at the end of their input without answering.
+- Claude Code and OpenCode Go are the only readers that read a credential, and they send it only to that
+  provider's usage endpoint. It never reaches a response, a log or an error. On macOS, Claude Code keeps its sign-in
+  in the Keychain unless it signed in over SSH; Recoder does not read the Keychain, so the reading is an error that
+  says so.
+- Test a reader in `apps/server/tests/agents/<cli>/limits.test.ts`. Fake a JSON-RPC CLI with `fakeRpcCli`
+  (`apps/server/tests/helpers/fake-rpc-cli.ts`).
 
 ## Adding an adapter: the checklist
 
@@ -195,6 +282,11 @@ for example `codex-cli`); `<Cli>` is the class prefix (`CodexCli`). Copy the sha
    - `protected childEnv()`: `cliEnv(this.env, STRIPPED)`, where `STRIPPED` drops `RECODER_*`, the CLI's own
      override variables, and every `*_TOKEN`, `*_API_KEY`, `SECRET` and `PASSWORD`;
    - `protected signIn(path)`: runs the CLI's status command and returns `{ signedIn }`;
+   - `readonly setup`: the fixed install and sign-in commands Settings may run (see *Setup jobs*), each null when
+     the CLI cannot do it headlessly;
+   - `protected configDir()`: the directory the CLI signs in from, for the status `config`;
+   - `setupEnv()`: override only when a call's environment would put the sign-in somewhere the user's own CLI
+     never reads (a scratch home);
    - `models(signal?)`: ids `` `<id>:<model>` ``, `provider: '<id>'`; kill the process when `signal` aborts;
      throw an `LlmError` when the CLI is missing or lists nothing;
    - `fixedModels()`: override only when the CLI has no command that lists models (return the fixed list);
@@ -213,7 +305,8 @@ for example `codex-cli`); `<Cli>` is the class prefix (`CodexCli`). Copy the sha
    failure mapping in the table above. Quote CLI output only through `quotedLine`.
 6. `<cli>-process.ts` when the CLI needs a config file: build it from the fields a run needs and nothing else (no
    hooks, no MCP servers, no imports of other tools' config), write it under the run's scratch dir, and point the
-   CLI at it (a flag, or `XDG_CONFIG_HOME`). Never read or copy the CLI's credential file.
+   CLI at it (a flag, or `XDG_CONFIG_HOME`). Never read or copy the CLI's credential file into it — when the
+   config file lives where the sign-in does, link just that file in (see *Setup jobs*).
 
 ### 3. Register it
 

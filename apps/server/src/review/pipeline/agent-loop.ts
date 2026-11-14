@@ -153,7 +153,7 @@ async function runTurns<T>(
 
 	const messages: ChatMessage[] = [
 		{ role: 'system', content: opts.system + REPLY_RULES + CHAT_STYLE },
-		{ role: 'user', content: opts.user }
+		{ role: 'user', content: opts.user, images: opts.images }
 	];
 
 	/** The tool results sent so far, oldest first: what compaction may stub. */

@@ -11,7 +11,7 @@ function server(overrides: Partial<VllmServer> = {}): VllmServer {
 		id: 'v1',
 		host: 'vllm.test:8000',
 		baseUrl: 'http://vllm.test:8000/v1',
-		apiKeyPreview: null,
+		apiKeySet: false,
 		syncedAt: NOW - 120_000,
 		error: null,
 		models: [
@@ -30,7 +30,7 @@ function vllmEntry(model: string, unavailable = false): ModelEntry {
 		label: model,
 		model,
 		baseUrl: 'http://vllm.test:8000/v1',
-		apiKeyPreview: null,
+		apiKeySet: false,
 		...(unavailable ? { unavailable: true } : {})
 	};
 }
@@ -40,13 +40,16 @@ function settings(models: ModelEntry[], pick: string): ModelSettings {
 		configured: true,
 		baseUrl: '',
 		model: '',
-		apiKeyPreview: null,
+		apiKeySet: false,
 		sharedModelId: null,
 		orchestratorModelId: vllmModelId('v1', pick),
 		models,
 		subagentCap: 8,
 		tokenBudget: 'medium',
 		reportLowSeverity: true,
+		disabledProviders: [],
+		hiddenModels: [],
+		modelPolicy: { kind: 'choose' },
 		limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 }
 	};
 }

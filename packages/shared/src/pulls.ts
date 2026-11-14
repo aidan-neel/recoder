@@ -55,23 +55,24 @@ export interface PullListItem {
 	review: ReviewListItem | null;
 }
 
-/** The most open pull requests `GET /api/pulls` reads from one repository: the newest opened. */
-export const PULL_LIST_REPO_MAX = 100;
+/** How many open pull requests `GET /api/pulls` reads from one repository per page. */
+export const PULL_LIST_PAGE = 30;
 
 /**
- * `GET /api/pulls`: the open pull requests of every tracked repository, newest
- * activity first. A repository whose forge call failed is named in `failures`
- * and the rest still load.
+ * `GET /api/pulls`: the first page of open pull requests of every tracked
+ * repository, newest activity first; with `?repoId=&after=`, the next page of
+ * that repository. A repository whose forge call failed is named in
+ * `failures` and the rest still load.
  */
 export interface PullList {
 	items: PullListItem[];
 	failures: { repoId: string; error: string }[];
 	/**
-	 * Repositories with more than {@link PULL_LIST_REPO_MAX} open pull
-	 * requests: `items` holds their newest opened, and the older ones are left
-	 * out. Absent when no list was cut.
+	 * For each repository with more open pull requests than `items` holds, the
+	 * cursor of its next page (`after` on `GET /api/pulls?repoId=`). A
+	 * repository with no more is absent.
 	 */
-	truncatedRepoIds?: string[];
+	nextCursors: Record<string, string>;
 	fetchedAt: string;
 }
 

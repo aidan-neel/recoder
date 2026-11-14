@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { PULL_LIST_REPO_MAX, type Repo } from '@recoder/shared';
+import { PULL_LIST_PAGE, type Repo } from '@recoder/shared';
 import { MERGE_STATS_PARALLEL } from '../../../src/forge/gitlab-api';
 import { gitlabMergeability, gitlabMergeMethods, gitlabPullForge } from '../../../src/forge/pulls/gitlab';
 import { clearToken, setToken } from '../../../src/forge/tokens';
@@ -42,15 +42,17 @@ function openMergeRequests(count: number) {
 	});
 }
 
-test('the list reads past GitLab’s first page and says when the repository had more than it keeps', async () => {
+test('the list reads one page and names the page number that follows it', async () => {
 	setToken('gitlab', 'test-token');
 	openMergeRequests(150);
 
-	const list = await gitlabPullForge(REPO).list();
+	const first = await gitlabPullForge(REPO).list(null);
+	const second = await gitlabPullForge(REPO).list(first.nextCursor);
 
-	expect(list.truncated).toBe(true);
-	expect(list.entries).toHaveLength(PULL_LIST_REPO_MAX);
-	expect(list.entries[0].pull.number).toBe(150);
+	expect(first.entries).toHaveLength(PULL_LIST_PAGE);
+	expect(first.entries[0].pull.number).toBe(150);
+	expect(first.nextCursor).toBe('2');
+	expect(second.entries[0].pull.number).toBe(150 - PULL_LIST_PAGE);
 });
 
 /**
@@ -85,20 +87,20 @@ function slowDiffs(count: number): { most: () => number } {
 test('the list reads the line counts of a few merge requests at a time, never all at once', async () => {
 	setToken('gitlab', 'test-token');
 
-	const diffs = slowDiffs(40);
-	const list = await gitlabPullForge(REPO).list();
+	const diffs = slowDiffs(PULL_LIST_PAGE);
+	const list = await gitlabPullForge(REPO).list(null);
 
-	expect(list.entries).toHaveLength(40);
+	expect(list.entries).toHaveLength(PULL_LIST_PAGE);
 	expect(diffs.most()).toBe(MERGE_STATS_PARALLEL);
 });
 
-test('a repository with fewer open merge requests than a page is read whole', async () => {
+test('a repository with fewer open merge requests than a page has no next page', async () => {
 	setToken('gitlab', 'test-token');
-	openMergeRequests(51);
+	openMergeRequests(PULL_LIST_PAGE - 1);
 
-	const list = await gitlabPullForge(REPO).list();
+	const list = await gitlabPullForge(REPO).list(null);
 
-	expect(list).toMatchObject({ truncated: false, entries: { length: 51 } });
+	expect(list).toMatchObject({ nextCursor: null, entries: { length: PULL_LIST_PAGE - 1 } });
 });
 
 describe('gitlabMergeability', () => {
@@ -126,16 +128,41 @@ describe('gitlabMergeability', () => {
 	});
 });
 
+/** A project's permissions as GitLab reports them, with the person's access level in the project and its group. */
+function access(project: number | null, group: number | null = null) {
+	return {
+		permissions: {
+			project_access: project === null ? null : { access_level: project },
+			group_access: group === null ? null : { access_level: group }
+		}
+	};
+}
+
 describe('gitlabMergeMethods', () => {
 	test('a merge-commit project allows a merge and an optional squash', () => {
-		expect(gitlabMergeMethods({ merge_method: 'merge', squash_option: 'default_off' })).toEqual(['merge', 'squash']);
+		expect(gitlabMergeMethods({ ...access(40), merge_method: 'merge', squash_option: 'default_off' })).toEqual([
+			'merge',
+			'squash'
+		]);
 	});
 
 	test('a fast-forward project merges like a rebase', () => {
-		expect(gitlabMergeMethods({ merge_method: 'ff', squash_option: 'never' })).toEqual(['rebase']);
+		expect(gitlabMergeMethods({ ...access(40), merge_method: 'ff', squash_option: 'never' })).toEqual(['rebase']);
 	});
 
 	test('a project that always squashes allows only a squash', () => {
-		expect(gitlabMergeMethods({ merge_method: 'rebase_merge', squash_option: 'always' })).toEqual(['squash']);
+		expect(gitlabMergeMethods({ ...access(40), merge_method: 'rebase_merge', squash_option: 'always' })).toEqual([
+			'squash'
+		]);
+	});
+
+	test('a group role counts when the person has no role in the project itself', () => {
+		expect(gitlabMergeMethods({ ...access(null, 50), merge_method: 'merge' })).toEqual(['merge', 'squash']);
+	});
+
+	test('a Developer, a Reporter and a person with no access cannot merge', () => {
+		expect(gitlabMergeMethods({ ...access(30), merge_method: 'merge' })).toEqual([]);
+		expect(gitlabMergeMethods({ ...access(20, 10), merge_method: 'merge' })).toEqual([]);
+		expect(gitlabMergeMethods({ merge_method: 'merge' })).toEqual([]);
 	});
 });

@@ -1,4 +1,5 @@
 import { findLinks, type TextRange } from './link-find';
+import { findImageTokens } from './link-image';
 
 /**
  * A link field's content: the plain text, URLs in full, and which of its
@@ -66,11 +67,14 @@ export function docFromSegments(segments: readonly Segment[]): LinkDoc {
 /**
  * Embeds every link in the text that is not one already, does not overlap
  * one, and does not touch `keep` (the word the caret is typing in, so a URL
- * never turns into an embed half typed).
+ * never turns into an embed half typed). An image's token is never typed, so
+ * it is an embed wherever it stands.
  */
 export function embedLinks(doc: LinkDoc, keep: TextRange | null): LinkDoc {
-	const added = findLinks(doc.text).filter(
-		(link) => !doc.links.some((embed) => overlaps(embed, link)) && !(keep && touches(keep, link))
+	const links = findLinks(doc.text).filter((link) => !(keep && touches(keep, link)));
+
+	const added = [...findImageTokens(doc.text), ...links].filter(
+		(link) => !doc.links.some((embed) => overlaps(embed, link))
 	);
 
 	if (added.length === 0) return doc;

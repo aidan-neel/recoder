@@ -13,8 +13,14 @@
 }
 
 /* ───────── Modal panel ───────── */
-/* Centered with `translate`, which composes under the entrance transform. */
+/*
+ * Centered with `translate`, which composes under the entrance transform. The inset and the title's line
+ * height live here, so the X can centre on the title's first line at any title size a skin sets.
+ */
 [data-ui='modal-panel'] {
+	--modal-inset: 16px;
+	--modal-title-line: calc(var(--font-size-title) * 1.375);
+
 	translate: -50% -50%;
 }
 /* On wider screens the panel sits 3rem above center (Sivir), never closer than 1rem to the top. */
@@ -53,13 +59,18 @@
 		margin-bottom: 96px;
 	}
 }
+/* The X: centred on the title's first line, 12px in from the right. */
+[data-ui='modal-panel'] > [data-slot='close'] {
+	top: calc(var(--modal-inset) + (var(--modal-title-line) - var(--size-icon-md)) / 2);
+	right: 12px;
+}
 /* The title clears the X. */
 [data-ui='modal-panel'][data-close] [data-ui='modal-title'] {
 	padding-right: 28px;
 }
-/* A description reads with its title: 6px apart instead of the panel's 16px gap. */
+/* A description reads with its title: 4px apart instead of the panel's 12px gap. */
 [data-ui='modal-title'] + [data-ui='modal-description'] {
-	margin-top: -10px;
+	margin-top: -8px;
 }
 
 /* ───────── Tooltip ───────── */

@@ -7,6 +7,7 @@ import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
 import { ProcessRun } from '../process-run';
 import type { ToolLease } from '../tools/mcp-host';
+import { claudeCodeInput } from './claude-code-input';
 import { effortArgs } from './claude-code-models';
 import { claudeCodeEnv } from './claude-code-process';
 import { RunReader } from './claude-code-run-reader';
@@ -104,12 +105,17 @@ export class ClaudeCodeRun extends ProcessRun {
 		const reader = new RunReader(this.options.onEvent);
 		const lines = new LineSplitter(reader.line);
 
+		const input = claudeCodeInput(
+			options.schema ? `${text}\n\n${JSON_MODE_INSTRUCTION}` : text,
+			this.sessionStarted ? [] : (this.options.images ?? [])
+		);
+
 		try {
 			const exit = await streamCli({
-				argv: [this.host.path, ...this.args()],
+				argv: [this.host.path, ...this.args(), ...input.args],
 				cwd: this.place.cwd,
 				env: claudeCodeEnv(this.host.env),
-				stdin: options.schema ? `${text}\n\n${JSON_MODE_INSTRUCTION}` : text,
+				stdin: input.stdin,
 				signal: deadline.signal,
 				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
 				onOutput: lines.push,

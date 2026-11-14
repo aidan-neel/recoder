@@ -67,7 +67,7 @@ describe('connecting a vLLM server', () => {
 
 		const shown = JSON.stringify([toVllmServer(server), vllmEntries()]);
 
-		expect(shown).toContain('••••1234');
+		expect(shown).toContain('"apiKeySet":true');
 		expect(shown).not.toContain('sk-secret');
 	});
 

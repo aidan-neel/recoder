@@ -8,6 +8,7 @@ import { useRef, type RefObject } from 'react';
 import { useVllmSection, type VllmSection } from '@/lib/settings/use-vllm-section';
 
 import { SettingsGroup, SettingsRow } from './settings-group';
+import { SETTINGS_ROW_HEIGHT } from './settings-skeleton';
 import { VllmConnectModal } from './vllm-connect';
 import { VllmServerItem } from './vllm-server';
 
@@ -40,7 +41,13 @@ function ServerActions({ view, addButton }: ServersProps) {
 function ServerRows({ view, addButton }: ServersProps) {
 	if (!view.loaded) {
 		return (
-			<SkeletonRows count={1} height={62} glyph widths={LOADING_WIDTHS} rowClassName="settings-row status-loading" />
+			<SkeletonRows
+				count={1}
+				height={SETTINGS_ROW_HEIGHT}
+				glyph
+				widths={LOADING_WIDTHS}
+				rowClassName="settings-row status-loading"
+			/>
 		);
 	}
 

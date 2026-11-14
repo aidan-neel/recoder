@@ -1,12 +1,14 @@
 'use client';
 
 import { Button, SkeletonRows } from '@recoder/ui';
-import { CornerDownLeft, Info, TriangleAlert } from 'lucide-react';
+import { CornerDownLeft, TriangleAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useCallback } from 'react';
 
 import type { PullListView, PullRow, PullTarget } from '@/lib/pulls/types';
 import { useOpenPull } from '@/lib/pulls/use-open-pull';
 import { usePullList } from '@/lib/pulls/use-pull-list';
+import { useSessionCache } from '@/lib/api/client';
 import { errorToast } from '@/lib/shell/notify';
 import { useAction } from '@/lib/shell/use-action';
 
@@ -16,6 +18,7 @@ import { Page } from '@/components/common/page';
 import { PullFilterMenu } from './pull-filter';
 import { PullList } from './pull-list';
 import { PullsFind, RefreshButton, RepoScope } from './pulls-bar';
+import { PullsMore } from './pulls-more';
 import { PullsNotice } from './pulls-notice';
 
 /** How many placeholder rows stand in while the list loads for the first time. */
@@ -34,13 +37,9 @@ function openLabel(target: PullTarget): string | null {
 	return null;
 }
 
-/**
- * What the list does not show in full: repositories whose forge did not
- * answer, and ones with more open pull requests than the list holds. The rest
- * of the list still shows.
- */
-function Strips({ failures, truncated }: Pick<PullListView, 'failures' | 'truncated'>) {
-	if (failures.length === 0 && truncated.length === 0) return null;
+/** Repositories whose forge did not answer; the rest of the list still shows. */
+function Strips({ failures }: Pick<PullListView, 'failures'>) {
+	if (failures.length === 0) return null;
 
 	return (
 		<div className="pulls-strips">
@@ -49,15 +48,6 @@ function Strips({ failures, truncated }: Pick<PullListView, 'failures' | 'trunca
 					<TriangleAlert aria-hidden />
 					<span className="strip-text">
 						<strong>{failure.repoName}</strong> did not load. {failure.error}
-					</span>
-				</div>
-			))}
-			{truncated.map((repo) => (
-				<div key={repo.repoId} className="strip" data-tone="neutral" role="status">
-					<Info aria-hidden />
-					<span className="strip-text">
-						<strong>{repo.repoName}</strong> has more open pull requests than fit here. Paste a link to open an older
-						one.
 					</span>
 				</div>
 			))}
@@ -91,12 +81,16 @@ function OpenRow({ label, onOpen, status }: OpenRowProps) {
  */
 export function PullsScreen() {
 	const router = useRouter();
+	const sessions = useSessionCache();
 	const view = usePullList();
 	const opener = useOpenPull();
 	const opening = useAction();
 	const target = opener.resolve(view.query);
 	const pasted = openLabel(target);
 	const loading = view.phase === 'loading';
+
+	/** Reads the page behind a row once the pointer rests on it, so the click that follows finds it loaded. */
+	const warm = useCallback((row: PullRow) => sessions.warm(row.repoId, row.number), [sessions]);
 
 	/** Starts a review from a row; a refusal shows as a toast and the row goes back by itself. */
 	function review(row: PullRow): void {
@@ -132,8 +126,8 @@ export function PullsScreen() {
 			}
 		>
 			<div className="page-scroll">
-				<div className="page-column">
-					<Strips failures={view.failures} truncated={view.truncated} />
+				<div className="pulls-column">
+					<Strips failures={view.failures} />
 					<div className="pulls-head">
 						<h1 className="contents">
 							<PullFilterMenu filter={view.filter} counts={view.counts} onChange={view.setFilter} />
@@ -146,12 +140,13 @@ export function PullsScreen() {
 					</div>
 					{loading ? <SkeletonRows count={LOADING_ROWS} height={60} glyph className="pull-list-skeleton" /> : null}
 					{!loading && view.rows.length > 0 ? (
-						<PullList rows={view.rows} starting={view.starting} onReview={review} />
+						<PullList rows={view.rows} starting={view.starting} onReview={review} onWarm={warm} />
 					) : null}
+					{!loading ? <PullsMore more={view.more} rowCount={view.rows.length} /> : null}
 					{!loading && view.rows.length === 0 && pasted ? (
 						<OpenRow label={pasted} onOpen={openPasted} status={opening.status} />
 					) : null}
-					{!loading && view.rows.length === 0 && !pasted ? (
+					{!loading && view.rows.length === 0 && !pasted && !view.more.available ? (
 						<div className="page-notice">
 							<PullsNotice view={view} />
 						</div>

@@ -1,5 +1,4 @@
 import { parseVllmModelId, vllmModelId, type ModelEntry, type ReasoningEffort } from '@recoder/shared';
-import { maskKey } from '../../review/session/review-settings.js';
 import { getVllmServer, listVllmServers, vllmHost, type StoredVllmServer } from './vllm-store.js';
 
 /** vLLM does not report reasoning levels; gpt-oss is the served model family that takes them (`reasoning_effort`). */
@@ -19,7 +18,7 @@ function entriesOf(server: StoredVllmServer): ModelEntry[] {
 		label: model.id,
 		model: model.id,
 		baseUrl: server.baseUrl,
-		apiKeyPreview: maskKey(server.apiKey),
+		apiKeySet: !!server.apiKey,
 		...effortsFor(model.id),
 		...(model.contextWindow ? { contextWindow: model.contextWindow } : {}),
 		...(model.served ? {} : { unavailable: true })

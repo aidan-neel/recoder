@@ -1,11 +1,11 @@
-import type {
-	MergePullInput,
-	MergePullResult,
-	PullMergeability,
-	PullMergeMethod,
-	PullRequest,
-	PullState,
-	Repo
+import {
+	PULL_LIST_PAGE,
+	type MergePullInput,
+	type MergePullResult,
+	type PullMergeability,
+	type PullMergeMethod,
+	type PullRequest,
+	type Repo
 } from '@recoder/shared';
 import { fetchChecks } from '../checks.js';
 import { GhError } from '../cli.js';
@@ -15,9 +15,8 @@ import { fetchMergeRequest, glabApi, glabWrite, listMergeRows } from '../glab.js
 import { tokenEnv } from '../tokens.js';
 import { gitlabCommits, gitlabConversation, gitlabPostComment } from './gitlab-conversation.js';
 import {
-	capOpenPulls,
+	GITLAB_STATES,
 	mergeRefusal,
-	OPEN_PULLS_ASKED,
 	record,
 	refusedMerge,
 	tallyChecks,
@@ -34,10 +33,14 @@ export function gitlabPullForge(repo: Repo): PullForge {
 		comments: true,
 		checks: true,
 
-		async list() {
-			const rows = await listMergeRows(repo.url, { env, limit: OPEN_PULLS_ASKED });
+		async list(after) {
+			const page = after === null ? 1 : Number(after);
+			const rows = await listMergeRows(repo.url, { env, limit: PULL_LIST_PAGE, page });
 
-			return capOpenPulls(rows.map(({ pr, row }) => gitlabEntry(pr, row)));
+			return {
+				entries: rows.map(({ pr, row }) => gitlabEntry(pr, row)),
+				nextCursor: rows.length === PULL_LIST_PAGE ? String(page + 1) : null
+			};
 		},
 
 		/** One merge request read, with its diff, which is where GitLab's +/− counts come from. */
@@ -47,6 +50,14 @@ export function gitlabPullForge(repo: Repo): PullForge {
 			const checks = tallyChecks((await fetchChecks(repo, pr.headSha)).map((check) => check.state));
 
 			return { pull: pr, status: { ...entry.status, checks } };
+		},
+
+		async head(n) {
+			const sha = str(record(await glabApi(`${project}/merge_requests/${n}`, env)).sha);
+
+			if (!sha) throw new GhError('not-found', `merge request ${n} has no head`);
+
+			return sha;
 		},
 
 		commits: (pull) => gitlabCommits(project, pull.number, env),
@@ -79,14 +90,6 @@ function gitlabEntry(pull: PullRequest, row: Record<string, unknown>): PullEntry
 	};
 }
 
-/** `locked` is GitLab's brief state while a merge runs, so the request still reads as open. */
-const GITLAB_STATES: Record<string, PullState> = {
-	opened: 'open',
-	locked: 'open',
-	merged: 'merged',
-	closed: 'closed'
-};
-
 /** `detailed_merge_status` values that mean GitLab is still working the answer out. */
 const MERGE_STATUS_PENDING = new Set(['checking', 'unchecked', 'preparing', 'approvals_syncing']);
 
@@ -109,12 +112,29 @@ export function gitlabMergeability(row: Record<string, unknown>): PullMergeabili
 }
 
 /**
- * The project's merge methods. GitLab merges each request the project's one
+ * The lowest access level that merges here: Maintainer (40), because a
+ * protected default branch usually allows only Maintainers to merge, and a
+ * Developer (30) would be offered a merge the forge then refuses.
+ */
+const MERGE_ACCESS_LEVEL = 40;
+
+/** The person's highest access level in the project, from the project itself or its group; 0 with none. */
+function accessLevel(project: Record<string, unknown>): number {
+	const { project_access, group_access } = record(project.permissions);
+
+	return Math.max(Number(record(project_access).access_level) || 0, Number(record(group_access).access_level) || 0);
+}
+
+/**
+ * The project's merge methods, none when the connected account is below
+ * {@link MERGE_ACCESS_LEVEL}. GitLab merges each request the project's one
  * way: `ff` (fast-forward only) keeps a linear history like a rebase, the
  * other two write a merge commit. Squashing is a per-request option unless
  * the project turns it off, or forces it, which leaves squash as the only way.
  */
 export function gitlabMergeMethods(project: Record<string, unknown>): PullMergeMethod[] {
+	if (accessLevel(project) < MERGE_ACCESS_LEVEL) return [];
+
 	const squash = project.squash_option !== 'never' ? (['squash'] as const) : [];
 
 	if (project.squash_option === 'always') return [...squash];

@@ -168,7 +168,7 @@ test('a machine with nothing set up still lists the Claude Code models', async (
 test('a model of a configured custom command is accepted by --reviewer once the command lists it', async () => {
 	process.env.RECODER_CUSTOM_AGENT = JSON.stringify({ argv: [process.execPath] });
 
-	const deep = { id: 'custom-command:deep', label: 'Deep', model: 'deep', baseUrl: null, apiKeyPreview: null };
+	const deep = { id: 'custom-command:deep', label: 'Deep', model: 'deep', baseUrl: null, apiKeySet: false };
 	const listing = spyOn(customCommand, 'models').mockResolvedValue([{ ...deep, efforts: ['low', 'high'] }]);
 
 	try {

@@ -1,8 +1,10 @@
 import { readdirSync, rmSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { ImageUpload } from '@recoder/shared';
 import { addedTurns, promptText, type ChatConversation, type HeldTranscript } from '../../models/llm/conversation';
+import { turnImages } from '../../models/llm/message-images';
 import type { ChatOptions } from '../../models/llm/types';
+import { claudeConfigDir } from './claude-code-process';
 
 type Env = Record<string, string | undefined>;
 
@@ -17,6 +19,8 @@ const kept = new WeakMap<ChatConversation, KeptSession>();
 export interface SessionCall {
 	args: string[];
 	prompt: string;
+	/** The images on the turns the prompt sends. */
+	images: ImageUpload[];
 	/** The call replied: its session now holds the conversation, so the one it forked from is deleted. */
 	commit(reply: string): void;
 	/** The call failed: its session is deleted, so a retry forks the last good one again. */
@@ -44,7 +48,7 @@ export class SessionFiles {
 	private readonly config: string;
 
 	constructor(env: Env, cwd: string) {
-		this.config = env.CLAUDE_CONFIG_DIR || join(env.HOME || homedir(), '.claude');
+		this.config = claudeConfigDir(env);
 		this.folder = join(this.config, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
 	}
 
@@ -100,7 +104,13 @@ export function sessionCall(request: SessionRequest, env: Env, cwd: string): Ses
 	const { conversation } = request;
 
 	if (!conversation)
-		return { args: ['--no-session-persistence'], prompt: promptText(null, request.turns), commit() {}, fail() {} };
+		return {
+			args: ['--no-session-persistence'],
+			prompt: promptText(null, request.turns),
+			images: turnImages(request.turns),
+			commit() {},
+			fail() {}
+		};
 
 	const files = openSessionFolder(env, cwd);
 	const held = kept.get(conversation);
@@ -118,6 +128,7 @@ export function sessionCall(request: SessionRequest, env: Env, cwd: string): Ses
 	return {
 		args: held && added ? ['--resume', held.id, '--fork-session', '--session-id', id] : ['--session-id', id],
 		prompt: promptText(added, request.turns),
+		images: turnImages(added ?? request.turns),
 		commit(reply) {
 			const previous = kept.get(conversation);
 			const { model, system, variant } = request;

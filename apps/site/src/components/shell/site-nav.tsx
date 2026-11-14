@@ -1,6 +1,6 @@
 'use client';
 
-import { ForgeMark, HoverList, NavPill, NavPillGroup, RowButton } from '@recoder/ui';
+import { ForgeMark, HoverList, NavPill, RowButton } from '@recoder/ui';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import { usePathname } from 'next/navigation';
@@ -47,34 +47,32 @@ export function SiteNav() {
 	return (
 		<nav className="site-nav" aria-label="Site">
 			<motion.div ref={row} layoutScroll className="site-nav-scroll">
-				<NavPillGroup>
-					<HoverList as="ul" itemSelector="a" className="site-nav-list">
-						{LINKS.map((link) => {
-							const active = link.href === current;
+				<HoverList as="ul" itemSelector="a" className="site-nav-list">
+					{LINKS.map((link) => {
+						const active = link.href === current;
 
-							return (
-								<li key={link.href}>
-									<RowButton asChild data-active={active || undefined} className="nav-item">
-										<Link href={link.href} aria-current={active ? 'page' : undefined}>
-											{active ? <NavPill value={link.href} /> : null}
-											{link.title}
-										</Link>
-									</RowButton>
-								</li>
-							);
-						})}
-						<li>
-							<RowButton asChild className="nav-item">
-								<a href={REPO_URL}>
-									<span aria-hidden className="flex">
-										<ForgeMark provider="github" />
-									</span>
-									GitHub
-								</a>
-							</RowButton>
-						</li>
-					</HoverList>
-				</NavPillGroup>
+						return (
+							<li key={link.href}>
+								<RowButton asChild data-active={active || undefined} className="nav-item">
+									<Link href={link.href} aria-current={active ? 'page' : undefined}>
+										{active ? <NavPill /> : null}
+										{link.title}
+									</Link>
+								</RowButton>
+							</li>
+						);
+					})}
+					<li>
+						<RowButton asChild className="nav-item">
+							<a href={REPO_URL}>
+								<span aria-hidden className="flex">
+									<ForgeMark provider="github" />
+								</span>
+								GitHub
+							</a>
+						</RowButton>
+					</li>
+				</HoverList>
 			</motion.div>
 		</nav>
 	);

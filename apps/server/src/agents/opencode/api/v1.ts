@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LlmError, cancelledError, isSpentPlan } from '../../../models/llm/errors';
+import { imageDataUrl } from '../../../models/llm/message-images';
 import { sleep } from '../../../models/llm/retry';
 import type { SessionHandlers } from '../opencode-events';
 import { OpenCodeError, providerError } from '../opencode-error';
@@ -281,7 +282,15 @@ export class V1Api implements OpenCodeApi {
 					...(schema ? { StructuredOutput: true } : {})
 				},
 				...(schema ? { format: { type: 'json_schema', schema } } : {}),
-				parts: [{ type: 'text', text: request.text }]
+				parts: [
+					{ type: 'text', text: request.text },
+					...request.images.map((image) => ({
+						type: 'file',
+						mime: image.type,
+						filename: image.name,
+						url: imageDataUrl(image)
+					}))
+				]
 			},
 			timeoutMs: request.timeoutMs,
 			signal

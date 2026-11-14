@@ -1,20 +1,30 @@
 'use client';
 
-import { MAX_CHAT_MESSAGE_CHARS, MAX_QUESTION_CHARS } from '@recoder/shared';
+import { MAX_CHAT_MESSAGE_CHARS, MAX_QUESTION_CHARS, type Review } from '@recoder/shared';
 import { useCallback, useMemo } from 'react';
 
 import { useSession, useSessionData } from '../pull/pull-session';
 import { bugMessages, pullMessages, pullRows } from './ask-messages';
 import { EMPTY_THREAD, isReplying } from './bug-thread';
+import { BUG_COMMANDS, pullCommands } from './commands';
 import { inFlightReply, orchestratorMessages, retryFor } from './conversation';
 import { BUG_SUGGESTIONS, PULL_SUGGESTIONS } from './suggestions';
 import type { AskScope, AskView } from './types';
+
+/**
+ * The review states a chat can start a new run from: a draft session starts
+ * its first, a finished or failed review starts another. The server refuses
+ * a run while one is queued or under way.
+ */
+const RERUNNABLE: ReadonlySet<Review['status']> = new Set(['draft', 'passed', 'failed']);
 
 /** The conversation about the whole pull request: Recoder's review session. */
 function usePullAsk(): AskView {
 	const session = useSession();
 	const messages = useSessionData((data) => data.progress?.messages);
+	const arriving = useSessionData((data) => (data.page.value?.review ?? null) !== null && data.progress === null);
 	const outbox = useSessionData((data) => data.outbox);
+	const canReview = useSessionData((data) => !data.review || RERUNNABLE.has(data.review.status));
 	const chat = session.pullChat;
 	const rows = useMemo(() => pullRows(messages, outbox), [messages, outbox]);
 
@@ -43,13 +53,14 @@ function usePullAsk(): AskView {
 			messages: pullMessages(rows),
 			replying:
 				inFlightReply(orchestratorMessages(messages)) !== null || outbox.some((item) => item.state === 'pending'),
-			suggestions: PULL_SUGGESTIONS,
+			suggestions: arriving ? [] : PULL_SUGGESTIONS,
+			commands: pullCommands(canReview),
 			limit: MAX_CHAT_MESSAGE_CHARS,
 			send: chat.send,
 			stop: () => void chat.stop(),
 			retry
 		}),
-		[rows, messages, outbox, chat, retry]
+		[rows, messages, arriving, outbox, canReview, chat, retry]
 	);
 }
 
@@ -65,6 +76,7 @@ function useBugAsk(bugId: string | null): AskView {
 			messages: bugMessages(thread),
 			replying: isReplying(thread),
 			suggestions: BUG_SUGGESTIONS,
+			commands: BUG_COMMANDS,
 			limit: MAX_QUESTION_CHARS,
 			send: (text: string) => chat.ask(id, text),
 			stop: () => chat.stop(id),

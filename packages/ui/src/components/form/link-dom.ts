@@ -2,12 +2,19 @@ import { FORGE_PATHS, LINK_GLYPH_PATHS } from '../display/forge-paths';
 import type { TextRange } from './link-find';
 import type { LinkDescription, LinkFact } from './link-describe';
 import type { TextSelection } from './link-edits';
+import { fillImageEmbed, imageKey, isImageToken, type InlineImage } from './link-image';
 import { CARET_HOLDER, segmentsOf, type LinkDoc, type Segment } from './link-model';
 
 /** How the field draws one link: what its URL says, and what the host knows about it. */
 export interface EmbedLook {
 	description: LinkDescription;
 	fact: LinkFact | undefined;
+}
+
+/** Where the field reads how to draw an embed: a link's look, or the image a token stands for. */
+export interface EmbedSource {
+	look: (url: string) => EmbedLook;
+	image: (token: string) => InlineImage | undefined;
 }
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -32,10 +39,10 @@ type Part = Segment | { kind: 'holder' };
  * line break so the empty last line shows. Nodes that already match are
  * kept, so the caret and the browser's spelling marks stay put.
  */
-export function renderDoc(root: HTMLElement, doc: LinkDoc, look: (url: string) => EmbedLook): void {
+export function renderDoc(root: HTMLElement, doc: LinkDoc, source: EmbedSource): void {
 	const parts = partsOf(segmentsOf(doc));
 
-	parts.forEach((part, index) => placePart(root, index, part, look));
+	parts.forEach((part, index) => placePart(root, index, part, source));
 
 	while (root.childNodes.length > parts.length) root.lastChild?.remove();
 
@@ -204,7 +211,7 @@ function partsOf(segments: Segment[]): Part[] {
 }
 
 /** Keeps the child at `index` matching one part, reusing the node there when it can. */
-function placePart(root: HTMLElement, index: number, part: Part, look: (url: string) => EmbedLook): void {
+function placePart(root: HTMLElement, index: number, part: Part, source: EmbedSource): void {
 	const current = root.childNodes[index] ?? null;
 
 	if (part.kind === 'holder') {
@@ -219,7 +226,8 @@ function placePart(root: HTMLElement, index: number, part: Part, look: (url: str
 		return;
 	}
 
-	placeEmbed(root, current, part.url, look);
+	if (isImageToken(part.url)) placeImage(root, current, part.url, source.image(part.url));
+	else placeEmbed(root, current, part.url, source.look);
 }
 
 /** A caret holder at `current`'s place: the one there, reset, or a new one. */
@@ -260,10 +268,37 @@ function placeEmbed(root: HTMLElement, current: ChildNode | null, url: string, l
 		return;
 	}
 
-	const embed = buildEmbed(wanted, key);
+	putEmbed(root, current, buildEmbed(wanted, key));
+}
 
+/** An image token's embed at `current`'s place: the one there when it draws the same image, else a new one. */
+function placeImage(root: HTMLElement, current: ChildNode | null, token: string, image: InlineImage | undefined): void {
+	const key = imageKey(image);
+
+	if (current instanceof HTMLElement && urlOf(current) === token && current.dataset.look === key) return;
+
+	const embed = embedShell(token);
+
+	embed.dataset.look = key;
+	fillImageEmbed(embed, image);
+	putEmbed(root, current, embed);
+}
+
+/** Puts a new embed at `current`'s place, in place of the embed there if there is one. */
+function putEmbed(root: HTMLElement, current: ChildNode | null, embed: HTMLElement): void {
 	if (current && urlOf(current) !== null) current.replaceWith(embed);
 	else root.insertBefore(embed, current);
+}
+
+/** The element every embed is: non-editable, inline, carrying the text it stands for. */
+function embedShell(text: string): HTMLElement {
+	const embed = document.createElement('span');
+
+	embed.contentEditable = 'false';
+	embed.dataset.ui = 'link-embed';
+	embed.setAttribute(URL_ATTRIBUTE, text);
+
+	return embed;
 }
 
 /** What makes two looks of one URL draw the same. */
@@ -278,13 +313,10 @@ function lookKey({ description, fact }: EmbedLook): string {
  */
 function buildEmbed(wanted: EmbedLook, key: string): HTMLElement {
 	const { description } = wanted;
-	const embed = document.createElement('span');
+	const embed = embedShell(description.url);
 	const label = document.createElement('span');
 
-	embed.contentEditable = 'false';
-	embed.dataset.ui = 'link-embed';
 	embed.dataset.kind = description.kind;
-	embed.setAttribute(URL_ATTRIBUTE, description.url);
 	embed.setAttribute('role', 'link');
 	label.dataset.ui = 'link-embed-label';
 	label.textContent = description.label;

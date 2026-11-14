@@ -1,5 +1,6 @@
 import type { SQL } from 'bun';
 import { coordinator, settingsOperation } from '../../storage/backend';
+import { sweepPullStates, SWEEP_INTERVAL_MS } from '../../forge/pulls/state-sweep';
 import { readAutoReviewSettings } from '../../forge/watch/settings';
 import { readWatchState } from '../../forge/watch/cursor';
 import { checkNow } from '../../forge/watch/watcher';
@@ -9,6 +10,7 @@ import { createWorkerWaitReporter } from './worker-wait';
 export function startSharedMaintenance(database: SQL): () => Promise<void> {
 	let stopped = false;
 	let lastModelSync = 0;
+	let lastPullSweep = 0;
 	let wake: (() => void) | undefined;
 	const reportWorkerWaits = coordinator ? createWorkerWaitReporter(coordinator) : undefined;
 
@@ -50,6 +52,16 @@ export function startSharedMaintenance(database: SQL): () => Promise<void> {
 							if (!stopped && Date.now() - lastModelSync >= VLLM_SYNC_INTERVAL_MS) {
 								await settingsOperation(() => syncAllVllm(true));
 								lastModelSync = Date.now();
+							}
+
+							if (!stopped && Date.now() - lastPullSweep >= SWEEP_INTERVAL_MS) {
+								lastPullSweep = Date.now();
+
+								try {
+									await sweepPullStates();
+								} catch {
+									if (!stopped) console.error('[maintenance] the pull state sweep failed; the next round will retry');
+								}
 							}
 						} finally {
 							await connection`SELECT pg_advisory_unlock(hashtextextended('recoder:maintenance', 0))`;

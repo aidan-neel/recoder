@@ -3,11 +3,13 @@
 import { Check, ChevronDown } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { Select as SelectPrimitive } from 'radix-ui';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
 import { buttonClass } from '../button';
 import { SwapText } from '../display/swap-text';
+import { watchInput } from '../overlay/input-modality';
+import { returnFocusQuietly } from '../overlay/return-focus';
 import { ShallowBodyLock } from '../overlay/shallow-body-lock';
 import { MENU_ITEM, MenuPanel } from './menu-parts';
 import { MenuHighlight } from './menu-highlight';
@@ -29,6 +31,8 @@ interface SelectProps {
 	placeholder?: string;
 	variant?: 'quiet' | 'outline';
 	size?: 'sm' | 'md';
+	/** Which edge of the trigger the list lines up with: `end` for a trigger that ends its row. */
+	align?: 'start' | 'end';
 	'aria-label'?: string;
 	className?: string;
 	contentClassName?: string;
@@ -42,7 +46,7 @@ function SelectRow({ option }: { option: SelectOption }) {
 			value={option.value}
 			disabled={option.disabled}
 			data-ui="select-item"
-			className={cn(MENU_ITEM, option.description && 'h-auto min-h-[30px] items-start py-1.5')}
+			className={cn(MENU_ITEM, option.description && 'h-auto min-h-[26px] items-start py-1')}
 		>
 			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<SelectPrimitive.ItemText className="truncate">{option.label}</SelectPrimitive.ItemText>
@@ -58,9 +62,10 @@ function SelectRow({ option }: { option: SelectOption }) {
 /**
  * Picks one value from a short list. The trigger looks like a `Button` of the
  * same variant, and a new choice crossfades into it. The list opens under it
- * on the menu panel, with the traveling highlight and a check mark on the
+ * on the menu panel, lined up with its start (or its end, with
+ * `align="end"`), with the traveling highlight and a check mark on the
  * chosen value. Arrow keys, Home, End and typeahead work; Escape closes and
- * returns focus to the trigger. A clear layer under the list takes presses
+ * returns focus to the trigger, with its ring only after a key press. A clear layer under the list takes presses
  * outside it, so the page's pointer lock stays shallow (`ShallowBodyLock`).
  */
 export function Select({
@@ -70,6 +75,7 @@ export function Select({
 	placeholder = 'Select',
 	variant = 'outline',
 	size = 'md',
+	align = 'start',
 	'aria-label': ariaLabel,
 	className,
 	contentClassName,
@@ -77,7 +83,10 @@ export function Select({
 }: SelectProps) {
 	const [open, setOpen] = useState(false);
 	const panelRef = useRef<HTMLDivElement>(null);
+	const triggerRef = useRef<HTMLButtonElement>(null);
 	const selected = options.find((option) => option.value === value);
+
+	useEffect(watchInput, []);
 
 	return (
 		<SelectPrimitive.Root
@@ -88,11 +97,12 @@ export function Select({
 			disabled={disabled}
 		>
 			<SelectPrimitive.Trigger
+				ref={triggerRef}
 				aria-label={ariaLabel}
 				data-ui="select-trigger"
 				data-variant={variant}
 				data-size={size}
-				className={buttonClass(variant, size, cn('min-w-0 justify-between gap-2 pr-2 text-left', className))}
+				className={buttonClass(variant, size, cn('min-w-0 justify-between gap-2 pr-[7px] text-left', className))}
 			>
 				<SelectPrimitive.Value
 					placeholder={<span className="block truncate text-fg-faint">{placeholder}</span>}
@@ -115,16 +125,17 @@ export function Select({
 							forceMount
 							asChild
 							position="popper"
-							align="start"
-							sideOffset={6}
+							align={align}
+							sideOffset={4}
 							collisionPadding={8}
+							onCloseAutoFocus={(event) => returnFocusQuietly(event, triggerRef.current)}
 						>
 							<MenuPanel
 								ref={panelRef}
 								highlight={false}
 								data-ui="select-content"
 								className={cn(
-									'min-w-[max(180px,var(--radix-select-trigger-width))] overflow-hidden p-0',
+									'min-w-[max(160px,var(--radix-select-trigger-width))] overflow-hidden p-0',
 									'max-h-(--radix-select-content-available-height)',
 									'origin-(--radix-select-content-transform-origin)',
 									contentClassName

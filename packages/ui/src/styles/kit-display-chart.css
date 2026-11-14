@@ -1,0 +1,237 @@
+/* kit: charts. The line chart, the tip body its tooltip and the row tooltips share, and the stacked bar, keyed on their data-ui hooks. */
+@layer components {
+	/* ───────── Line chart: a smooth line over a soft fill per series, drawn at the measured width ───────── */
+	[data-ui='line-chart'] {
+		position: relative;
+		width: 100%;
+		border-radius: var(--radius-row);
+		font-variant-numeric: tabular-nums;
+		outline: none;
+	}
+	[data-ui='line-chart']:focus-visible {
+		box-shadow: var(--focus-ring);
+	}
+	[data-ui='line-chart'] svg {
+		display: block;
+		overflow: visible;
+	}
+	[data-ui='line-chart'] [data-part='grid'] {
+		stroke: var(--line-subtle);
+		stroke-width: 1;
+	}
+	[data-ui='line-chart'] [data-part='baseline'] {
+		stroke: var(--line-card);
+		stroke-width: 1;
+	}
+	[data-ui='line-chart'] [data-part='tick'] {
+		fill: var(--text-faint);
+		font-size: 11px;
+	}
+	[data-ui='line-chart'] [data-part='guide'] {
+		stroke: var(--line-hover);
+		stroke-width: 1;
+		stroke-dasharray: 3 3;
+	}
+	[data-ui='line-chart'] [data-part='fill-top'] {
+		stop-opacity: 0.14;
+	}
+	[data-ui='line-chart'] [data-part='fill-bottom'] {
+		stop-opacity: 0;
+	}
+	[data-ui='line-chart'] [data-part='line'] {
+		fill: none;
+		stroke-width: 1.75;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+	}
+	/* Each dot sits in a ring of the surface under the chart, so it reads over the lines it crosses. */
+	[data-ui='line-chart'] [data-part='dot'] {
+		stroke: var(--chart-surface, var(--bg-canvas));
+		stroke-width: 2;
+	}
+	[data-ui='line-chart'] [data-part='series'],
+	[data-ui='line-chart'] [data-part='area'],
+	[data-ui='line-chart'] [data-part='dot'] {
+		transition: opacity var(--dur-highlight) ease-out;
+	}
+	/* A highlighted line keeps its fill and the others step back to a trace, their fills gone. */
+	[data-ui='line-chart'][data-highlight] [data-part='series']:not([data-highlight]),
+	[data-ui='line-chart'][data-highlight] [data-part='dot']:not([data-highlight]) {
+		opacity: 0.22;
+	}
+	[data-ui='line-chart'][data-highlight] [data-part='series']:not([data-highlight]) [data-part='area'] {
+		opacity: 0;
+	}
+	[data-ui='line-chart'] [data-part='series'][data-highlight] [data-part='line'] {
+		stroke-width: 2.25;
+	}
+
+	/*
+	 * The tooltip is the menus' surface. It glides from day to day on its
+	 * transform, fades in when it first opens, and never takes the pointer.
+	 */
+	[data-ui='chart-tooltip'] {
+		position: absolute;
+		left: 0;
+		z-index: 1;
+		min-width: 200px;
+		max-width: 280px;
+		padding: 8px 10px 9px;
+		border-radius: var(--radius-card);
+		background: var(--bg-menu);
+		box-shadow: var(--shadow-menu);
+		color: var(--text-primary);
+		pointer-events: none;
+		transition: transform var(--dur-menu) var(--ease-menu);
+		animation: chart-tooltip-in var(--dur-menu) var(--ease-menu);
+	}
+	@keyframes chart-tooltip-in {
+		from {
+			opacity: 0;
+		}
+	}
+
+	/*
+	 * ───────── Tip body: a heading with its number, then columns of swatch, name, value and share ─────────
+	 * The columns have no gap of their own: each cell pads its left side, so a
+	 * column a tip leaves empty (no swatches, no shares) takes no room.
+	 */
+	[data-ui='chart-tip'] {
+		--tip-swatch: 8px;
+
+		display: grid;
+		min-width: 0;
+		grid-template-columns: var(--tip-swatch) minmax(0, 1fr) auto auto;
+		align-items: center;
+		row-gap: 3px;
+		padding: 3px 2px;
+		font-size: 12px;
+		font-variant-numeric: tabular-nums;
+		line-height: 16px;
+	}
+	[data-ui='chart-tooltip'] [data-ui='chart-tip'] {
+		padding: 0;
+	}
+	[data-ui='chart-tip']:not(:has([data-part='swatch'][style])) {
+		--tip-swatch: 0px;
+	}
+	[data-ui='chart-tip'] [data-part='heading'] {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 20px;
+		grid-column: 1 / -1;
+		margin-bottom: 3px;
+		color: var(--text-muted);
+	}
+	[data-ui='chart-tip'] [data-part='name'] {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	[data-ui='chart-tip'] [data-part='total'] {
+		color: var(--text-primary);
+		font-weight: 500;
+	}
+	[data-ui='chart-tip'] [data-part='row'] {
+		display: contents;
+	}
+	[data-ui='chart-tip'] [data-part='swatch'] {
+		width: var(--tip-swatch);
+		height: 8px;
+		border-radius: 2px;
+	}
+	[data-ui='chart-tip'] [data-part='label'] {
+		min-width: 0;
+		overflow: hidden;
+		padding-left: var(--tip-swatch);
+		color: var(--text-secondary);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	[data-ui='chart-tip'] [data-part='value'] {
+		padding-left: 16px;
+		color: var(--text-primary);
+		text-align: right;
+	}
+	[data-ui='chart-tip'] [data-part='detail'] {
+		min-width: 46px;
+		color: var(--text-faint);
+		text-align: right;
+	}
+	[data-ui='chart-tip'] [data-part='detail']:empty {
+		min-width: 0;
+	}
+	/* With one line picked, the others step back so it reads at a glance. */
+	[data-ui='chart-tip'][data-focused] [data-part='row']:not([data-active]) > * {
+		opacity: 0.45;
+	}
+	[data-ui='chart-tip'] [data-part='row'][data-active] [data-part='label'] {
+		color: var(--text-primary);
+	}
+	[data-ui='chart-tip'] [data-part='rule'] {
+		height: 1px;
+		grid-column: 1 / -1;
+		margin: 4px 0 2px;
+		background: var(--line-menu);
+	}
+
+	/* ───────── Stacked bar: one thin bar, then a legend of square swatches ───────── */
+	[data-ui='stacked-bar'] [data-part='track'] {
+		display: flex;
+		height: 8px;
+		gap: 2px;
+	}
+	[data-ui='stacked-bar'] [data-part='segment'] {
+		min-width: 3px;
+		flex-basis: 0;
+		border-radius: 2px;
+		outline: none;
+		transition: opacity var(--dur-hover) ease-out;
+	}
+	[data-ui='stacked-bar']
+		[data-part='track']:is(:hover, :focus-within)
+		[data-part='segment']:not(:hover, :focus-visible) {
+		opacity: 0.45;
+	}
+	[data-ui='stacked-bar'] [data-part='segment']:focus-visible {
+		box-shadow: var(--focus-ring);
+	}
+	[data-ui='stacked-bar'] [data-part='legend'] {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px 20px;
+		margin-top: 12px;
+		font-size: var(--font-size-label);
+		font-variant-numeric: tabular-nums;
+	}
+	[data-ui='stacked-bar'] [data-part='legend'] li {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+	}
+	[data-ui='stacked-bar'] [data-part='swatch'] {
+		width: 8px;
+		height: 8px;
+		flex-shrink: 0;
+		border-radius: 2px;
+	}
+	[data-ui='stacked-bar'] [data-part='label'] {
+		color: var(--text-muted);
+	}
+	[data-ui='stacked-bar'] [data-part='value'] {
+		color: var(--text-primary);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		[data-ui='line-chart'] [data-part='series'],
+		[data-ui='line-chart'] [data-part='area'],
+		[data-ui='line-chart'] [data-part='dot'],
+		[data-ui='chart-tooltip'],
+		[data-ui='stacked-bar'] [data-part='segment'] {
+			transition: none;
+			animation: none;
+		}
+	}
+}

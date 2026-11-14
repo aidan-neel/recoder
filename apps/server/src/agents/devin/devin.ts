@@ -7,10 +7,10 @@ import { callDeadline, emptyDirectory, findCli, removeScratchDir, scratchDir, st
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, streamCli } from '../cli-stream';
 import { SessionCliAgent } from '../session-run';
-import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { parseDevinModels } from './devin-models';
 import { DEVIN_LOGIN, exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
-import { devinEnv, removeToolFreeHome, toolFreeHome } from './devin-process';
+import { devinDataHome, devinEnv, removeToolFreeHome, toolFreeHome } from './devin-process';
 import { DevinRun, DEVIN_PRINT_ARGS } from './devin-run';
 
 const INSTALL = 'curl -fsSL https://cli.devin.ai/install.sh | bash';
@@ -38,11 +38,22 @@ const TOOL_RETRIES = 2;
 export class DevinAgent extends SessionCliAgent {
 	readonly id = 'devin';
 	readonly name = 'Devin';
+	/** Its CLI documents no image input; the prompt goes in as text (`--prompt-file`). */
+	readonly readsImages = false;
 	readonly install = INSTALL;
 	readonly login = DEVIN_LOGIN;
 	/** Each call runs one CLI process, so four run at once unless `RECODER_DEVIN_CONCURRENCY` says otherwise. */
 	readonly processCeiling = { env: 'RECODER_DEVIN_CONCURRENCY', fallback: 4 };
 	readonly signInFix = `Sign in with \`${DEVIN_LOGIN}\`, or pick another model in Recoder settings.`;
+	/**
+	 * The setup Settings runs: the vendor install script, piped to `bash` by the job runner, and
+	 * `devin auth login --force-manual-token-flow`, the CLI's paste-a-token sign-in. The credential lands in the
+	 * user's data dir — the environment keeps `XDG_DATA_HOME` — so it is the user's own.
+	 */
+	readonly setup: AgentSetup = {
+		install: { argv: ['bash', '-s'], stdinUrl: 'https://cli.devin.ai/install.sh' },
+		signIn: { argv: ['devin', 'auth', 'login', '--force-manual-token-flow'], needsInput: true }
+	};
 
 	/**
 	 * The account's models, from `devin models list`; throws when the CLI is missing or the list is empty. When `signal`
@@ -139,6 +150,10 @@ export class DevinAgent extends SessionCliAgent {
 
 	protected childEnv(): Record<string, string> {
 		return devinEnv(this.env);
+	}
+
+	protected configDir(): string {
+		return devinDataHome(this.env);
 	}
 
 	/** `devin auth status` exits 0 when signed in. */

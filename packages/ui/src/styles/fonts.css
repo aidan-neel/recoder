@@ -1,7 +1,14 @@
-/* Self-hosted faces: Inter for the UI, Geist Mono for code and metadata, Lora for the AI voice. */
+/*
+ * Self-hosted faces: Inter for the UI, or Geist when picked in the app's
+ * Appearance settings; Geist Mono for code and metadata; Lora for the AI voice.
+ * A browser downloads a face only when the page uses it.
+ */
 @import '@fontsource/inter/latin-400.css';
 @import '@fontsource/inter/latin-500.css';
 @import '@fontsource/inter/latin-600.css';
+@import '@fontsource/geist-sans/latin-400.css';
+@import '@fontsource/geist-sans/latin-500.css';
+@import '@fontsource/geist-sans/latin-600.css';
 @import '@fontsource/geist-mono/latin-400.css';
 @import '@fontsource/geist-mono/latin-500.css';
 @import '@fontsource/lora/latin-400.css';

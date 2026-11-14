@@ -17,10 +17,12 @@ const settings: ModelSettings = {
 	configured: true,
 	baseUrl: 'https://api.example.com/v1',
 	model: 'env-model',
-	apiKeyPreview: 'sk-…prev',
+	apiKeySet: true,
 	sharedModelId: 'review',
 	orchestratorModelId: null,
 	specialistModelId: null,
+	hiddenModels: [],
+	modelPolicy: { kind: 'choose' },
 	models: [
 		{
 			id: 'review',
@@ -28,16 +30,17 @@ const settings: ModelSettings = {
 			model: 'gpt-x',
 			provider: 'opencode',
 			baseUrl: null,
-			apiKeyPreview: 'sk-…entry',
+			apiKeySet: true,
 			contextWindow: 200_000
 		},
-		{ id: 'small', label: 'Small', model: 'gpt-mini', baseUrl: null, apiKeyPreview: null, runtime: { temperature: 0 } }
+		{ id: 'small', label: 'Small', model: 'gpt-mini', baseUrl: null, apiKeySet: false, runtime: { temperature: 0 } }
 	],
 	orchestratorEffort: 'high',
 	specialistEffort: null,
 	subagentCap: 8,
 	tokenBudget: 'medium',
 	reportLowSeverity: false,
+	disabledProviders: [],
 	configPath: '/home/someone/.recoder/data/review-config.json',
 	limits: { maxFiles: 200, maxDiffChars: 400_000, maxFileChars: 60_000 }
 };

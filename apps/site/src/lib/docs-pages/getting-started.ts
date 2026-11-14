@@ -11,7 +11,7 @@ export const gettingStarted: DocPage = {
 - **The app** (\`apps/app\`) is the web page you review in. It talks to the server from your browser.
 - **Your model provider** sees the code under review, because the reviewers send it in their prompts.
 
-Recoder is single-user. The server has no sign-in: anyone who can reach its port can start reviews with your tokens and models. Keep it on your own machine or behind your network’s access control. The server listens on every interface (\`HOST=0.0.0.0\`) unless you set \`HOST=127.0.0.1\`.
+Recoder is single-user. The first time you connect GitHub or GitLab, the server makes one account from it, and from then on the API needs that sign-in. Until then anyone who can reach its port can start reviews with your tokens and models, so keep it on your own machine or behind your network’s access control until you have signed in. From any other machine, the app asks for a setup code first: find it in the server log (the line that starts with \`setup code:\`) or in the \`setup-code\` file in the data directory. The server listens on every interface (\`HOST=0.0.0.0\`) unless you set \`HOST=127.0.0.1\`.
 
 ## Requirements
 

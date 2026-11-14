@@ -1,6 +1,7 @@
 import {
 	settleAssignments,
 	type CommandRun,
+	type ModelCallRow,
 	type ProgressSummaries,
 	type ProgressSummary,
 	type Repo,
@@ -12,6 +13,7 @@ import { collection as createCollection, closeStorage, postgres, sharedDiffs } f
 import { progressWrites, metricWrites } from './storage/persistence-queue';
 import type { ReviewCheckpoint } from './review/session/review-checkpoint';
 import type { PipelineRun, RunTokenCall } from './models/metrics';
+import type { StoredRepoChat } from './repo-chat/chat-record';
 import { isTerminalTask, settleTasks } from './review/session/task-state';
 
 async function flushPersistence(): Promise<void> {
@@ -29,7 +31,8 @@ export async function closeStore(): Promise<void> {
 export const db = {
 	repos: createCollection<Repo>('repos'),
 	reviews: createCollection<Review>('reviews'),
-	runs: createCollection<CommandRun>('runs')
+	runs: createCollection<CommandRun>('runs'),
+	repoChats: createCollection<StoredRepoChat>('repo_chats')
 };
 
 const progressTable = createCollection<ReviewProgress>('review_progress');
@@ -267,6 +270,28 @@ export const reviewMetrics = {
 		return metricsTable.clear();
 	}
 };
+
+const modelCallsTable = createCollection<ModelCallRow>('model_calls');
+
+/**
+ * Every settled model call, one row each: the admin usage report reads these instead of scanning
+ * each review's metrics. Writes are queued through `metricWrites` keyed by the owning review or
+ * chat (or a shared bucket for calls with none), so reads drain the queue first.
+ */
+export const modelCalls = {
+	...modelCallsTable,
+	list: async () => {
+		await metricWrites.drainAll();
+
+		return modelCallsTable.list();
+	},
+	clear: async () => {
+		await metricWrites.drainAll();
+
+		return modelCallsTable.clear();
+	}
+};
+
 /** Where an unfinished review stopped, so it can continue instead of starting over (see ReviewCheckpoint). */
 export const reviewCheckpoints = createCollection<ReviewCheckpoint>('review_checkpoints');
 /** A passed review's last checkpoint, kept so the review can be replayed from verification without its reviewers. */

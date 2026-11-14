@@ -75,7 +75,7 @@ function toModelEntry(
 		label,
 		model,
 		baseUrl: null,
-		apiKeyPreview: null,
+		apiKeySet: false,
 		contextWindow: contextWindowFor(model),
 		...(efforts && defaultEffort ? { efforts, defaultEffort } : {})
 	};

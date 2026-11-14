@@ -1,3 +1,5 @@
+import type { Provider } from '@recoder/shared';
+
 /**
  * What one row of the pull request list says about its pull request, most
  * urgent first: a review that runs, open findings, a review that failed,
@@ -24,6 +26,8 @@ export interface PullRow {
 	repoId: string;
 	/** The repository's short name (`recoder`, not `owner/recoder`). */
 	repoName: string;
+	/** Where the repository lives, for the mark beside its name; null while the repositories load. */
+	repoForge: Provider | null;
 	number: number;
 	title: string;
 	author: string;
@@ -46,6 +50,7 @@ export interface RepoOption {
 	id: string;
 	/** `owner/name`. */
 	name: string;
+	provider: Provider;
 }
 
 /** Everything the pull request list screen shows and does. */
@@ -66,8 +71,16 @@ export interface PullListView {
 	setQuery: (query: string) => void;
 	/** Repositories whose forge did not answer; the others still load. */
 	failures: { repoName: string; error: string }[];
-	/** Repositories with more open pull requests than the list sends; empty when no list was cut. */
-	truncated: { repoId: string; repoName: string }[];
+	/** Reading further down the list: the repositories in view may have more pull requests than the rows shown. */
+	more: {
+		/** Some repository in view has a next page. */
+		available: boolean;
+		loading: boolean;
+		/** Why the newest read of more failed; null when it did not. */
+		error: string | null;
+		/** Reads the next page of every repository in view that has one. */
+		load: () => void;
+	};
 	/** Why the whole list failed, when `phase` is `failed`. */
 	error: string | null;
 	/** True when the review server did not answer at all. */

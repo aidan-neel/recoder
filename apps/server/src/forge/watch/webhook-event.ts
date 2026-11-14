@@ -1,6 +1,7 @@
-import type { Repo } from '@recoder/shared';
+import type { PullState, Repo } from '@recoder/shared';
 import { db } from '../../store';
 import { hostOfRepoUrl } from '../gitlab-host';
+import { recordPullState } from '../pulls/pull-states';
 import { parseSlug } from '../providers';
 import { decideEvent, readWatchState, writeWatchState, type PullEvent, type WatchedPull } from './cursor';
 import { readAutoReviewSettings } from './settings';
@@ -11,7 +12,10 @@ import { withWatchState } from './state-queue';
 export interface PullHook {
 	repoUrls: string[];
 	pull: WatchedPull;
-	event: PullEvent;
+	/** What happened, when the payload is a review-relevant event; a payload that only reports a state has none. */
+	event?: PullEvent;
+	/** The pull request's state the payload reports, when it says one. */
+	state?: PullState;
 }
 
 /** The webhook's answer; the forge shows it in its delivery log. */
@@ -51,17 +55,22 @@ function skipped(reason: string): HookOutcome {
 /**
  * Run a webhook event through the watcher's own settings and rules, starting
  * the review the same way. The event moves the pull request's cursor, so the
- * poller won't start a second review for the same comment or commit.
+ * poller won't start a second review for the same comment or commit. A state
+ * the payload reports is recorded whether or not a review could come of it.
  */
 export async function handlePullHook(hook: PullHook): Promise<HookOutcome> {
+	const repo = await findTrackedRepo(hook.repoUrls);
+
+	if (repo && hook.state !== undefined) await recordPullState(repo.id, hook.pull.number, hook.state);
+
 	const settings = readAutoReviewSettings();
 
 	if (!settings.enabled) return skipped('auto-review is off');
-
-	const repo = await findTrackedRepo(hook.repoUrls);
-
 	if (!repo) return skipped('repo not tracked');
 	if (settings.excludedRepoIds.includes(repo.id)) return skipped('repo excluded from auto-review');
+	if (hook.event === undefined) return skipped('nothing to review');
+
+	const { event } = hook;
 
 	return withWatchState(async () => {
 		const now = new Date().toISOString();
@@ -72,7 +81,7 @@ export async function handlePullHook(hook: PullHook): Promise<HookOutcome> {
 			settings,
 			cursor: repoCursor.pulls[hook.pull.number],
 			pull: hook.pull,
-			event: hook.event,
+			event,
 			...(await reviewHistory(repo.id, hook.pull)),
 			now
 		});

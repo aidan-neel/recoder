@@ -140,3 +140,12 @@ export class LineSplitter {
 		this.buffer = '';
 	}
 }
+
+/** The text as JSON, or undefined when it is not JSON. */
+export function parseJson(line: string): unknown {
+	try {
+		return JSON.parse(line);
+	} catch {
+		return undefined;
+	}
+}

@@ -6,6 +6,7 @@ import { CodexAgent } from '../../../src/agents/codex/codex';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { fakeCodex } from '../../helpers/fake-codex';
+import { imageUpload } from '../../helpers/images';
 import { testCallFailures } from '../../helpers/native-agent';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
@@ -39,7 +40,7 @@ test('the models are the catalog’s listed ones, with the effort levels Recoder
 			label: 'GPT-6-Sol',
 			model: 'gpt-6-sol',
 			baseUrl: null,
-			apiKeyPreview: null,
+			apiKeySet: false,
 			contextWindow: 272000,
 			efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
 			defaultEffort: 'medium'
@@ -96,6 +97,27 @@ describe('CodexAgent.complete', () => {
 		expect(childEnv).not.toContain('RECODER_SECRET_KEY');
 		expect(childEnv).not.toContain('OPENAI_API_KEY');
 		expect(childEnv).not.toContain('CODEX_API_KEY');
+	});
+
+	test('passes attached images as files before the other flags, keeping the prompt on stdin', async () => {
+		const env = await fakeCodex();
+
+		await new CodexAgent(env).complete(
+			call({
+				messages: [
+					{ role: 'system', content: 'Review the diff.' },
+					{ role: 'user', content: 'diff --git a/x b/x', images: [imageUpload()] }
+				]
+			})
+		);
+
+		const logged = await loggedCall(env.FAKE_CODEX_LOG);
+
+		expect(logged.args.slice(0, 2)).toEqual(['exec', '--image']);
+		expect(logged.args[2]).toEndWith('/image-1.png');
+		expect(logged.args[3]).toBe('--ephemeral');
+		expect(logged.args.at(-1)).toBe('-');
+		expect(logged.prompt).toBe('diff --git a/x b/x');
 	});
 
 	test('offers the model no sub-agents, though the CLI’s catalog gives it a version', async () => {

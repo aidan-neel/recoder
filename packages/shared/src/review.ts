@@ -1,3 +1,4 @@
+import type { ImageUpload } from './attachments';
 import type { AutoReviewReason } from './auto-review';
 import type { ReviewContext } from './context';
 import type { Finding } from './findings';
@@ -97,6 +98,11 @@ export interface Review {
 	source: Provider | 'stub';
 	prTitle: string | null;
 	prUrl: string | null;
+	/**
+	 * The account that started the review, whose model picks it runs on. Reviews started with the bearer token, by
+	 * the watcher, a webhook or a schedule, and reviews stored before this was recorded, are the admin's (`owner`).
+	 */
+	startedBy?: string;
 	/** Set when a forge webhook or the auto-review watcher queued the review: nobody is watching it. */
 	trigger?: 'webhook' | 'auto';
 	/** Why the watcher or a webhook started it, and where on the pull request to answer. */
@@ -142,6 +148,8 @@ export interface CreateReviewInput {
 	postComment?: boolean;
 	/** The developer's brief ("focus on the auth changes"); a started review runs with it. */
 	instructions?: string;
+	/** Images that go with the brief (a screenshot of the bug), at most `MAX_IMAGES`; the review's models see them. */
+	images?: ImageUpload[];
 }
 
 export interface CommandRun {

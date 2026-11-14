@@ -86,7 +86,7 @@ export class CursorRun extends ProcessRun {
 		const run = new CursorRun(host, options, cursorPlace(root, host.env));
 
 		try {
-			await writeCursorConfig(run.place, run.lease);
+			await writeCursorConfig(run.place, host.env, run.lease);
 
 			return run;
 		} catch (error) {

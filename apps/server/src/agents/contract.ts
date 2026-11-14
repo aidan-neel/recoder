@@ -1,4 +1,4 @@
-import type { AgentStatus, ModelEntry, ModelFailure, ReasoningEffort, TokenUsage } from '@recoder/shared';
+import type { AgentStatus, ImageUpload, ModelEntry, ModelFailure, ReasoningEffort, TokenUsage } from '@recoder/shared';
 import type { LlmError } from '../models/llm/errors';
 import type { ChatOptions } from '../models/llm/types';
 
@@ -21,6 +21,11 @@ export interface AgentAdapter {
 	readonly processCeiling: ProcessCeiling | null;
 	/** What `recoder doctor` tells someone whose model the agent does not list, which is how a missing sign-in shows. */
 	readonly signInFix: string;
+	/**
+	 * Whether the images on a call's turns, or on a run's first prompt, reach the model. A request with images for an
+	 * agent that cannot read them is refused before it starts, never sent without them.
+	 */
+	readonly readsImages: boolean;
 	/** Installed, version, sign-in state. Cached until `refresh`. */
 	detect(refresh?: boolean): Promise<AgentStatus>;
 	/** The status `recoder doctor` reports, found without starting anything that outlives the check. */
@@ -44,6 +49,18 @@ export interface AgentAdapter {
 	/** Opens a run in which the CLI is the agent, calling Recoder's tools as it goes. */
 	openRun(options: AgentRunOptions): Promise<AgentRun>;
 	/**
+	 * The install and sign-in Settings may run for the user, each a fixed command the adapter owns — nothing a
+	 * request sends is ever run. A step is null when the CLI has no headless way to do it (Pi's `/login`, OpenCode's
+	 * provider picker), and `setup` itself is null when neither can run.
+	 */
+	readonly setup: AgentSetup | null;
+	/**
+	 * The environment a setup job runs with: like the CLI run from the user's own terminal — the server env minus
+	 * Recoder's secrets and minus whatever a call overrides to isolate the CLI from the user's config, since a
+	 * setup job's purpose is to change that config.
+	 */
+	setupEnv(): Record<string, string>;
+	/**
 	 * Words for the developer when a call of one of its models failed with `err`; `source` is the hosted provider
 	 * the model routes to, when it has one. A usage cap is a `UsageLimitError` the adapter raised.
 	 */
@@ -56,6 +73,27 @@ export interface AgentAdapter {
 export interface ProcessCeiling {
 	env: string;
 	fallback: number;
+}
+
+/**
+ * One command of an agent's setup: a fixed argv run without a shell. For a sign-in step `argv[0]` is the CLI's
+ * command name and the job runner substitutes the binary it found; an install step names its installer (`npm`,
+ * `bash`). `stdinUrl` is a vendor installer script the runner fetches and writes to the process's stdin, the
+ * `curl … | bash` flow without a shell.
+ */
+export interface AgentSetupStep {
+	argv: readonly string[];
+	stdinUrl?: string;
+	/** Extra environment on top of `setupEnv` (`NO_OPEN_BROWSER=1`, so a login command prints its URL). */
+	env?: Record<string, string>;
+	/** True while the CLI may wait for a pasted code or token on stdin; Settings shows its input box then. */
+	needsInput?: boolean;
+}
+
+/** The setup steps an agent offers: install and sign-in, each null when the CLI cannot do it headlessly. */
+export interface AgentSetup {
+	install: AgentSetupStep | null;
+	signIn: AgentSetupStep | null;
 }
 
 /** What a model id of an agent resolves to, beyond the model: its effort and, for a router, its hosted provider. */
@@ -103,6 +141,8 @@ export interface AgentRunOptions {
 	onEvent: (event: AgentEvent) => void;
 	/** Aborting it kills the CLI's whole process group. */
 	signal: AbortSignal;
+	/** Images the developer attached to the brief, sent with the run's first prompt; only for an agent that `readsImages`. */
+	images?: readonly ImageUpload[];
 }
 
 export interface AgentPromptOptions {

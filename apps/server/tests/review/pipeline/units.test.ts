@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { applyDirective } from '../../../src/review/chat/directive';
 import { buildInventory } from '../../../src/review/pipeline/inventory';
-import { partitionUnits } from '../../../src/review/pipeline/units';
+import { partitionUnits, unitTitle } from '../../../src/review/pipeline/units';
 import { addedFile } from './harness-fixtures';
 
 /** Two hunks in one file, far enough apart to stay separate. */
@@ -73,4 +73,16 @@ test('files the developer excluded, lockfiles and generated files are left out o
 	expect(paths).not.toContain('bun.lock');
 	expect(paths).not.toContain('package-lock.json');
 	expect(paths).toContain('src/a.ts');
+});
+
+test('a unit title names a real folder, not the repository root, when root files are in the unit', () => {
+	const scope = ['README.md', 'package.json', 'src/a.ts', 'test/a.test.ts'].map((path) => ({ path, hunkIds: [] }));
+
+	expect(unitTitle(scope)).toBe('src and 2 more folders');
+});
+
+test('a unit of only root files is titled as the repository root', () => {
+	const scope = ['README.md', 'package.json'].map((path) => ({ path, hunkIds: [] }));
+
+	expect(unitTitle(scope)).toBe('repository root (2 files)');
 });

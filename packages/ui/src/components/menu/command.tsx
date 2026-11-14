@@ -16,14 +16,13 @@ import { ShallowBodyLock } from '../overlay/shallow-body-lock';
 type CommandFilter = ComponentProps<typeof Command>['filter'];
 
 /**
- * The palette frame: 640px wide, 14vh from the top, radius 14, floating on a
- * deep shadow. Its classes never conflict, so it is a plain string and
+ * The palette frame: 640px wide, 14vh from the top, with the card radius and
+ * the menu shadow. Its classes never conflict, so it is a plain string and
  * loading the module merges nothing.
  */
 const FRAME = [
 	'fixed inset-x-0 top-[14vh] z-[120] mx-auto flex w-[calc(100vw-32px)] max-w-[640px] flex-col overflow-hidden',
-	'rounded-[14px] bg-menu text-fg outline-none',
-	'shadow-[0_0_0_1px_var(--line-menu),0_30px_80px_rgb(var(--shade-rgb)/0.6)]'
+	'rounded-(--radius-card) bg-menu text-fg shadow-(--shadow-menu) outline-none'
 ].join(' ');
 
 /** A click on a toast (an Undo, say) is not a click outside the palette. */
@@ -41,6 +40,14 @@ interface CommandDialogProps {
 	shouldFilter?: boolean;
 	/** Scores an item for the query, 0 hides it; defaults to cmdk's fuzzy score. */
 	filter?: CommandFilter;
+	/**
+	 * The `value` of the row selected and scrolled into view each time the
+	 * dialog opens, such as a picker's current choice; without it, the first
+	 * row. Pass only a value a row has: cmdk selects nothing for any other
+	 * until an arrow key or typing moves the selection. Typing selects the
+	 * first match either way.
+	 */
+	defaultValue?: string;
 	/** Runs when the palette closes, before focus returns to what had it; prevent it to place focus yourself. */
 	onCloseAutoFocus?: (event: Event) => void;
 	children: ReactNode;
@@ -59,6 +66,7 @@ export function CommandDialog({
 	className,
 	shouldFilter,
 	filter,
+	defaultValue,
 	onCloseAutoFocus,
 	children
 }: CommandDialogProps) {
@@ -102,6 +110,7 @@ export function CommandDialog({
 									label={label}
 									shouldFilter={shouldFilter}
 									filter={filter}
+									defaultValue={defaultValue}
 									loop
 									vimBindings={false}
 									className="flex min-h-0 flex-col"
@@ -130,7 +139,7 @@ interface CommandInputProps {
 	className?: string;
 }
 
-/** The palette's search row: 48px with a divider under it. */
+/** The palette's search row: 44px with a divider under it. */
 export function CommandInput({
 	placeholder,
 	value,
@@ -143,7 +152,7 @@ export function CommandInput({
 	return (
 		<div
 			data-ui="command-input"
-			className={cn('flex h-12 shrink-0 items-center gap-3 border-b border-line-card px-[18px]', className)}
+			className={cn('flex h-11 shrink-0 items-center gap-2.5 border-b border-line-card px-3', className)}
 		>
 			{leading ?? <Search aria-hidden className="size-4 shrink-0 text-fg-muted" />}
 			<Command.Input
@@ -151,7 +160,7 @@ export function CommandInput({
 				value={value}
 				onValueChange={onValueChange}
 				onKeyDown={onKeyDown}
-				className="h-full min-w-0 flex-1 bg-transparent text-[15px] text-fg outline-none placeholder:text-fg-faint"
+				className="h-full min-w-0 flex-1 bg-transparent text-[14px] text-fg outline-none placeholder:text-fg-faint"
 			/>
 			{trailing ? (
 				<span className="max-w-[160px] shrink-0 truncate text-[12.5px] text-fg-faint">{trailing}</span>
@@ -213,7 +222,7 @@ function ItemLabel({ description, children }: { description?: ReactNode; childre
 	);
 }
 
-/** A 36px result row: icon, label, then detail and shortcut on the right. A description makes it two lines. */
+/** A 30px result row: icon, label, then detail and shortcut on the right. A description makes it two lines. */
 export function CommandItem({
 	value,
 	keywords,
@@ -237,9 +246,9 @@ export function CommandItem({
 			data-ui="command-item"
 			data-lines={description ? 2 : undefined}
 			className={cn(
-				'flex h-9 cursor-default items-center gap-3 rounded-[9px] px-2.5 text-[14px] text-fg select-none',
+				'flex h-[30px] cursor-default items-center gap-2.5 rounded-(--radius-chip) px-2 text-[13.5px] text-fg select-none',
 				'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-40',
-				description && 'h-auto min-h-9 py-2',
+				description && 'h-auto min-h-[30px] py-1.5',
 				className
 			)}
 		>
@@ -281,7 +290,7 @@ export interface CommandHint {
 }
 
 /**
- * The 36px footer: keycaps and what they do (`↑↓ navigate`, `↵ open`, `esc close`),
+ * The 32px footer: keycaps and what they do (`↑↓ navigate`, `↵ open`, `esc close`),
  * and anything in `aside` at the far end (a switch that changes what Enter does).
  */
 export function CommandFooter({
@@ -297,7 +306,7 @@ export function CommandFooter({
 		<div
 			data-ui="command-footer"
 			className={cn(
-				'flex h-9 shrink-0 items-center gap-4 border-t border-line-card px-[18px] text-[12px] text-fg-faint',
+				'flex h-8 shrink-0 items-center gap-4 border-t border-line-card px-3 text-[12px] text-fg-faint',
 				className
 			)}
 		>

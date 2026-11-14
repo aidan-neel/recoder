@@ -1,6 +1,6 @@
 /*
  * kit: form choices. Switch, checkbox, radio cards, segmented control and the
- * nav pill, keyed on their data-ui hooks. Layered like the fields, so a class
+ * nav fill, keyed on their data-ui hooks. Layered like the fields, so a class
  * passed to a component still wins.
  */
 @layer components {
@@ -9,8 +9,8 @@
 		--switch-thumb-off: var(--text-primary);
 		position: relative;
 		display: inline-flex;
-		width: 32px;
-		height: 20px;
+		width: 28px;
+		height: 16px;
 		flex-shrink: 0;
 		border-radius: 999px;
 		background-color: var(--line-strong);
@@ -35,13 +35,13 @@
 	}
 	[data-ui='switch'] > [data-ui='switch-thumb'] {
 		position: absolute;
-		top: 3px;
-		left: 3px;
-		width: 14px;
-		height: 14px;
+		top: 2px;
+		left: 2px;
+		width: 12px;
+		height: 12px;
 		border-radius: 999px;
 		background-color: var(--switch-thumb-off);
-		box-shadow: 0 1px 2px rgb(var(--shade-rgb) / 0.18);
+		box-shadow: 0 1px 1px rgb(var(--shade-rgb) / 0.16);
 		pointer-events: none;
 		/* The thumb swaps color once the track is past halfway, so the two never meet at one grey. */
 		transition: background-color 0s var(--dur-press);
@@ -53,11 +53,11 @@
 	/* ───────── Checkbox: the box fills, the check draws in ───────── */
 	[data-ui='checkbox'] {
 		display: inline-grid;
-		width: 16px;
-		height: 16px;
+		width: 14px;
+		height: 14px;
 		flex-shrink: 0;
 		place-items: center;
-		border-radius: 5px;
+		border-radius: var(--radius-chip);
 		background-color: var(--bg-field);
 		box-shadow: inset 0 0 0 1px var(--line-strong);
 		color: var(--on-primary);
@@ -84,8 +84,8 @@
 			var(--focus-ring);
 	}
 	[data-ui='checkbox-check'] {
-		width: 12px;
-		height: 12px;
+		width: 11px;
+		height: 11px;
 		stroke: currentColor;
 		stroke-linecap: round;
 		stroke-linejoin: round;
@@ -102,8 +102,8 @@
 		width: 100%;
 		align-items: flex-start;
 		gap: 10px;
-		padding: 10px 12px;
-		border-radius: 10px;
+		padding: 8px 10px;
+		border-radius: var(--radius-row);
 		background-color: transparent;
 		box-shadow: inset 0 0 0 1px var(--line-card);
 		text-align: left;
@@ -126,11 +126,11 @@
 	}
 	[data-ui='radio-dot'] {
 		display: grid;
-		width: 16px;
-		height: 16px;
+		width: 14px;
+		height: 14px;
 		flex-shrink: 0;
 		place-items: center;
-		margin-top: 1px;
+		margin-top: 2px;
 		border-radius: 999px;
 		background-color: var(--bg-field);
 		box-shadow: inset 0 0 0 1px var(--line-strong);
@@ -167,50 +167,44 @@
 		text-wrap: pretty;
 	}
 
-	/* ───────── Segmented control: a raised pill slides inside a sunken track ───────── */
+	/* ───────── Segmented control: the chosen option is filled in place inside a sunken track ───────── */
 	[data-ui='segmented'] {
 		display: inline-flex;
 		align-items: center;
 		padding: 2px;
-		border-radius: 9px;
+		border-radius: var(--radius-row);
 		background-color: var(--bg-search);
 		box-shadow: inset 0 0 0 1px var(--line-card);
 	}
 	[data-ui='segmented-item'] {
-		position: relative;
 		display: inline-flex;
-		height: 26px;
+		height: calc(var(--size-control-md) - 4px);
 		align-items: center;
 		justify-content: center;
-		padding: 0 10px;
-		border-radius: 7px;
+		padding: 0 8px;
+		border-radius: var(--radius-chip);
 		color: var(--text-subtle);
 		font-size: var(--font-size-label);
 		white-space: nowrap;
 		outline: none;
 		transition:
 			color var(--dur-hover) ease-out,
+			background-color var(--dur-hover) ease-out,
 			box-shadow var(--dur-hover) ease-out;
 	}
 	[data-ui='segmented'][data-size='sm'] [data-ui='segmented-item'] {
-		height: 22px;
-		padding: 0 8px;
+		height: calc(var(--size-control-sm) - 4px);
+		padding: 0 7px;
 		font-size: 12px;
 	}
 	[data-ui='segmented-item']:hover:not(:disabled),
 	[data-ui='segmented-item'][data-state='checked'] {
 		color: var(--text-primary);
 	}
-	[data-ui='segmented-pill'] {
-		position: absolute;
-		z-index: 0;
-		inset: 0;
-		background-color: var(--bg-raised);
-		box-shadow: inset 0 0 0 1px var(--line-control);
+	[data-ui='segmented-item'][data-state='checked'] {
+		background-color: var(--bg-selected);
 	}
 	[data-ui='segmented-label'] {
-		position: relative;
-		z-index: 1;
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
@@ -221,11 +215,12 @@
 		stroke-width: 1.75;
 	}
 
-	/* ───────── Nav pill: under every label it slides past, so the items need no z-index of their own ───────── */
+	/* ───────── Nav fill: under every label, with its item's corners, so the items need no z-index of their own ───────── */
 	[data-ui='nav-pill'] {
 		position: absolute;
 		z-index: -1;
 		inset: 0;
+		border-radius: inherit;
 		background-color: var(--bg-selected);
 		pointer-events: none;
 	}

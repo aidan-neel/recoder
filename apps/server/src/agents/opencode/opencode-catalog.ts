@@ -247,7 +247,7 @@ export function normalizeModels(configJson: unknown): ModelEntry[] {
 				label: model.name || model.id,
 				model: `${provider.id}/${model.id}`,
 				baseUrl: null,
-				apiKeyPreview: null,
+				apiKeySet: false,
 				...(ordered.length
 					? { efforts: [...ordered], defaultEffort: ordered.includes('medium') ? 'medium' : ordered[0] }
 					: {}),

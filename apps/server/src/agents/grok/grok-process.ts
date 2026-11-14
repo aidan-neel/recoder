@@ -2,10 +2,13 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { cliEnv } from '../cli-process';
+import { cliEnv, type CliLocation } from '../cli-process';
 import type { ToolLease } from '../tools/mcp-host';
 
 type Env = Record<string, string | undefined>;
+
+/** Where the `grok` binary is: `RECODER_GROK_BIN`, else PATH, else the installer's `~/.grok/bin`. */
+export const GROK_CLI: CliLocation = { pin: 'RECODER_GROK_BIN', command: 'grok', installed: ['.grok', 'bin', 'grok'] };
 
 /**
  * Variables the CLI must not inherit from the server: the server's own settings and keys, every `GROK_*` override
@@ -44,6 +47,11 @@ const COMPAT_DISABLED: Record<string, string> = {
 	GROK_CURSOR_SKILLS_ENABLED: 'false'
 };
 
+/** The CLI's home, where it keeps its sign-in and settings: `GROK_HOME`, else `~/.grok`. */
+export function grokHome(env: Env): string {
+	return env.GROK_HOME ?? join(env.HOME ?? homedir(), '.grok');
+}
+
 /**
  * The sign-in file the CLI would read under the user's own home: `GROK_AUTH_PATH` when set, else `auth.json` in
  * `GROK_HOME` or `~/.grok`. Null when there is none, which the CLI reports as signed out. The path is handed to
@@ -54,8 +62,7 @@ export function realAuthPath(env: Env): string | null {
 
 	if (override) return existsSync(override) ? override : null;
 
-	const home = env.GROK_HOME ?? join(env.HOME ?? homedir(), '.grok');
-	const auth = join(home, 'auth.json');
+	const auth = join(grokHome(env), 'auth.json');
 
 	return existsSync(auth) ? auth : null;
 }
@@ -74,6 +81,21 @@ export function grokEnv(env: Env, home: string, authPath: string | null): Record
 	Object.assign(out, COMPAT_DISABLED);
 
 	if (authPath) out.GROK_AUTH_PATH = authPath;
+	if (env.XAI_API_KEY !== undefined) out.XAI_API_KEY = env.XAI_API_KEY;
+
+	return out;
+}
+
+/**
+ * The environment a `grok login` job runs with: the stripped server env but the user's real `HOME` and `GROK_HOME`,
+ * since the job's purpose is to write the sign-in where the user's own CLI reads it. `GROK_AUTH_PATH` stays off, so
+ * the credential lands in `GROK_HOME/auth.json` just as a terminal `grok login` would leave it.
+ */
+export function grokSetupEnv(env: Env): Record<string, string> {
+	const out = cliEnv(env, STRIPPED);
+
+	out.HOME = env.HOME ?? homedir();
+	out.GROK_HOME = grokHome(env);
 	if (env.XAI_API_KEY !== undefined) out.XAI_API_KEY = env.XAI_API_KEY;
 
 	return out;

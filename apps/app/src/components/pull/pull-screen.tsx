@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Skeleton } from '@recoder/ui';
+import { Button } from '@recoder/ui';
 import { ArrowUpRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
@@ -20,12 +20,14 @@ import { BugsTools } from '@/components/bugs/bugs-tools';
 import { ChangesTab } from '@/components/changes/changes-tab';
 import { ChangesTools, type ChangesMode } from '@/components/changes/changes-tools';
 import { CommitsTab } from '@/components/commits/commits-tab';
+import { CancelReviewHost } from '@/components/common/cancel-review';
 import { Crumbs } from '@/components/common/crumbs';
 import { Page } from '@/components/common/page';
 import { SummaryTab } from '@/components/summary/summary-tab';
 
-import { MergeBar } from './merge-bar';
+import { MergeStrip } from './merge-strip';
 import { PullHeader } from './pull-header';
+import { PullPageSkeleton } from './pull-skeleton';
 import { PullNotice } from './pull-notice';
 import { PullTabs } from './pull-tabs';
 
@@ -39,17 +41,6 @@ interface PullOnTabProps extends PullScreenProps {
 	tab: PullTab;
 }
 
-/** Bars where the title, the facts and the tabs will stand while the page loads. */
-function HeadSkeleton() {
-	return (
-		<div className="pull-head-skeleton" aria-hidden>
-			<Skeleton className="h-5 w-[420px] max-w-full" />
-			<Skeleton className="h-3 w-[300px] max-w-full" />
-			<Skeleton className="mt-2 h-3 w-[260px] max-w-full" />
-		</div>
-	);
-}
-
 /** The Bugs tab's tools; they read the review, so they mount only on that tab. */
 function BugsTabTools() {
 	return <BugsTools view={useBugsView()} run={useRunView()} />;
@@ -60,8 +51,8 @@ function ChangesTabTools({ mode, onModeChange }: { mode: ChangesMode; onModeChan
 	return <ChangesTools viewed={useViewedFiles()} mode={mode} onModeChange={onModeChange} />;
 }
 
-/** The merge bar; it reads the checks and the review, so the header above never re-renders for them. */
-function PullMergeBar() {
+/** The merge strip; it reads the checks and the review, so the title and facts above never re-render for them. */
+function PullMergeStrip() {
 	const view = usePullPageView();
 	const checks = usePullChecksView();
 	const merge = useMergeView();
@@ -70,11 +61,16 @@ function PullMergeBar() {
 	if (!view.page) return null;
 
 	return (
-		<MergeBar page={view.page} checks={checks} merge={merge} bugs={bugs.phase === 'ready' ? bugs.open.length : null} />
+		<MergeStrip
+			page={view.page}
+			checks={checks}
+			merge={merge}
+			bugs={bugs.phase === 'ready' ? bugs.open.length : null}
+		/>
 	);
 }
 
-/** The page inside its session: the bar, the header, the tabs, the open tab and the merge bar. */
+/** The page inside its session: the bar, the header with its merge strip, the tabs and the open tab. */
 function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	const router = useRouter();
 	const { base } = useApi();
@@ -104,41 +100,48 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	};
 
 	return (
-		<Page
-			start={
-				<Crumbs
-					parts={[{ label: 'Pull requests', href: pullsHref(base) }, { label: view.repoName }, { label: `#${number}` }]}
-				/>
-			}
-			end={
-				forge && page ? (
-					<Button asChild variant="ghost">
-						<a href={page.pull.url} target="_blank" rel="noreferrer">
-							Open on {forge}
-							<ArrowUpRight aria-hidden className="size-3.5" />
-						</a>
-					</Button>
-				) : null
-			}
-		>
-			{view.phase === 'loading' ? <HeadSkeleton /> : null}
-			{view.phase === 'not-found' || view.phase === 'failed' ? (
-				<div className="page-notice">
-					<PullNotice view={view} />
-				</div>
-			) : null}
-			{page ? (
-				<>
-					<PullHeader page={page} />
-					<div className="page-tabs-row">
-						<PullTabs repoId={repoId} number={number} tab={tab} counts={view.counts} />
-						<div className="pull-tools">{tools[tab]}</div>
+		<CancelReviewHost>
+			<Page
+				start={
+					<Crumbs
+						parts={[
+							{ label: 'Pull requests', href: pullsHref(base) },
+							{ label: view.repoName },
+							{ label: `#${number}` }
+						]}
+					/>
+				}
+				end={
+					forge && page ? (
+						<Button asChild variant="ghost" className="pull-forge-link">
+							<a href={page.pull.url} target="_blank" rel="noreferrer">
+								Open on {forge}
+								<ArrowUpRight aria-hidden className="size-3.5" />
+							</a>
+						</Button>
+					) : null
+				}
+			>
+				{view.phase === 'loading' ? <PullPageSkeleton /> : null}
+				{view.phase === 'not-found' || view.phase === 'failed' ? (
+					<div className="page-notice">
+						<PullNotice view={view} />
 					</div>
-					<div className="pull-body">{bodies[tab]}</div>
-					<PullMergeBar />
-				</>
-			) : null}
-		</Page>
+				) : null}
+				{page ? (
+					<>
+						<PullHeader page={page}>
+							<PullMergeStrip />
+						</PullHeader>
+						<div className="pull-tabs-row">
+							<PullTabs repoId={repoId} number={number} tab={tab} counts={view.counts} />
+							<div className="pull-tools">{tools[tab]}</div>
+						</div>
+						<div className="pull-body">{bodies[tab]}</div>
+					</>
+				) : null}
+			</Page>
+		</CancelReviewHost>
 	);
 }
 

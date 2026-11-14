@@ -24,7 +24,7 @@ export class ReviewStream {
 
 	constructor(id: string, onReview: (review: Review) => void) {
 		this.progress = emptyReviewProgress(id);
-		this.source = new EventSource(`${apiBase}/api/reviews/${id}/events`);
+		this.source = new EventSource(`${apiBase}/api/reviews/${id}/events`, { withCredentials: true });
 
 		this.source.onopen = () => {
 			if (this.disposed) return;
@@ -114,7 +114,7 @@ export class ReviewStream {
 		const { onopen, onerror, onmessage } = this.source;
 
 		this.source.close();
-		this.source = new EventSource(`${apiBase}/api/reviews/${id}/events`);
+		this.source = new EventSource(`${apiBase}/api/reviews/${id}/events`, { withCredentials: true });
 		Object.assign(this.source, { onopen, onerror, onmessage });
 	}
 

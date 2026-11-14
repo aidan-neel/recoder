@@ -1,5 +1,5 @@
 import type { PullTab } from '../pull/types';
-import type { SettingsSection } from '../settings/sections';
+import { SETTINGS_SECTIONS, type SettingsSection } from '../settings/sections';
 
 /**
  * Page addresses. Each takes the client's `base` (`''` live, `'/sample'` for
@@ -32,7 +32,24 @@ export function newReviewHref(base: string): string {
 	return `${base}/new`;
 }
 
-/** Settings, on one section when given. Live only. */
-export function settingsHref(section?: SettingsSection): string {
-	return section ? `/settings/${section}` : '/settings';
+/** A chat with Recoder about a repository. */
+export function chatHref(base: string, chatId: string): string {
+	return `${base}/chats/${encodeURIComponent(chatId)}`;
+}
+
+/** Where Settings' pages live. */
+const SETTINGS_ROOT = '/settings';
+
+/**
+ * Settings on `section`, or on its first section. Opening Settings goes
+ * straight there, so the sidebar's swap lands on an open section row instead
+ * of waiting for a redirect. Live only.
+ */
+export function settingsHref(section: SettingsSection = SETTINGS_SECTIONS[0].id): string {
+	return `${SETTINGS_ROOT}/${section}`;
+}
+
+/** True on Settings or one of its sections, where the sidebar lists the sections instead of the app's places. */
+export function isSettingsPath(pathname: string): boolean {
+	return pathname === SETTINGS_ROOT || pathname.startsWith(`${SETTINGS_ROOT}/`);
 }

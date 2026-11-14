@@ -71,15 +71,22 @@ function directoryOf(path: string): string {
 	return slash < 0 ? '.' : path.slice(0, slash);
 }
 
-/** "src/a.ts", "src/review", or "src/review and 2 more folders". */
+/** How a title names the repository root, which `directoryOf` calls ".". */
+const ROOT_FOLDER = 'repository root';
+
+/**
+ * "src/a.ts", "src/review (3 files)", or "src/review and 2 more folders". A
+ * named folder leads over the root, which would otherwise sort first.
+ */
 export function unitTitle(scope: UnitScope): string {
 	if (scope.length === 1) return scope[0].path;
 
 	const folders = [...new Set(scope.map((entry) => directoryOf(entry.path)))];
+	const lead = folders.find((folder) => folder !== '.') ?? ROOT_FOLDER;
 
-	if (folders.length === 1) return `${folders[0]} (${scope.length} files)`;
+	if (folders.length === 1) return `${lead} (${scope.length} files)`;
 
-	return `${folders[0]} and ${folders.length - 1} more folder${folders.length === 2 ? '' : 's'}`;
+	return `${lead} and ${folders.length - 1} more folder${folders.length === 2 ? '' : 's'}`;
 }
 
 /** The files a review reads, in folder order: not excluded or summarized, and with a hunk to read. */

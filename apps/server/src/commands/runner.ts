@@ -3,6 +3,7 @@ import type { CommandRun } from '@recoder/shared';
 import { env } from '../env';
 import { allowedCommands } from '../env';
 import { db } from '../store';
+import { childEnv } from '../util/process';
 
 export interface RunOptions {
 	command: string;
@@ -20,17 +21,6 @@ export interface RunOptions {
 }
 
 const MAX_LOG_CHARS = 200_000;
-
-/** process.env minus undefined values, merged with overrides (Bun needs Record<string, string>). */
-function withEnv(overrides: Record<string, string>): Record<string, string> {
-	const base: Record<string, string> = {};
-
-	for (const [key, value] of Object.entries(process.env)) {
-		if (value !== undefined) base[key] = value;
-	}
-
-	return { ...base, ...overrides };
-}
 
 function truncate(logs: string): string {
 	if (logs.length <= MAX_LOG_CHARS) return logs;
@@ -76,7 +66,7 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 			cwd,
 			stdout: 'pipe',
 			stderr: 'pipe',
-			env: opts.env ? withEnv(opts.env) : undefined
+			env: opts.env ? childEnv(opts.env) : undefined
 		});
 
 		let wasKilled = false;

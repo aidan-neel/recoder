@@ -19,7 +19,7 @@
 }
 .guidelines-pill {
 	display: flex;
-	border-radius: 6px;
+	border-radius: var(--radius-control);
 	outline: none;
 }
 a.guidelines-pill:hover [data-ui='pill'] {
@@ -63,14 +63,15 @@ a.guidelines-pill:focus-visible {
 .guidelines-action-skeleton {
 	width: 50px;
 	height: 28px;
-	border-radius: 8px;
+	border-radius: var(--radius-control);
 }
 
 /* ───────── Editor: the text, a note and the count, then the bar ───────── */
+/* It keeps its row's lanes: the field starts on the text's edge and Save ends on the controls' edge, 12px off the floor. */
 .guidelines-editor {
 	display: flex;
 	flex-direction: column;
-	padding: 2px 16px 16px;
+	padding: 2px var(--settings-end) 12px var(--settings-inset);
 }
 
 /* The field and the stream view share one box and one type, so swapping them moves nothing. */
@@ -83,7 +84,7 @@ a.guidelines-pill:focus-visible {
 /* The stream grows to the field's 24 rows, then scrolls. */
 .guidelines-stream {
 	max-height: calc(24 * 20px + 16px);
-	border-radius: 10px;
+	border-radius: var(--radius-row);
 	background-color: var(--bg-field);
 	box-shadow: inset 0 0 0 1px var(--line-control);
 	color: var(--text-primary);
@@ -116,7 +117,7 @@ a.guidelines-pill:focus-visible {
 	min-height: 24px;
 	align-items: flex-start;
 	gap: 16px;
-	padding: 8px 2px 0;
+	padding-top: 8px;
 }
 .guidelines-note {
 	flex: 1;
@@ -191,7 +192,6 @@ a.guidelines-pill:focus-visible {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	padding: 0 2px;
 }
 .guidelines-sources legend {
 	margin-bottom: 8px;
@@ -213,7 +213,6 @@ a.guidelines-pill:focus-visible {
 	gap: 12px;
 }
 .guidelines-draft-hint {
-	padding: 0 2px;
 	color: var(--text-subtle);
 	font-size: var(--font-size-meta);
 	line-height: 16px;

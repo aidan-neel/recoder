@@ -7,7 +7,12 @@ test('models.dev models served over another API are marked unsupported', () => {
 			'opencode-go': {
 				npm: '@ai-sdk/openai-compatible',
 				models: {
-					'glm-5.2': { id: 'glm-5.2', name: 'GLM-5.2', limit: { context: 1_000_000 }, cost: { input: 1.4 } },
+					'glm-5.2': {
+						id: 'glm-5.2',
+						name: 'GLM-5.2',
+						limit: { context: 1_000_000 },
+						cost: { input: 1.4, output: 4.4, cache_read: 0.3 }
+					},
 					'grok-4.7': { id: 'grok-4.7', name: 'Grok 4.7', provider: { npm: '@ai-sdk/openai' } },
 					'minimax-m3': { id: 'minimax-m3', name: 'MiniMax M3', provider: { npm: '@ai-sdk/anthropic' } }
 				}
@@ -22,7 +27,10 @@ test('models.dev models served over another API are marked unsupported', () => {
 		['minimax-m3', false]
 	]);
 
-	expect(models[0]).toMatchObject({ contextWindow: 1_000_000, inputCost: 1.4 });
+	expect(models[0]).toMatchObject({
+		contextWindow: 1_000_000,
+		cost: { input: 1.4, output: 4.4, cacheRead: 0.3, cacheWrite: null }
+	});
 });
 
 test('a missing models.dev provider yields no models instead of throwing', () => {
@@ -33,15 +41,26 @@ test('a missing models.dev provider yields no models instead of throwing', () =>
 test('OpenRouter per-token prices become per-million and junk rows are skipped', () => {
 	const models = parseOpenRouter({
 		data: [
-			{ id: 'qwen/qwen3-coder', name: 'Qwen: Qwen3 Coder', context_length: 262144, pricing: { prompt: '0.0000004' } },
+			{
+				id: 'qwen/qwen3-coder',
+				name: 'Qwen: Qwen3 Coder',
+				context_length: 262144,
+				pricing: { prompt: '0.0000004', completion: '0.0000012' }
+			},
 			{ name: 'no id' },
 			{ id: 'free/model', pricing: { prompt: 'n/a' } }
 		]
 	});
 
 	expect(models).toEqual([
-		{ id: 'qwen/qwen3-coder', name: 'Qwen3 Coder', contextWindow: 262144, inputCost: 0.4, supported: true },
-		{ id: 'free/model', name: 'free/model', contextWindow: null, inputCost: null, supported: true }
+		{
+			id: 'qwen/qwen3-coder',
+			name: 'Qwen3 Coder',
+			contextWindow: 262144,
+			cost: { input: 0.4, output: 1.2, cacheRead: null, cacheWrite: null },
+			supported: true
+		},
+		{ id: 'free/model', name: 'free/model', contextWindow: null, cost: null, supported: true }
 	]);
 });
 

@@ -16,7 +16,7 @@ const trees = new WeakMap<Components, Map<string, ReactElement>>();
  * The tree `source` renders to with `parts`, rendered once by `render` and
  * then reused, so a remount (the reading pane remounts on every selection)
  * skips the Markdown parse. Only for complete text: streaming text changes on
- * every chunk and carries a caret.
+ * every chunk and shimmers at its end.
  */
 export function cachedMarkdown(parts: Components, source: string, render: () => ReactElement): ReactElement {
 	let kept = trees.get(parts);

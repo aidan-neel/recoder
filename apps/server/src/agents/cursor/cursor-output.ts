@@ -182,11 +182,12 @@ function tokenUsage(fields: {
 }
 
 /**
- * What a signed-out call tells the user. Recoder runs the CLI under its own config folder, and where the CLI keeps
- * a `cursor-agent login` sign-in is not confirmed: if it is that folder, signing in again changes nothing. So the
- * message names `CURSOR_API_KEY` first, the sign-in that reaches every run, and says why the other may not.
+ * What a signed-out call tells the user. Recoder runs the CLI under its own config folder but links the user's
+ * `auth.json` in, so a `cursor-agent login` sign-in does reach a run — unless the CLI keeps that sign-in outside
+ * the file, as on macOS, where its session lives in the Keychain. The message names `CURSOR_API_KEY` first, the
+ * sign-in that always reaches a run.
  */
-export const SIGNED_OUT_FIX = `Set CURSOR_API_KEY. Recoder runs Cursor in its own config folder, so a sign-in made with \`${CURSOR_LOGIN}\` may not reach it.`;
+export const SIGNED_OUT_FIX = `Set CURSOR_API_KEY, or sign in with \`${CURSOR_LOGIN}\` (its auth.json reaches a run; a Keychain sign-in on macOS may not).`;
 
 /**
  * The failure a `cursor-agent` call maps to: signed out is a 401, a spent plan a usage cap, a throttle a 429.

@@ -1,11 +1,21 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { cliEnv } from '../cli-process';
+import { cliEnv, type CliLocation } from '../cli-process';
 import type { ToolLease } from '../tools/mcp-host';
 
 export type Env = Record<string, string | undefined>;
 
 export const ANTIGRAVITY_LOGIN = 'agy acp --login';
+
+/** Where the `agy` binary is: `RECODER_ANTIGRAVITY_BIN`, else PATH, else the installer's `~/.local/bin`. */
+export const ANTIGRAVITY_CLI: CliLocation = {
+	pin: 'RECODER_ANTIGRAVITY_BIN',
+	command: 'agy',
+	installed: ['.local', 'bin', 'agy']
+};
+
+/** The empty directory, under the data dir, that the short checks (models, usage) run `agy` in. */
+export const ANTIGRAVITY_PROBE_DIR = 'antigravity-probe';
 
 const CUSTOM_AGENT_NAME = 'recoder';
 

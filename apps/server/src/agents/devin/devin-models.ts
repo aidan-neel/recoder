@@ -41,7 +41,7 @@ export function parseDevinModels(output: string): ModelEntry[] {
 			label: label.trim(),
 			model,
 			baseUrl: null,
-			apiKeyPreview: null,
+			apiKeySet: false,
 			contextWindow: contextWindow(count, unit)
 		});
 	}

@@ -75,11 +75,14 @@ function followContentHeight(list: HTMLElement): () => void {
  * new height as results change, and the traveling highlight follows the
  * selected row. An empty search shows the items in source order: cmdk sorts
  * by moving DOM nodes and never moves them back, so clearing the search
- * remounts the items.
+ * remounts the items. Each change to the search scrolls back to the top,
+ * where the first match is selected: cmdk keeps the old scroll, which hid that
+ * match whenever the list had been scrolled down.
  */
 export function CommandList({ className, children }: { className?: string; children: ReactNode }) {
 	const ref = useRef<HTMLDivElement>(null);
-	const searching = useCommandState((state) => state.search.length > 0);
+	const search = useCommandState((state) => state.search);
+	const searching = search.length > 0;
 
 	useLayoutEffect(() => {
 		const list = ref.current;
@@ -89,11 +92,15 @@ export function CommandList({ className, children }: { className?: string; child
 		return followContentHeight(list);
 	}, []);
 
+	useLayoutEffect(() => {
+		ref.current?.scrollTo({ top: 0 });
+	}, [search]);
+
 	return (
 		<Command.List
 			ref={ref}
 			data-ui="command-list"
-			className={cn('thin-scroll max-h-[min(420px,calc(86dvh-140px))] overflow-y-auto overscroll-contain', className)}
+			className={cn('max-h-[min(420px,calc(86dvh-140px))] overflow-y-auto overscroll-contain', className)}
 		>
 			<MenuHighlight selector={SELECTED_ITEM} />
 			<Fragment key={searching ? 'search' : 'all'}>{children}</Fragment>

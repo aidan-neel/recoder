@@ -4,10 +4,10 @@ import type { PrCheck, PullCheckTally, Review, ReviewListItem } from '@recoder/s
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
-import { useApi, useListStore } from '../api/client';
+import { useListStore, useSessionCache } from '../api/client';
 import { openCounts, shortRepoName } from '../pulls/pull-rows';
 import { chosenMethod, mergeBlock } from './merge';
-import { createSession, type Session } from './session';
+import type { Session } from './session';
 import { loaded, type Load, type SessionData } from './session-state';
 import type {
 	Loadable,
@@ -31,9 +31,8 @@ export function PullSessionProvider({
 	number: number;
 	children: ReactNode;
 }) {
-	const client = useApi();
-	const list = useListStore();
-	const session = useMemo(() => createSession(client, list, repoId, number), [client, list, repoId, number]);
+	const sessions = useSessionCache();
+	const session = useMemo(() => sessions.get(repoId, number), [sessions, repoId, number]);
 
 	useEffect(() => session.open(), [session]);
 

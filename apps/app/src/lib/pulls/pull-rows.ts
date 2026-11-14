@@ -1,4 +1,11 @@
-import { REVIEW_CANCELLED, repoLabels, type PullListItem, type Repo, type ReviewListItem } from '@recoder/shared';
+import {
+	REVIEW_CANCELLED,
+	repoLabels,
+	type Provider,
+	type PullListItem,
+	type Repo,
+	type ReviewListItem
+} from '@recoder/shared';
 
 import { isOpenFinding } from '../api/reviews';
 import { repoName } from '../shell/format';
@@ -83,6 +90,11 @@ export function needsReview({ item, review }: ListedPull): boolean {
  * the label that tells it apart when another tracked repository has the same
  * short name. Its id until that list is known.
  */
+/** True when `repoId` is still connected; a removed repo's reviews and chats stay on the server with nowhere to open. */
+export function isConnectedRepo(repos: Repo[] | null, repoId: string): boolean {
+	return repos?.some((repo) => repo.id === repoId) ?? false;
+}
+
 /** Two repository names are one name whatever their case, as the forge and `repoLabels` read them. */
 function sameName(left: string, right: string): boolean {
 	return left.toLowerCase() === right.toLowerCase();
@@ -99,6 +111,11 @@ export function shortRepoName(repos: Repo[] | null, repoId: string): string {
 	return isShared ? (repoLabels(repos).get(repo.id) ?? repo.name) : short;
 }
 
+/** Where the repository lives, for the mark beside its name; null while the repositories load or for one not listed. */
+export function repoForge(repos: Repo[] | null, repoId: string): Provider | null {
+	return repos?.find((repo) => repo.id === repoId)?.provider ?? null;
+}
+
 /** One row of the list. */
 export function pullRow(listed: ListedPull, repos: Repo[] | null, base: string): PullRow {
 	const { item, review } = listed;
@@ -108,6 +125,7 @@ export function pullRow(listed: ListedPull, repos: Repo[] | null, base: string):
 		key: pullKey(item.repoId, pull.number),
 		repoId: item.repoId,
 		repoName: shortRepoName(repos, item.repoId),
+		repoForge: repoForge(repos, item.repoId),
 		number: pull.number,
 		title: pull.title,
 		author: pull.author,

@@ -1,10 +1,9 @@
 'use client';
 
 import { RadioGroup as RadioGroupPrimitive } from 'radix-ui';
-import { useId, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
-import { Pill, usePillTravel } from './pill';
 
 interface SegmentOption {
 	value: string;
@@ -17,16 +16,15 @@ interface SegmentedControlProps {
 	onValueChange: (value: string) => void;
 	options: SegmentOption[];
 	'aria-label': string;
-	/** `md` is 30px tall; `sm` (26px) fits a dense toolbar. */
+	/** `md` is 28px tall, like a button; `sm` (24px) fits a dense toolbar. */
 	size?: 'sm' | 'md';
 	className?: string;
 }
 
 /**
- * A small set of mutually exclusive views or filters in one track. A raised
- * pill slides to the chosen option once the control has painted. It behaves
- * as a radio group: one option is always chosen, and arrow keys move the
- * choice.
+ * A small set of mutually exclusive views or filters in one track. The
+ * chosen option is filled in place; nothing slides. It behaves as a radio
+ * group: one option is always chosen, and arrow keys move the choice.
  */
 export function SegmentedControl({
 	value,
@@ -36,9 +34,6 @@ export function SegmentedControl({
 	size = 'md',
 	className
 }: SegmentedControlProps) {
-	const pill = `${useId()}-pill`;
-	const travels = usePillTravel();
-
 	return (
 		<RadioGroupPrimitive.Root
 			data-ui="segmented"
@@ -51,9 +46,6 @@ export function SegmentedControl({
 		>
 			{options.map((option) => (
 				<RadioGroupPrimitive.Item key={option.value} value={option.value} data-ui="segmented-item">
-					{option.value === value ? (
-						<Pill layoutId={pill} ui="segmented-pill" radius={7} value={value} travels={travels} />
-					) : null}
 					<span data-ui="segmented-label">
 						{option.icon}
 						{option.label}

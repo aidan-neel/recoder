@@ -1,10 +1,12 @@
-import type { ModelProvider, OutputRate, ReasoningEffort, TokenUsage } from '@recoder/shared';
+import type { ImageUpload, ModelProvider, OutputRate, ReasoningEffort, TokenUsage } from '@recoder/shared';
 
 import type { ChatConversation } from './conversation';
 
 export interface ChatMessage {
 	role: 'system' | 'user' | 'assistant';
 	content: string;
+	/** Images the developer attached to this turn; only on user turns, and only for a model that reads them. */
+	images?: readonly ImageUpload[];
 }
 
 export interface ChatOptions {

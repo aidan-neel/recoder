@@ -7,8 +7,11 @@ const ROW_WIDTHS = [
 	['148px', '300px']
 ] as const;
 
+/** A Settings row's height (`.settings-page .settings-row`). */
+export const SETTINGS_ROW_HEIGHT = 52;
+
 /**
- * Stands in for a section while its settings load: the same groups of 60px
+ * Stands in for a section while its settings load: the same groups of 52px
  * rows that replace it, so nothing moves when they land.
  */
 export function SettingsSkeleton({ groups }: { groups: readonly number[] }) {
@@ -20,7 +23,7 @@ export function SettingsSkeleton({ groups }: { groups: readonly number[] }) {
 						<Skeleton style={{ width: 96 }} />
 					</div>
 					<Card>
-						<SkeletonRows count={rows} height={60} widths={ROW_WIDTHS} rowClassName="settings-row" />
+						<SkeletonRows count={rows} height={SETTINGS_ROW_HEIGHT} widths={ROW_WIDTHS} rowClassName="settings-row" />
 					</Card>
 				</div>
 			))}

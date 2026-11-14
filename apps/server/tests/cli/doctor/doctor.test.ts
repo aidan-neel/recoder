@@ -86,7 +86,7 @@ const DEVIN_ID = 'devin:swe-2-high';
 const SECRET_MARKER = 'sk-marker-7c1d';
 
 function entry(id: string): ModelEntry {
-	return { id, label: id, model: id.slice(id.indexOf(':') + 1), baseUrl: null, apiKeyPreview: null };
+	return { id, label: id, model: id.slice(id.indexOf(':') + 1), baseUrl: null, apiKeySet: false };
 }
 
 /** Runs `checkReviewModel` with `opencode.models` returning the given model ids. */
@@ -187,4 +187,23 @@ test('a signed-out Codex verifier model fails the agent sign-in check when revie
 	} finally {
 		sign.mockRestore();
 	}
+});
+
+test('a verifier model on a switched-off provider fails the model check with where to switch it on', async () => {
+	setReviewOverrides({
+		baseUrl: 'http://model.test/v1',
+		apiKey: 'sk-secret-value',
+		models: [{ id: 'test', label: 'Test', model: 'test-model' }],
+		orchestratorModelId: 'test',
+		verifierModelId: 'codex:gpt-6-sol',
+		disabledProviders: ['cli:codex']
+	});
+
+	expect(await checkReviewModel()).toMatchObject({
+		id: 'review-model',
+		ok: false,
+		detail: 'Codex is switched off in Settings → Providers.'
+	});
+
+	expect(await checkAgentSignIns()).toEqual([]);
 });

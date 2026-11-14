@@ -13,9 +13,12 @@ services:
       PORT: 3001
       HOST: 0.0.0.0
       RECODER_DATABASE_URL: ${RECODER_DATABASE_URL:-}
+      RECODER_SECRET_KEY: ${RECODER_SECRET_KEY:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
       GITLAB_WEBHOOK_SECRET: ${GITLAB_WEBHOOK_SECRET:-}
+      RECODER_GITHUB_CLIENT_ID: ${RECODER_GITHUB_CLIENT_ID:-}
+      RECODER_GITLAB_CLIENT_ID: ${RECODER_GITLAB_CLIENT_ID:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITLAB_TOKEN: ${GITLAB_TOKEN:-}
       GITLAB_HOST: ${GITLAB_HOST:-}
@@ -23,9 +26,11 @@ services:
       RECODER_WORKDIR: /tmp/recoder-work
       RECODER_COMMAND_TIMEOUT_MS: ${RECODER_COMMAND_TIMEOUT_MS:-120000}
       RECODER_DATA_DIR: /app/data
+      XDG_CONFIG_HOME: /app/config
     volumes:
       - recoder-work:/tmp/recoder-work
       - recoder-data:/app/data
+      - recoder-config:/app/config
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health > /dev/null']
       interval: 10s
@@ -49,3 +54,4 @@ services:
 volumes:
   recoder-work:
   recoder-data:
+  recoder-config:

@@ -91,7 +91,7 @@ export function copilotModels(): ModelEntry[] {
 		label,
 		model,
 		baseUrl: null,
-		apiKeyPreview: null,
+		apiKeySet: false,
 		contextWindow: CONTEXT_WINDOW,
 		...(model === AUTO_MODEL ? {} : copilotEfforts())
 	}));

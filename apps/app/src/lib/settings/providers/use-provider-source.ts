@@ -1,14 +1,14 @@
 'use client';
 
-import type { AgentProvider, AgentStatus } from '@recoder/shared';
+import { agentReady, type AgentProvider, type AgentStatus } from '@recoder/shared';
 
-import { agentReady, useSettings } from '../settings-store';
+import { useSettings } from '../settings-store';
 
 /**
  * Where the provider list stands: still loading, the server down, the agent
  * check failed with no list to show, the agent that connects providers
  * (OpenCode) not ready, or ready with its providers. A check that fails after
- * the list loaded keeps it, as the Agent CLIs card keeps its rows.
+ * the list loaded keeps it, as Settings → Providers keeps its rows.
  */
 export type ProviderSource =
 	| { state: 'loading' }

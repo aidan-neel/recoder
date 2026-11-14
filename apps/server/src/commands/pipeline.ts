@@ -1,4 +1,13 @@
-import { settleAssignments, parseUnifiedDiff, REVIEW_CANCELLED, type Provider, type Repo } from '@recoder/shared';
+import {
+	settleAssignments,
+	parseUnifiedDiff,
+	REVIEW_CANCELLED,
+	type ImageUpload,
+	type Provider,
+	type Repo
+} from '@recoder/shared';
+import { imageRefusal } from '../agents/registry';
+import { reviewImageUploads } from '../attachments/image-store';
 import {
 	closeReviewControl,
 	openReviewControl,
@@ -18,7 +27,8 @@ import { settlePullComment, trackPullComment, stopPullCommentTracking } from '..
 import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
 import type { GatheredContext } from '../review/pipeline/intent/types';
 import { runAdaptiveReview } from '../review/pipeline/harness';
-import { configForOrchestrator, isReviewConfigured, stageConfigs, withLockedModels } from '../models/models';
+import { configForOrchestrator, isReviewConfigured, stageConfigs } from '../models/models';
+import { withReviewModels } from '../models/model-policy';
 import { ModelBlockedError } from '../review/pipeline/agent-loop';
 import { signedOutAgent, signedOutReason } from '../models/agent-sign-in';
 import { reviewInstructions } from '../review/chat/review-chat';
@@ -26,11 +36,12 @@ import { harnessCallbacks } from './pipeline-callbacks';
 import { detectProvider, locateRepo, refspecFor } from '../forge/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../sandbox/sandbox';
 import { tokenEnv } from '../forge/tokens';
-import { recordTokenBudget, withReviewMetrics } from '../models/metrics';
+import { recordTokenBudget, withUsageMetrics } from '../models/metrics';
 import { isRecoverableExit } from '../review/runtime/execution';
 import { storageTransaction } from '../storage/backend';
 import { finalizeReview, settleRun } from './finalize-review';
 import { coordinator } from '../storage/backend';
+import { reviewStartsHeld } from '../update/hold';
 
 export { queueReview, createReviewSession, startReviewSession, touch } from './review-session';
 
@@ -44,8 +55,11 @@ import { touch } from './review-session';
  * frontend demo routes, not as a silent fallback for live reviews.
  */
 export async function runReviewPipeline(reviewId: string, signal?: AbortSignal): Promise<void> {
-	return withLockedModels(
-		async () => await withReviewMetrics(reviewId, 'pipeline', () => runTrackedReviewPipeline(reviewId, signal))
+	if (reviewStartsHeld()) return;
+
+	return withReviewModels(
+		reviewId,
+		async () => await withUsageMetrics(reviewId, 'pipeline', () => runTrackedReviewPipeline(reviewId, signal))
 	);
 }
 
@@ -79,6 +93,8 @@ async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal):
 		if (signal?.aborted) throw signal.reason;
 		if (!repo) throw new Error('repo not found');
 		await assertAgentsSignedIn();
+
+		const images = await briefImages(reviewId);
 
 		emitReviewEvent(reviewId, {
 			type: 'step',
@@ -205,6 +221,7 @@ async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal):
 					context: await prContext,
 					prsForCommit: (sha, signal) => prsForCommit(repo, provider, sha, signal),
 					instructions: await reviewInstructions(reviewId, initial.startedAt),
+					images,
 					signal: analysis.signal,
 					subagentCap: effectiveSubagentCap(),
 					tokenBudget,
@@ -262,6 +279,19 @@ async function assertAgentsSignedIn(): Promise<void> {
 	const signedOut = await signedOutAgent(stageConfigs());
 
 	if (signedOut) throw new ModelBlockedError({ reason: signedOutReason(signedOut) });
+}
+
+/**
+ * The brief's images, which the Review model reads with the brief. A Review model that cannot read them (picked
+ * after the review was queued) fails the review now, since one run without them is not the review asked for.
+ */
+async function briefImages(reviewId: string): Promise<ImageUpload[]> {
+	const images = await reviewImageUploads(reviewId);
+	const refusal = images.length ? imageRefusal(configForOrchestrator().provider) : null;
+
+	if (refusal) throw new ModelBlockedError({ reason: refusal });
+
+	return images;
 }
 
 /**

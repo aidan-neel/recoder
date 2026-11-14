@@ -9,7 +9,6 @@ import {
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger,
-	Pill,
 	Tooltip
 } from '@recoder/ui';
 import { ChevronDown } from 'lucide-react';
@@ -23,12 +22,18 @@ const METHOD_LABELS: Record<PullMergeMethod, { action: string; detail: string }>
 	rebase: { action: 'Rebase and merge', detail: 'Every commit, replayed on the base branch.' }
 };
 
-/** Why the button is off, for the blocks that keep it on screen. */
+/** Why the pull request cannot merge, for the blocks that show a button that cannot be pressed. */
 const BLOCK_REASONS: Partial<Record<MergeBlock, string>> = {
 	draft: 'A draft cannot merge. Mark it ready on the forge first.',
 	conflicts: 'Resolve the conflicts with the base branch first.',
 	blocked: 'A branch rule, a required check or a missing approval stops this merge.'
 };
+
+/** The button's words while the forge works out whether the pull request can merge. */
+const CHECKING_LABEL = 'Checking';
+
+/** The button's words when the pull request cannot merge; the reason shows on hover. */
+const BLOCKED_LABEL = "Can't merge";
 
 interface MergeButtonProps {
 	view: MergeView;
@@ -41,15 +46,36 @@ interface MergeButtonProps {
 /**
  * Merges the pull request: the button names the chosen method, the menu
  * beside it changes the method, and a dialog asks once before the merge,
- * since it cannot be taken back from here. A merged or closed pull request
- * shows that in place of the button; where Recoder cannot merge, nothing shows.
+ * since it cannot be taken back from here. The method shows only when the
+ * merge can happen now: while the forge works it out the button says so, and
+ * a pull request that cannot merge shows "Can't merge" with the reason on
+ * hover. A merged or closed pull request, whose state the title's badges
+ * already name, and one Recoder cannot merge at all show nothing.
  */
 export function MergeButton({ view, pull, base }: MergeButtonProps) {
 	const [confirming, setConfirming] = useState(false);
 
-	if (view.block === 'merged') return <Pill tone="sent">Merged</Pill>;
-	if (view.block === 'closed') return <Pill tone="danger">Closed</Pill>;
-	if (view.block === 'unavailable' || !view.method) return null;
+	if (view.block === 'merged' || view.block === 'closed' || view.block === 'unavailable' || !view.method) return null;
+
+	if (view.block === 'unknown') {
+		return (
+			<Button variant="outline" disabled status="pending">
+				{CHECKING_LABEL}
+			</Button>
+		);
+	}
+
+	if (view.block) {
+		return (
+			<Tooltip content={BLOCK_REASONS[view.block]} side="bottom">
+				<span tabIndex={0}>
+					<Button variant="outline" disabled>
+						{BLOCKED_LABEL}
+					</Button>
+				</span>
+			</Tooltip>
+		);
+	}
 
 	/** The menu hands back the chosen row's value as text; only a method the repository allows is set. */
 	function chooseMethod(value: string): void {
@@ -59,42 +85,32 @@ export function MergeButton({ view, pull, base }: MergeButtonProps) {
 	}
 
 	const label = METHOD_LABELS[view.method].action;
-	const reason = view.block ? BLOCK_REASONS[view.block] : undefined;
-	const off = view.block !== null || view.phase === 'merging';
-
-	const button = (
-		<Button
-			variant={view.block ? 'outline' : 'primary'}
-			disabled={off}
-			status={view.phase === 'merging' ? 'pending' : 'idle'}
-			onClick={() => setConfirming(true)}
-		>
-			{label}
-		</Button>
-	);
 
 	return (
 		<>
 			<div className="merge-split">
-				{reason ? (
-					<Tooltip content={reason} side="top">
-						<span tabIndex={0}>{button}</span>
-					</Tooltip>
-				) : (
-					button
-				)}
+				<Button
+					variant="primary"
+					className="merge-split-main"
+					disabled={view.phase === 'merging'}
+					status={view.phase === 'merging' ? 'pending' : 'idle'}
+					onClick={() => setConfirming(true)}
+				>
+					{label}
+				</Button>
 				<DropdownMenu>
 					<DropdownMenuTrigger>
 						<Button
-							variant={view.block ? 'outline' : 'primary'}
+							variant="primary"
 							size="icon"
+							className="merge-split-menu"
 							aria-label="Choose how to merge"
 							disabled={view.phase === 'merging'}
 						>
 							<ChevronDown />
 						</Button>
 					</DropdownMenuTrigger>
-					<DropdownMenuContent side="top" align="end" className="w-[300px]">
+					<DropdownMenuContent align="end" className="w-[300px]">
 						<DropdownMenuRadioGroup value={view.method} onValueChange={chooseMethod}>
 							{view.methods.map((method) => (
 								<DropdownMenuRadioItem key={method} value={method} className="merge-method">

@@ -1,6 +1,6 @@
 'use client';
 
-import { NavPill, NavPillGroup } from '@recoder/ui';
+import { NavPill } from '@recoder/ui';
 import Link from 'next/link';
 
 /** One tab of a page: a link with its own address. */
@@ -24,31 +24,29 @@ interface PageTabsProps {
 
 /**
  * A page's tabs as links, so each has an address and opens in a new browser
- * tab like any link. The pill slides to the open one.
+ * tab like any link. The open one sits on a fill.
  */
 export function PageTabs({ label, tabs, current }: PageTabsProps) {
 	return (
-		<NavPillGroup>
-			<nav className="page-tabs" aria-label={label}>
-				{tabs.map(({ id, label: name, href, count, tone }) => (
-					<Link
-						key={id}
-						href={href}
-						replace
-						scroll={false}
-						className="page-tab"
-						aria-current={id === current ? 'page' : undefined}
-					>
-						{id === current ? <NavPill value={id} /> : null}
-						{name}
-						{count ? (
-							<span className="page-tab-count" data-tone={tone}>
-								{count}
-							</span>
-						) : null}
-					</Link>
-				))}
-			</nav>
-		</NavPillGroup>
+		<nav className="page-tabs" aria-label={label}>
+			{tabs.map(({ id, label: name, href, count, tone }) => (
+				<Link
+					key={id}
+					href={href}
+					replace
+					scroll={false}
+					className="page-tab"
+					aria-current={id === current ? 'page' : undefined}
+				>
+					{id === current ? <NavPill /> : null}
+					{name}
+					{count ? (
+						<span className="page-tab-count" data-tone={tone}>
+							{count}
+						</span>
+					) : null}
+				</Link>
+			))}
+		</nav>
 	);
 }

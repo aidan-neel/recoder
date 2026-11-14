@@ -47,6 +47,9 @@ export const reviewsApi = {
 	resume: (id: string) => post<{ paused: boolean }>(`${reviewPath(id)}/resume`),
 	cancel: (id: string) => post<{ cancelled: boolean }>(`${reviewPath(id)}/cancel`),
 
+	/** Removes the review with its findings, conversation and files. It cannot be undone. */
+	delete: (id: string) => del<{ deleted: true }>(reviewPath(id)),
+
 	decide: (id: string, findingId: string, input: DecisionInput) =>
 		put<FindingDecision>(`${findingPath(id, findingId)}/decision`, input),
 	reopen: (id: string, findingId: string) => del<{ reopened: true }>(`${findingPath(id, findingId)}/decision`),

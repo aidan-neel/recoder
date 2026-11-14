@@ -3,11 +3,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AGENT_BIN_PINS } from './helpers/agent-bins';
 
-/** Point storage at temp dirs before any module opens the database or reads credentials. */
+/** Point storage and the secret key file at temp dirs before any module opens the database or reads credentials. */
 function isolateStorage(): void {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-test-suite-'));
 	process.env.RECODER_WORKDIR = mkdtempSync(join(tmpdir(), 'recoder-test-work-'));
 	writeFileSync(join(process.env.RECODER_DATA_DIR, 'tokens.json'), '{}', { mode: 0o600 });
+	process.env.XDG_CONFIG_HOME = mkdtempSync(join(tmpdir(), 'recoder-test-config-'));
+	delete process.env.RECODER_SECRET_KEY;
 	delete process.env.GH_TOKEN;
 	delete process.env.GITLAB_TOKEN;
 	delete process.env.RECODER_DATABASE_URL;

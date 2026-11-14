@@ -64,7 +64,7 @@ export function usePullList(): PullListView {
 	const counts = useMemo(() => filterCounts(narrowed), [narrowed]);
 
 	const repoOptions = useMemo<RepoOption[]>(
-		() => (repos ?? []).map((repo) => ({ id: repo.id, name: repo.name })),
+		() => (repos ?? []).map((repo) => ({ id: repo.id, name: repo.name, provider: repo.provider })),
 		[repos]
 	);
 
@@ -77,12 +77,13 @@ export function usePullList(): PullListView {
 		[pullList, repos]
 	);
 
-	const truncated = useMemo(
-		() =>
-			(pullList?.truncatedRepoIds ?? [])
-				.filter((truncatedId) => repos?.some((repo) => repo.id === truncatedId))
-				.map((truncatedId) => ({ repoId: truncatedId, repoName: shortRepoName(repos, truncatedId) })),
-		[pullList, repos]
+	const more = useStore(list.state, (state) => state.more);
+	const available = Object.keys(more.cursors).some((id) => repoId === null || id === repoId);
+	const loadMore = useCallback(() => void list.loadMore(repoId), [list, repoId]);
+
+	const morePages = useMemo(
+		() => ({ available, loading: more.loading, error: more.error, load: loadMore }),
+		[available, more.loading, more.error, loadMore]
 	);
 
 	const setFilter = useCallback((next: PullFilter) => list.state.setState({ filter: next }), [list]);
@@ -109,7 +110,7 @@ export function usePullList(): PullListView {
 			query,
 			setQuery,
 			failures,
-			truncated,
+			more: morePages,
 			error: data.error,
 			offline: data.offline,
 			noRepos: repos !== null && repos.length === 0,
@@ -135,7 +136,7 @@ export function usePullList(): PullListView {
 			query,
 			setQuery,
 			failures,
-			truncated,
+			morePages,
 			repos,
 			pullList,
 			list.refresh,

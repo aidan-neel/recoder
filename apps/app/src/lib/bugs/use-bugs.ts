@@ -3,7 +3,6 @@
 import type { Review } from '@recoder/shared';
 import { useCallback, useMemo } from 'react';
 
-import { isReviewing } from '../pulls/pull-rows';
 import { useSession, useSessionData } from '../pull/pull-session';
 import { bugLists, modelLabel, type BugLists } from './bug-lists';
 import { fixPrompt } from './fix-prompt';
@@ -93,7 +92,6 @@ export function useSummaryView(): SummaryView {
 	return useMemo(
 		() => ({
 			analysis: review?.status === 'passed' ? review.summary : null,
-			writing: !!review && isReviewing(review),
 			description
 		}),
 		[review, description]

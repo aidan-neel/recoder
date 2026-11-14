@@ -146,7 +146,8 @@ class NativeRun<T> {
 			tools: this.toolsOn ? nativeToolNames({ exec: Boolean(opts.exec), delegate: Boolean(opts.delegate) }) : [],
 			runTool: this.gate.run,
 			onEvent: this.relay.onEvent,
-			signal: opts.signal
+			signal: opts.signal,
+			images: opts.images
 		});
 	}
 

@@ -1,26 +1,43 @@
 /* ───────── Settings → Models: the model rows, the model dialog, local servers and agent CLIs ───────── */
 
-/* The picker: a quiet model trigger with the effort beside it. Pulled right so its last chevron ends on the card's inset. */
+/*
+ * The picker: the effort, when the model has one, then the model trigger. The
+ * model ends on the row's right edge in every row, where every other row's
+ * control ends, so the model triggers line up down the card. A long name ends
+ * in an ellipsis.
+ */
 .model-picker {
 	display: flex;
 	min-width: 0;
 	align-items: center;
-	gap: 2px;
-	margin-right: -8px;
+	justify-content: flex-end;
+	gap: 4px;
 }
 .model-trigger,
 .effort-trigger {
-	gap: 6px;
-	padding: 0 8px 0 10px;
+	gap: 4px;
 }
 .model-trigger {
+	min-width: 0;
 	max-width: 240px;
 }
 .model-trigger-label {
 	flex: 1;
 }
+/* The effort, and a pick that only follows another, read in the ghost buttons' grey until pointed at or open. */
+.effort-trigger {
+	flex-shrink: 0;
+	color: var(--text-subtle);
+}
+.effort-trigger:hover,
+.effort-trigger[data-state='open'],
+.model-trigger:hover .model-trigger-quiet,
+.model-trigger[aria-expanded='true'] .model-trigger-quiet {
+	color: var(--text-primary);
+}
 .model-trigger-quiet {
-	color: var(--text-muted);
+	color: var(--text-subtle);
+	transition: color var(--dur-hover) ease-out;
 }
 .model-trigger-chevron {
 	width: 14px;
@@ -29,38 +46,54 @@
 	color: var(--text-faint);
 	stroke-width: 1.75;
 }
-/* The effort list opens under the trigger's right edge, since the picker ends its row. */
+/* Wide enough that every effort's line about it stays on one line. It opens end-aligned, under the trigger. */
 .effort-menu {
-	width: 240px;
-	transform-origin: top right;
-	translate: calc(var(--radix-select-trigger-width) - 100%) 0;
+	width: 256px;
 }
 
-/* ───────── Model dialog: denser rows for a long catalog. The heights match the row layout in lib/settings/model-rows.ts. ───────── */
+/*
+ * ───────── Model dialog ─────────
+ * Two lanes: the search glyph and the pick's check share one, and the query,
+ * the provider headings and the model names share the next. The list's
+ * padding and the row and heading heights match the layout in
+ * lib/settings/model-rows.ts, which places rows without measuring them.
+ */
 .model-dialog {
-	max-width: 560px;
+	--model-lead: 16px;
+	--model-lead-gap: 10px;
+	max-width: 520px;
+}
+.model-dialog [data-ui='command-input'] {
+	gap: var(--model-lead-gap);
+}
+.model-dialog [data-ui='command-input'] > svg {
+	width: var(--model-lead);
+	height: var(--model-lead);
+}
+.model-dialog [data-ui='command-list'] > [cmdk-list-sizer] {
+	padding: 4px;
 }
 .model-row {
-	height: 34px;
-	gap: 10px;
-	font-size: var(--font-size-label);
+	height: 30px;
+	gap: var(--model-lead-gap);
+	padding-inline: 8px;
 }
 .model-row-mark {
 	display: grid;
-	width: 15px;
-	height: 15px;
+	width: var(--model-lead);
+	height: var(--model-lead);
 	place-items: center;
 	color: var(--text-primary);
 }
 .model-row-mark svg {
-	width: 15px;
-	height: 15px;
+	width: 14px;
+	height: 14px;
 	stroke-width: 2;
 }
 .model-heading {
-	height: 29px;
+	height: 28px;
 	overflow: hidden;
-	padding: 8px 10px 5px;
+	padding: 8px 8px 4px calc(8px + var(--model-lead) + var(--model-lead-gap));
 	color: var(--text-faint);
 	font-size: 11.5px;
 	line-height: 16px;
@@ -105,7 +138,7 @@
 	display: flex;
 	flex-direction: column;
 	margin-top: -2px;
-	padding: 0 16px 12px 40px;
+	padding: 0 var(--settings-inset) 12px calc(var(--settings-inset) + 24px);
 }
 .server-model {
 	display: flex;
@@ -132,7 +165,7 @@
 /* The disclosure's chevron lines up with the model ids above it. */
 .server-more {
 	align-self: flex-start;
-	margin: 4px 0 0 -8px;
+	margin: 4px 0 0 -7px;
 }
 /* Open is not a held state here: the kit's ghost fill is for a trigger with a menu under it. */
 .server-more[data-state='open']:not(:hover) {
@@ -149,27 +182,4 @@
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
-}
-
-/* ───────── Agent CLIs ───────── */
-.cli-version {
-	flex-shrink: 0;
-	color: var(--text-faint);
-	font-size: 12px;
-	font-weight: 400;
-}
-.cli-path {
-	display: block;
-	overflow: hidden;
-	font-size: 12px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-/* The command that fixes a CLI, in line with the CLI's name. */
-.cli-fix {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	margin-top: -4px;
-	padding: 0 16px 14px 40px;
 }

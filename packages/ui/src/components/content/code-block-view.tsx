@@ -29,12 +29,12 @@ export function CodeBlockView({ source, html, copy = false, wrap = false, classN
 			data-wrap={wrap || undefined}
 			data-copy={copy || undefined}
 			className={cn(
-				'relative min-w-0 overflow-hidden rounded-[10px] bg-code font-mono text-[12.5px] leading-5 text-(--syn-plain)',
+				'relative min-w-0 overflow-hidden rounded-(--radius-row) bg-code font-mono text-[12.5px] leading-5 text-(--syn-plain)',
 				'shadow-[0_0_0_1px_var(--line-card)] [tab-size:4]',
 				className
 			)}
 		>
-			<pre data-ui="code-block-content" className="thin-scroll">
+			<pre data-ui="code-block-content">
 				<code dangerouslySetInnerHTML={{ __html: html }} />
 			</pre>
 			{copy ? (

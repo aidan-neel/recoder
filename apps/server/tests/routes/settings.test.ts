@@ -230,7 +230,7 @@ describe('review settings', () => {
 		expect(configForSubagent().model).toBe('lead-model');
 	});
 
-	test('PUT stores the model registry and GET masks the key', async () => {
+	test('PUT stores the model registry and no response returns the key', async () => {
 		isolateDataDir();
 
 		const put = await app.request('/api/settings/models', {
@@ -252,7 +252,8 @@ describe('review settings', () => {
 		const saved = await put.json();
 
 		expect(saved.configured).toBe(true);
-		expect(saved.apiKeyPreview).toBe('••••1234');
+		expect(saved.apiKeySet).toBe(true);
+		expect(JSON.stringify(saved)).not.toContain('secret1234');
 		expect(saved.sharedModelId).toBe('m1');
 
 		const get = await app.request('/api/settings/models');

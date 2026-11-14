@@ -1,4 +1,4 @@
-import { REASONING_EFFORTS, type CatalogModel, type ReasoningEffort } from '@recoder/shared';
+import { REASONING_EFFORTS, type CatalogModel, type ModelCost, type ReasoningEffort } from '@recoder/shared';
 import { TtlCache } from '../util/ttl-cache.js';
 
 /**
@@ -88,6 +88,47 @@ export async function verifyKey(provider: HostedProviderDef, apiKey: string): Pr
 /** Model packages on models.dev that mean plain chat completions. */
 const CHAT_COMPLETIONS = new Set(['@ai-sdk/openai-compatible']);
 
+/** A price in USD per million tokens as the catalog writes it, or null when it is not a non-negative number. */
+function price(value: unknown): number | null {
+	return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+/** A model's `cost` on models.dev (USD per million tokens); null without both an input and an output price. */
+export function modelsDevCost(raw: unknown): ModelCost | null {
+	const cost = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+	const input = price(cost.input);
+	const output = price(cost.output);
+
+	if (input === null || output === null) return null;
+
+	return { input, output, cacheRead: price(cost.cache_read), cacheWrite: price(cost.cache_write) };
+}
+
+/** OpenRouter writes prices per token, as strings; this is the price per million tokens, to three decimals. */
+function perMillion(perToken: unknown): number | null {
+	const value = Number(perToken);
+
+	return perToken !== undefined && perToken !== null && Number.isFinite(value) && value >= 0
+		? Math.round(value * 1_000_000 * 1000) / 1000
+		: null;
+}
+
+/** An OpenRouter model's `pricing`; null without both a prompt and a completion price. */
+function openRouterCost(raw: unknown): ModelCost | null {
+	const pricing = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+	const input = perMillion(pricing.prompt);
+	const output = perMillion(pricing.completion);
+
+	if (input === null || output === null) return null;
+
+	return {
+		input,
+		output,
+		cacheRead: perMillion(pricing.input_cache_read),
+		cacheWrite: perMillion(pricing.input_cache_write)
+	};
+}
+
 /**
  * One provider's models from models.dev's `api.json`. A model with its own
  * `provider.npm` other than the OpenAI-compatible one is served over another API
@@ -108,14 +149,13 @@ export function parseModelsDev(body: unknown, providerId: string): CatalogModel[
 		const override = (raw.provider as Record<string, unknown> | undefined)?.npm;
 		const npm = typeof override === 'string' ? override : providerNpm;
 		const context = (raw.limit as Record<string, unknown> | undefined)?.context;
-		const input = (raw.cost as Record<string, unknown> | undefined)?.input;
 
 		return [
 			{
 				id,
 				name: typeof raw.name === 'string' && raw.name ? raw.name : id,
 				contextWindow: typeof context === 'number' && context > 0 ? context : null,
-				inputCost: typeof input === 'number' ? input : null,
+				cost: modelsDevCost(raw.cost),
 				supported: CHAT_COMPLETIONS.has(npm)
 			}
 		];
@@ -151,7 +191,6 @@ export function parseOpenRouter(body: unknown): CatalogModel[] {
 
 		if (typeof row.id !== 'string' || !row.id) return [];
 
-		const perToken = Number((row.pricing as Record<string, unknown> | undefined)?.prompt);
 		const reasoning = row.reasoning as Record<string, unknown> | undefined;
 		const offered = efforts(reasoning?.supported_efforts);
 		const fallback = reasoning?.default_effort;
@@ -162,7 +201,7 @@ export function parseOpenRouter(body: unknown): CatalogModel[] {
 				id: row.id,
 				name: displayName(row.name, row.id),
 				contextWindow: typeof row.context_length === 'number' && row.context_length > 0 ? row.context_length : null,
-				inputCost: Number.isFinite(perToken) && perToken >= 0 ? Math.round(perToken * 1_000_000 * 1000) / 1000 : null,
+				cost: openRouterCost(row.pricing),
 				supported: true,
 				...(offered.length ? { efforts: offered } : {}),
 				...(defaultEffort ? { defaultEffort } : {})
@@ -179,8 +218,17 @@ async function getJson(url: string): Promise<unknown> {
 	return response.json();
 }
 
+const CATALOG_TTL_MS = 60 * 60 * 1000;
+
 /** Catalogs change a few times a day at most. */
-const catalogCache = new TtlCache<CatalogModel[]>(60 * 60 * 1000, 20);
+const catalogCache = new TtlCache<CatalogModel[]>(CATALOG_TTL_MS, 20);
+
+const modelsDevCache = new TtlCache<unknown>(CATALOG_TTL_MS, 1);
+
+/** models.dev's whole `api.json`, which the hosted catalogs and the usage prices both read. */
+export function modelsDevCatalog(): Promise<unknown> {
+	return modelsDevCache.get('api', () => getJson('https://models.dev/api.json'));
+}
 
 /** The provider's models, supported ones first, then by name. */
 export function providerCatalog(provider: HostedProviderDef): Promise<CatalogModel[]> {
@@ -188,7 +236,7 @@ export function providerCatalog(provider: HostedProviderDef): Promise<CatalogMod
 		const models =
 			provider.catalog.kind === 'openrouter'
 				? parseOpenRouter(await getJson(`${provider.baseUrl}/models`))
-				: parseModelsDev(await getJson('https://models.dev/api.json'), provider.catalog.id);
+				: parseModelsDev(await modelsDevCatalog(), provider.catalog.id);
 
 		if (models.length === 0) throw new Error(`${provider.name} didn't return any models.`);
 

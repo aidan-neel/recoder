@@ -1,8 +1,9 @@
 'use client';
 
-import { Button, Keycap, Spinner, StatusGlyph } from '@recoder/ui';
+import { Button, cn, Keycap, StatusGlyph, StatusNotice } from '@recoder/ui';
+import { Check, Circle, RotateCcw, X } from 'lucide-react';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { ComponentProps } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import type { RunStage, RunView } from '@/lib/run/types';
@@ -15,6 +16,7 @@ import { useKeys } from '@/lib/shell/use-keys';
 import { useNow } from '@/lib/shell/use-now';
 
 import { Age } from '@/components/common/age';
+import { CancelReviewButton } from '@/components/common/cancel-review';
 
 interface RunBannerProps {
 	run: RunView;
@@ -27,6 +29,16 @@ interface RunBannerProps {
 /** A sentence for a rejection: its own message, else a plain fallback. */
 function reason(error: unknown, fallback: string): string {
 	return error instanceof Error && error.message ? error.message : fallback;
+}
+
+/** Runs one control of the review on its button; a refusal shows the server's reason in a toast. */
+function runControl(action: ReturnType<typeof useAction>, call: () => Promise<void>, fallback: string): void {
+	action.run(() =>
+		call().catch((error: unknown) => {
+			errorToast(reason(error, fallback));
+			throw error;
+		})
+	);
 }
 
 /** The step the review is on, with its count: `Checking each claim · 12 of 31`. */
@@ -45,24 +57,59 @@ function Clock({ since }: { since: string }) {
 	return <span className="meta mono tabular">{runClock(now - Date.parse(since))}</span>;
 }
 
-interface BannerFrameProps {
-	lead: ReactNode;
-	title: ReactNode;
-	detail?: ReactNode;
-	children?: ReactNode;
+/** When the review ended and the model it ran with: `4 minutes ago · Opus 5.5 · High`. */
+function RunFacts({ at, model }: { at: string | null; model: string | null }) {
+	return (
+		<>
+			<Age at={at} form="long" />
+			{at && model ? ' · ' : null}
+			{model}
+		</>
+	);
 }
 
-/** The banner's one layout: a glyph, a sentence, a quiet detail, then the actions. */
-function BannerFrame({ lead, title, detail, children }: BannerFrameProps) {
+type BannerProps = Omit<ComponentProps<typeof StatusNotice>, 'variant' | 'role' | 'label'>;
+
+/**
+ * The banner's one shape, the kit's banner notice. It is a region named
+ * Review, not a live one: its step and its clock change every few seconds.
+ */
+function Banner(props: BannerProps) {
+	return <StatusNotice {...props} variant="banner" role="region" label="Review" />;
+}
+
+/** The mark before a step in the footer: a check once done, a cross where it stopped, a ring for the rest. */
+function StepMark({ done, stopped }: { done: boolean; stopped: boolean }) {
+	if (done) return <Check className="text-ok" strokeWidth={2.5} aria-hidden />;
+	if (stopped) return <X className="text-danger" strokeWidth={2.5} aria-hidden />;
+
 	return (
-		<section className="run-banner" aria-label="Review">
-			{lead}
-			<div className="run-banner-text">
-				<span>{title}</span>
-				{detail ? <span className="meta">{detail}</span> : null}
-			</div>
-			<div className="run-banner-actions">{children}</div>
-		</section>
+		<span className="grid size-3 place-items-center" aria-hidden>
+			<Circle className="size-2 text-fg-ghost" strokeWidth={3} />
+		</span>
+	);
+}
+
+/** One step in the footer; the one the review stopped at reads in ink and says so. */
+function Step({ stage, stopped }: { stage: RunStage; stopped: boolean }) {
+	return (
+		<li className={cn('inline-flex items-center gap-1.5', stopped && 'text-fg')} data-state={stage.state}>
+			<StepMark done={stage.state === 'done'} stopped={stopped} />
+			{stopped ? `Stopped at ${stage.label}` : stage.label}
+		</li>
+	);
+}
+
+/** What a failed review kept: the steps it finished, the one it stopped at, then the ones it never reached. */
+function KeptSteps({ stages }: { stages: RunStage[] }) {
+	const stopped = stages.findIndex((stage) => stage.state !== 'done');
+
+	return (
+		<ol className="contents" aria-label="Steps">
+			{stages.map((stage, index) => (
+				<Step key={stage.id} stage={stage} stopped={index === stopped} />
+			))}
+		</ol>
 	);
 }
 
@@ -72,18 +119,18 @@ function ReviewButton({ run, again }: { run: RunView; again: boolean }) {
 
 	/** Starts the review; a refusal shows as a toast and the button offers to try again. */
 	function start(): void {
-		action.run(() =>
-			run.start().catch((error: unknown) => {
-				errorToast(reason(error, 'The review did not start.'));
-				throw error;
-			})
-		);
+		runControl(action, () => run.start(), 'The review did not start.');
 	}
 
 	useKeys({ r: start });
 
 	return (
-		<Button variant={again ? 'outline' : 'primary'} status={run.starting ? 'pending' : action.status} onClick={start}>
+		<Button
+			variant={again ? 'outline' : 'primary'}
+			status={run.starting ? 'pending' : action.status}
+			onClick={start}
+			data-run-primary=""
+		>
 			{again ? 'Review again' : 'Review'}
 			<Keycap k="r" />
 		</Button>
@@ -107,113 +154,143 @@ function foundText(bugs: number | null): string {
 }
 
 /**
- * Where the newest review stands, in one line above the diff: not reviewed,
- * queued, running, paused, failed, cancelled, out of date, or done. Each
- * state offers its one next step.
+ * Where the newest review stands, in a banner above the tab's content: not
+ * reviewed, queued, running, paused, failed, cancelled, out of date, or done.
+ * Each state offers its one next step at the right. A failure says why, when,
+ * and which steps it kept. Every state is the same `Banner`, so the glyph
+ * morphs in place when the review moves on.
  */
 export function RunBanner({ run, repoId, number, bugs }: RunBannerProps) {
 	const { base } = useApi();
 	const bugsHref = pullHref(base, repoId, number, 'bugs');
-	const stopping = useAction();
 	const resuming = useAction();
 	const retrying = useAction();
 
 	if (run.phase === 'queued' || run.phase === 'running') {
+		const queued = run.phase === 'queued';
+
 		return (
-			<BannerFrame
-				lead={<Spinner size={14} label={run.phase === 'queued' ? 'Queued' : 'Reviewing'} />}
-				title={run.phase === 'queued' ? 'Queued' : 'Reviewing'}
-				detail={run.phase === 'queued' ? run.waiting : stageText(run.stages)}
-			>
-				{run.connection === 'reconnecting' ? <span className="meta">Reconnecting…</span> : null}
-				{run.startedAt && run.phase === 'running' ? <Clock since={run.startedAt} /> : null}
-				<Button asChild variant="ghost">
-					<Link href={bugsHref} replace scroll={false}>
-						See progress
-					</Link>
-				</Button>
-				<Button variant="ghost" status={stopping.status} onClick={() => stopping.run(run.cancel)}>
-					Cancel
-				</Button>
-			</BannerFrame>
+			<Banner
+				glyph={<StatusGlyph kind="spinner" />}
+				title={queued ? 'Queued' : 'Reviewing'}
+				meta={queued ? run.waiting : stageText(run.stages)}
+				actions={
+					<>
+						{run.connection === 'reconnecting' ? <span className="meta">Reconnecting…</span> : null}
+						{run.startedAt && !queued ? <Clock since={run.startedAt} /> : null}
+						<Button asChild variant="ghost">
+							<Link href={bugsHref} replace scroll={false}>
+								See progress
+							</Link>
+						</Button>
+						<CancelReviewButton variant="ghost" />
+					</>
+				}
+			/>
 		);
 	}
 
 	if (run.phase === 'paused') {
 		return (
-			<BannerFrame lead={<StatusGlyph kind="idle" />} title="The review is paused." detail={stageText(run.stages)}>
-				<Button variant="ghost" status={stopping.status} onClick={() => stopping.run(run.cancel)}>
-					Cancel
-				</Button>
-				<Button variant="primary" status={resuming.status} onClick={() => resuming.run(run.resume)}>
-					Resume
-				</Button>
-			</BannerFrame>
+			<Banner
+				glyph={<StatusGlyph kind="idle" />}
+				title="The review is paused."
+				meta={stageText(run.stages)}
+				actions={
+					<>
+						<CancelReviewButton variant="ghost" />
+						<Button
+							variant="primary"
+							status={resuming.status}
+							onClick={() => runControl(resuming, run.resume, 'The review did not resume.')}
+						>
+							Resume
+						</Button>
+					</>
+				}
+			/>
 		);
 	}
 
 	if (run.phase === 'failed') {
 		return (
-			<BannerFrame
-				lead={<StatusGlyph kind="failed" />}
+			<Banner
+				tone="danger"
+				glyph={<StatusGlyph kind="failed" />}
 				title="The review failed."
-				detail={run.failure?.message ?? null}
-			>
-				<FailureLink action={run.failure?.action ?? null} />
-				<Button variant="primary" status={retrying.status} onClick={() => retrying.run(run.retry)}>
-					Try again
-				</Button>
-			</BannerFrame>
+				meta={<RunFacts at={run.finishedAt} model={run.modelLabel} />}
+				detail={run.failure?.message}
+				footer={run.stages.length > 0 ? <KeptSteps stages={run.stages} /> : null}
+				actions={
+					<>
+						<FailureLink action={run.failure?.action ?? null} />
+						<Button
+							status={retrying.status}
+							onClick={() => runControl(retrying, run.retry, 'The review did not start again.')}
+						>
+							<RotateCcw aria-hidden />
+							Try again
+						</Button>
+					</>
+				}
+			/>
 		);
 	}
 
 	if (run.phase === 'passed' && !run.outdated) {
 		return (
-			<BannerFrame
-				lead={<StatusGlyph kind={bugs ? 'high' : 'ok'} />}
+			<Banner
+				glyph={<StatusGlyph kind={bugs ? 'high' : 'ok'} />}
 				title={foundText(bugs)}
-				detail={
+				meta={
 					<>
 						Reviewed <Age at={run.finishedAt} form="long" />
 					</>
 				}
-			>
-				{bugs ? (
-					<Button asChild variant="primary">
-						<Link href={bugsHref} replace scroll={false}>
-							{bugs === 1 ? 'See the bug' : 'See the bugs'}
-						</Link>
-					</Button>
-				) : null}
-				<ReviewButton run={run} again />
-			</BannerFrame>
+				actions={
+					<>
+						{bugs ? (
+							<Button asChild variant="primary">
+								<Link href={bugsHref} replace scroll={false}>
+									{bugs === 1 ? 'See the bug' : 'See the bugs'}
+								</Link>
+							</Button>
+						) : null}
+						<ReviewButton run={run} again />
+					</>
+				}
+			/>
 		);
 	}
 
 	if (run.phase === 'passed') {
 		return (
-			<BannerFrame
-				lead={<StatusGlyph kind="outdated" />}
+			<Banner
+				glyph={<StatusGlyph kind="outdated" />}
 				title="This pull request has commits newer than its review."
-				detail={foundText(bugs)}
-			>
-				<Button asChild variant="ghost">
-					<Link href={bugsHref} replace scroll={false}>
-						See the last review
-					</Link>
-				</Button>
-				<ReviewButton run={run} again={false} />
-			</BannerFrame>
+				meta={foundText(bugs)}
+				actions={
+					<>
+						<Button asChild variant="ghost">
+							<Link href={bugsHref} replace scroll={false}>
+								See the last review
+							</Link>
+						</Button>
+						<ReviewButton run={run} again={false} />
+					</>
+				}
+			/>
 		);
 	}
 
+	const cancelled = run.phase === 'cancelled';
+
 	return (
-		<BannerFrame
-			lead={<StatusGlyph kind="idle" />}
-			title={run.phase === 'cancelled' ? 'The review was cancelled.' : 'Recoder has not reviewed this pull request.'}
-			detail={run.modelLabel}
-		>
-			<ReviewButton run={run} again={false} />
-		</BannerFrame>
+		<Banner
+			glyph={<StatusGlyph kind="idle" />}
+			title={cancelled ? 'The review was cancelled.' : 'Recoder has not reviewed this pull request.'}
+			meta={<RunFacts at={cancelled ? run.finishedAt : null} model={run.modelLabel} />}
+			actions={<ReviewButton run={run} again={false} />}
+		/>
 	);
 }

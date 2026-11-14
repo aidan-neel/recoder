@@ -14,7 +14,7 @@ import {
 import { clearAllCaches } from '../../src/util/ttl-cache';
 import { join } from 'node:path';
 
-const entry: ModelEntry = { id: 'devin:swe', label: 'SWE', model: 'swe', baseUrl: null, apiKeyPreview: null };
+const entry: ModelEntry = { id: 'devin:swe', label: 'SWE', model: 'swe', baseUrl: null, apiKeySet: false };
 
 /** A status for an agent that is installed, runs and is signed in. */
 function ready(id: string): AgentStatus {
@@ -28,7 +28,9 @@ function ready(id: string): AgentStatus {
 		install: '',
 		signedIn: true,
 		login: null,
-		providers: false
+		providers: false,
+		config: null,
+		setup: { install: false, signIn: false }
 	};
 }
 

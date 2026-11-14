@@ -3,10 +3,10 @@ import { create } from 'zustand';
 
 /**
  * Points every theme-color meta at the chrome showing now. The layout's two
- * metas follow the device; a theme picked in the app has to reach the
- * browser's own bar whatever the device prefers.
+ * metas follow the device; a theme or palette picked in the app has to reach
+ * the browser's own bar whatever the device prefers.
  */
-function syncChrome(): void {
+export function syncChrome(): void {
 	const chrome = getComputedStyle(document.documentElement).getPropertyValue('--bg-chrome').trim();
 
 	if (!chrome) return;

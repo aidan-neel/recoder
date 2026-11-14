@@ -81,6 +81,61 @@ test('a stale value is served at once while a fresh one loads behind it', async 
 	expect(await cache.stale('a', async () => 'unused')).toBe('new');
 });
 
+test('a stale value too old to serve waits on the fresh load', async () => {
+	const cache = new TtlCache<string>(5);
+
+	await cache.stale('a', async () => 'old');
+	await Bun.sleep(10);
+
+	expect(await cache.stale('a', async () => 'new', 0)).toBe('new');
+});
+
+test('stale callers in the same moment share one background load', async () => {
+	const cache = new TtlCache<string>(5);
+	let calls = 0;
+
+	await cache.stale('a', async () => 'old');
+	await Bun.sleep(10);
+
+	const load = async () => {
+		calls++;
+		await Bun.sleep(5);
+
+		return 'new';
+	};
+
+	await Promise.all([cache.stale('a', load), cache.stale('a', load)]);
+	expect(calls).toBe(1);
+});
+
+test('a failed refresh keeps the stale answer and the next read tries again', async () => {
+	const cache = new TtlCache<string>(5);
+
+	await cache.stale('a', async () => 'old');
+	await Bun.sleep(10);
+
+	expect(await cache.stale('a', () => Promise.reject(new Error('boom')))).toBe('old');
+	await Bun.sleep(0);
+	expect(await cache.stale('a', async () => 'new')).toBe('old');
+	await Bun.sleep(0);
+	expect(await cache.stale('a', async () => 'unused')).toBe('new');
+});
+
+test('a value still fresh does not start a background load', async () => {
+	const cache = new TtlCache<string>(50);
+	let calls = 0;
+
+	const load = async () => {
+		calls++;
+
+		return 'v';
+	};
+
+	await cache.stale('a', load);
+	await cache.stale('a', load);
+	expect(calls).toBe(1);
+});
+
 test('past its size, the cache evicts the key read least recently, not the first one stored', async () => {
 	const cache = new TtlCache<string>(1000, 2);
 	const loads: string[] = [];

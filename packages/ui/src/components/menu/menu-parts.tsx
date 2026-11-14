@@ -16,21 +16,21 @@ import { MenuHighlight } from './menu-highlight';
 export const MenuOpen = createContext(false);
 
 /**
- * The floating surface menus, selects and their lists share: radius 12, menu
- * background, menu shadow. Its classes never conflict, so it is a plain
+ * The floating surface menus, selects and their lists share: the card
+ * radius, a 4px inset, menu background, menu shadow. Its classes never conflict, so it is a plain
  * string and loading the module merges nothing.
  */
 const PANEL = [
-	'relative z-[130] flex min-w-[180px] flex-col gap-px rounded-[12px] bg-menu p-1 text-fg outline-none',
-	'thin-scroll overflow-y-auto overscroll-contain shadow-(--shadow-menu)'
+	'relative z-[130] flex min-w-[160px] flex-col gap-px rounded-(--radius-card) bg-menu p-1 text-fg outline-none',
+	'overflow-y-auto overscroll-contain shadow-(--shadow-menu)'
 ].join(' ');
 
 /**
- * A 30px menu row. Items carry no background of their own; the traveling
+ * A 26px menu row. Items carry no background of their own; the traveling
  * highlight sits under them. A plain string, like `PANEL`.
  */
 export const MENU_ITEM = [
-	'flex h-[30px] shrink-0 cursor-default items-center gap-3 rounded-[7px] px-2.5',
+	'flex h-[26px] shrink-0 cursor-default items-center gap-2 rounded-(--radius-chip) px-2',
 	'text-[13px] leading-[18px] text-fg outline-none select-none',
 	'data-disabled:pointer-events-none data-disabled:opacity-40 data-[tone=danger]:text-danger'
 ].join(' ');
@@ -87,7 +87,7 @@ export function MenuItemBody({ icon, shortcut, children }: MenuItemBodyProps) {
 
 /** Props every menu row shares (DropdownMenu and ContextMenu). */
 export interface MenuItemProps {
-	/** A 15px icon before the label, in `text-fg-subtle`. */
+	/** A 14px icon before the label, in `text-fg-subtle`. */
 	icon?: ReactNode;
 	/** A key name shown as a keycap at the row's end (`mod+k`, `Enter`, `d`). */
 	shortcut?: string;

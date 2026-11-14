@@ -1,48 +1,32 @@
 'use client';
 
-import {
-	EFFORT_TEXT,
-	prettyModelName,
-	resolveEffort,
-	type ModelSettingsPatch,
-	type ReasoningEffort
-} from '@recoder/shared';
+import { EFFORT_TEXT, prettyModelName, resolveEffort, type ReasoningEffort } from '@recoder/shared';
 import { useEffect, useState } from 'react';
 
 import {
 	followsWhenUnset,
 	missingNote,
 	modelCatalog,
-	rolePick,
+	rolePickOf,
 	type ModelCatalog,
 	type ModelRole,
 	type RolePick
 } from './model-options';
 import { FOLLOW_ID, FOLLOW_LABEL } from './model-rows';
+import { usePickSource, type PickDraft, type PickSource } from './pick-source';
 import { useSettings } from './settings-store';
-import { useInstantSave, type SaveState } from './use-save-state';
-
-/** A pick on screen before the server confirms it. A null id unsets the pick, so it follows the Review model. */
-interface Draft {
-	id: string | null;
-	effort: ReasoningEffort | null;
-}
+import { useInstantChange, type SaveState } from './use-save-state';
 
 const FAILED = 'Model settings weren’t saved';
 
 const EMPTY_CATALOG: ModelCatalog = { groups: [], byId: new Map(), count: 0 };
 
-/** The settings fields each role's pick saves to. */
-const ROLE_PATCH: Record<ModelRole, (draft: Draft) => ModelSettingsPatch> = {
-	orchestrator: ({ id, effort }) => ({ orchestratorModelId: id, orchestratorEffort: effort }),
-	specialist: ({ id, effort }) => ({ specialistModelId: id, specialistEffort: effort }),
-	verifier: ({ id, effort }) => ({ verifierModelId: id, verifierEffort: effort })
-};
-
 /** What the trigger reads, and whether it reads as a placeholder. */
 function triggerLabel(pick: RolePick): { text: string; quiet: boolean } {
-	if (missingNote(pick))
-		return { text: `${pick.option?.name ?? prettyModelName(pick.id ?? '')} · missing`, quiet: true };
+	const name = pick.option?.name ?? prettyModelName(pick.id ?? '');
+
+	if (pick.switchedOff) return { text: `${name} · switched off`, quiet: true };
+	if (missingNote(pick)) return { text: `${name} · missing`, quiet: true };
 	if (pick.option) return { text: pick.option.name, quiet: false };
 	if (pick.follows) return { text: FOLLOW_LABEL, quiet: true };
 	if (pick.id) return { text: prettyModelName(pick.id), quiet: false };
@@ -50,13 +34,14 @@ function triggerLabel(pick: RolePick): { text: string; quiet: boolean } {
 	return { text: 'Choose a model', quiet: true };
 }
 
-/** The pick a draft shows: its model's catalog entry when it names one, and whether it follows the Review model. */
-function draftPick(draft: Draft, catalog: ModelCatalog, role: ModelRole): RolePick {
+/** The pick a draft shows: its model's catalog entry when it names one, and whether it follows the Review model. A draft comes from the catalog, which offers only switched-on providers. */
+function draftPick(draft: PickDraft, catalog: ModelCatalog, role: ModelRole): RolePick {
 	return {
 		id: draft.id,
 		option: draft.id ? catalog.byId.get(draft.id) : undefined,
 		effort: draft.effort,
-		follows: followsWhenUnset(role) && !draft.id
+		follows: followsWhenUnset(role) && !draft.id,
+		switchedOff: false
 	};
 }
 
@@ -79,8 +64,10 @@ export interface ModelPickerView {
 	effort: ReasoningEffort | null;
 	/** The efforts the pick's model accepts, for the effort select; null when it has none or none is picked. */
 	effortOptions: { value: ReasoningEffort; label: string; description: string }[] | null;
-	/** The catalog has models to pick; false disables the trigger. */
+	/** The catalog has models to pick and the person may change the pick; false disables the trigger. */
 	canOpen: boolean;
+	/** The person cannot change this pick: the admin sets it. The picker still shows it. */
+	locked: boolean;
 	/** Where the pick's save stands. */
 	state: SaveState;
 	open: boolean;
@@ -95,17 +82,22 @@ export interface ModelPickerView {
 	chooseEffort: (effort: ReasoningEffort) => void;
 }
 
+/** The picker of the pick `role` for the person signed in: the admin's settings, or a member's own picks. */
+export function useModelPicker(role: ModelRole): ModelPickerView {
+	return useModelPickerOf(role, usePickSource(role));
+}
+
 /**
  * A quiet model trigger opening a searchable dialog grouped by provider, with
  * the effort select beside it. A pick saves at once: it shows straight away, a
  * spinner runs while the server saves it, and a failure puts the old pick back
  * with a toast saying why. Effort options come from the model's capabilities.
  */
-export function useModelPicker(role: ModelRole): ModelPickerView {
+export function useModelPickerOf(role: ModelRole, source: PickSource): ModelPickerView {
 	const settings = useSettings((state) => state.models);
 	const offline = useSettings((state) => state.status === 'offline');
 	const [open, setOpen] = useState(false);
-	const instant = useInstantSave(ROLE_PATCH[role], FAILED);
+	const instant = useInstantChange(source.save, FAILED);
 	const draft = instant.draft?.value;
 	const save = instant.change;
 
@@ -114,7 +106,7 @@ export function useModelPicker(role: ModelRole): ModelPickerView {
 	}, []);
 
 	const catalog = settings ? modelCatalog(settings.models) : EMPTY_CATALOG;
-	const saved = settings ? rolePick(settings, role) : null;
+	const saved = settings && source.saved ? rolePickOf(settings, role, source.saved) : null;
 
 	let pick: RolePick | null = null;
 
@@ -155,7 +147,8 @@ export function useModelPicker(role: ModelRole): ModelPickerView {
 		label: pick ? triggerLabel(pick) : null,
 		effort: pick?.effort ?? null,
 		effortOptions,
-		canOpen: catalog.count > 0,
+		canOpen: catalog.count > 0 && !source.locked,
+		locked: source.locked,
 		state: instant.state,
 		open,
 		setOpen,

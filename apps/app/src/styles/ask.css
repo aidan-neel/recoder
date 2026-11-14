@@ -1,0 +1,189 @@
+/* ───────── Ask: the pane beside the reading, the thread, and its composer ───────── */
+/* A 20px gutter inside the pane, so the composer's right edge meets the header's. */
+.ask-pane {
+	display: flex;
+	width: clamp(320px, 34%, 460px);
+	flex-shrink: 0;
+	flex-direction: column;
+	border-left: 1px solid var(--line-subtle);
+}
+.ask-pane-head {
+	display: flex;
+	height: 44px;
+	flex-shrink: 0;
+	align-items: center;
+	padding: 0 20px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.ask-pane-title {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 18px;
+}
+.ask-pane-scroll {
+	min-height: 0;
+	flex: 1;
+	overflow-y: auto;
+}
+/* The thread sits on the composer: short, it starts at the foot; long, it scrolls up from there. */
+.ask-pane-thread {
+	display: flex;
+	min-height: 100%;
+	flex-direction: column;
+	justify-content: flex-end;
+	gap: 16px;
+	padding: 16px 20px 8px;
+}
+.ask-pane-foot {
+	flex-shrink: 0;
+	padding: 8px 20px 20px;
+}
+
+.ask-thread {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+.ask-message {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 8px;
+}
+.ask-message[data-from='person'] {
+	align-items: flex-end;
+}
+/* The person's images under their words, on the same right edge. */
+.ask-images {
+	max-width: 85%;
+	justify-content: flex-end;
+	padding: 6px 0 0;
+}
+.ask-question {
+	max-width: 85%;
+	padding: 6px 10px;
+	border-radius: var(--radius-row);
+	background: var(--bg-bubble);
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	line-height: 20px;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}
+.ask-message[data-from='recoder'] [data-ui='markdown'] {
+	color: var(--text-secondary);
+	font-size: var(--font-size-body);
+	line-height: 22px;
+}
+.ask-failed {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	color: var(--danger);
+	font-size: var(--font-size-label);
+}
+
+/* Questions to start from: quiet rows whose text starts on the gutter; the hover fill reaches 8px past it. */
+.ask-suggestions {
+	display: flex;
+	flex-direction: column;
+	margin: 0 -8px;
+}
+.ask-suggestion {
+	min-height: 30px;
+	gap: 8px;
+	padding: 0 8px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+}
+.ask-suggestion svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+
+/* ───────── The composer's models: a quiet trigger in its bar, and the menu it opens ───────── */
+.composer-models {
+	min-width: 0;
+	max-width: 200px;
+	flex-shrink: 1;
+	gap: 4px;
+	padding-inline: 8px;
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+}
+.composer-models-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.composer-models .composer-models-chevron {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.composer-models-loading {
+	width: 88px;
+	height: 12px;
+	margin-inline: 8px;
+}
+.composer-models-menu {
+	width: 280px;
+}
+.composer-models-role {
+	height: 30px;
+}
+.composer-models-role-body {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.composer-models-role-name {
+	flex-shrink: 0;
+	color: var(--text-secondary);
+}
+.composer-models-role-pick {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	color: var(--text-primary);
+	text-align: right;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.composer-models-role-pick[data-quiet] {
+	color: var(--text-subtle);
+}
+.composer-models-role .composer-models-role-chevron {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.composer-models-label {
+	padding: 6px 8px 2px;
+	color: var(--text-subtle);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.composer-models-note {
+	padding: 4px 8px 6px;
+	color: var(--text-subtle);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+
+/* ───────── The "+" dialog: the pull request's changed files ───────── */
+.attach-dialog {
+	max-width: 560px;
+}
+.attach-counts {
+	font-family: var(--font-code);
+	font-size: var(--font-size-meta);
+	font-variant-numeric: tabular-nums;
+}

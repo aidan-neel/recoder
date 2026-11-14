@@ -11,7 +11,7 @@ import { cliFailure } from '../cli-failure';
 import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../../models/llm/types';
 import { callDeadline, cliEnv, emptyDirectory, killGroup, stopOnShutdown } from '../cli-process';
 import { systemText } from '../cli-prompt';
-import type { AgentAdapter, AgentEvent, AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentAdapter, AgentEvent, AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { CUSTOM_AGENT_VAR, DEFAULT_NAME, readCustomCommand, type CustomCommand } from './custom-config';
 import { runDescribe, runTurn, type CommandHost } from './custom-invoke';
 import { PROTOCOL, PROTOCOL_VERSION, type TurnRequest } from './custom-protocol';
@@ -61,6 +61,15 @@ export class CustomCommandAgent implements AgentAdapter {
 	readonly signInFix =
 		'Check that the custom command is signed in and lists the model, or pick another model in Recoder settings.';
 
+	/**
+	 * No setup: Recoder does not know how the user's own command installs or signs in — it only runs what
+	 * `CUSTOM_AGENT_VAR` names — so both steps stay null.
+	 */
+	readonly setup: AgentSetup = { install: null, signIn: null };
+
+	/** The custom command protocol carries text only. */
+	readonly readsImages = false;
+
 	private readonly running = new Set<Bun.Subprocess>();
 	private status: AgentStatus | null = null;
 
@@ -91,7 +100,9 @@ export class CustomCommandAgent implements AgentAdapter {
 			install: INSTALL,
 			signedIn: null,
 			login: null,
-			providers: false
+			providers: false,
+			config: null,
+			setup: { install: false, signIn: false }
 		};
 
 		if (config.kind === 'ready') {
@@ -129,7 +140,7 @@ export class CustomCommandAgent implements AgentAdapter {
 			label: model.label,
 			model: model.id,
 			baseUrl: null,
-			apiKeyPreview: null,
+			apiKeySet: false,
 			...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow }),
 			...(model.efforts === undefined ? {} : { efforts: model.efforts }),
 			...(model.defaultEffort === undefined ? {} : { defaultEffort: model.defaultEffort })
@@ -181,6 +192,11 @@ export class CustomCommandAgent implements AgentAdapter {
 
 	describeFailure(err: LlmError, fallback: string): ModelFailure {
 		return cliFailure(this, err, fallback);
+	}
+
+	/** The environment a setup job would run with; there is none, so it is the call env. */
+	setupEnv(): Record<string, string> {
+		return cliEnv(this.env, STRIPPED);
 	}
 
 	stop(): void {

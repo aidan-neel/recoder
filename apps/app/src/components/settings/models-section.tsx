@@ -1,35 +1,32 @@
 'use client';
 
-import { useAgentSection } from '@/lib/settings/use-agent-section';
+import { useIsAdmin } from '@/lib/account/use-is-admin';
 
-import { AgentClis } from './agent-clis';
+import { ModelChooser } from './model-chooser';
 import { ModelPicks } from './model-picks';
-import { ProvidersGroup } from './providers/providers-group';
 import { ServerSection } from './server-section';
 import { VllmServers } from './vllm-servers';
 
-/** The row counts of the four groups, for the skeleton that stands in while settings load. */
-const GROUP_ROWS = [2, 2, 1, 3];
+/** The row counts of the groups, for the skeleton that stands in while settings load. */
+const GROUP_ROWS = [2, 1];
 
-/** The groups themselves, mounted once the server's settings are in. */
-function ModelsGroups() {
-	const section = useAgentSection();
-
-	return (
-		<div className="settings">
-			<ModelPicks />
-			<ProvidersGroup section={section} />
-			<VllmServers />
-			<AgentClis />
-		</div>
-	);
-}
-
-/** Settings → Models: the review models, the providers, local servers and agent CLIs. */
+/**
+ * Settings → Models: the review models, which models the pickers offer, and
+ * the local servers. A member's pickers are their own; which models are
+ * offered and the local servers are the admin's, so a member sees only the
+ * picks (the local servers' models already show in them). Agent CLIs and
+ * model providers are under Providers.
+ */
 export function ModelsSection() {
+	const admin = useIsAdmin();
+
 	return (
 		<ServerSection groups={GROUP_ROWS}>
-			<ModelsGroups />
+			<div className="settings">
+				<ModelPicks />
+				{admin ? <ModelChooser /> : null}
+				{admin ? <VllmServers /> : null}
+			</div>
 		</ServerSection>
 	);
 }

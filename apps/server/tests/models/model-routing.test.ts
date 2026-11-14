@@ -5,6 +5,10 @@ import {
 	configForSubagent,
 	configForVerifier,
 	hasSeparateSpecialist,
+	isReviewConfigured,
+	isReviewRunnable,
+	ProviderSwitchedOffError,
+	stageConfigs,
 	withLockedModels
 } from '../../src/models/models';
 import { setReviewOverrides } from '../../src/review/session/review-settings';
@@ -133,4 +137,30 @@ test('workers are offered only when the second model or its effort differs from 
 
 	setReviewOverrides({ models, orchestratorModelId: 'sol', specialistModelId: 'mini' });
 	expect(hasSeparateSpecialist()).toBe(true);
+});
+
+test('a review whose verifier runs on a switched-off agent CLI fails before any call, naming it and where to switch it on', () => {
+	setReviewOverrides({
+		models,
+		orchestratorModelId: 'sol',
+		verifierModelId: 'codex:gpt-6-sol',
+		disabledProviders: ['cli:codex']
+	});
+
+	expect(() => withLockedModels(stageConfigs)).toThrow('Codex is switched off in Settings → Providers.');
+});
+
+test('a chat on a model OpenCode routes to a switched-off provider fails before it starts', () => {
+	setReviewOverrides({
+		orchestratorModelId: 'opencode:openrouter/qwen/qwen3',
+		disabledProviders: ['opencode:openrouter']
+	});
+
+	expect(configForOrchestrator).toThrow(ProviderSwitchedOffError);
+});
+
+test('a pick on a switched-off provider still counts as configured, but no review can run on it', () => {
+	setReviewOverrides({ models, orchestratorModelId: 'claude-code:opus', disabledProviders: ['cli:claude-code'] });
+
+	expect([isReviewConfigured(), isReviewRunnable()]).toEqual([true, false]);
 });

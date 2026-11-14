@@ -1,0 +1,282 @@
+/*
+ * kit: the composer. One ringed box: the link field on top, a bar at its
+ * foot. The bar's 28px controls sit 6px in from the edges (8px at `lg`), and
+ * the text starts on the ink of the first tool's icon, so the field and the
+ * bar share one left edge. Layered like the rest of the kit.
+ */
+@layer components {
+	/* ───────── Box ───────── */
+	[data-ui='composer'] {
+		--composer-inset: 6px;
+		--composer-text-x: 14px;
+		--composer-text-top: 12px;
+		--composer-line: 22px;
+		--composer-font: 13.5px;
+		--composer-tile: 72px;
+
+		--composer-radius: var(--radius-composer);
+
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		border-radius: var(--composer-radius);
+		background-color: var(--bg-raised);
+		box-shadow: var(--shadow-composer);
+		cursor: text;
+		transition: box-shadow var(--dur-hover) ease-out;
+	}
+	[data-ui='composer'][data-size='lg'] {
+		--composer-radius: calc(var(--radius-composer) + 2px);
+		--composer-inset: 8px;
+		--composer-text-x: 16px;
+		--composer-text-top: 14px;
+		--composer-font: 14.5px;
+	}
+	[data-ui='composer']:has([data-ui='link-field']:focus) {
+		box-shadow: 0 0 0 1px var(--line-focus);
+	}
+	[data-ui='composer'][data-invalid] {
+		box-shadow: 0 0 0 1px color-mix(in oklab, var(--danger) 55%, var(--line-control));
+	}
+	[data-ui='composer'][data-dropping] {
+		box-shadow: 0 0 0 1px var(--line-focus);
+		background-color: var(--bg-hover);
+	}
+	[data-ui='composer'][data-disabled] {
+		cursor: not-allowed;
+		opacity: 0.5;
+	}
+
+	/* ───────── Field: bare inside the box, 22px lines ───────── */
+	[data-ui='composer'] [data-ui='link-field'] {
+		min-height: calc(var(--textarea-min-rows, 2) * var(--composer-line) + var(--composer-text-top) + 4px);
+		padding: var(--composer-text-top) var(--composer-text-x) 4px;
+		border-radius: var(--composer-radius) var(--composer-radius) 0 0;
+		color: var(--text-primary);
+		font-size: var(--composer-font);
+		line-height: var(--composer-line);
+	}
+
+	/* The box draws the ring and the fill; `:is(*, :focus)` outranks the field's own hover, focus and invalid rings. */
+	[data-ui='composer'] [data-ui='link-field']:is(*, :focus) {
+		background: none;
+		box-shadow: none;
+	}
+	[data-ui='composer'] [data-ui='link-field'][data-max-rows] {
+		max-height: calc(var(--textarea-max-rows) * var(--composer-line) + var(--composer-text-top) + 4px);
+	}
+	[data-ui='composer'] [data-ui='link-field'][data-disabled] {
+		opacity: 1;
+	}
+
+	/* ───────── Bar: tools, the refusal note, then the caller's controls and the action ───────── */
+	/*
+	 * Every control in the bar nests in the box's corner, so its radius is the
+	 * box's less the inset: the curves run parallel. The kit's buttons and
+	 * triggers read their corners from these tokens, so setting them here
+	 * reaches each one (tools, send, stop, a picker) whatever its own hook.
+	 */
+	[data-ui='composer-bar'] {
+		--radius-control: calc(var(--composer-radius) - var(--composer-inset));
+		--radius-chip: var(--radius-control);
+
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 4px;
+		padding: var(--composer-inset);
+	}
+	[data-ui='composer-bar-tools'] {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 2px;
+	}
+	[data-ui='composer-tool'] svg {
+		stroke-width: 1.75;
+	}
+
+	/* ───────── Images: square tiles over the text, on the text's edge; the remove button rides the corner ───────── */
+	[data-ui='image-tiles'] {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+		margin: 0;
+		padding: var(--composer-text-top) var(--composer-text-x) 0;
+		list-style: none;
+		cursor: default;
+	}
+	[data-ui='image-tile'] {
+		position: relative;
+		width: var(--composer-tile);
+		height: var(--composer-tile);
+		flex-shrink: 0;
+	}
+	[data-ui='image-tile-thumb'] {
+		display: block;
+		width: 100%;
+		height: 100%;
+		border-radius: var(--radius-card);
+		object-fit: cover;
+		box-shadow: 0 0 0 1px var(--line-subtle);
+	}
+	/*
+	 * The remove button: round, over the tile's corner by a third of itself, as a badge sits. The corner lays a solid
+	 * disc and a ring in the box's colour under the button's own see-through fill, so it reads on any image.
+	 */
+	[data-ui='image-tile-corner'] {
+		--radius-control: 50%;
+
+		position: absolute;
+		top: calc(var(--size-icon-md) / -3);
+		right: calc(var(--size-icon-md) / -3);
+		display: flex;
+		border-radius: 50%;
+		background-color: var(--bg-menu);
+		box-shadow: 0 0 0 2px var(--bg-raised);
+	}
+
+	/* ───────── A sent message's images: small chips, each opening its image ───────── */
+	[data-ui='image-chips'] {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin: 0;
+		padding: 4px 0 0;
+		list-style: none;
+	}
+	[data-ui='image-chip'] {
+		display: flex;
+		height: 36px;
+		align-items: center;
+		padding: 0 4px;
+		border-radius: var(--radius-row);
+		background-color: var(--bg-canvas);
+		box-shadow: 0 0 0 1px var(--line-subtle);
+	}
+	[data-ui='image-chip-body'] {
+		display: flex;
+		min-width: 0;
+		align-items: center;
+		gap: 8px;
+		padding-right: 6px;
+		color: var(--text-secondary);
+		font-size: var(--font-size-label);
+		text-decoration: none;
+	}
+	a[data-ui='image-chip-body']:hover {
+		color: var(--text-primary);
+	}
+	[data-ui='image-chip-thumb'] {
+		width: 28px;
+		height: 28px;
+		flex-shrink: 0;
+		border-radius: var(--radius-chip);
+		object-fit: cover;
+		box-shadow: 0 0 0 1px var(--line-subtle);
+	}
+	[data-ui='image-chip-name'] {
+		max-width: 160px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	[data-ui='composer-note'] {
+		min-width: 0;
+		flex: 1;
+		overflow: hidden;
+		padding-inline: 4px;
+		color: var(--danger);
+		font-size: var(--font-size-meta);
+		line-height: 16px;
+		text-align: right;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		cursor: default;
+	}
+
+	/*
+	 * Row: the field and the bar share one line, as a reply box. The field's
+	 * 22px line sits centred on the 28px action, and both grow from the bottom.
+	 */
+	[data-ui='composer'][data-layout='row'] {
+		flex-flow: row wrap;
+		align-items: flex-end;
+	}
+	[data-ui='composer'][data-layout='row'] [data-ui='image-tiles'] {
+		flex-basis: 100%;
+	}
+	[data-ui='composer'][data-layout='row'] [data-ui='link-field'] {
+		min-width: 0;
+		min-height: calc(var(--composer-line) + 2 * (var(--composer-inset) + 3px));
+		flex: 1;
+		padding: calc(var(--composer-inset) + 3px) 0 calc(var(--composer-inset) + 3px) var(--composer-text-x);
+		border-radius: var(--composer-radius) 0 0 var(--composer-radius);
+	}
+	[data-ui='composer'][data-layout='row'] [data-ui='composer-bar'] {
+		max-width: 50%;
+	}
+	[data-ui='composer'][data-layout='row'] [data-ui='composer-note'] {
+		flex: 0 1 auto;
+	}
+	[data-ui='composer'][data-layout='row'] [data-ui='composer-note']:empty {
+		display: none;
+	}
+
+	/* ───────── The "/" menu: over or under the composer, from its left edge, at most 440px wide ───────── */
+	[data-ui='composer-menu'] {
+		position: absolute;
+		z-index: 130;
+		left: 0;
+		display: flex;
+		width: min(100%, 440px);
+		max-height: 280px;
+		flex-direction: column;
+		overflow: hidden;
+		border-radius: var(--radius-card);
+		background-color: var(--bg-menu);
+		box-shadow: var(--shadow-menu);
+		cursor: default;
+	}
+	[data-ui='composer-menu'][data-side='top'] {
+		bottom: calc(100% + 6px);
+		transform-origin: bottom center;
+	}
+	[data-ui='composer-menu'][data-side='bottom'] {
+		top: calc(100% + 6px);
+		transform-origin: top center;
+	}
+	[data-ui='composer-menu-list'] {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		padding: 4px;
+	}
+	[data-ui='composer-menu-item'] {
+		display: flex;
+		height: 30px;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 10px;
+		padding: 0 8px;
+		border-radius: var(--radius-chip);
+		font-size: 13px;
+		user-select: none;
+	}
+	[data-ui='composer-menu-name'] {
+		min-width: 84px;
+		flex-shrink: 0;
+		color: var(--text-primary);
+		font-family: var(--font-code);
+		font-size: 12.5px;
+	}
+	[data-ui='composer-menu-description'] {
+		min-width: 0;
+		overflow: hidden;
+		color: var(--text-muted);
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+}

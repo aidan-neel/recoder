@@ -3,7 +3,7 @@ import type { Repo } from '@recoder/shared';
 import { createReviewSession, startReviewSession } from '../../src/commands/pipeline';
 import { replayReviewSession } from '../../src/commands/rerun';
 import type { PipelineRun, RunTokenCall } from '../../src/models/metrics';
-import { saveReviewSettings } from '../../src/review/session/review-settings';
+import { getStoredSettings, saveReviewSettings, setReviewOverrides } from '../../src/review/session/review-settings';
 import { db, reviewMetrics } from '../../src/store';
 import {
 	fakeReviewer,
@@ -122,4 +122,22 @@ test('a replay under a new pick runs as its own run on the new models, apart fro
 	expect(replayModels.every((model) => SECOND.includes(model))).toBe(true);
 	expect(modelsByRun(calls)).toEqual({ 'run 0': FIRST, 'run 1': replayModels });
 	expect(runs?.map(({ startedAt: _, queueDelay: __, ...run }) => run)).toEqual([segment(0, FIRST), segment(1, SECOND)]);
+}, 60000);
+
+test('a review whose verifier runs on a switched-off provider fails before any model call, naming the provider', async () => {
+	const repo = await forgeRepo();
+	const requests: FakeRequest[] = [];
+
+	pickModels(FIRST);
+	setReviewOverrides({ ...getStoredSettings(), verifierModelId: 'codex:gpt-6-sol', disabledProviders: ['cli:codex'] });
+	globalThis.fetch = fakeReviewer(requests);
+
+	const reviewId = await reviewToEnd(repo);
+
+	expect(await db.reviews.get(reviewId)).toMatchObject({
+		status: 'failed',
+		summary: 'Codex is switched off in Settings → Providers.'
+	});
+
+	expect(requests).toEqual([]);
 }, 60000);

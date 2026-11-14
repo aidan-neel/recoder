@@ -154,6 +154,7 @@ export async function openCodeChat(
 			session: turn.session,
 			directory,
 			text: turn.text,
+			images: turn.images,
 			model: opts.model,
 			system: prompt.system,
 			variant,

@@ -52,6 +52,9 @@
 	--primary-hover: #fffcf5;
 	--on-primary: #141312;
 
+	/* Brand marks that keep their own color: Claude Code's orange, in both themes. */
+	--brand-claude: #d97757;
+
 	/* Status and severity: text on tint. Chroma sits at 70-95% of the sRGB
 	   maximum for each hue (OKLCH), so they read vivid, not muted. In both
 	   themes every text color passes 5:1 on its tint over canvas, panel and
@@ -81,23 +84,23 @@
 	--syn-plain: #d6d1c9;
 
 	/* Elevation */
-	--shadow-menu: 0 0 0 1px var(--line-menu), 0 20px 50px rgba(0, 0, 0, 0.55);
+	--shadow-menu: 0 0 0 1px var(--line-menu), 0 8px 24px rgba(0, 0, 0, 0.45);
 	/* Centred and tight: an offset blur pooled as a dark band under the dialog. */
 	--shadow-modal: 0 0 0 1px var(--line-control), 0 4px 24px rgba(0, 0, 0, 0.35);
 	--shadow-composer: 0 0 0 1px var(--line-control);
 	--scrim: rgba(8, 7, 6, 0.6);
 
-	/* Motion: tuned for a tool opened thousands of times a day. Feedback is
-	   quick but smooth; only movement that explains a change (the tab pill, a
-	   panel unfolding) gets a short ease. Tune the app's feel here. */
+	/* Motion: tuned for a tool opened thousands of times a day. Hover is near
+	   instant; menus and dialogs take a short, visible fade (120 to 150ms);
+	   only movement that explains a change (a panel unfolding) gets a longer
+	   ease. Tune the app's feel here. */
 	--ease-menu: cubic-bezier(0.2, 0.8, 0.2, 1);
-	--dur-hover: 100ms;
+	--dur-hover: 50ms;
 	--dur-press: 80ms;
-	--dur-highlight: 100ms;
+	--dur-highlight: 70ms;
 	--dur-toggle: 180ms;
-	--dur-pill: 240ms;
 	--dur-disclose: 200ms;
-	--dur-menu: 150ms;
+	--dur-menu: 120ms;
 	--dur-swap: 140ms;
 	--dur-shimmer: 1.6s;
 	--dur-skeleton: 1.4s;
@@ -108,7 +111,6 @@
 	/* A quiet "still working" note waits this long, so a fast answer never shows it. */
 	--late-delay: 400ms;
 	--dur-spinner: 0.9s;
-	--dur-caret: 1s;
 
 	/* Type */
 	--font-ui: 'Inter', system-ui, sans-serif;
@@ -184,7 +186,7 @@
 	--syn-type: #1f7a68;
 	--syn-plain: #3a3631;
 
-	--shadow-menu: 0 0 0 1px var(--line-menu), 0 12px 32px rgba(60, 45, 30, 0.16);
+	--shadow-menu: 0 0 0 1px var(--line-menu), 0 8px 24px rgba(60, 45, 30, 0.14);
 	--shadow-modal: 0 0 0 1px var(--line-control), 0 24px 60px rgba(60, 45, 30, 0.22);
 	--shadow-composer: 0 0 0 1px var(--line-control);
 	--scrim: rgba(30, 25, 20, 0.35);
@@ -267,16 +269,14 @@
 	--size-icon-md: 28px;
 
 	/*
-	 * Button depth: a soft lift under the hairline edge and a faint top-down sheen, never a heavy
-	 * border. The edge colour comes from the line tokens at the button, so a skin's palette follows.
+	 * Corners, small and few. A surface's radius is its inset plus the radius of the rows in it, so
+	 * a 4px row in a menu with a 4px inset sits in an 8px panel.
 	 */
-	--button-lift: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 2px rgb(0 0 0 / 0.4);
-	--button-sheen: linear-gradient(rgb(255 255 255 / 0.03), rgb(255 255 255 / 0));
-	--button-primary-lift:
-		inset 0 1px 0 rgb(255 255 255 / 0.55), inset 0 -1px 0 rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.5);
-	--button-primary-sheen: linear-gradient(rgb(255 255 255 / 0.3), rgb(255 255 255 / 0));
-	/* A press shrinks a button this much, over --dur-hover. */
-	--press-scale: 0.97;
+	--radius-chip: 4px; /* badges, keycaps, checkboxes, menu rows, sm buttons */
+	--radius-control: 5px; /* buttons, fields, select triggers, tabs, tooltips */
+	--radius-row: 6px; /* list rows and their highlight, radio cards, textareas, code blocks */
+	--radius-card: 8px; /* cards, menus, popovers, toasts, modals, the palette */
+	--radius-composer: 14px; /* the composer, the one soft box: a message field reads as a place to write, not a card */
 
 	--font-size-title: 15px;
 	--font-size-body: 13.5px;
@@ -290,15 +290,11 @@
 	--focus-ring: 0 0 0 2px var(--focus-color);
 
 	/* The menu highlight's travel, and the ease app transitions share. Overlays time themselves in the motion presets. */
-	--motion-hover: 120ms;
+	--motion-hover: 60ms;
 	--ease-out: var(--ease-menu);
 }
 :root:not(.dark) {
 	--focus-color: rgb(var(--ink-rgb) / 0.52);
-	--button-lift: 0 1px 2px rgb(0 0 0 / 0.06);
-	--button-sheen: linear-gradient(rgb(0 0 0 / 0), rgb(0 0 0 / 0.025));
-	--button-primary-lift: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 1px 2px rgb(0 0 0 / 0.2);
-	--button-primary-sheen: linear-gradient(rgb(255 255 255 / 0.1), rgb(255 255 255 / 0));
 	--sent: #6b3fb0;
 	--sent-tint: rgba(107, 63, 176, 0.1);
 	--diff-add-gutter: rgba(26, 127, 55, 0.13);

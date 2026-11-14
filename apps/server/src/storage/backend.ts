@@ -70,6 +70,35 @@ export async function storageTransaction<T>(work: (transaction?: TransactionSQL)
 	return postgres ? withPostgresTransaction(postgres, work) : work();
 }
 
+/**
+ * Milliseconds since the epoch by PostgreSQL's clock when replicas share it,
+ * so every replica judges how old a stamp is by one clock, as leases do.
+ * This process's clock without PostgreSQL.
+ */
+export async function storageNow(): Promise<number> {
+	if (!postgres) return Date.now();
+
+	const [row] = await postgres<{ ms: number }[]>`SELECT (extract(epoch FROM clock_timestamp()) * 1000)::float8 AS ms`;
+
+	return Math.round(row.ms);
+}
+
+/**
+ * A token that changes with every write to the record, read without reading
+ * the record: PostgreSQL's row version (`xmin`). Undefined when there is no
+ * such record, and always without PostgreSQL, where every write happens in
+ * this process and its callers hear of it directly.
+ */
+export async function recordVersion(table: Table, id: string): Promise<string | undefined> {
+	if (!postgres) return undefined;
+
+	const rows = await postgres<{ version: string }[]>`
+		SELECT xmin::text AS version FROM recoder_records WHERE collection = ${table} AND id = ${id}
+	`;
+
+	return rows[0]?.version;
+}
+
 export async function settingsOperation<T>(work: () => T | Promise<T>): Promise<T> {
 	return postgres ? withFreshSharedSettings(postgres, work) : work();
 }

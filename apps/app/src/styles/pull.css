@@ -1,4 +1,16 @@
-/* ───────── Pull request page: the header, the tabs, one tab's body, the merge bar ───────── */
+/* ───────── Pull request page: the header, the merge strip, the tabs, one tab's body ───────── */
+/* The page fills the window. The crumbs, title, badges, strip and first tab label share the bar's gutter. */
+.pull-head {
+	flex-shrink: 0;
+	padding: 18px var(--page-gutter) 6px;
+}
+/*
+ * The forge link has no box at rest, so its ink ends on the gutter like the box edges below it: it reaches out by
+ * its padding beside the icon (the kit's 7px) and by the arrow's own margin (6 of its 24 units).
+ */
+.pull-forge-link {
+	margin-right: calc(-7px - 14px / 4);
+}
 .pull-title-number {
 	flex-shrink: 0;
 	color: var(--text-faint);
@@ -12,6 +24,22 @@
 	align-items: center;
 	gap: 6px;
 	margin-top: 8px;
+}
+
+/*
+ * The tabs, with the open tab's own tools at the right. The first tab's fill starts on the gutter, in line with the
+ * status card above. The rule is a border inside the 44px, as on the bar, so the controls centre between the top
+ * and the rule.
+ */
+.pull-tabs-row {
+	display: flex;
+	height: 44px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 0 var(--page-gutter);
+	border-bottom: 1px solid var(--line-subtle);
 }
 
 .pull-tools {
@@ -40,118 +68,138 @@
 	flex: 1;
 }
 
-/* While the page loads: bars where the title, the facts and the tabs will stand. */
+/* While the page loads: bars as tall as the title, the facts and the strip, so nothing moves when they arrive. */
 .pull-head-skeleton {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
-	padding: 24px 24px 20px;
-	border-bottom: 1px solid var(--line-subtle);
+}
+.pull-head-skeleton > :nth-child(1) {
+	margin: 4px 0;
+}
+.pull-head-skeleton > :nth-child(2) {
+	margin-top: 8px;
+}
+.pull-head-skeleton > :nth-child(3) {
+	margin-top: 14px;
+	border-radius: var(--radius-row);
 }
 
-/* ───────── Review banner: where the newest review stands, and the one next step ───────── */
-.run-banner {
-	display: flex;
-	min-height: 48px;
-	align-items: center;
-	gap: 12px;
-	padding: 8px 10px 8px 16px;
-	border-radius: 10px;
+/* ───────── Merge strip: the checks, the conflicts, the open bugs, then the menu and the merge button ───────── */
+.merge-strip {
+	margin-top: 14px;
+	border-radius: var(--radius-row);
 	background: var(--bg-raised);
 	box-shadow: inset 0 0 0 1px var(--line-card);
-	font-size: var(--font-size-label);
 }
-.run-banner-text {
+/* Inside the box, the first icon sits 12px in; the merge button sits 6px from the right edge, as from the top and bottom. */
+.merge-strip-row {
 	display: flex;
+	height: 40px;
 	min-width: 0;
-	flex: 1;
 	align-items: center;
-	gap: 12px;
-	color: var(--text-primary);
-	font-weight: 500;
-}
-.run-banner-text .meta {
-	overflow: hidden;
-	font-weight: 400;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.run-banner-actions {
-	display: flex;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 6px;
-}
-
-/* ───────── Merge bar: checks, mergeability, the merge button ───────── */
-.merge-bar {
-	display: flex;
-	height: 52px;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 4px;
-	padding: 0 16px 0 14px;
-	border-top: 1px solid var(--line-subtle);
-	background: var(--bg-canvas);
+	padding: 0 6px 0 2px;
 	font-size: var(--font-size-label);
 }
-.merge-bar-fact {
+/* A fact: its icon on the strip's 12px inset, so it lines up with the check rows under it. */
+.merge-fact {
 	display: inline-flex;
 	height: 28px;
+	flex-shrink: 0;
 	align-items: center;
 	gap: 8px;
 	padding: 0 10px;
 	color: var(--text-secondary);
 	white-space: nowrap;
 }
-.merge-bar-fact + .merge-bar-fact,
-.merge-bar [data-ui='button'] + .merge-bar-fact {
-	margin-left: 6px;
-	padding-left: 16px;
-	border-left: 1px solid var(--line-control);
-}
-.merge-bar-fact svg {
+.merge-fact svg {
 	width: 14px;
 	height: 14px;
 	flex-shrink: 0;
 }
-.merge-bar-fact[data-tone='ok'] svg {
+.merge-fact[data-tone='ok'] svg {
 	color: var(--success);
 }
-.merge-bar-fact[data-tone='bad'] svg {
+.merge-fact[data-tone='bad'] svg {
 	color: var(--danger);
 }
-.merge-bar-fact[data-tone='wait'] svg {
+.merge-fact[data-tone='wait'] svg {
 	color: var(--sev-medium);
 }
-.merge-bar-end {
+.merge-fact[data-tone='none'] {
+	color: var(--text-muted);
+}
+.merge-fact[data-tone='none'] svg {
+	color: var(--text-faint);
+}
+.merge-fact-skeleton {
+	width: 120px;
+	height: 12px;
+	margin: 0 10px;
+}
+.merge-strip-divider {
+	width: 1px;
+	height: 16px;
+	flex-shrink: 0;
+	margin: 0 2px;
+	background: var(--line-control);
+}
+.merge-fact .checks-chevron {
+	width: 12px;
+	height: 12px;
+	margin-left: -2px;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.checks-toggle[data-state='open'] .checks-chevron {
+	rotate: 180deg;
+}
+.merge-strip-end {
 	display: flex;
+	min-width: 0;
 	align-items: center;
-	gap: 10px;
+	gap: 6px;
 	margin-left: auto;
+	padding-left: 12px;
 }
 .merge-error {
+	min-width: 0;
 	max-width: 420px;
+	margin-right: 4px;
 	overflow: hidden;
 	color: var(--danger);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-/* The merge button and its method menu read as one control. */
+/*
+ * The merge button and its method menu read as one control: outer corners
+ * round, inner corners square, and a hairline of the label's own colour
+ * between the halves. Each half lights on its own and rings inside its own shape.
+ */
 .merge-split {
 	display: inline-flex;
-	border-radius: 8px;
 }
-.merge-split > [data-ui='button']:first-child,
-.merge-split > span:first-child > [data-ui='button'] {
+.merge-split-main {
 	border-top-right-radius: 0;
 	border-bottom-right-radius: 0;
 }
-.merge-split > [data-ui='button']:last-child {
-	margin-left: 1px;
+.merge-split-menu {
 	border-top-left-radius: 0;
 	border-bottom-left-radius: 0;
+}
+.merge-split-menu::before {
+	position: absolute;
+	top: 6px;
+	bottom: 6px;
+	left: 0;
+	width: 1px;
+	background: currentcolor;
+	content: '';
+	opacity: 0.2;
+	pointer-events: none;
+}
+.merge-split [data-ui='button']:focus-visible {
+	box-shadow: inset 0 0 0 2px color-mix(in oklab, currentcolor 65%, transparent);
 }
 
 /* A merge method in the menu: what it does, then what it leaves on the base branch. */
@@ -168,41 +216,67 @@
 	line-height: 16px;
 }
 
-/* The checks popover: one row a check, failed first. */
-.checks {
-	display: flex;
-	width: 340px;
-	max-height: 360px;
-	flex-direction: column;
-}
-.checks-head {
-	padding: 10px 12px 6px;
-}
+/* The checks under the strip: rows fill as many columns as the width holds. A long list scrolls inside the strip. */
 .checks-list {
-	display: flex;
-	flex-direction: column;
-	overflow-y: auto;
-	padding: 0 4px 4px;
-	scrollbar-width: thin;
+	max-height: 308px;
+	border-top: 1px solid var(--line-card);
+}
+.checks-list-viewport {
+	padding: 4px 6px 6px;
+}
+.checks-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+.checks-grid [data-ui='hover-list-highlight'] {
+	border-radius: var(--radius-row);
 }
 .check-row {
-	height: 32px;
+	height: 30px;
+	min-width: 0;
 	align-items: center;
 	gap: 10px;
-	padding: 0 8px;
+	padding: 0 6px;
 	color: var(--text-secondary);
 	font-size: var(--font-size-label);
 }
 .check-row-name {
 	min-width: 0;
-	flex: 1;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.check-row > svg:last-child {
+.check-row-state {
+	flex-shrink: 0;
+	color: var(--danger);
+	font-size: var(--font-size-meta);
+}
+.check-row-link {
 	width: 12px;
 	height: 12px;
 	flex-shrink: 0;
-	color: var(--text-ghost);
+	color: var(--text-faint);
+	opacity: 0;
+}
+.check-row:hover .check-row-link,
+.check-row:focus-visible .check-row-link {
+	opacity: 1;
+}
+.checks-skipped {
+	margin-top: 2px;
+}
+.checks-skipped-toggle {
+	height: 30px;
+	padding: 0 6px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+}
+.checks-skipped-toggle .checks-chevron {
+	width: 12px;
+	height: 12px;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.checks-skipped-toggle[data-state='open'] .checks-chevron {
+	rotate: 180deg;
 }

@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { MAX_CHAT_MESSAGE_CHARS, type Finding, type Review } from '@recoder/shared';
-import { withReviewMetrics } from '../../models/metrics';
+import { withUsageMetrics } from '../../models/metrics';
+import { withReviewModels } from '../../models/model-policy';
 import { LlmError } from '../../models/llm';
 import { ModelConfigError } from '../../models/models';
 import {
@@ -118,7 +119,11 @@ app.post('/:id/discuss', async (c) => {
 	const input = await discussInput(loaded.review, loaded.body, loaded.diff);
 
 	try {
-		return c.json(await withReviewMetrics(loaded.review.id, 'discussion', () => discussFinding(input)));
+		return c.json(
+			await withReviewModels(loaded.review.id, () =>
+				withUsageMetrics(loaded.review.id, 'discussion', () => discussFinding(input))
+			)
+		);
 	} catch (err) {
 		if (err instanceof LlmError) return c.json({ error: err.message }, 502);
 		throw err;
@@ -141,8 +146,10 @@ app.post('/:id/discuss/stream', async (c) => {
 
 			try {
 				const result = await settingsOperation(() =>
-					withReviewMetrics(loaded.review.id, 'discussion', () =>
-						streamDiscussFinding(input, (text) => send({ type: 'token', text }))
+					withReviewModels(loaded.review.id, () =>
+						withUsageMetrics(loaded.review.id, 'discussion', () =>
+							streamDiscussFinding(input, (text) => send({ type: 'token', text }))
+						)
 					)
 				);
 
@@ -181,13 +188,15 @@ app.post('/:id/rereview', async (c) => {
 	const sandboxPath = await findReviewCheckout(review);
 
 	try {
-		const result = await withReviewMetrics(review.id, 'discussion', () =>
-			runRereview({
-				notes: body.notes,
-				diff,
-				sandboxPath,
-				existingFindings: review.findings
-			})
+		const result = await withReviewModels(review.id, () =>
+			withUsageMetrics(review.id, 'discussion', () =>
+				runRereview({
+					notes: body.notes,
+					diff,
+					sandboxPath,
+					existingFindings: review.findings
+				})
+			)
 		);
 
 		if (result.findings.length > 0) result.findings = await mergeNewFindings(review.id, result.findings);

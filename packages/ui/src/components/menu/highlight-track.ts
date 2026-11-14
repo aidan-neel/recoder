@@ -5,12 +5,15 @@
  */
 const HIDE_DELAY = 60;
 
-/** Attributes the menus flip on the highlighted item: Radix menus and Select, and cmdk. */
-const WATCHED = ['data-highlighted', 'data-selected', 'aria-selected', 'hidden'];
+/**
+ * Attributes that mark the highlighted item: Radix menus and Select, cmdk, and
+ * our own lists, which mark the row being read as current.
+ */
+const WATCHED = ['data-highlighted', 'data-selected', 'aria-selected', 'data-current', 'aria-current', 'hidden'];
 
 /**
  * Where `item` sits inside `container`, in layout pixels. Offsets ignore
- * transforms, so a menu still scaling in from 0.95 measures at full size.
+ * transforms, so a menu still scaling in from 0.97 measures at full size.
  */
 function offsetWithin(item: HTMLElement, container: HTMLElement): { x: number; y: number } {
 	let x = 0;

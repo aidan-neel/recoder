@@ -7,15 +7,21 @@ import {
 	SUBAGENT_CAPS,
 	isRoutedModelId,
 	migrateSubagentCap,
+	parseProviderKey,
 	TOKEN_BUDGETS,
 	type ModelEntryPatch,
+	type ModelPolicy,
 	type ModelSettingsPatch,
 	type SubagentCap,
 	type TokenBudget
 } from '@recoder/shared';
+import { SealedValueError } from '../../secrets/seal.js';
+import { SecretKeyError } from '../../secrets/secret-key.js';
 import { serverDataDir } from '../../util/data-dir.js';
 import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
 import { isChatGptSignInEntry, moveChatGptModels, SAVED_ENTRY_PROVIDERS } from './chatgpt-migration.js';
+import { hiddenModelsSchema, modelPolicySchema } from './model-pick-schemas.js';
+import { hasUnsealedKey, openSettingsKeys, sealSettingsKeys } from './settings-secrets.js';
 
 const runtimeSchema = z.object({
 	temperature: z.number().min(0).max(2).nullable().optional(),
@@ -38,6 +44,20 @@ const modelEntrySchema = z.object({
 	runtime: runtimeSchema.optional()
 });
 
+/**
+ * The providers switched off in Settings, by `providerKey`, kept deduplicated and sorted. A key no installed CLI or
+ * connected provider has yet is kept: the CLI may be installed again, and its switch should still hold.
+ */
+const disabledProvidersSchema = z
+	.array(
+		z
+			.string()
+			.max(200)
+			.refine((key) => parseProviderKey(key) !== null, 'Expected cli:<agent id> or opencode:<provider id>.')
+	)
+	.max(200)
+	.transform((keys) => [...new Set(keys)].sort());
+
 export const reviewSettingsSchema = z.object({
 	baseUrl: z.string().max(500).optional(),
 	apiKey: z.string().max(500).optional(),
@@ -52,6 +72,9 @@ export const reviewSettingsSchema = z.object({
 	subagentCap: z.literal(SUBAGENT_CAPS).optional(),
 	tokenBudget: z.enum(TOKEN_BUDGETS).optional(),
 	reportLowSeverity: z.boolean().optional(),
+	disabledProviders: disabledProvidersSchema.optional(),
+	hiddenModels: hiddenModelsSchema.optional(),
+	modelPolicy: modelPolicySchema.optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
 	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
 	maxFileChars: z.number().int().positive().max(200_000).optional()
@@ -144,11 +167,18 @@ const sharedStoredSchema = reviewSettingsSchema.extend({
 	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional()
 });
 
-/** The shared settings, read in the current shape: a ChatGPT entry saved before the Codex CLI moves as in a file. */
-function sharedOverrides(): StoredSettings {
+/**
+ * The shared settings as stored, their keys sealed or not, in the current shape: a ChatGPT entry saved before the
+ * Codex CLI moves as in a file.
+ */
+function sharedStoredForm(): StoredSettings {
 	const { models, ...rest } = sharedStoredSchema.parse(readSharedSetting('review-settings') ?? {});
 
 	return { ...rest, ...moveChatGptModels(rest, models) };
+}
+
+function sharedOverrides(): StoredSettings {
+	return openSettingsKeys(sharedStoredForm());
 }
 
 function currentOverrides(): StoredSettings {
@@ -156,7 +186,7 @@ function currentOverrides(): StoredSettings {
 }
 
 function replaceOverrides(settings: StoredSettings): void {
-	if (sharedSettingsActive()) writeSharedSetting('review-settings', settings);
+	if (sharedSettingsActive()) writeSharedSetting('review-settings', sealSettingsKeys(settings));
 	else localOverrides = settings;
 }
 
@@ -174,21 +204,27 @@ export function settingsFileDisplay(): string {
 	return home && file.startsWith(home) ? `~${file.slice(home.length)}` : file;
 }
 
+/** Save the settings with their API keys sealed. */
 function persist(): void {
+	const sealed = sealSettingsKeys(currentOverrides());
+
 	if (sharedSettingsActive()) {
-		writeSharedSetting('review-settings', currentOverrides());
+		writeSharedSetting('review-settings', sealed);
 
 		return;
 	}
 
 	try {
-		writeFileSync(settingsFile(), JSON.stringify(currentOverrides(), null, 2), { mode: 0o600 });
+		writeFileSync(settingsFile(), JSON.stringify(sealed, null, 2), { mode: 0o600 });
 	} catch (err) {
 		console.warn('[settings] could not persist review config', err instanceof Error ? err.message : err);
 	}
 }
 
-/** What a saved settings file holds, converted to the current shape, and whether it was in an older one. */
+/**
+ * What a saved settings file holds, converted to the current shape with its keys opened, and whether it was in an
+ * older one: before the shapes above, or before keys were sealed.
+ */
 interface SavedSettings {
 	settings: StoredSettings;
 	legacy: boolean;
@@ -217,24 +253,32 @@ export function parseSavedReviewSettings(raw: unknown): SavedSettings {
 		}))
 	};
 
-	return { settings: apiKey ? { ...normalized, apiKey } : normalized, legacy: hasLegacyFields(parsed) };
+	const stored = apiKey ? { ...normalized, apiKey } : normalized;
+
+	return { settings: openSettingsKeys(stored), legacy: hasLegacyFields(parsed) || hasUnsealedKey(stored) };
 }
 
 function readSavedSettings(): SavedSettings | null {
 	try {
 		return parseSavedReviewSettings(JSON.parse(readFileSync(settingsFile(), 'utf8')));
-	} catch {
+	} catch (error) {
+		if (error instanceof SealedValueError || error instanceof SecretKeyError) throw error;
+
 		return null;
 	}
 }
 
 /**
- * Load persisted settings into memory, and save a file that was in an older format again in the current one. Call once
- * at boot. A missing or corrupt file starts empty, and env covers it.
+ * Load persisted settings into memory, and save a file that was in an older format, or held keys that were never
+ * sealed, again in the current one. Call once at boot. A missing or corrupt file starts empty, and env covers it; keys
+ * that cannot be opened stop the start, since saving over them would lose them.
  */
 export function initReviewSettings(): void {
 	if (sharedSettingsActive()) {
-		currentOverrides();
+		const stored = sharedStoredForm();
+		const settings = openSettingsKeys(stored);
+
+		if (hasUnsealedKey(stored)) replaceOverrides(settings);
 
 		return;
 	}
@@ -371,6 +415,9 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.subagentCap !== undefined) clean.subagentCap = patch.subagentCap;
 	if (patch.tokenBudget !== undefined) clean.tokenBudget = patch.tokenBudget;
 	if (patch.reportLowSeverity !== undefined) clean.reportLowSeverity = patch.reportLowSeverity;
+	if (patch.disabledProviders !== undefined) clean.disabledProviders = patch.disabledProviders;
+	if (patch.hiddenModels !== undefined) clean.hiddenModels = patch.hiddenModels;
+	if (patch.modelPolicy !== undefined) clean.modelPolicy = patch.modelPolicy;
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
 	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;
@@ -432,9 +479,17 @@ export function effectiveReportLowSeverity(): boolean {
 	return currentOverrides().reportLowSeverity ?? true;
 }
 
-/** API keys are never returned in full; the UI gets this masked preview (`••••1234` or null). */
-export function maskKey(key: string | undefined): string | null {
-	if (!key) return null;
+/** The keys of the providers switched off in Settings (`cli:codex`, `opencode:anthropic`); none by default. */
+export function disabledProviderKeys(): string[] {
+	return [...(currentOverrides().disabledProviders ?? [])];
+}
 
-	return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
+/** The ids of the models switched off in Settings; none by default. */
+export function hiddenModelIds(): string[] {
+	return [...(currentOverrides().hiddenModels ?? [])];
+}
+
+/** Who picks the models members run on: the saved policy, else each member picks. */
+export function effectiveModelPolicy(): ModelPolicy {
+	return currentOverrides().modelPolicy ?? { kind: 'choose' };
 }

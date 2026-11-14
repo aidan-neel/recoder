@@ -382,6 +382,7 @@ export function poolContext(run: ReviewRun): PoolContext {
 		nextCandidate: () => `c${run.nextCandidate++}`,
 		recommended: run.recommended,
 		exec: Boolean(run.workspace),
+		images: input.images ?? [],
 		setupNotes: () => run.setupNotes,
 		directive: run.directive,
 		subagentRequests: requestsPerReviewer(run),

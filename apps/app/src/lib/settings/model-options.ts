@@ -5,6 +5,7 @@ import {
 	parseVllmModelId,
 	prettyModelName,
 	resolveEffort,
+	switchedOffProviderOf,
 	type ModelEntry,
 	type ModelSettings,
 	type ReasoningEffort
@@ -130,10 +131,12 @@ export interface RolePick {
 	option: ModelOption | undefined;
 	effort: ReasoningEffort | null;
 	follows: boolean;
+	/** The pick runs on a provider switched off in Settings → Providers, so the server no longer offers it. */
+	switchedOff: boolean;
 }
 
 /** A role's saved model id and effort, before the catalog is looked up. */
-interface SavedPick {
+export interface SavedPick {
 	id: string | null;
 	effort: ReasoningEffort | null | undefined;
 }
@@ -148,19 +151,41 @@ const SAVED_PICK: Record<ModelRole, (settings: ModelSettings) => SavedPick> = {
 	verifier: (settings) => ({ id: settings.verifierModelId ?? null, effort: settings.verifierEffort })
 };
 
+/** What the server's settings hold for a role. */
+export function savedPick(settings: ModelSettings, role: ModelRole): SavedPick {
+	return SAVED_PICK[role](settings);
+}
+
 /** The saved pick for a role. */
 export function rolePick(settings: ModelSettings, role: ModelRole): RolePick {
-	const { id, effort } = SAVED_PICK[role](settings);
+	return rolePickOf(settings, role, savedPick(settings, role));
+}
+
+/** A role's pick as it runs now, for a saved id and effort read from the settings or from a member's own picks. */
+export function rolePickOf(settings: ModelSettings, role: ModelRole, { id, effort }: SavedPick): RolePick {
 	const option = id ? modelCatalog(settings.models).byId.get(id) : undefined;
 
-	return { id, option, effort: resolveEffort(option, effort), follows: followsWhenUnset(role) && !id };
+	return {
+		id,
+		option,
+		effort: resolveEffort(option, effort),
+		follows: followsWhenUnset(role) && !id,
+		switchedOff: isSwitchedOff(id, settings)
+	};
+}
+
+/** True when model `id` runs on a provider the settings have switched off. */
+function isSwitchedOff(id: string | null, settings: ModelSettings): boolean {
+	return id !== null && switchedOffProviderOf(id, settings.disabledProviders) !== null;
 }
 
 /**
- * Why a pick can't run, in plain words, or null when it can: its vLLM server
- * stopped serving the model, or was disconnected. Other picks are never missing here.
+ * Why a pick can't run, in plain words, or null when it can: its provider is
+ * switched off, or its vLLM server stopped serving the model or was
+ * disconnected. Other picks are never missing here.
  */
 export function missingNote(pick: RolePick): string | null {
+	if (pick.switchedOff) return 'Its provider is switched off. Switch it on in Providers or pick another model.';
 	if (pick.option?.unavailable) return `${pick.option.name} is no longer served. Pick another model or reviews stop.`;
 
 	const parsed = pick.id && !pick.option ? parseVllmModelId(pick.id) : null;

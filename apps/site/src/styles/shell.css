@@ -79,10 +79,6 @@ body {
 		padding: 0;
 		overflow-x: auto;
 		overscroll-behavior-x: contain;
-		scrollbar-width: none;
-	}
-	.site-nav-scroll::-webkit-scrollbar {
-		display: none;
 	}
 	.site-nav-list {
 		width: max-content;

@@ -66,14 +66,14 @@ interface PopoverContentProps {
 }
 
 /**
- * The floating panel: menu surface, 12px radius and padding. It grows from
- * the side it is anchored to (130ms in, 80ms out), flips and shifts to stay
+ * The floating panel: menu surface, the card radius, 10px padding. It grows
+ * from the side it is anchored to (65ms in, 40ms out), flips and shifts to stay
  * 8px inside the viewport, and scrolls when taller than the room it has.
  */
 export function PopoverContent({
 	side = 'bottom',
 	align = 'center',
-	sideOffset = 8,
+	sideOffset = 6,
 	className,
 	children,
 	onOpenAutoFocus,
@@ -107,7 +107,7 @@ export function PopoverContent({
 							className={cn(
 								'z-[130] max-h-(--radix-popover-content-available-height) max-w-(--radix-popover-content-available-width)',
 								'origin-(--radix-popover-content-transform-origin) overflow-auto overscroll-contain',
-								'rounded-[12px] bg-menu p-3 text-fg shadow-(--shadow-menu) outline-none thin-scroll',
+								'rounded-(--radius-card) bg-menu p-2.5 text-fg shadow-(--shadow-menu) outline-none',
 								'data-[state=closed]:pointer-events-none!',
 								className
 							)}

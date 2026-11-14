@@ -11,9 +11,13 @@ import type {
 
 import { post, request, seg } from './http';
 
-/** Which open pull requests to list: one repository's, and whether to skip the server's cache. */
+/**
+ * Which open pull requests to list: one repository's, the page after a cursor
+ * (which needs a repository), and whether to skip the server's cache.
+ */
 export interface PullListQuery {
 	repoId?: string;
+	after?: string;
 	fresh?: boolean;
 }
 
@@ -27,6 +31,7 @@ function listSearch(query: PullListQuery): string {
 	const params = new URLSearchParams();
 
 	if (query.repoId) params.set('repoId', query.repoId);
+	if (query.after) params.set('after', query.after);
 	if (query.fresh) params.set('fresh', '1');
 
 	const search = params.toString();

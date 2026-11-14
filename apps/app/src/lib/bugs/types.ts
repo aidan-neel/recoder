@@ -112,8 +112,6 @@ export interface BugsView {
 export interface SummaryView {
 	/** The review's account of the change, as markdown; null before a review wrote one. */
 	analysis: string | null;
-	/** True while the review still writes it. */
-	writing: boolean;
 	/** The pull request's description, as untrusted markdown; null when it has none. */
 	description: string | null;
 }

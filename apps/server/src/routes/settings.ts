@@ -4,8 +4,10 @@ import {
 	effectiveReportLowSeverity,
 	effectiveSubagentCap,
 	effectiveTokenBudget,
+	disabledProviderKeys,
+	effectiveModelPolicy,
+	hiddenModelIds,
 	getStoredSettings,
-	maskKey,
 	settingsFileDisplay,
 	reviewSettingsSchema,
 	saveReviewSettings,
@@ -18,11 +20,12 @@ import {
 	providerCatalog,
 	verifyKey
 } from '../models/model-providers';
-import { within, type HostedProvider, type ModelEntry, type SetupStatus } from '@recoder/shared';
+import { within, type HostedProvider, type SetupStatus } from '@recoder/shared';
 import { opencode } from '../agents/opencode/opencode';
-import { agentModels, pickedModels } from '../agents/registry';
-import { vllmEntries } from '../models/vllm/vllm-models';
-import { isReviewConfigured } from '../models/models';
+import { offeredModels, WRITE_WAIT_MS, type ModelListing } from '../models/offered-models';
+import { knownHiddenModels, settingsPatchProblem } from '../models/model-policy';
+import { isReviewConfigured, isReviewRunnable } from '../models/models';
+import { providerSwitches, type ProviderSwitches } from '../models/provider-switches';
 import { z } from 'zod';
 import { discoverModels } from '../models/model-discovery';
 import { db } from '../store';
@@ -31,34 +34,11 @@ import { parseBody } from './parse-body';
 const app = new Hono();
 
 /**
- * How long a write waits on an agent's fresh model listing (after the lists
- * were cleared) before it answers with the models that agent listed last.
- * The listing goes on and fills the cache for the next read; a write never
- * waits out a slow CLI.
+ * Effective reviewer model config. A key is never returned, only whether one is set. Models
+ * are the captured vLLM models and the agents', as `listing` says: the pickable ones, every one for the chooser, or
+ * only the picked models' entries, for a page that shows the picks, limits and toggles but no picker yet.
  */
-const WRITE_WAIT_MS = 2_500;
-
-/**
- * The models the settings offer: the captured vLLM models, then every model
- * the agents run, or with `catalog` off only the picked ones. `waitMs` bounds
- * the wait on a fresh listing.
- */
-async function offeredModels(catalog: boolean, waitMs?: number): Promise<ModelEntry[]> {
-	if (catalog) return [...vllmEntries(), ...(await agentModels(waitMs))];
-
-	const { sharedModelId, orchestratorModelId, specialistModelId, verifierModelId } = getStoredSettings();
-	const picked = [sharedModelId, orchestratorModelId, specialistModelId, verifierModelId];
-
-	return [...vllmEntries().filter((entry) => picked.includes(entry.id)), ...(await pickedModels(picked, waitMs))];
-}
-
-/**
- * Effective reviewer model config. Keys are never returned in full. Models
- * are the captured vLLM models and the agents': the whole catalog, or with `catalog` off only the
- * picked models' entries, for a page that shows the picks, limits and
- * toggles but no picker yet.
- */
-async function settingsPayload(catalog = true, waitMs?: number) {
+async function settingsPayload(listing: ModelListing, waitMs?: number) {
 	const eff = effectiveReviewEnv();
 	const stored = getStoredSettings();
 
@@ -66,18 +46,21 @@ async function settingsPayload(catalog = true, waitMs?: number) {
 		configured: isReviewConfigured(),
 		baseUrl: eff.baseUrl,
 		model: eff.model,
-		apiKeyPreview: maskKey(eff.apiKey),
+		apiKeySet: eff.apiKey !== '',
 		sharedModelId: stored.sharedModelId ?? null,
 		orchestratorModelId: stored.orchestratorModelId ?? null,
 		specialistModelId: stored.specialistModelId ?? null,
 		verifierModelId: stored.verifierModelId ?? null,
-		models: await offeredModels(catalog, waitMs),
+		models: await offeredModels(listing, waitMs),
 		orchestratorEffort: stored.orchestratorEffort ?? null,
 		specialistEffort: stored.specialistEffort ?? null,
 		verifierEffort: stored.verifierEffort ?? null,
 		subagentCap: effectiveSubagentCap(),
 		tokenBudget: effectiveTokenBudget(),
 		reportLowSeverity: effectiveReportLowSeverity(),
+		disabledProviders: disabledProviderKeys(),
+		hiddenModels: hiddenModelIds(),
+		modelPolicy: effectiveModelPolicy(),
 		configPath: settingsFileDisplay(),
 		limits: {
 			maxFiles: eff.maxFiles,
@@ -87,21 +70,32 @@ async function settingsPayload(catalog = true, waitMs?: number) {
 	};
 }
 
-/** `?catalog=0` leaves the catalog out (the picks keep their entries); without it the answer is unchanged, for apps/web. */
-function wantsCatalog(c: Context): boolean {
-	return c.req.query('catalog') !== '0';
+/**
+ * Which models the answer lists: `?catalog=0` only the picked ones (the picks keep their entries), `?hidden=1` every
+ * model of a switched-on provider with the hidden ones too, for the chooser; otherwise the models people pick from.
+ */
+function listingOf(c: Context): ModelListing {
+	if (c.req.query('catalog') === '0') return { kind: 'picked' };
+
+	return c.req.query('hidden') === '1' ? { kind: 'chooser' } : { kind: 'pickable' };
 }
 
-app.get('/models', async (c) => c.json(await settingsPayload(wantsCatalog(c))));
+app.get('/models', async (c) => c.json(await settingsPayload(listingOf(c))));
 
-/** True when OpenCode has a model provider connected; false when it has none, or is missing or down (its last check says which). */
-async function openCodeConnected(): Promise<boolean> {
+/**
+ * True when OpenCode has a model provider connected and switched on; false when it has none, is switched off, or is
+ * missing or down (its last check says which).
+ */
+async function openCodeConnected(switches: ProviderSwitches): Promise<boolean> {
+	if (!switches.isOn({ kind: 'cli', id: opencode.id })) return false;
+
 	const status = await opencode.detect();
 
 	if (!status.installed || status.error) return false;
 
 	return opencode.providers().then(
-		(providers) => providers.some((provider) => provider.connected),
+		(providers) =>
+			providers.some((provider) => provider.connected && switches.isOn({ kind: 'opencode', id: provider.id })),
 		() => false
 	);
 }
@@ -117,23 +111,25 @@ async function openCodeConnected(): Promise<boolean> {
 const STATUS_WAIT_MS = 2_000;
 
 /**
- * What first run needs, without the model catalog. OpenCode's providers are
- * asked only when no model is configured, which is first run's own case, and
- * alongside the model count, so the answer waits {@link STATUS_WAIT_MS} at
- * most.
+ * What first run needs, without the model catalog. Only switched-on providers
+ * count. OpenCode's providers are asked only when no picked model can run,
+ * which is first run's own case, and alongside the model count, so the answer
+ * waits {@link STATUS_WAIT_MS} at most.
  */
 app.get('/status', async (c) => {
 	const configured = isReviewConfigured();
+	const runnable = isReviewRunnable();
+	const switches = providerSwitches();
 
 	const [models, openCode] = await Promise.all([
-		offeredModels(true, STATUS_WAIT_MS),
-		configured || within(openCodeConnected(), STATUS_WAIT_MS, false)
+		offeredModels({ kind: 'chooser' }, STATUS_WAIT_MS),
+		runnable || within(openCodeConnected(switches), STATUS_WAIT_MS, false)
 	]);
 
 	const status: SetupStatus = {
 		configured,
 		modelCount: models.length,
-		providerConnected: configured || models.length > 0 || openCode,
+		providerConnected: runnable || models.length > 0 || openCode,
 		repoCount: (await db.repos.list()).length
 	};
 
@@ -150,9 +146,13 @@ app.on(['PUT', 'PATCH'], '/models', async (c) => {
 
 	if (body instanceof Response) return body;
 
-	saveReviewSettings(body);
+	const problem = await settingsPatchProblem(body);
 
-	return c.json(await settingsPayload(wantsCatalog(c), WRITE_WAIT_MS));
+	if (problem) return c.json({ error: problem }, 400);
+
+	saveReviewSettings(body.hiddenModels ? { ...body, hiddenModels: await knownHiddenModels(body.hiddenModels) } : body);
+
+	return c.json(await settingsPayload(listingOf(c), WRITE_WAIT_MS));
 });
 
 const discoverSchema = z.object({ baseUrl: z.string().max(500).optional(), apiKey: z.string().max(500).optional() });
@@ -175,7 +175,7 @@ app.post('/models/discover', async (c) => {
 	}
 });
 
-/** Hosted providers and whether each has a key. Keys are masked. */
+/** Hosted providers and whether each has a key. A key is never returned. */
 function providersPayload(): HostedProvider[] {
 	const connections = getStoredSettings().connections ?? {};
 
@@ -186,7 +186,7 @@ function providersPayload(): HostedProvider[] {
 		keyUrl: provider.keyUrl,
 		usageUrl: provider.usageUrl,
 		connected: !!connections[provider.id],
-		apiKeyPreview: maskKey(connections[provider.id]?.apiKey)
+		apiKeySet: !!connections[provider.id]?.apiKey
 	}));
 }
 
@@ -227,7 +227,10 @@ app.post('/providers/:id/connect', async (c) => {
 
 	setConnection(provider.id, parsed.data.apiKey);
 
-	return c.json({ providers: providersPayload(), settings: await settingsPayload(true, WRITE_WAIT_MS) });
+	return c.json({
+		providers: providersPayload(),
+		settings: await settingsPayload({ kind: 'pickable' }, WRITE_WAIT_MS)
+	});
 });
 
 /** Forget the key and every model added from this provider. */
@@ -238,7 +241,10 @@ app.delete('/providers/:id', async (c) => {
 	disconnects.set(provider.id, (disconnects.get(provider.id) ?? 0) + 1);
 	setConnection(provider.id, null);
 
-	return c.json({ providers: providersPayload(), settings: await settingsPayload(true, WRITE_WAIT_MS) });
+	return c.json({
+		providers: providersPayload(),
+		settings: await settingsPayload({ kind: 'pickable' }, WRITE_WAIT_MS)
+	});
 });
 
 /** Every model the provider serves, marked by whether Recoder can call it. */

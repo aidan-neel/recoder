@@ -6,17 +6,11 @@ import { useMemo } from 'react';
 import { modelLabel } from '../bugs/bug-lists';
 import { isReviewing } from '../pulls/pull-rows';
 import { useSession, useSessionData } from '../pull/pull-session';
+import { runActivity } from './run-activity';
 import { runPhase } from './run-phase';
 import { runStages } from './run-stages';
 import { waitingReason } from './run-waiting';
 import type { RunPhase, RunView } from './types';
-
-/** What the review does right now: the command it runs, else its latest step. */
-function activityOf(progress: ReviewProgress | null): string | null {
-	const running = progress?.toolCalls?.findLast((tool) => tool.status === 'running');
-
-	return running?.command ?? progress?.activity.at(-1)?.message ?? null;
-}
 
 function failureAction(failure: ModelFailure | undefined): FailureAction | null {
 	return failure?.usageLimit ? 'settings' : null;
@@ -55,7 +49,7 @@ export function useRunView(): RunView {
 			startedAt: phase === 'none' ? null : (review?.startedAt ?? review?.createdAt ?? null),
 			finishedAt: review && !isReviewing(review) && phase !== 'none' ? review.updatedAt : null,
 			stages: runStages(progress, review?.status ?? 'draft', phase),
-			activity: live ? activityOf(progress) : null,
+			activity: live ? runActivity(progress) : null,
 			waiting: phase === 'queued' ? waitingReason(progress) : null,
 			modelLabel: modelLabel(progress?.orchestratorModel),
 			failure: failureOf(review, progress, phase),

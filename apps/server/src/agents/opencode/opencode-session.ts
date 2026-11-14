@@ -1,4 +1,6 @@
+import type { ImageUpload } from '@recoder/shared';
 import { addedTurns, promptText, type ChatConversation, type HeldTranscript } from '../../models/llm/conversation';
+import { turnImages } from '../../models/llm/message-images';
 import type { ChatMessage } from '../../models/llm/types';
 import type { OpenCodeServer } from './opencode-server';
 
@@ -18,6 +20,8 @@ const kept = new WeakMap<ChatConversation, KeptSession>();
 export interface SessionTurn {
 	session: string;
 	text: string;
+	/** The images on the turns `text` sends. */
+	images: ImageUpload[];
 	/** The call replied: remember what the session now holds. */
 	commit(reply: string, messageId: string | undefined): void;
 	/** The call is over. A throwaway session is deleted; a kept one drops a failed call's messages. */
@@ -83,6 +87,7 @@ async function throwawayTurn(request: TurnRequest): Promise<SessionTurn> {
 	return {
 		session,
 		text: promptText(null, request.turns),
+		images: turnImages(request.turns),
 		commit: () => {},
 		end: async (_ok, aborted) => {
 			await abortSession(request, session, aborted);
@@ -133,6 +138,7 @@ export async function openTurn(request: TurnRequest): Promise<SessionTurn> {
 	return {
 		session: session.id,
 		text: promptText(added, request.turns),
+		images: turnImages(added ?? request.turns),
 		commit: (reply, messageId) => {
 			session.turns = request.turns.length + 1;
 			session.reply = reply;

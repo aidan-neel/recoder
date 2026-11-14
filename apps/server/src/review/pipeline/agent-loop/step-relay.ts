@@ -102,7 +102,13 @@ export class StepRelay<T> {
 		this.steps++;
 		this.stepMessageId = null;
 		opts.budget.spend();
-		this.current = { step, tracking: trackTokenCall(opts.config.model, this.provider), reported: false };
+
+		this.current = {
+			step,
+			tracking: trackTokenCall(opts.config.model, this.provider, opts.config.reasoningEffort),
+			reported: false
+		};
+
 		this.promptCalls.push(this.current);
 		opts.onLog?.(`${opts.label} model turn ${this.steps}/${opts.maxTurns} (${opts.config.model})`);
 		this.hooks.onStep(this.steps);
@@ -195,7 +201,7 @@ export class StepRelay<T> {
 		this.promptCalls = [];
 
 		if (calls.length === 0) {
-			const missed = trackTokenCall(this.opts.config.model, this.provider);
+			const missed = trackTokenCall(this.opts.config.model, this.provider, this.opts.config.reasoningEffort);
 
 			if (tokens) missed.usage(tokens);
 

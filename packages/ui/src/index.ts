@@ -14,4 +14,5 @@ export * from './components/menu';
 export { useOpened } from './components/menu/use-opened';
 export * from './components/form';
 export * from './components/display';
+export * from './components/chart';
 export * from './components/content';

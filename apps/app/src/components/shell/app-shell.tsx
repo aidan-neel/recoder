@@ -8,6 +8,7 @@ import { useEffect, type ReactNode } from 'react';
 import { useApi } from '@/lib/api/client';
 import { useChrome } from '@/lib/shell/chrome';
 import { newReviewHref, settingsHref } from '@/lib/shell/routes';
+import { toggleSidebar } from '@/lib/shell/sidebar-toggle';
 import { followSystemTheme } from '@/lib/shell/theme';
 import { useKeys } from '@/lib/shell/use-keys';
 import { useNavigator } from '@/lib/shell/navigation';
@@ -29,7 +30,6 @@ interface AppShellProps {
 export function AppShell({ model, children }: AppShellProps) {
 	const router = useRouter();
 	const { base } = useApi();
-	const sidebarOpen = useChrome((state) => state.sidebarOpen);
 
 	useNavigator();
 	useEffect(() => followSystemTheme(), []);
@@ -37,7 +37,7 @@ export function AppShell({ model, children }: AppShellProps) {
 	useKeys({
 		'mod+k': () => useChrome.getState().setPaletteOpen(!useChrome.getState().paletteOpen),
 		'mod+,': () => router.push(settingsHref()),
-		'[': () => useChrome.getState().toggleSidebar(),
+		'[': () => toggleSidebar(),
 		c: () => router.push(newReviewHref(base)),
 		'?': () => useChrome.getState().setShortcutsOpen(true)
 	});
@@ -45,14 +45,29 @@ export function AppShell({ model, children }: AppShellProps) {
 	return (
 		<MotionConfig reducedMotion="user">
 			<TooltipProvider>
-				<div className="app-frame" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
+				<Frame>
 					<Sidebar model={model} />
 					{children}
-				</div>
+				</Frame>
 				<CommandPalette />
 				<ShortcutsModal />
 				<Toaster />
 			</TooltipProvider>
 		</MotionConfig>
+	);
+}
+
+/**
+ * The grid the sidebar slides in. It alone follows the open state, so a
+ * toggle re-renders this one element and not the sidebar, the page or the
+ * overlays: the slide starts on the next frame instead of after a render.
+ */
+function Frame({ children }: { children: ReactNode }) {
+	const sidebarOpen = useChrome((state) => state.sidebarOpen);
+
+	return (
+		<div className="app-frame" data-sidebar={sidebarOpen ? 'open' : 'closed'}>
+			{children}
+		</div>
 	);
 }
