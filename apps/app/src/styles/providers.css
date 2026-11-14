@@ -1,16 +1,12 @@
-/* ───────── Settings → Models → Providers: the connected list and the dialog that connects one ───────── */
-/* In the card a notice is a settings row; the command that fixes it sits under the row's text. */
-.provider-notice .provider-command {
-	margin: 0 16px 16px;
-}
-
-/* ───────── The dialog's steps ───────── */
+/* ───────── The dialog that connects a model provider: its steps ───────── */
 /*
  * The steps cross in one cell of a set height, so the dialog and its footer
  * stay put from the list to a sign-in. A form that needs more room grows it.
+ * Under the 28px search and its 8px gap, the list opens on its first heading
+ * and eight whole rows (30 + 8 × 32), not partway through a name.
  */
 .provider-steps {
-	--provider-steps-height: 308px;
+	--provider-steps-height: 322px;
 	display: grid;
 	min-height: var(--provider-steps-height);
 }
@@ -183,7 +179,7 @@
 	justify-content: space-between;
 	gap: 12px;
 	padding: 0 10px 0 16px;
-	border-radius: 10px;
+	border-radius: var(--radius-control);
 	background: var(--bg-field);
 	box-shadow: inset 0 0 0 1px var(--line-control);
 }
@@ -202,4 +198,303 @@
 }
 .provider-sign-in-link {
 	align-self: flex-start;
+}
+
+/* ───────── Settings → Providers: the list beside the picked provider's details ───────── */
+
+/* The list and the details need more room than the 704px column of the other sections. */
+.settings-page:has(.providers) {
+	--settings-column: 920px;
+}
+.providers {
+	display: grid;
+	min-height: 440px;
+	grid-template-columns: 280px minmax(0, 1fr);
+}
+
+/* The list: rows of 56px on the rail's own 6px inset, so the highlight keeps off the card's edge. */
+.provider-rail {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px;
+	border-right: 1px solid var(--line-subtle);
+	--row-button-radius: var(--radius-row);
+}
+.provider-rail-row {
+	position: relative;
+	display: grid;
+	min-height: 56px;
+	align-items: center;
+	grid-template-columns: 28px minmax(0, 1fr) auto;
+	gap: 0 10px;
+	padding: 8px 10px;
+}
+.provider-rail-row[data-off] .provider-mark,
+.provider-rail-row[data-off] .provider-rail-text {
+	opacity: 0.55;
+}
+.provider-rail-text {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+}
+.provider-rail-name {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 6px;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+	line-height: 18px;
+}
+.provider-rail-name-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.provider-rail-status {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.provider-rail-status-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* The switch sits over the row's cover, so it stays its own control. */
+.provider-rail-switch {
+	position: relative;
+	z-index: 1;
+}
+.provider-rail-row:has(.provider-rail-add) {
+	display: flex;
+	min-height: 40px;
+}
+.provider-rail-add {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding-left: 6px;
+	color: var(--text-muted);
+	font-size: var(--font-size-body);
+}
+.provider-rail-add svg {
+	width: 16px;
+	height: 16px;
+}
+.provider-rail-add:hover {
+	color: var(--text-primary);
+}
+
+.provider-version {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	font-weight: 400;
+}
+.provider-mark {
+	display: grid;
+	width: 28px;
+	height: 28px;
+	flex-shrink: 0;
+	place-items: center;
+	border-radius: var(--radius-control);
+	background: var(--bg-hover);
+	color: var(--text-secondary);
+}
+.provider-mark svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* The details: a 60px head, then titled blocks split by hairlines, on a 20px inset. */
+/* It stays in view while a long list scrolls past. */
+.provider-detail {
+	position: sticky;
+	top: 0;
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	align-self: start;
+}
+.provider-detail-head {
+	display: flex;
+	min-height: 60px;
+	align-items: center;
+	gap: 10px;
+	padding: 12px var(--settings-end) 12px 20px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.provider-detail-title {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 22px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.provider-detail-head [data-ui='button'] {
+	margin-left: auto;
+}
+.provider-detail-empty {
+	display: grid;
+	place-items: center;
+	color: var(--text-muted);
+	font-size: var(--font-size-body);
+}
+
+.detail-block {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 16px 20px;
+}
+.detail-block + .detail-block {
+	border-top: 1px solid var(--line-subtle);
+}
+.detail-block-head {
+	display: flex;
+	min-height: 22px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+.detail-block-title {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 18px;
+}
+.detail-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-body);
+	line-height: 20px;
+}
+.detail-text {
+	color: var(--text-muted);
+	font-size: var(--font-size-body);
+	line-height: 20px;
+}
+/* Rows inside a block start on the block's text edge; the block already has its inset. */
+.detail-block .settings-row {
+	min-height: 44px;
+	padding: 4px 0;
+}
+.detail-fact-value {
+	font-family: var(--font-code);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+/* OpenCode's model providers: a row each, its usage under it when the provider meters it. */
+.model-providers {
+	display: flex;
+	flex-direction: column;
+}
+.model-provider + .model-provider {
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+}
+.model-provider[data-off] .settings-row-text {
+	opacity: 0.55;
+}
+.usage-windows[data-compact] {
+	gap: 10px;
+	padding-bottom: 12px;
+}
+
+/* Usage: each window's name and share used over its track, the reset under it. */
+.usage-windows {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+}
+.usage-window {
+	display: grid;
+	align-items: baseline;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 6px 12px;
+}
+.usage-window [data-ui='meter'],
+.usage-window-reset,
+.usage-skeleton-label,
+.usage-skeleton-track {
+	grid-column: 1 / -1;
+}
+.usage-window-label {
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	line-height: 18px;
+}
+.usage-window-used {
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+	font-variant-numeric: tabular-nums;
+}
+.usage-window-reset {
+	min-height: 16px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.usage-skeleton-label {
+	width: 96px;
+}
+.usage-skeleton-track {
+	height: 3px;
+}
+
+/* Add provider: the same blocks, on the dialog's own inset. */
+.add-provider .detail-block {
+	padding-inline: 0;
+}
+.add-provider .detail-block:first-child {
+	padding-top: 0;
+}
+.add-provider-cli {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-bottom: 6px;
+}
+
+/* ───────── Install and sign-in run by Recoder ───────── */
+.agent-setup {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 10px;
+}
+.agent-setup-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+/* The scroll area clips the code block's own ring, so the frame is drawn on the area. */
+.setup-output {
+	max-height: 180px;
+	border-radius: var(--radius-row);
+	background: var(--bg-code);
+	box-shadow: 0 0 0 1px var(--line-card);
+}
+.setup-code {
+	display: flex;
+	align-items: flex-end;
+	gap: 8px;
+}
+.setup-code > :first-child {
+	flex: 1;
 }

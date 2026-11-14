@@ -1,17 +1,32 @@
 /* ───────── Pull request list: one row a pull request, one fact that needs you ───────── */
+/* The list fills the page. Labels start and end on the bar's gutter; quiet controls and row fills reach past it. */
+.pulls-column {
+	width: 100%;
+	padding: 12px var(--page-gutter) 48px var(--page-gutter);
+}
+/*
+ * The bar's quiet controls have no box at rest, so their text or ink sits on the gutter: they reach out by their
+ * own padding (the kit's 9px, and 6px around a 16px icon in 28px) and the refresh icon by its 2-unit margin.
+ */
+.pulls-scope {
+	margin-left: -9px;
+}
+.pulls-refresh {
+	margin-right: calc(-6px - 16px / 12);
+}
 .pulls-head {
 	display: flex;
 	height: 36px;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	margin: 0 -8px 6px;
+	margin: 0 -9px 6px;
 }
 .pulls-head [data-ui='button'] {
 	font-size: var(--font-size-body);
 }
 .pulls-updated {
-	padding-right: 8px;
+	padding-right: 9px;
 	white-space: nowrap;
 }
 
@@ -28,19 +43,22 @@
 	margin: 0 -12px;
 }
 .pull-list [data-ui='hover-list-highlight'] {
-	border-radius: 10px;
+	border-radius: var(--radius-row);
 }
 
-/* A row: the mark, the title over its facts, then status, size and the menu in fixed slots so columns line up. */
+/*
+ * A row: the mark, the title over its facts, then status and size in fixed slots so columns line up. The size
+ * ends on the gutter, under the bar's last control; the menu stands in its place while the row is pointed at.
+ */
 .pull-row {
 	position: relative;
 	display: grid;
 	min-height: 60px;
 	align-items: center;
-	grid-template-columns: 16px minmax(0, 1fr) auto 104px var(--size-icon-md);
+	grid-template-columns: 16px minmax(0, 1fr) auto 104px;
 	gap: 0 14px;
-	padding: 0 8px 0 14px;
-	--row-button-radius: 10px;
+	padding: 0 12px;
+	--row-button-radius: var(--radius-row);
 }
 /* The hairline between rows hides under the highlight, so a hovered row reads as one surface. */
 .pull-row + .pull-row::before {
@@ -100,8 +118,17 @@
 }
 .pull-row .diff-stat {
 	justify-content: flex-end;
+	transition: opacity var(--dur-hover) ease-out;
 }
-/* The menu button waits until the row is pointed at, focused, or its menu is open. */
+.pull-row .diff-stat,
+.pull-row-menu {
+	grid-row: 1;
+	grid-column: 4;
+}
+.pull-row-menu {
+	justify-self: end;
+}
+/* The menu button waits until the row is pointed at, focused, or its menu is open; the size steps aside for it. */
 .pull-row-menu [data-ui='button'] {
 	opacity: 0;
 	transition:
@@ -114,7 +141,21 @@
 .pull-row-menu [data-ui='button'][data-state='open'] {
 	opacity: 1;
 }
+@media (hover: hover) {
+	.pull-row:hover .diff-stat,
+	.pull-row:focus-within .diff-stat,
+	.pull-row:has(.pull-row-menu [data-state='open']) .diff-stat {
+		opacity: 0;
+	}
+}
+/* Without a pointer to reveal it, the menu keeps a slot of its own after the size. */
 @media (hover: none) {
+	.pull-row {
+		grid-template-columns: 16px minmax(0, 1fr) auto 104px var(--size-icon-md);
+	}
+	.pull-row-menu {
+		grid-column: 5;
+	}
 	.pull-row-menu [data-ui='button'] {
 		opacity: 1;
 	}
@@ -136,9 +177,8 @@
 	min-height: 60px;
 	align-items: center;
 	gap: 14px;
-	margin: 0 -12px;
-	padding: 0 14px;
-	border-radius: 10px;
+	padding: 0 12px;
+	border-radius: var(--radius-row);
 	background: var(--bg-raised);
 	box-shadow: inset 0 0 0 1px var(--line-card);
 	color: var(--text-secondary);
@@ -148,9 +188,13 @@
 	flex: 1;
 }
 
+/* The watched end of the list: it takes no room, and the next page starts loading as it nears the screen. */
+.pulls-end {
+	height: 1px;
+}
 .pull-list-skeleton {
 	margin: 0 -12px;
 }
 .pull-list-skeleton [data-ui='skeleton-row'] {
-	padding: 0 14px;
+	padding: 0 12px;
 }

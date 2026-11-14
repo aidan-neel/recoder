@@ -39,7 +39,7 @@ export function parseGrokModels(output: string): ModelEntry[] {
 				label: model,
 				model,
 				baseUrl: null,
-				apiKeyPreview: null
+				apiKeySet: false
 			});
 		}
 	}

@@ -56,11 +56,6 @@
 				"tailwindcss"
 			]
 		},
-		"apps/bench": {
-			"project": [
-				"src/**/*.{ts,svelte}"
-			]
-		},
 		"packages/shared": {
 			"entry": [
 				"tests/**/*.test.ts"
@@ -80,6 +75,7 @@
 			],
 			"ignoreDependencies": [
 				"@fontsource/geist-mono",
+				"@fontsource/geist-sans",
 				"@fontsource/inter",
 				"@fontsource/lora"
 			]

@@ -70,7 +70,6 @@ function ConnectForm({ close, onSending }: ConnectFormProps) {
 					type="submit"
 					form={FORM_ID}
 					status={flow.status}
-					successLabel="Connected"
 					disabled={!flow.canSubmit && !flow.sending}
 				>
 					Connect

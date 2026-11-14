@@ -1,3 +1,7 @@
+import { existsSync } from 'node:fs';
+import { rm, symlink } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { cliEnv } from '../cli-process';
 
 type Env = Record<string, string | undefined>;
@@ -47,4 +51,26 @@ export function copilotEnv(env: Env): Record<string, string> {
  */
 export function copilotEnvWithHome(env: Env, home: string): Record<string, string> {
 	return { ...copilotEnv(env), COPILOT_HOME: home };
+}
+
+/** The CLI's home dir: `COPILOT_HOME`, else `~/.copilot`. */
+export function copilotHome(env: Env): string {
+	return env.COPILOT_HOME || join(env.HOME || homedir(), '.copilot');
+}
+
+/**
+ * Links the user's own `config.json` into a scratch `COPILOT_HOME`. It is the file `copilot login` writes its
+ * token to on a machine that keeps no OS keychain; where the keychain holds the sign-in (and where `gh auth
+ * login` or `COPILOT_GITHUB_TOKEN` covers it), there is no file and nothing is linked. A link, never a copy or a
+ * read: the CLI sees and refreshes the real file in place. Nothing else of `COPILOT_HOME` is imported — the
+ * plugins, MCP servers, sessions and instructions that file does not carry.
+ */
+export async function linkCopilotSignIn(env: Env, home: string): Promise<void> {
+	const real = join(copilotHome(env), 'config.json');
+	const link = join(home, 'config.json');
+
+	if (!existsSync(real) || real === link) return;
+
+	await rm(link, { force: true });
+	await symlink(real, link);
 }

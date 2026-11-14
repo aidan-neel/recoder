@@ -13,6 +13,9 @@ interface Part<Value> {
 /** Running checks are read again this often while the page is visible. */
 const CHECKS_MS = 15_000;
 
+/** The forge works out whether an open pull request can merge after it is asked; the page asks again this often until it knows. */
+const MERGEABILITY_MS = 4_000;
+
 /** What the rest of the session hears from the page. */
 interface PageEvents {
 	/** The page answered: a first load or a refresh. */
@@ -41,6 +44,22 @@ async function fill<Value>(part: Part<Value>, fetch: () => Promise<Value>): Prom
 export function createPageLoads(context: SessionContext, events: PageEvents) {
 	const { client, state, repoId, number } = context;
 	const get = state.getState;
+	const inflight = new Map<string, Promise<void>>();
+
+	/** `run`, or this part's load already in flight, so a warm and an open that overlap share one read. */
+	function deduped(key: string, run: () => Promise<void>): Promise<void> {
+		const pending = inflight.get(key);
+
+		if (pending) return pending;
+
+		const promise = run().finally(() => {
+			if (inflight.get(key) === promise) inflight.delete(key);
+		});
+
+		inflight.set(key, promise);
+
+		return promise;
+	}
 
 	const parts = {
 		diff: { read: () => get().diff, write: (diff) => state.setState({ diff }) } satisfies Part<PullDiff>,
@@ -106,15 +125,33 @@ export function createPageLoads(context: SessionContext, events: PageEvents) {
 		return hasPendingCheck(loaded(get().checks) ?? []);
 	}
 
+	function mergeabilityPending(): boolean {
+		const status = get().page.value?.status;
+
+		return status?.state === 'open' && status.mergeability === 'unknown';
+	}
+
+	const load = {
+		page: () => deduped('page', loadPage),
+		diff: () => deduped('diff', loadDiff),
+		checks: () => deduped('checks', loadChecks),
+		commits: () => deduped('commits', () => fill(parts.commits, () => client.pullCommits(repoId, number))),
+		conversation: () =>
+			deduped('conversation', () => fill(parts.conversation, () => client.pullComments(repoId, number)))
+	};
+
 	return {
-		loadPage,
-		loadDiff,
-		loadChecks,
-		loadCommits: () => fill(parts.commits, () => client.pullCommits(repoId, number)),
-		loadConversation: () => fill(parts.conversation, () => client.pullComments(repoId, number)),
+		loadPage: load.page,
+		loadDiff: load.diff,
+		loadChecks: load.checks,
+		loadCommits: load.commits,
+		loadConversation: load.conversation,
 
 		/** Reads the checks again while one runs and the page is visible; returns the stop. */
-		pollChecks: () => whileVisible(CHECKS_MS, () => void (checksRunning() && loadChecks())),
+		pollChecks: () => whileVisible(CHECKS_MS, () => void (checksRunning() && load.checks())),
+
+		/** Reads the page again while the forge has not yet said whether it can merge; returns the stop. */
+		pollMergeability: () => whileVisible(MERGEABILITY_MS, () => void (mergeabilityPending() && load.page())),
 
 		/** Posts a comment; it shows in the conversation at once. Rejects with a plain sentence. */
 		async postComment(body: string): Promise<void> {

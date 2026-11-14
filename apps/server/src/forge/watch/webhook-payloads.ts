@@ -1,3 +1,5 @@
+import type { PullState } from '@recoder/shared';
+import { GITLAB_STATES } from '../pulls/status';
 import { gitlabAuthor, gitlabPull } from './gitlab-feed';
 import { githubNote, githubPull } from './github-feed';
 import type { WatchedPull } from './cursor';
@@ -16,7 +18,9 @@ function urls(repo: Row, keys: string[]): string[] {
 /**
  * A GitLab "Merge Request Hook" (open and reopen, or an update with `oldrev`,
  * which is a push) or a "Note Hook" on an open merge request, as a pull
- * request event. Anything else is null.
+ * request event. Any `merge_request` payload whose state we read also carries
+ * it back for the record: open and reopen report `open`, a merge `merged`, a
+ * close `closed`. Anything else is null.
  */
 export function gitlabHook(payload: unknown): PullHook | null {
 	const body = row(payload);
@@ -27,15 +31,19 @@ export function gitlabHook(payload: unknown): PullHook | null {
 	if (body.object_kind === 'merge_request') {
 		const pull = gitlabPull(attributes);
 		const action = attributes.action;
+		const state = GITLAB_STATES[String(attributes.state)];
 
-		if (attributes.state !== 'opened' || pull.number <= 0) return null;
-		if (action === 'open' || action === 'reopen') return { repoUrls, pull, event: { kind: 'opened' } };
+		if (pull.number <= 0 || state === undefined) return null;
 
-		if (action === 'update' && typeof attributes.oldrev === 'string' && attributes.oldrev) {
-			return { repoUrls, pull, event: { kind: 'pushed' } };
+		if (state === 'open') {
+			if (action === 'open' || action === 'reopen') return { repoUrls, pull, event: { kind: 'opened' }, state };
+
+			if (action === 'update' && typeof attributes.oldrev === 'string' && attributes.oldrev) {
+				return { repoUrls, pull, event: { kind: 'pushed' }, state };
+			}
 		}
 
-		return null;
+		return { repoUrls, pull, state };
 	}
 
 	const merge = row(body.merge_request);
@@ -60,7 +68,8 @@ export function gitlabHook(payload: unknown): PullHook | null {
 				createdAt: new Date().toISOString(),
 				...(discussionId ? { discussionId } : {})
 			}
-		}
+		},
+		state: 'open'
 	};
 }
 
@@ -72,7 +81,10 @@ function issuePull(issue: Row): WatchedPull {
 /**
  * GitHub `pull_request` (opened and reopened, or synchronize, a push),
  * `issue_comment` on an open pull request and `pull_request_review_comment`,
- * as a pull request event. Anything else is null.
+ * as a pull request event. A `closed` action only reports the state the pull
+ * request settled at (`pull_request.merged` tells a merge from a plain
+ * close), and any other payload naming an open pull request reports `open`.
+ * Anything else is null.
  */
 export function githubHook(event: string | undefined, payload: unknown): PullHook | null {
 	const body = row(payload);
@@ -82,8 +94,15 @@ export function githubHook(event: string | undefined, payload: unknown): PullHoo
 		const pull = githubPull(row(body.pull_request));
 
 		if (pull.number <= 0) return null;
-		if (body.action === 'opened' || body.action === 'reopened') return { repoUrls, pull, event: { kind: 'opened' } };
-		if (body.action === 'synchronize') return { repoUrls, pull, event: { kind: 'pushed' } };
+		if (body.action === 'opened' || body.action === 'reopened')
+			return { repoUrls, pull, event: { kind: 'opened' }, state: 'open' };
+		if (body.action === 'synchronize') return { repoUrls, pull, event: { kind: 'pushed' }, state: 'open' };
+
+		if (body.action === 'closed') {
+			return { repoUrls, pull, state: row(body.pull_request).merged === true ? 'merged' : 'closed' };
+		}
+
+		if (row(body.pull_request).state === 'open') return { repoUrls, pull, state: 'open' };
 
 		return null;
 	}
@@ -103,5 +122,8 @@ export function githubHook(event: string | undefined, payload: unknown): PullHoo
 
 	if (!pull || pull.number <= 0 || !note) return null;
 
-	return { repoUrls, pull, event: { kind: 'mention', note } };
+	const state: PullState | undefined =
+		event === 'issue_comment' || row(body.pull_request).state === 'open' ? 'open' : undefined;
+
+	return { repoUrls, pull, event: { kind: 'mention', note }, state };
 }

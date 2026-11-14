@@ -1,6 +1,6 @@
 import { REASONING_EFFORTS, supportedEffort, type ModelEntry, type ReasoningEffort } from '@recoder/shared';
 import { z } from 'zod';
-import { parseJson } from './codex-output';
+import { parseJson } from '../cli-stream';
 
 /** Prefix of a Codex model's id in the Model select, so routing knows the CLI runs it. */
 export const CODEX_MODEL_PREFIX = 'codex:';
@@ -84,7 +84,7 @@ function modelEntry(model: z.infer<typeof modelSchema>): ModelEntry {
 		label: model.display_name || model.slug,
 		model: model.slug,
 		baseUrl: null,
-		apiKeyPreview: null,
+		apiKeySet: false,
 		...(model.context_window ? { contextWindow: model.context_window } : {}),
 		...(efforts.length ? { efforts } : {}),
 		...(defaultEffort ? { defaultEffort } : {})

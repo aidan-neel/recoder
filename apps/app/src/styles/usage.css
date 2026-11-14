@@ -1,0 +1,466 @@
+/* ───────── Settings → Usage: the overview, the totals and the breakdown ───────── */
+
+/*
+ * Usage is figures and charts, not settings, so it has no cards: titles,
+ * space and hairlines group it, as on the pull request screens. It needs the
+ * room the Providers page has, for the total and its people beside the
+ * chart. Numbers are tabular wherever they line up.
+ */
+.usage-page {
+	display: contents;
+}
+.settings-page:has(.usage-page) {
+	--settings-column: 920px;
+}
+.usage-report {
+	display: flex;
+	flex-direction: column;
+	gap: 48px;
+	margin-top: 8px;
+	font-variant-numeric: tabular-nums;
+}
+
+/* The + on a cost that leaves out unpriced models: there, but quieter than the number. */
+.usage-plus {
+	margin-left: 1px;
+	color: var(--text-faint);
+}
+
+/* ───────── A block: its title (and control), then its figures ───────── */
+.usage-block {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 14px;
+}
+.usage-block-head {
+	display: flex;
+	min-height: 28px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+.usage-block-title {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 18px;
+}
+.usage-block-note {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+
+/* ───────── One person's view: the way back, then who they are, where the update strip sits ───────── */
+.usage-person-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 16px;
+	padding-bottom: 12px;
+	box-shadow: inset 0 -1px 0 var(--line-subtle);
+}
+.usage-person-head [data-usage-back] {
+	margin-left: -7px;
+}
+.usage-person-id {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+}
+.usage-person-id .avatar {
+	width: 20px;
+	height: 20px;
+	font-size: 10px;
+}
+.usage-person-name {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+	line-height: 20px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ───────── Overview: the total and its rows beside the daily chart ───────── */
+.usage-overview {
+	display: grid;
+	grid-template-columns: 272px minmax(0, 1fr);
+	gap: 48px;
+}
+@container (max-width: 760px) {
+	.usage-overview {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+.usage-rail {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 20px;
+}
+.usage-total {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.usage-total-value {
+	color: var(--text-primary);
+	font-size: 40px;
+	font-weight: 600;
+	letter-spacing: -0.03em;
+	line-height: 44px;
+}
+.usage-total-meta {
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	white-space: nowrap;
+}
+
+/*
+ * A row is its line's dot, a mark, the name and the tokens over the share,
+ * sessions and cost. Its box bleeds 10px past the column so the text lines
+ * up with the total over it.
+ */
+.usage-rail-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0 -10px;
+}
+.usage-rail-row {
+	position: relative;
+	display: grid;
+	width: 100%;
+	min-width: 0;
+	grid-template-columns: 8px 18px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 2px 8px;
+	padding: 8px 10px;
+	border-radius: var(--radius-row);
+	outline: none;
+	text-align: left;
+	transition: background-color var(--dur-highlight) ease-out;
+}
+.usage-rail-row:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+
+/* The row whose line the pointer rests on in the chart lights as if hovered. */
+.usage-rail-row[data-linked] {
+	background-color: rgb(var(--wash-rgb) / 0.05);
+}
+.usage-rail-list:hover .usage-rail-row[data-linked] {
+	background-color: transparent;
+}
+.usage-rail-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 999px;
+}
+.usage-rail-mark {
+	display: flex;
+	align-items: center;
+}
+.usage-rail-mark .avatar {
+	width: 18px;
+	height: 18px;
+	font-size: 9px;
+}
+.usage-rail-mark [data-ui='agent-mark'] {
+	color: var(--text-subtle);
+}
+.usage-rail-name {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	line-height: 20px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.usage-rail-tokens {
+	padding-left: 12px;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+	line-height: 20px;
+}
+.usage-rail-meta {
+	grid-column: 3 / -1;
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+	white-space: nowrap;
+}
+
+.usage-plot {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 16px;
+}
+
+/* ───────── Totals: the split as figures, then as one bar ───────── */
+.usage-figures {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: 16px 24px;
+}
+@container (max-width: 640px) {
+	.usage-figures {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+.usage-figure {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 4px;
+}
+.usage-figure dt {
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.usage-figure dd {
+	color: var(--text-primary);
+	font-size: 20px;
+	font-weight: 500;
+	letter-spacing: -0.01em;
+	line-height: 26px;
+	white-space: nowrap;
+}
+
+.usage-figure dd[data-tone='warning'] {
+	color: var(--sev-medium);
+}
+.usage-figure-quiet {
+	margin-left: 8px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	font-weight: 400;
+	letter-spacing: 0;
+}
+
+/* ───────── Breakdown: models, days or people, split by hairlines under one hover highlight ───────── */
+/*
+ * The table bleeds 8px past the column so the hover highlight has room
+ * around the text; the hairlines and the text keep to the column's edges.
+ */
+.usage-rows {
+	--usage-columns: minmax(0, 1fr) var(--usage-sessions-column,) var(--usage-calls-column,) 64px
+		var(--usage-cost-column,) 72px;
+
+	margin: 0 -8px;
+}
+.usage-rows[data-sessions] {
+	--usage-sessions-column: 72px;
+}
+.usage-rows[data-calls] {
+	--usage-calls-column: 72px;
+}
+.usage-rows[data-cost] {
+	--usage-cost-column: 96px;
+}
+.usage-rows[data-go] {
+	--usage-go: 14px;
+}
+.usage-head,
+.usage-row {
+	position: relative;
+	display: grid;
+	grid-template-columns: var(--usage-columns) var(--usage-go, 0);
+	align-items: center;
+	column-gap: 24px;
+	padding: 0 8px;
+}
+.usage-rows:not([data-go]) :is(.usage-head, .usage-row) {
+	grid-template-columns: var(--usage-columns);
+}
+.usage-head::after,
+.usage-row:not(:last-child)::after {
+	position: absolute;
+	right: 8px;
+	bottom: 0;
+	left: 8px;
+	height: 1px;
+	background: var(--line-subtle);
+	content: '';
+}
+.usage-head {
+	height: 32px;
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+}
+.usage-head > :not(:first-child) {
+	text-align: right;
+}
+.usage-row {
+	min-height: 52px;
+	border-radius: var(--radius-row);
+	outline: none;
+}
+.usage-row:focus-visible,
+.usage-row:has(.usage-select:focus-visible) {
+	box-shadow: var(--focus-ring);
+}
+.usage-cell {
+	min-width: 0;
+}
+.usage-cell-figure {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	text-align: right;
+	white-space: nowrap;
+}
+.usage-cell-quiet {
+	color: var(--text-muted);
+}
+.usage-cell-go {
+	display: flex;
+	justify-content: flex-end;
+}
+.usage-cell-go svg {
+	width: 14px;
+	height: 14px;
+	color: var(--text-faint);
+	transition: color var(--dur-hover) ease-out;
+}
+.usage-row:hover .usage-cell-go svg {
+	color: var(--text-muted);
+}
+
+/* The name over its share line. A person's name is a button whose press covers the row. */
+.usage-select,
+.usage-plain {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+	max-width: 360px;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 0 9px;
+	text-align: left;
+}
+.usage-select {
+	outline: none;
+}
+.usage-select::before {
+	position: absolute;
+	inset: 0;
+	content: '';
+}
+.usage-row-title {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+}
+.usage-row-title .avatar {
+	width: 18px;
+	height: 18px;
+	font-size: 9px;
+}
+.usage-row-title [data-ui='agent-mark'] {
+	color: var(--text-subtle);
+}
+.usage-row-name {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	line-height: 20px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The share as a line under the name, split by the chart's lines in their colors; the biggest row's runs full. */
+.usage-share {
+	display: flex;
+	min-width: 3px;
+	height: 2px;
+	gap: 1px;
+}
+.usage-share > span {
+	min-width: 1px;
+	flex-basis: 0;
+	border-radius: 999px;
+}
+
+/* Show all lines its label up with the column's edge. */
+.usage-more {
+	align-self: flex-start;
+	margin: -6px 0 0 -9px;
+}
+
+/* ───────── Loading: the blocks' own shapes ───────── */
+.usage-skeleton-total {
+	width: 120px;
+	height: 36px;
+	margin: 4px 0;
+}
+.usage-skeleton-meta {
+	width: 150px;
+	height: 12px;
+	margin: 3px 0;
+}
+/* A rail row's placeholders sit in the row's own grid, each bar centred on the line it stands for. */
+.usage-skeleton-dot,
+.usage-skeleton-mark {
+	border-radius: 999px;
+}
+.usage-skeleton-dot {
+	width: 8px;
+	height: 8px;
+}
+.usage-skeleton-mark {
+	width: 18px;
+	height: 18px;
+}
+.usage-skeleton-rail-name {
+	width: 72px;
+	height: 12px;
+	margin: 4px 0;
+}
+.usage-skeleton-rail-tokens {
+	width: 40px;
+	height: 12px;
+	justify-self: end;
+	margin: 4px 0 4px 12px;
+}
+.usage-skeleton-rail-meta {
+	width: 168px;
+	height: 10px;
+	grid-column: 3 / -1;
+	margin: 3px 0;
+}
+.usage-skeleton-name {
+	width: 36%;
+	height: 14px;
+}
+.usage-skeleton-chart {
+	height: 268px;
+}
+.usage-skeleton-label {
+	width: 80px;
+	height: 12px;
+	margin: 2px 0;
+}
+.usage-skeleton-figure {
+	width: 64px;
+	height: 20px;
+	margin: 3px 0;
+}
+.usage-skeleton-bar {
+	height: 8px;
+	margin-bottom: 30px;
+}
+.usage-skeleton-row {
+	min-height: 52px;
+}

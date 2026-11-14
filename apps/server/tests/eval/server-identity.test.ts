@@ -10,9 +10,12 @@ const PLANTED = 'sk-planted-identity-test-key';
 const PLANTED_NAMES = ['RECODER_REVIEW_API_KEY', 'RECODER_TEST_STRENGTH', 'RECODER_NEW_SWITCH', 'RECODER_FORGE_TOKEN'];
 const saved = Object.fromEntries(PLANTED_NAMES.map((name) => [name, process.env[name]]));
 
-/** Read by the server but never a flag: where it keeps files and how it reaches its model. */
+/** Read by the server but never a flag: where it keeps files, how it reaches its model and how API clients sign in. */
 const NOT_A_FLAG = [
+	'RECODER_API_TOKEN',
+	'RECODER_SECRET_KEY',
 	'RECODER_INSTANCE_ID',
+	'RECODER_PUBLIC_URL',
 	'RECODER_DATABASE_URL',
 	'RECODER_DATA_DIR',
 	'RECODER_CLAUDE_CODE_DEBUG_DIR',

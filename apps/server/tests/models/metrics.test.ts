@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,7 +11,7 @@ import {
 	normalizeTokenUsage,
 	recordTokenBudget,
 	trackTokenCall,
-	withReviewMetrics,
+	withUsageMetrics,
 	withTokenStage
 } from '../../src/models/metrics';
 import { getStoredSettings, setReviewOverrides } from '../../src/review/session/review-settings';
@@ -21,28 +21,15 @@ import { codex } from '../../src/agents/codex/codex';
 import { ModelBudget, runJsonAgent } from '../../src/review/pipeline/agent-loop';
 import { EvidenceStore } from '../../src/evidence/evidence';
 import { buildInventory } from '../../src/review/pipeline/inventory';
+import { CHAT_OPTIONS as opts, COMPLETION_USAGE as usage, useMetricsStore } from '../helpers/metrics-store';
 import { testReview } from '../helpers/review';
 
-const originalFetch = globalThis.fetch;
+useMetricsStore('recoder-metrics-');
+
 const originalSettings = getStoredSettings();
 const originalComplete = codex.complete;
 const originalClaudeCode = claudeCode.complete;
 const ids: string[] = [];
-
-const opts = {
-	baseUrl: 'https://model.test/v1',
-	apiKey: 'secret-not-for-metrics',
-	model: 'model-a',
-	messages: [{ role: 'user' as const, content: 'private prompt' }]
-};
-
-const usage = {
-	prompt_tokens: 100,
-	completion_tokens: 30,
-	total_tokens: 130,
-	prompt_tokens_details: { cached_tokens: 40, cache_write_tokens: 10 },
-	completion_tokens_details: { reasoning_tokens: 20 }
-};
 
 async function review(): Promise<Review> {
 	const value = testReview({ repoId: 'missing-repo', headSha: 'head' });
@@ -52,27 +39,7 @@ async function review(): Promise<Review> {
 	return await db.reviews.set(value);
 }
 
-/** closeStore() reopens SQLite from RECODER_DATA_DIR, so this file owns a temp data dir for its whole run. */
-const originalDataDir = process.env.RECODER_DATA_DIR;
-
-beforeAll(async () => {
-	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-metrics-'));
-	await closeStore();
-});
-
-afterAll(async () => {
-	await closeStore();
-	if (originalDataDir === undefined) delete process.env.RECODER_DATA_DIR;
-	else process.env.RECODER_DATA_DIR = originalDataDir;
-});
-
-beforeEach(() => {
-	globalThis.fetch = (async () =>
-		Response.json({ choices: [{ message: { content: 'ok' } }], usage })) as unknown as typeof fetch;
-});
-
 afterEach(async () => {
-	globalThis.fetch = originalFetch;
 	codex.complete = originalComplete;
 	claudeCode.complete = originalClaudeCode;
 	setReviewOverrides(originalSettings);
@@ -90,13 +57,13 @@ test('concurrent requests remain isolated by review, model and scope and survive
 	const b = await review();
 
 	await Promise.all([
-		await withReviewMetrics(a.id, 'pipeline', () =>
+		await withUsageMetrics(a.id, 'pipeline', () =>
 			Promise.all([chatCompletion(opts), chatCompletion({ ...opts, model: 'model-b' })])
 		),
-		await withReviewMetrics(b.id, 'discussion', () => chatCompletion(opts))
+		await withUsageMetrics(b.id, 'discussion', () => chatCompletion(opts))
 	]);
 
-	await withReviewMetrics(a.id, 'fix', () => chatCompletion(opts));
+	await withUsageMetrics(a.id, 'fix', () => chatCompletion(opts));
 	await closeStore();
 
 	const metrics = (await getReviewMetrics(a.id))!;
@@ -129,18 +96,18 @@ test('concurrent requests remain isolated by review, model and scope and survive
 test('a review’s metrics name the token budget of its latest pipeline run, and a run outside the pipeline records none', async () => {
 	const a = await review();
 
-	await withReviewMetrics(a.id, 'pipeline', () => recordTokenBudget('low'));
+	await withUsageMetrics(a.id, 'pipeline', () => recordTokenBudget('low'));
 	expect((await getReviewMetrics(a.id))?.tokenBudget).toBe('low');
-	await withReviewMetrics(a.id, 'pipeline', () => recordTokenBudget('high'));
+	await withUsageMetrics(a.id, 'pipeline', () => recordTokenBudget('high'));
 	expect((await getReviewMetrics(a.id))?.tokenBudget).toBe('high');
-	await withReviewMetrics(a.id, 'discussion', () => recordTokenBudget('low'));
+	await withUsageMetrics(a.id, 'discussion', () => recordTokenBudget('low'));
 	expect((await getReviewMetrics(a.id))?.tokenBudget).toBe('high');
 });
 
 test('concurrent calls keep their own stage, an inner stage wins, and a call outside any stage counts as other', async () => {
 	const a = await review();
 
-	await withReviewMetrics(a.id, 'pipeline', () =>
+	await withUsageMetrics(a.id, 'pipeline', () =>
 		Promise.all([
 			withTokenStage('reviewer', () =>
 				Promise.all([chatCompletion(opts), withTokenStage('worker', () => chatCompletion(opts))])
@@ -190,7 +157,7 @@ test('streaming requests request usage and replace cumulative reports, including
 	const tokens: string[] = [];
 
 	expect(
-		await withReviewMetrics(a.id, 'discussion', () => streamChatCompletion(opts, (token) => tokens.push(token)))
+		await withUsageMetrics(a.id, 'discussion', () => streamChatCompletion(opts, (token) => tokens.push(token)))
 	).toBe('ok');
 
 	expect(tokens).toEqual(['ok']);
@@ -209,7 +176,7 @@ test('final usage without a trailing newline is retained at stream EOF', async (
 			`data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: ${JSON.stringify({ usage })}`
 		)) as unknown as typeof fetch;
 
-	await withReviewMetrics(a.id, 'discussion', () => streamChatCompletion(opts, () => {}));
+	await withUsageMetrics(a.id, 'discussion', () => streamChatCompletion(opts, () => {}));
 	expect((await getReviewMetrics(a.id))?.total.usage.totalTokens).toBe(130);
 });
 
@@ -228,7 +195,7 @@ test.each([{ choices: [{ finish_reason: 'length' }] }, { error: { message: 'Prov
 				].join('\n\n')
 			)) as unknown as typeof fetch;
 
-		await expect(withReviewMetrics(a.id, 'discussion', () => streamChatCompletion(opts, () => {}))).rejects.toThrow();
+		await expect(withUsageMetrics(a.id, 'discussion', () => streamChatCompletion(opts, () => {}))).rejects.toThrow();
 
 		expect((await getReviewMetrics(a.id))?.total).toMatchObject({
 			calls: 1,
@@ -243,7 +210,7 @@ test('cancellation before acquiring capacity does not invent a model request', a
 	const a = await review();
 	const signal = AbortSignal.abort();
 
-	await withReviewMetrics(a.id, 'pipeline', async () => {
+	await withUsageMetrics(a.id, 'pipeline', async () => {
 		await expect(chatCompletion({ ...opts, signal })).rejects.toThrow('cancelled');
 		await expect(streamChatCompletion({ ...opts, signal }, () => {})).rejects.toThrow('cancelled');
 	});
@@ -263,16 +230,16 @@ test('Codex chat and streaming followups each count once and separate the same m
 		return 'ok';
 	};
 
-	await withReviewMetrics(a.id, 'pipeline', () => chatCompletion({ ...opts, provider: 'codex' }));
+	await withUsageMetrics(a.id, 'pipeline', () => chatCompletion({ ...opts, provider: 'codex' }));
 
 	const chunks: string[] = [];
 
-	await withReviewMetrics(a.id, 'discussion', () =>
+	await withUsageMetrics(a.id, 'discussion', () =>
 		streamChatCompletion({ ...opts, provider: 'codex' }, (text) => chunks.push(text))
 	);
 
 	expect(chunks).toEqual(['o', 'k']);
-	await withReviewMetrics(a.id, 'discussion', () => chatCompletion(opts));
+	await withUsageMetrics(a.id, 'discussion', () => chatCompletion(opts));
 
 	expect(
 		(await getReviewMetrics(a.id))?.models.map((model) => [model.provider, model.calls, model.usage.totalTokens])
@@ -291,7 +258,7 @@ test('a Claude Code call records what paid for it on its call record', async () 
 		return 'ok';
 	};
 
-	await withReviewMetrics(a.id, 'pipeline', () =>
+	await withUsageMetrics(a.id, 'pipeline', () =>
 		chatCompletion({ ...opts, provider: 'claude-code', baseUrl: '', apiKey: '' })
 	);
 
@@ -310,7 +277,7 @@ test('nested agent retries count all provider calls, not just the accepted JSON 
 			usage
 		})) as unknown as typeof fetch;
 
-	await withReviewMetrics(a.id, 'pipeline', () =>
+	await withUsageMetrics(a.id, 'pipeline', () =>
 		runJsonAgent({
 			label: 'reviewer',
 			stage: 'reviewer',
@@ -336,7 +303,7 @@ test('nested agent retries count all provider calls, not just the accepted JSON 
 test('missing usage stays unavailable; partial coverage and failed/truncated requests are counted honestly', async () => {
 	const a = await review();
 
-	await withReviewMetrics(a.id, 'pipeline', async () => {
+	await withUsageMetrics(a.id, 'pipeline', async () => {
 		await chatCompletion(opts);
 
 		globalThis.fetch = (async () =>
@@ -367,7 +334,7 @@ test('missing usage stays unavailable; partial coverage and failed/truncated req
 	globalThis.fetch = (async () =>
 		new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n')) as unknown as typeof fetch;
 
-	await withReviewMetrics(b.id, 'discussion', () => streamChatCompletion(opts, () => {}));
+	await withUsageMetrics(b.id, 'discussion', () => streamChatCompletion(opts, () => {}));
 
 	expect((await getReviewMetrics(b.id))?.total).toMatchObject({
 		calls: 1,
@@ -382,7 +349,7 @@ test('a call the provider rejects is stored as failed with its error text, witho
 	globalThis.fetch = (async () =>
 		new Response(`{"error":"key ${opts.apiKey} is over its quota"}`, { status: 400 })) as unknown as typeof fetch;
 
-	await withReviewMetrics(a.id, 'pipeline', () => expect(chatCompletion(opts)).rejects.toThrow());
+	await withUsageMetrics(a.id, 'pipeline', () => expect(chatCompletion(opts)).rejects.toThrow());
 
 	const [call] = (await reviewMetrics.get(a.id))?.calls ?? [];
 
@@ -392,7 +359,7 @@ test('a call the provider rejects is stored as failed with its error text, witho
 
 test('interrupted calls keep reported usage durably and cannot recreate deleted reviews', async () => {
 	const a = await review();
-	const call = await withReviewMetrics(a.id, 'pipeline', () => trackTokenCall('model-a', 'codex'));
+	const call = await withUsageMetrics(a.id, 'pipeline', () => trackTokenCall('model-a', 'codex'));
 
 	call.usage(normalizeTokenUsage({ prompt_tokens: 100, completion_tokens: 10 }));
 	await closeStore();

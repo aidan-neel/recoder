@@ -12,13 +12,13 @@ import { useFieldControl } from './field-context';
  * px-to-rem step skips `[data-ui='switch']`), so the thumb's travel lines up
  * at every root size.
  */
-const TRACK = 32;
-const INSET = 3;
-const THUMB = 14;
+const TRACK = 28;
+const INSET = 2;
+const THUMB = 12;
 const TRAVEL = TRACK - INSET * 2 - THUMB;
 
 /** A press stretches the thumb this much toward the far side. */
-const STRETCH = 4;
+const STRETCH = 3;
 
 /** The toggle springs with a little overshoot; the press stretch is firmer. */
 const TOGGLE: Transition = { type: 'spring', stiffness: 560, damping: 28 };
@@ -34,7 +34,7 @@ interface SwitchProps {
 }
 
 /**
- * An on/off switch: a 32×20 track with a 14px thumb that springs across.
+ * An on/off switch: a 28×16 track with a 12px thumb that springs across.
  * Pressing it (pointer or Space) stretches the thumb, as if it were about to
  * move. Inside a `Field`, the field's label names it.
  */

@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ComponentType, ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
 
 import { CodeBlock } from './code-block';
@@ -90,7 +90,7 @@ function Image({ src, alt }: ComponentProps<'img'>) {
 /** A table, scrolling sideways inside its own box when it is wider than the text. */
 function Table({ children }: ComponentProps<'table'>) {
 	return (
-		<div data-ui="markdown-table" className="thin-scroll">
+		<div data-ui="markdown-table">
 			<table>{children}</table>
 		</div>
 	);
@@ -101,3 +101,33 @@ export const MARKDOWN_PARTS: Components = { pre: Fence, code: InlineCode, a: Lin
 
 /** The same parts for `StaticMarkdown`, whose fenced code is highlighted on the server. */
 export const STATIC_MARKDOWN_PARTS: Components = { ...MARKDOWN_PARTS, pre: StaticFence };
+
+/** Links whose target starts with `prefix` draw through `component` instead of as plain links, such as a citation chip. */
+export interface LinkOverride {
+	prefix: string;
+	component: ComponentType<{ href: string; children: ReactNode }>;
+}
+
+const OVERRIDE_PARTS = new WeakMap<LinkOverride['component'], Map<string, Components>>();
+
+/**
+ * The parts with `override`'s links drawn by its component. One table per override, kept, because rendered
+ * text is cached by its table's identity.
+ */
+export function partsWithLinkOverride({ prefix, component: Custom }: LinkOverride): Components {
+	const byPrefix = OVERRIDE_PARTS.get(Custom) ?? new Map<string, Components>();
+	const kept = byPrefix.get(prefix);
+
+	if (kept) return kept;
+
+	const parts: Components = {
+		...MARKDOWN_PARTS,
+		a: (props: ComponentProps<'a'>) =>
+			props.href?.startsWith(prefix) ? <Custom href={props.href}>{props.children}</Custom> : <Link {...props} />
+	};
+
+	byPrefix.set(prefix, parts);
+	OVERRIDE_PARTS.set(Custom, byPrefix);
+
+	return parts;
+}

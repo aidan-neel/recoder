@@ -1,8 +1,9 @@
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Hono, type Context } from 'hono';
 import { env } from '../env';
 import { handlePullHook, type HookOutcome, type PullHook } from '../forge/watch/webhook-event';
 import { githubHook, gitlabHook } from '../forge/watch/webhook-payloads';
+import { sameSecret } from '../util/same-secret';
 
 function verifySignature(secret: string, signature: string | null | undefined, raw: string): boolean {
 	if (!signature?.startsWith('sha256=')) return false;
@@ -12,13 +13,6 @@ function verifySignature(secret: string, signature: string | null | undefined, r
 	const b = Buffer.from(expected);
 
 	return a.length === b.length && timingSafeEqual(a, b);
-}
-
-/** GitLab sends the secret itself; comparing digests keeps the check constant-time whatever the length. */
-function sameSecret(secret: string, header: string | undefined): boolean {
-	const digest = (value: string) => createHash('sha256').update(value).digest();
-
-	return header !== undefined && timingSafeEqual(digest(secret), digest(header));
 }
 
 function parseJson(raw: string):

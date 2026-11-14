@@ -1,13 +1,13 @@
 import { matchesQuery, ROLE_NAME, type ModelGroup, type ModelOption } from './model-options';
 
-/** A model row, and the "Same as Review model" row, are 34px. */
-const ROW_HEIGHT = 34;
+/** A model row, and the "Same as Review model" row, are 30px (`.model-row`). */
+const ROW_HEIGHT = 30;
 
-/** A provider heading: 16px of text with 8px above and 5px below. */
-const HEADING_HEIGHT = 29;
+/** A provider heading: 16px of text with 8px above and 4px below (`.model-heading`). */
+const HEADING_HEIGHT = 28;
 
-/** The list's padding above the first row (`[cmdk-list-sizer]` in the kit). */
-const LIST_PAD = 8;
+/** The list's padding above the first row (`.model-dialog [cmdk-list-sizer]`). */
+const LIST_PAD = 4;
 
 /** The row that unsets a pick, so it follows the Review model. */
 export const FOLLOW_LABEL = `Same as ${ROLE_NAME.orchestrator}`;
@@ -153,6 +153,15 @@ export function scrollToCenter(layout: RowLayout, index: number, viewport: numbe
 	const middle = layout.tops[index] + heightOf(layout.rows[index], layout.scale) / 2;
 
 	return Math.max(0, Math.min(layout.total - viewport, middle - viewport / 2));
+}
+
+/**
+ * The list's own scroll position for a position measured from the first row.
+ * The list's padding sits above the first row, so a position at the first row
+ * scrolls to the very top and keeps that padding in view.
+ */
+export function listScrollTop(layout: RowLayout, rowTop: number): number {
+	return rowTop <= 0 ? 0 : rowTop + layout.pad;
 }
 
 /** How far each key moves the selection; Home and End jump to the ends. */

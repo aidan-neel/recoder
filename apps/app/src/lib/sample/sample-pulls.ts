@@ -9,6 +9,7 @@ import {
 	type Review
 } from '@recoder/shared';
 
+import { MANY_CHECKS, MANY_CHECKS_PASSING } from './sample-checks';
 import { sampleTime } from './sample-clock';
 import { SAMPLE_CHECKS, SAMPLE_PULL, SAMPLE_REVIEW } from './sample-review';
 
@@ -56,12 +57,6 @@ const PASSED: PrCheck[] = [
 	{ name: 'unit tests', state: 'passed', url: null }
 ];
 
-const FAILING: PrCheck[] = [
-	{ name: 'typecheck', state: 'failed', url: null },
-	{ name: 'unit tests', state: 'failed', url: null },
-	{ name: 'lint', state: 'passed', url: null }
-];
-
 /** The tally a forge reports for these checks. */
 function tally(checks: PrCheck[]): PullStatus['checks'] {
 	return {
@@ -77,7 +72,7 @@ interface PullShape {
 	title: string;
 	author: string;
 	updatedAt: string;
-	status?: Partial<Pick<PullStatus, 'draft' | 'mergeability'>>;
+	status?: Partial<Pick<PullStatus, 'state' | 'draft' | 'mergeability'>>;
 	checks?: PrCheck[];
 }
 
@@ -163,7 +158,7 @@ const PULLS = {
 		title: 'Upgrade the chart library',
 		author: 'renovate[bot]',
 		updatedAt: sampleTime('2026-10-13T07:20:00.000Z'),
-		checks: FAILING
+		checks: MANY_CHECKS
 	}),
 	darkMode: samplePull({
 		repoId: 'sample-web',
@@ -178,7 +173,8 @@ const PULLS = {
 		number: 219,
 		title: 'Add an audit log for admin actions',
 		author: 'claude[bot]',
-		updatedAt: sampleTime('2026-10-13T06:10:00.000Z')
+		updatedAt: sampleTime('2026-10-13T06:10:00.000Z'),
+		checks: MANY_CHECKS_PASSING
 	}),
 	datePicker: samplePull({
 		repoId: 'sample-web',
@@ -201,6 +197,63 @@ const PULLS = {
 		author: 'jonas',
 		updatedAt: sampleTime('2026-10-12T11:00:00.000Z'),
 		status: { mergeability: 'blocked' }
+	}),
+	cache: samplePull({
+		repoId: 'sample-api',
+		number: 198,
+		title: 'Cache the tenant lookup',
+		author: 'maya',
+		updatedAt: sampleTime('2026-10-13T08:50:00.000Z'),
+		status: { state: 'merged' },
+		checks: MANY_CHECKS
+	}),
+	locale: samplePull({
+		repoId: 'sample-web',
+		number: 77,
+		title: 'Add the Spanish locale',
+		author: 'ana',
+		updatedAt: sampleTime('2026-10-13T05:30:00.000Z'),
+		status: { state: 'merged' }
+	}),
+	tracing: samplePull({
+		repoId: 'sample-api',
+		number: 190,
+		title: 'Trace every outbound call',
+		author: 'devin-ai[bot]',
+		updatedAt: sampleTime('2026-10-12T19:00:00.000Z'),
+		status: { state: 'closed' }
+	}),
+	icons: samplePull({
+		repoId: 'sample-web',
+		number: 72,
+		title: 'Swap the icon set',
+		author: 'jonas',
+		updatedAt: sampleTime('2026-10-11T10:00:00.000Z'),
+		status: { state: 'merged' }
+	}),
+	retries: samplePull({
+		repoId: 'sample-api',
+		number: 181,
+		title: 'Retry failed queue jobs',
+		author: 'renovate[bot]',
+		updatedAt: sampleTime('2026-10-09T10:00:00.000Z'),
+		status: { state: 'closed' }
+	}),
+	tables: samplePull({
+		repoId: 'sample-web',
+		number: 69,
+		title: 'Sticky headers for tables',
+		author: 'ana',
+		updatedAt: sampleTime('2026-10-06T10:00:00.000Z'),
+		status: { state: 'merged' }
+	}),
+	pooling: samplePull({
+		repoId: 'sample-api',
+		number: 170,
+		title: 'Pool database connections',
+		author: 'maya',
+		updatedAt: sampleTime('2026-09-29T10:00:00.000Z'),
+		status: { state: 'closed' }
 	})
 };
 
@@ -262,7 +315,14 @@ export function sampleSeed(): SampleSeed {
 		{ ...plainReview(PULLS.audit, 'failed'), summary: REVIEW_CANCELLED },
 		plainReview(PULLS.datePicker, 'passed', '85bead'),
 		plainReview(PULLS.pagination, 'passed'),
-		plainReview(PULLS.billing, 'passed')
+		plainReview(PULLS.billing, 'passed'),
+		plainReview(PULLS.cache, 'passed'),
+		plainReview(PULLS.locale, 'passed'),
+		plainReview(PULLS.tracing, 'passed'),
+		plainReview(PULLS.icons, 'passed'),
+		plainReview(PULLS.retries, 'failed'),
+		plainReview(PULLS.tables, 'passed'),
+		plainReview(PULLS.pooling, 'passed')
 	];
 
 	return {

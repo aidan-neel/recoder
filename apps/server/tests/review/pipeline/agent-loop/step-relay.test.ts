@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { TokenUsage } from '@recoder/shared';
 import { LlmError } from '../../../../src/models/llm';
-import { getReviewMetrics, withReviewMetrics } from '../../../../src/models/metrics';
+import { getReviewMetrics, withUsageMetrics } from '../../../../src/models/metrics';
 import { ModelBudget } from '../../../../src/review/pipeline/agent-loop/budget';
 import type { JsonAgentOptions } from '../../../../src/review/pipeline/agent-loop/options';
 import { StepRelay } from '../../../../src/review/pipeline/agent-loop/step-relay';
@@ -37,7 +37,7 @@ async function relay(): Promise<{ reviewId: string; run: <T>(work: (relay: StepR
 
 	return {
 		reviewId: review.id,
-		run: async (work) => await withReviewMetrics(review.id, 'pipeline', () => work(target))
+		run: async (work) => await withUsageMetrics(review.id, 'pipeline', () => work(target))
 	};
 }
 

@@ -1,6 +1,12 @@
 import type { AgentStatus, ModelProvider } from '@recoder/shared';
 import { agentById } from '../../agents/registry.js';
-import { isReviewConfigured, stageConfigs, type ModelConfig } from '../../models/models.js';
+import {
+	isReviewConfigured,
+	isReviewRunnable,
+	ProviderSwitchedOffError,
+	stageConfigs,
+	type ModelConfig
+} from '../../models/models.js';
 import { MODEL_LOOKUP_LIMIT_MS, listLiveModels, listingProblem, type ModelLookup } from '../run/model-choices.js';
 import { openRunSignal } from '../run/run-signal.js';
 import { failedCheck, passedCheck } from './check-result.js';
@@ -8,6 +14,8 @@ import type { DoctorCheck } from './doctor.js';
 
 const NOT_CONFIGURED_FIX =
 	'Configure a model in Recoder settings, or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL.';
+
+const SWITCHED_OFF_FIX = 'Switch the provider back on in Settings → Providers, or pick a model on another provider.';
 
 /**
  * Whether a review model resolves, and which models the review, subagents and verifiers would use. A model run by
@@ -19,7 +27,11 @@ const NOT_CONFIGURED_FIX =
 export async function checkReviewModel(): Promise<DoctorCheck> {
 	if (!isReviewConfigured()) return failedCheck('review-model', 'No review model is configured.', NOT_CONFIGURED_FIX);
 
-	const configs = stageConfigs();
+	const configs = stageModels();
+
+	if (configs instanceof ProviderSwitchedOffError)
+		return failedCheck('review-model', configs.message, SWITCHED_OFF_FIX);
+
 	const [review, worker, verifier] = configs;
 
 	const lookup: ModelLookup = {
@@ -34,6 +46,17 @@ export async function checkReviewModel(): Promise<DoctorCheck> {
 	const verifierNote = verifier.model === review.model ? '' : `; verifier model ${verifier.model}`;
 
 	return passedCheck('review-model', `Review model ${review.model}; worker model ${worker.model}${verifierNote}.`);
+}
+
+/** Each stage's model, or the error of one on a provider switched off in Settings, which the check reports. */
+function stageModels(): readonly ModelConfig[] | ProviderSwitchedOffError {
+	try {
+		return stageConfigs();
+	} catch (error) {
+		if (error instanceof ProviderSwitchedOffError) return error;
+
+		throw error;
+	}
 }
 
 /** A failed check when the model's agent does not list it; null when it does, and for a model no agent lists. */
@@ -66,7 +89,7 @@ async function unlistedModel(config: ModelConfig, lookup: ModelLookup): Promise<
  * installed; whether it offers the saved model is `checkReviewModel`'s check.
  */
 export async function checkAgentSignIns(): Promise<DoctorCheck[]> {
-	if (!isReviewConfigured()) return [];
+	if (!isReviewRunnable()) return [];
 
 	const providers = new Set(stageConfigs().map((config) => config.provider));
 

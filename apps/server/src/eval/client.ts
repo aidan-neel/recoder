@@ -9,13 +9,25 @@ import type {
 } from '@recoder/shared';
 import type { StoredMetrics } from '../models/metrics';
 import type { CandidateOutcome } from '../review/pipeline/candidate-outcome';
+import { clientAccessToken } from '../accounts/local-access-token';
 import type { ServerIdentity } from './server-identity';
 
-/** Fetches a JSON route on the Recoder server; a non-2xx answer throws with the server's error message. */
+/** The machine's API token as a bearer header, or nothing when the server has none to check. */
+function bearerHeader(): Record<string, string> {
+	const token = clientAccessToken();
+
+	return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Fetches a JSON route on the Recoder server; a non-2xx answer throws with the server's error message. Once the
+ * server has an account the eval has no browser session, so it sends the machine's API token (`RECODER_API_TOKEN`,
+ * or the file in the data dir) as a bearer token.
+ */
 async function request<T>(base: string, path: string, init?: RequestInit): Promise<T> {
 	const response = await fetch(new URL(path, base), {
 		...init,
-		headers: { 'Content-Type': 'application/json', ...init?.headers }
+		headers: { 'Content-Type': 'application/json', ...bearerHeader(), ...init?.headers }
 	});
 
 	const body = (await response.json().catch(() => null)) as { error?: string } | null;
@@ -116,7 +128,9 @@ export async function getCandidates(base: string, reviewId: string): Promise<(Fi
 
 /** Stops a running review; one that already stopped answers 409, which is fine here. */
 export async function cancelReview(base: string, reviewId: string): Promise<void> {
-	await fetch(new URL(`/api/reviews/${reviewId}/cancel`, base), { method: 'POST' }).catch(() => undefined);
+	await fetch(new URL(`/api/reviews/${reviewId}/cancel`, base), { method: 'POST', headers: bearerHeader() }).catch(
+		() => undefined
+	);
 }
 
 /** Task and reviewer counts for the progress line; null when the server has none for this review (it is not running). */
@@ -151,7 +165,10 @@ export async function readProgress(base: string, reviewId: string): Promise<Revi
 	const timer = setTimeout(() => abort.abort(), 15_000);
 
 	try {
-		const response = await fetch(new URL(`/api/reviews/${reviewId}/events`, base), { signal: abort.signal });
+		const response = await fetch(new URL(`/api/reviews/${reviewId}/events`, base), {
+			signal: abort.signal,
+			headers: bearerHeader()
+		});
 
 		if (!response.ok || !response.body) return null;
 

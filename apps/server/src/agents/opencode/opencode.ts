@@ -13,7 +13,9 @@ import { LlmError, UsageLimitError } from '../../models/llm/errors';
 import { withFieldFallback } from '../../models/llm/request-fields';
 import { outOfUsage } from '../../models/out-of-usage';
 import type { ChatOptions } from '../../models/llm/types';
-import type { AgentAdapter, AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentAdapter, AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
+import { childEnv } from '../cli-process';
+import { openCodeDataDir } from './limits';
 import { OAUTH_TIMEOUT_MS } from './api/types';
 import { OpenCodeAgentRun, refusesStructuredOutput } from './opencode-agent-session';
 import { openCodeChat } from './opencode-chat';
@@ -52,10 +54,22 @@ type Attempt = AgentOAuthAttempt & {
 export class OpenCodeAgent implements AgentAdapter {
 	readonly id = 'opencode';
 	readonly name = 'OpenCode';
+	/** Images go in as `data:` file attachments of the prompt. */
+	readonly readsImages = true;
 	/** Every call goes through one `opencode serve` process, so they share the endpoint ceiling. */
 	readonly processCeiling = null;
 	readonly signInFix =
 		'Sign in to the model\u2019s provider with `opencode auth login`, or pick another model in Recoder settings.';
+
+	/**
+	 * The setup Settings runs: the vendor install script, piped to `bash` by the job runner. There is no generic
+	 * sign-in job: `opencode auth login` is an interactive provider picker, and per-provider sign-ins already go
+	 * through the server's OAuth routes — so `signIn` stays null.
+	 */
+	readonly setup: AgentSetup = {
+		install: { argv: ['bash', '-s'], stdinUrl: 'https://opencode.ai/install' },
+		signIn: null
+	};
 
 	private readonly server: OpenCodeServer;
 	private status: AgentStatus | null = null;
@@ -172,7 +186,9 @@ export class OpenCodeAgent implements AgentAdapter {
 			install: INSTALL,
 			signedIn: null,
 			login: null,
-			providers: true
+			providers: true,
+			config: openCodeDataDir(this.env),
+			setup: { install: true, signIn: false }
 		};
 	}
 
@@ -303,6 +319,11 @@ export class OpenCodeAgent implements AgentAdapter {
 	/** JSON request to the managed server. Errors carry OpenCode's own message when it gives one. */
 	request(path: string, init: ServerRequest = {}): Promise<unknown> {
 		return this.server.request(path, init);
+	}
+
+	/** The environment a setup job runs with: the server's env as the managed `serve` process also gets it. */
+	setupEnv(): Record<string, string> {
+		return childEnv(this.env);
 	}
 
 	stop(): void {

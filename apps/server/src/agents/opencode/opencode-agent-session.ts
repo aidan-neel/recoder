@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ImageUpload } from '@recoder/shared';
 import { LlmError, cancelledError } from '../../models/llm/errors';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import { emptyDirectory } from '../cli-process';
@@ -40,6 +41,8 @@ function asLlmError(error: unknown, aborted: boolean): LlmError {
  */
 export class OpenCodeAgentRun implements AgentRun {
 	private readonly events = new AbortController();
+	/** The brief's images, until the first prompt sends them; the session holds them after that. */
+	private unsentImages: readonly ImageUpload[];
 
 	private constructor(
 		private readonly host: OpenCodeAgentHost,
@@ -49,7 +52,9 @@ export class OpenCodeAgentRun implements AgentRun {
 		private readonly lease: ToolLease | null,
 		private readonly id: string,
 		private readonly variant: string | undefined
-	) {}
+	) {
+		this.unsentImages = options.images ?? [];
+	}
 
 	static async open(host: OpenCodeAgentHost, options: AgentRunOptions): Promise<OpenCodeAgentRun> {
 		const scope = { server: host.server, directory: await emptyDirectory(OPENCODE_EMPTY_DIR) };
@@ -89,11 +94,16 @@ export class OpenCodeAgentRun implements AgentRun {
 	}
 
 	private async send(text: string, prompt: AgentPromptOptions, structured: boolean): Promise<AgentReply> {
+		const images = this.unsentImages;
+
+		this.unsentImages = [];
+
 		try {
 			const reply = await this.api.prompt({
 				session: this.id,
 				directory: this.scope.directory,
 				text,
+				images,
 				model: this.options.model,
 				system: this.options.system,
 				variant: this.variant,

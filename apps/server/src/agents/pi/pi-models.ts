@@ -39,7 +39,7 @@ export function parsePiModels(output: string): ModelEntry[] {
 			label: `${model} (${provider})`,
 			model: `${provider}/${model}`,
 			baseUrl: null,
-			apiKeyPreview: null,
+			apiKeySet: false,
 			contextWindow: tokenCount(count, unit),
 			...(thinks === 'yes' ? { efforts: PI_EFFORTS, defaultEffort: PI_DEFAULT_EFFORT } : {})
 		});

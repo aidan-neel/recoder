@@ -1,0 +1,36 @@
+/* ───────── Commits ───────── */
+.commit-list {
+	display: flex;
+	flex-direction: column;
+	margin: 0 -12px;
+	padding: 0;
+	list-style: none;
+}
+.commit-row {
+	position: relative;
+	display: grid;
+	min-height: 52px;
+	align-items: center;
+	grid-template-columns: 24px minmax(0, 1fr) auto;
+	gap: 0 12px;
+	padding: 6px 12px;
+	--row-button-radius: var(--radius-row);
+}
+.commit-row-text {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+}
+.commit-title {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* The hash's text ends on the row's edge; the copy button's fill reaches the 7px past it. */
+.commit-sha {
+	position: relative;
+	z-index: 1;
+	margin-right: -7px;
+}

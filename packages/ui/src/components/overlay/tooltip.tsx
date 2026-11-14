@@ -17,38 +17,15 @@ import {
 import { DURATION, EASE_IN, EASE_OUT } from '../../motion/presets';
 import { useMotionVariants } from '../../motion/reduced';
 import { Keycap } from '../keycap';
+import { isKeyboardLast, watchInput } from './input-modality';
 import { PRESENCE } from './panel';
 
 /** True under a `TooltipProvider`; a tooltip outside one brings its own. */
 const Provided = createContext(false);
 
-/** Whether the person's last input was a key press rather than a pointer press. */
-let keyboardLast = false;
-
-/**
- * Follows the last input, for `keyboardFocusOnly`. `:focus-visible` cannot
- * tell: a menu opened by a click focuses itself from script, and Chrome then
- * marks that focus, and the trigger's when it comes back, as visible.
- */
-function trackInput(): () => void {
-	const key = () => (keyboardLast = true);
-	const pointer = () => (keyboardLast = false);
-
-	document.addEventListener('keydown', key, true);
-	document.addEventListener('pointerdown', pointer, true);
-
-	return () => {
-		document.removeEventListener('keydown', key, true);
-		document.removeEventListener('pointerdown', pointer, true);
-	};
-}
-
-/**
- * A fade with the menus' 0.95 scale and no blur: a small hint that comes and
- * goes as the pointer travels needs no blur, and no rise.
- */
+/** A fade with the menus' 0.97 scale and no rise: a small hint that comes and goes as the pointer travels. */
 const tooltipMotion: Variants = {
-	closed: { opacity: 0, scale: 0.95, transition: { duration: DURATION.menuOut, ease: EASE_IN } },
+	closed: { opacity: 0, scale: 0.97, transition: { duration: DURATION.menuOut, ease: EASE_IN } },
 	open: { opacity: 1, scale: 1, transition: { duration: DURATION.hover, ease: EASE_OUT } }
 };
 
@@ -58,7 +35,7 @@ const tooltipMotion: Variants = {
  * root of the app.
  */
 export function TooltipProvider({ children }: { children: ReactNode }) {
-	useEffect(trackInput, []);
+	useEffect(watchInput, []);
 
 	return (
 		<Provided value>
@@ -77,6 +54,8 @@ interface TooltipProps extends Omit<
 	/** A key name (`mod+k`, `j`, `?`) printed as a keycap after the text. */
 	shortcut?: string;
 	side?: 'top' | 'bottom' | 'left' | 'right';
+	/** Where along the trigger's edge the bubble lines up; a wide trigger such as a table row sets `end`. */
+	align?: 'start' | 'center' | 'end';
 	/** The trigger. It must hold a ref and take pointer events, so wrap a disabled button in a span. */
 	children: ReactElement;
 }
@@ -109,12 +88,12 @@ function keyboardFocusOnly(onFocus?: FocusEventHandler<HTMLButtonElement>): Focu
 	return (event: FocusEvent<HTMLButtonElement>) => {
 		onFocus?.(event);
 
-		if (!keyboardLast) event.preventDefault();
+		if (!isKeyboardLast()) event.preventDefault();
 	};
 }
 
 /** The trigger and its bubble. Open state lives here so the bubble can animate out before it unmounts. */
-function Bubble({ content, shortcut, side = 'top', children, onFocus, ...trigger }: TooltipProps) {
+function Bubble({ content, shortcut, side = 'top', align = 'center', children, onFocus, ...trigger }: TooltipProps) {
 	const [open, setOpen] = useState(false);
 	const variants = useMotionVariants(tooltipMotion);
 
@@ -126,12 +105,12 @@ function Bubble({ content, shortcut, side = 'top', children, onFocus, ...trigger
 			<AnimatePresence>
 				{open ? (
 					<TooltipPrimitive.Portal forceMount>
-						<TooltipPrimitive.Content forceMount asChild side={side} sideOffset={6} collisionPadding={8}>
+						<TooltipPrimitive.Content forceMount asChild side={side} align={align} sideOffset={6} collisionPadding={8}>
 							<motion.div
 								{...PRESENCE}
 								data-ui="tooltip"
 								variants={variants}
-								className="pointer-events-none z-[140] flex max-w-[18rem] origin-(--radix-tooltip-content-transform-origin) items-center gap-2 rounded-[8px] bg-menu px-2 py-[5px] text-[12px] leading-4 font-normal text-pretty text-fg shadow-(--shadow-menu) select-none"
+								className="pointer-events-none z-[140] flex max-w-[18rem] origin-(--radix-tooltip-content-transform-origin) items-center gap-1.5 rounded-(--radius-control) bg-menu px-1.5 py-[3px] text-[12px] leading-4 font-normal text-pretty text-fg shadow-(--shadow-menu) select-none"
 							>
 								<span>{content}</span>
 								{shortcut ? <Keycap k={shortcut} /> : null}

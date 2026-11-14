@@ -1,3 +1,5 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { cliEnv } from '../cli-process';
 
 type Env = Record<string, string | undefined>;
@@ -30,4 +32,9 @@ const STRIPPED = [
 /** The server's environment with every stripped variable and every unset entry removed, as `Bun.spawn` expects. */
 export function claudeCodeEnv(env: Env): Record<string, string> {
 	return cliEnv(env, STRIPPED);
+}
+
+/** The CLI's config dir, where it keeps sessions and, off macOS, its sign-in: `CLAUDE_CONFIG_DIR`, else `~/.claude`. */
+export function claudeConfigDir(env: Env): string {
+	return env.CLAUDE_CONFIG_DIR || join(env.HOME || homedir(), '.claude');
 }

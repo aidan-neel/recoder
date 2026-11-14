@@ -6,7 +6,7 @@ const settings: ModelSettings = {
 	configured: true,
 	baseUrl: 'https://api.example.com/v1',
 	model: 'glm-5.3',
-	apiKeyPreview: 'sk-…a1b2',
+	apiKeySet: true,
 	sharedModelId: 'glm',
 	models: [
 		{
@@ -14,20 +14,24 @@ const settings: ModelSettings = {
 			label: 'GLM',
 			model: 'glm-5.3',
 			baseUrl: 'https://api.example.com/v1',
-			apiKeyPreview: 'sk-…c3d4'
+			apiKeySet: true
 		}
 	],
 	subagentCap: 8,
 	tokenBudget: 'medium',
 	reportLowSeverity: false,
+	disabledProviders: [],
+	hiddenModels: [],
+	modelPolicy: { kind: 'choose' },
 	limits: { maxFiles: 50, maxDiffChars: 100_000, maxFileChars: 20_000 }
 };
 
 describe('cacheableModelSettings', () => {
-	test('drops every API key preview before the settings are stored', () => {
-		const stored = JSON.stringify(cacheableModelSettings(settings));
+	test('clears every API key flag before the settings are stored', () => {
+		const stored = cacheableModelSettings(settings);
 
-		expect(stored).not.toContain('sk-');
-		expect(stored).toContain('glm-5.3');
+		expect(stored.apiKeySet).toBe(false);
+		expect(stored.models.map((entry) => entry.apiKeySet)).toEqual([false]);
+		expect(stored.model).toBe('glm-5.3');
 	});
 });

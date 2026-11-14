@@ -12,6 +12,14 @@ const nextConfig: NextConfig = {
 	experimental: { optimizePackageImports: ['@recoder/ui'] },
 	/** The Docker image sets `NEXT_OUTPUT=standalone` to ship only the traced server files (`apps/app/Dockerfile`). */
 	output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
+	/**
+	 * Other hosts the dev server may serve its scripts and hot reload to, such
+	 * as a Tailscale name for viewing it from another machine:
+	 * `RECODER_DEV_ORIGINS=desktop.tailnet.ts.net bun run dev`.
+	 */
+	allowedDevOrigins: process.env.RECODER_DEV_ORIGINS?.split(',')
+		.map((host) => host.trim())
+		.filter(Boolean),
 	agentRules: false,
 	devIndicators: false,
 	poweredByHeader: false

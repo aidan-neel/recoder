@@ -12,7 +12,7 @@ export function ModalBody({ className, ...props }: ComponentProps<'div'>) {
 		<div
 			data-ui="modal-body"
 			className={cn(
-				'thin-scroll -mx-5 -my-1 flex min-h-0 flex-auto flex-col overflow-y-auto overscroll-contain px-5 py-1',
+				'-mx-(--modal-inset) -my-1 flex min-h-0 flex-auto flex-col overflow-y-auto overscroll-contain px-(--modal-inset) py-1',
 				className
 			)}
 			{...props}
@@ -20,9 +20,9 @@ export function ModalBody({ className, ...props }: ComponentProps<'div'>) {
 	);
 }
 
-/** The actions row: right-aligned, 8px apart, 24px under the body like Sivir's footer under Recoder. */
+/** The actions row: right-aligned, 6px apart, 16px under the body. */
 export function ModalFooter({ className, ...props }: ComponentProps<'div'>) {
 	return (
-		<div data-ui="modal-footer" className={cn('flex items-center justify-end gap-2 pt-2', className)} {...props} />
+		<div data-ui="modal-footer" className={cn('flex items-center justify-end gap-1.5 pt-1', className)} {...props} />
 	);
 }

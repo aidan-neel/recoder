@@ -161,7 +161,7 @@ async function gitlabRest(
 			body: init?.body === undefined ? undefined : JSON.stringify(init.body),
 			headers: {
 				...(init?.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-				...(token ? { 'PRIVATE-TOKEN': token } : {})
+				...(token ? { Authorization: `Bearer ${token}` } : {})
 			},
 			signal: AbortSignal.timeout(15_000)
 		});

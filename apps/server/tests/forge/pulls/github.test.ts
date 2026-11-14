@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { PULL_LIST_REPO_MAX } from '@recoder/shared';
+import { PULL_LIST_PAGE } from '@recoder/shared';
 import { githubMergeability, githubPullForge } from '../../../src/forge/pulls/github';
 import { PullHeadMoved } from '../../../src/forge/pulls/status';
 import { fakeGh } from '../../helpers/fake-gh';
@@ -60,62 +60,132 @@ describe('githubMergeability', () => {
 	});
 });
 
-test('the list reads each pull request status and check tally from one gh call', async () => {
-	const rollup = [
-		{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS' },
-		{ __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SKIPPED' },
-		{ __typename: 'CheckRun', status: 'IN_PROGRESS', conclusion: '' },
-		{ __typename: 'StatusContext', state: 'FAILURE' },
-		{ __typename: 'StatusContext', state: 'PENDING' }
-	];
+/** One GraphQL pull request node with the head commit's check counts. */
+function graphqlNode(
+	number: number,
+	counts: { runs?: Record<string, number>; statuses?: Record<string, number> } = {}
+) {
+	const toCounts = (by: Record<string, number> = {}) => Object.entries(by).map(([state, count]) => ({ state, count }));
 
-	const gh = await fakeGh({
-		'pr-list': [{ out: [pullRow({ isDraft: true, mergeStateStatus: 'BLOCKED', statusCheckRollup: rollup })] }]
+	return {
+		number,
+		title: 'Fix it',
+		url: `https://github.com/o/r/pull/${number}`,
+		body: '',
+		author: { login: 'octo' },
+		baseRefName: 'main',
+		headRefName: 'feat',
+		headRefOid: HEAD,
+		additions: 3,
+		deletions: 1,
+		changedFiles: 2,
+		createdAt: '2026-11-01T00:00:00Z',
+		updatedAt: '2026-11-02T00:00:00Z',
+		isDraft: false,
+		assignees: { nodes: [{ login: 'dev', name: 'Dev' }] },
+		commits: {
+			nodes: [
+				{
+					commit: {
+						statusCheckRollup: {
+							contexts: {
+								checkRunCountsByState: toCounts(counts.runs),
+								statusContextCountsByState: toCounts(counts.statuses)
+							}
+						}
+					}
+				}
+			]
+		}
+	};
+}
+
+/** A GraphQL `pullRequests` answer with `nodes` and, when `endCursor` is set, a next page after it. */
+function graphqlPage(nodes: unknown[], endCursor?: string) {
+	const pageInfo = { hasNextPage: endCursor !== undefined, endCursor: endCursor ?? null };
+
+	return { out: { data: { repository: { pullRequests: { pageInfo, nodes } } } } };
+}
+
+test('the list reads each pull request status and check tally from the check counts', async () => {
+	const node = graphqlNode(7, {
+		runs: { SUCCESS: 1, SKIPPED: 1, IN_PROGRESS: 1, QUEUED: 1, TIMED_OUT: 1 },
+		statuses: { FAILURE: 1, PENDING: 1, SUCCESS: 1 }
 	});
+
+	const gh = await fakeGh({ 'api-graphql': [graphqlPage([{ ...node, isDraft: true }])] });
 
 	process.env.PATH = gh.path;
 
 	const {
 		entries: [entry]
-	} = await githubPullForge('https://github.com/o/r').list();
+	} = await githubPullForge('https://github.com/o/r').list(null);
 
 	expect(entry.pull).toMatchObject({ number: 7, headSha: HEAD, additions: 3 });
+	expect(entry.pull.assignees?.[0]).toMatchObject({ login: 'dev', name: 'Dev' });
 
 	expect(entry.status).toEqual({
 		state: 'open',
 		draft: true,
-		mergeability: 'blocked',
+		mergeability: 'unknown',
 		updatedAt: '2026-11-02T00:00:00Z',
-		checks: { passed: 2, failed: 1, pending: 2 },
+		checks: { passed: 3, failed: 2, pending: 3 },
 		commits: null
 	});
-
-	expect(await gh.calls()).toHaveLength(1);
 });
 
-/** The list of a repository with `count` open pull requests, numbered newest first, and the `gh` calls it made. */
-async function listOf(count: number) {
-	const rows = Array.from({ length: count }, (_, index) => pullRow({ number: count - index }));
-	const gh = await fakeGh({ 'pr-list': [{ out: rows }] });
+test('a pull request whose head has no checks has no tally', async () => {
+	const gh = await fakeGh({
+		'api-graphql': [graphqlPage([graphqlNode(7), { ...graphqlNode(8), commits: { nodes: [] } }])]
+	});
 
 	process.env.PATH = gh.path;
 
-	return { list: await githubPullForge('https://github.com/o/r').list(), calls: await gh.calls() };
-}
+	const { entries } = await githubPullForge('https://github.com/o/r').list(null);
 
-test('a repository with more open pull requests than the list keeps answers the newest and says it was cut', async () => {
-	const { list, calls } = await listOf(PULL_LIST_REPO_MAX + 1);
-
-	expect(list.truncated).toBe(true);
-	expect(list.entries).toHaveLength(PULL_LIST_REPO_MAX);
-	expect(list.entries[0].pull.number).toBe(PULL_LIST_REPO_MAX + 1);
-	expect(calls[0]).toContain(`--limit ${PULL_LIST_REPO_MAX + 1}`);
+	expect(entries.map((entry) => entry.status.checks)).toEqual([null, null]);
 });
 
-test('a repository with exactly as many open pull requests as the list keeps is not cut', async () => {
-	const { list } = await listOf(PULL_LIST_REPO_MAX);
+/** The GraphQL calls a fake `gh` logged; a call's query spans several lines, so the log is split where a call starts. */
+async function graphqlCalls(gh: { calls: () => Promise<string[]> }): Promise<string[]> {
+	return (await gh.calls()).join('\n').split(/^(?=api graphql)/m);
+}
 
-	expect(list).toMatchObject({ truncated: false, entries: { length: PULL_LIST_REPO_MAX } });
+test('the list asks for one page and hands back the cursor of the next', async () => {
+	const nodes = Array.from({ length: PULL_LIST_PAGE }, (_, index) => graphqlNode(PULL_LIST_PAGE - index));
+	const gh = await fakeGh({ 'api-graphql': [graphqlPage(nodes, 'cursor-1')] });
+
+	process.env.PATH = gh.path;
+
+	const list = await githubPullForge('https://github.com/o/r').list(null);
+	const [call, ...rest] = await graphqlCalls(gh);
+
+	expect(list.entries).toHaveLength(PULL_LIST_PAGE);
+	expect(list.nextCursor).toBe('cursor-1');
+	expect(rest).toHaveLength(0);
+	expect(call).toContain(`first=${PULL_LIST_PAGE}`);
+	expect(call).not.toContain('after=');
+});
+
+test('the next page is read after the cursor, and the last page has none', async () => {
+	const gh = await fakeGh({ 'api-graphql': [graphqlPage([graphqlNode(3)])] });
+
+	process.env.PATH = gh.path;
+
+	const list = await githubPullForge('https://github.com/o/r').list('cursor-1');
+
+	expect(list.nextCursor).toBeNull();
+	expect((await graphqlCalls(gh))[0]).toContain('after=cursor-1');
+});
+
+test('an answer without a pull request list is a forge failure that names GitHub’s errors', async () => {
+	const gh = await fakeGh({ 'api-graphql': [{ out: { errors: [{ message: 'Could not resolve to a Repository' }] } }] });
+
+	process.env.PATH = gh.path;
+
+	await expect(githubPullForge('https://github.com/o/r').list(null)).rejects.toThrow(
+		'Could not resolve to a Repository'
+	);
 });
 
 test('a pull request without checks has no tally', async () => {
@@ -178,12 +248,26 @@ test('a refused merge’s reason never quotes a credential from the forge output
 	expect(result.message).not.toContain(token);
 });
 
-test('the allowed merge methods come from the repository settings', async () => {
+/** The merge methods of a repository where the person has `viewerPermission` and squash and rebase are allowed. */
+async function mergeMethodsFor(viewerPermission: string) {
 	const gh = await fakeGh({
-		'repo-view': [{ out: { mergeCommitAllowed: false, squashMergeAllowed: true, rebaseMergeAllowed: true } }]
+		'repo-view': [
+			{ out: { viewerPermission, mergeCommitAllowed: false, squashMergeAllowed: true, rebaseMergeAllowed: true } }
+		]
 	});
 
 	process.env.PATH = gh.path;
 
-	expect(await githubPullForge('https://github.com/o/r').mergeMethods()).toEqual(['squash', 'rebase']);
+	return githubPullForge('https://github.com/o/r').mergeMethods();
+}
+
+test('the allowed merge methods come from the repository settings', async () => {
+	expect(await mergeMethodsFor('WRITE')).toEqual(['squash', 'rebase']);
+	expect(await mergeMethodsFor('MAINTAIN')).toEqual(['squash', 'rebase']);
+	expect(await mergeMethodsFor('ADMIN')).toEqual(['squash', 'rebase']);
+});
+
+test('a person who can only read or triage a repository has no merge methods', async () => {
+	expect(await mergeMethodsFor('READ')).toEqual([]);
+	expect(await mergeMethodsFor('TRIAGE')).toEqual([]);
 });

@@ -35,6 +35,14 @@ export function devinEnv(env: Env): Record<string, string> {
 }
 
 /**
+ * The CLI's data dir, where `devin auth login` keeps `credentials.toml`: `$XDG_DATA_HOME/devin`, else
+ * `~/.local/share/devin`. The environment keeps both vars, so the sign-in a run sees is the user's own.
+ */
+export function devinDataHome(env: Env): string {
+	return join(env.XDG_DATA_HOME || join(env.HOME || homedir(), '.local', 'share'), 'devin');
+}
+
+/**
  * The parts of the user's config a call needs: the config version, and the org the CLI bills, which it reads from
  * this file. Sign-in is not in it.
  */

@@ -1,8 +1,17 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import type { AgentOAuthStatus } from '@recoder/shared';
+import { parseProviderKey, type AgentOAuthStatus } from '@recoder/shared';
+import { providerLimits } from '../agents/limits';
 import { OpenCodeError, opencode } from '../agents/opencode/opencode';
-import { agentStatuses, forgetAgentModels } from '../agents/registry';
+import { agentById, agentStatuses, forgetAgentModels } from '../agents/registry';
+import {
+	cancelSetupJob,
+	getSetupJob,
+	SetupJobError,
+	setupJobInput,
+	startSetupJob,
+	type SetupStep
+} from '../agents/setup/setup-jobs';
 import { trustedOrigin } from './trusted-origin';
 
 /** The agent CLIs: every one's status, then OpenCode's providers and sign-in. */
@@ -18,6 +27,18 @@ function fail(e: unknown, fallback: string) {
 
 /** Every known agent: installed, version, sign-in state. `?refresh=1` checks again and lists the models afresh. */
 app.get('/', async (c) => c.json({ agents: await agentStatuses(c.req.query('refresh') === '1') }));
+
+/**
+ * One provider's usage limits, by its key (`cli:claude-code`, `opencode:opencode-go`, URL-encoded). A read is kept
+ * for a minute; `?refresh=1` reads afresh.
+ */
+app.get('/limits/:key', async (c) => {
+	const ref = parseProviderKey(c.req.param('key'));
+
+	if (!ref) return c.json({ error: 'That is not a provider key.' }, 400);
+
+	return c.json(await providerLimits.read(ref, c.req.query('refresh') === '1'));
+});
 
 app.get('/providers', async (c) => {
 	try {
@@ -109,6 +130,64 @@ app.delete('/oauth/:attempt', (c) => {
 	opencode.cancel(c.req.param('attempt'));
 
 	return c.json({ ok: true });
+});
+
+/**
+ * Runs the agent's own `step` command as a setup job: its fixed install or sign-in command from the adapter —
+ * nothing a request sends is ever run. One job per agent at a time.
+ */
+async function startJob(c: Context, step: SetupStep): Promise<Response> {
+	const agent = agentById(c.req.param('id'));
+
+	if (!agent) return c.json({ error: 'That is not an agent CLI.' }, 404);
+
+	try {
+		return c.json({ job: await startSetupJob(agent, step) });
+	} catch (e) {
+		return setupFailure(c, e, 'The job could not be started.');
+	}
+}
+
+/** The error a setup job failure answers with: its message, never a stack or an internal path. */
+function setupFailure(c: Context, e: unknown, fallback: string): Response {
+	return c.json({ error: e instanceof Error ? e.message : fallback }, e instanceof SetupJobError ? e.status : 500);
+}
+
+app.post('/:id/install', (c) => startJob(c, 'install'));
+
+app.post('/:id/sign-in', (c) => startJob(c, 'sign-in'));
+
+/** A setup job: its state, the redacted tail of what the CLI printed, and the sign-in URL it gave. */
+app.get('/jobs/:job', (c) => {
+	const job = getSetupJob(c.req.param('job'));
+
+	return job ? c.json(job) : c.json({ error: 'That setup job is no longer known.' }, 404);
+});
+
+const inputSchema = z.object({ text: z.string().min(1).max(4000) });
+
+/** A pasted sign-in code or token, written to the CLI's stdin and kept out of the job's reported output. */
+app.post('/jobs/:job/input', async (c) => {
+	const parsed = inputSchema.safeParse(await c.req.json().catch(() => null));
+
+	if (!parsed.success) return c.json({ error: 'Send the text to paste.' }, 400);
+
+	try {
+		return c.json(await setupJobInput(c.req.param('job'), parsed.data.text));
+	} catch (e) {
+		return setupFailure(c, e, 'The input could not be sent.');
+	}
+});
+
+/** Stops a running setup job: its whole process group is killed. */
+app.delete('/jobs/:job', (c) => {
+	try {
+		cancelSetupJob(c.req.param('job'));
+
+		return c.json({ ok: true });
+	} catch (e) {
+		return setupFailure(c, e, 'The job could not be stopped.');
+	}
 });
 
 export default app;

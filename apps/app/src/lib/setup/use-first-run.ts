@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 
-import { useTokenDialog, type TokenDialog } from '../connections/use-token-dialog';
 import { recheckSetup, useSetupSteps } from './setup-gate';
 import { stepsLeft, type SetupSteps } from './setup-steps';
 import { useFinish } from './use-finish';
@@ -27,8 +26,6 @@ export interface FirstRunView {
 	openDialog: (dialog: SetupDialog) => void;
 	/** The dialogs' onOpenChange: closing rechecks the steps. */
 	dialogOpenChange: (open: boolean) => void;
-	/** The token dialog state; `token.connect` opens it for a forge. */
-	token: TokenDialog;
 	/** True while the checklist fades out and the pull request list takes its place. */
 	leaving: boolean;
 }
@@ -51,9 +48,8 @@ function currentStep(steps: SetupSteps): SetupCurrent | null {
 export function useFirstRun(): FirstRunView {
 	const steps = useSetupSteps();
 	const [dialog, setDialog] = useState<SetupDialog | null>(null);
-	const token = useTokenDialog();
 	const left = steps ? stepsLeft(steps) : 3;
-	const leaving = useFinish(left === 0 && dialog === null && !token.open);
+	const leaving = useFinish(left === 0 && dialog === null);
 	const current = steps ? currentStep(steps) : null;
 
 	function dialogOpenChange(open: boolean): void {
@@ -70,7 +66,6 @@ export function useFirstRun(): FirstRunView {
 		dialog,
 		openDialog: setDialog,
 		dialogOpenChange,
-		token,
 		leaving
 	};
 }

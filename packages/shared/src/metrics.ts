@@ -18,7 +18,12 @@ export const TOKEN_STAGES = [
 
 export type TokenStage = (typeof TOKEN_STAGES)[number];
 
-/** Provider-reported counts only. Cached/reasoning counts are breakdowns, not added to total. */
+/**
+ * Provider-reported counts only. Cached and reasoning counts are breakdowns, not added to total: `inputTokens`
+ * includes `cachedInputTokens` (cache reads) and `cacheWriteInputTokens`, and `outputTokens` includes
+ * `reasoningOutputTokens`. Every adapter reports them this way (the ones whose CLI counts cache apart add it back),
+ * so the input that was neither read from nor written to the cache is `inputTokens` minus both.
+ */
 export interface TokenUsage {
 	inputTokens: number | null;
 	outputTokens: number | null;
@@ -37,6 +42,8 @@ export interface OutputRate {
 
 export interface TokenCall {
 	id: string;
+	/** When the call started, an ISO timestamp; unset on calls stored before it was recorded. */
+	at?: string;
 	model: string;
 	provider: ModelProvider;
 	scope: TokenScope;

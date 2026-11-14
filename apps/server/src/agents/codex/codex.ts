@@ -2,16 +2,18 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry, ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
+import { turnImages } from '../../models/llm/message-images';
 import type { ChatOptions } from '../../models/llm/types';
 import { callDeadline, emptyDirectory, findCli, removeScratchDir, scratchDir, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
+import { writeImageFiles } from '../image-files';
 import { SessionCliAgent } from '../session-run';
-import type { AgentEvent, AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentEvent, AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { catalogWithoutSubagents, codexEffort, parseCodexModels } from './codex-models';
 import { CODEX_LOGIN, CodexReader } from './codex-output';
-import { callArgs, codexEnv } from './codex-process';
-import { CodexRun } from './codex-run';
+import { CODEX_CLI, callArgs, codexEnv, codexHome } from './codex-process';
+import { CodexRun, imageArgs } from './codex-run';
 
 const INSTALL = 'npm install -g @openai/codex';
 
@@ -33,11 +35,22 @@ const FORGET_TIMEOUT_MS = 10_000;
 export class CodexAgent extends SessionCliAgent {
 	readonly id = 'codex';
 	readonly name = 'Codex';
+	/** Images go in as files, through `codex exec --image`. */
+	readonly readsImages = true;
 	readonly install = INSTALL;
 	readonly login = CODEX_LOGIN;
 	/** Each call runs one CLI process, so four run at once unless `RECODER_CODEX_CONCURRENCY` says otherwise. */
 	readonly processCeiling = { env: 'RECODER_CODEX_CONCURRENCY', fallback: 4 };
 	readonly signInFix = `Sign in with \`${CODEX_LOGIN}\`, or pick another model in Recoder settings.`;
+	/**
+	 * The setup Settings runs: the npm install, and `codex login --device-auth`, the CLI's headless sign-in — it
+	 * prints the URL and user code and polls until the browser authorizes it. The sign-in lands in `CODEX_HOME`,
+	 * which the environment keeps, so it is the user's own.
+	 */
+	readonly setup: AgentSetup = {
+		install: { argv: ['npm', 'install', '-g', '@openai/codex'] },
+		signIn: { argv: ['codex', 'login', '--device-auth'] }
+	};
 
 	/** The models the last listing found, for the effort levels {@link modelSettings} answers with. */
 	private listed = new Map<string, ModelEntry>();
@@ -89,16 +102,19 @@ export class CodexAgent extends SessionCliAgent {
 		try {
 			await writeFile(systemFile, systemText(opts), { mode: 0o600 });
 
+			const turns = opts.messages.filter((m) => m.role !== 'system');
+			const images = await writeImageFiles(scratch, turnImages(turns));
+
 			const effort = opts.thinking === false ? 'low' : opts.reasoningEffort;
 			const flags = callArgs({ model: opts.model, reasoningEffort: effort, systemFile, catalogFile, lease: null });
 			const reader = new CodexReader(callEvents(opts, onToken), 'codex');
 			const lines = new LineSplitter(reader.line);
 
 			const exit = await streamCli({
-				argv: [path, 'exec', '--ephemeral', ...flags, '-'],
+				argv: [path, 'exec', ...imageArgs(images), '--ephemeral', ...flags, '-'],
 				cwd: await emptyDirectory('codex-empty'),
 				env: codexEnv(this.env),
-				stdin: promptText(opts.messages.filter((m) => m.role !== 'system')),
+				stdin: promptText(turns),
 				signal: deadline.signal,
 				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
 				onOutput: lines.push,
@@ -128,11 +144,15 @@ export class CodexAgent extends SessionCliAgent {
 	}
 
 	protected find(): string | null {
-		return findCli({ pin: 'RECODER_CODEX_BIN', command: 'codex', installed: ['.local', 'bin', 'codex'] }, this.env);
+		return findCli(CODEX_CLI, this.env);
 	}
 
 	protected childEnv(): Record<string, string> {
 		return codexEnv(this.env);
+	}
+
+	protected configDir(): string {
+		return codexHome(this.env);
 	}
 
 	/** `codex login status` exits 0 when signed in. */

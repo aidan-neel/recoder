@@ -48,6 +48,7 @@ interface TokenPanelProps {
 	forge: Forge;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	onSaved: (() => void) | undefined;
 }
 
 /**
@@ -55,8 +56,8 @@ interface TokenPanelProps {
  * the dialog stays open, and an X that did nothing would look broken. Cancel
  * closes it.
  */
-function TokenPanel({ forge, open, onOpenChange }: TokenPanelProps) {
-	const view = useTokenModal(forge, onOpenChange);
+function TokenPanel({ forge, open, onOpenChange, onSaved }: TokenPanelProps) {
+	const view = useTokenModal(forge, onOpenChange, onSaved);
 	const formId = useId();
 
 	function submit(event: FormEvent): void {
@@ -95,5 +96,13 @@ function TokenPanel({ forge, open, onOpenChange }: TokenPanelProps) {
  * or timer from an earlier opening reaches the next.
  */
 export function TokenModal({ dialog }: { dialog: TokenDialog }) {
-	return <TokenPanel key={dialog.opening} forge={dialog.forge} open={dialog.open} onOpenChange={dialog.setOpen} />;
+	return (
+		<TokenPanel
+			key={dialog.opening}
+			forge={dialog.forge}
+			open={dialog.open}
+			onOpenChange={dialog.setOpen}
+			onSaved={dialog.onSaved}
+		/>
+	);
 }

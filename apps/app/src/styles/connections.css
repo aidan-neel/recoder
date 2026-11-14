@@ -1,15 +1,7 @@
-/* ───────── Settings → Connections: forges and tracked repositories ───────── */
+/* ───────── Settings → Connections: the forges ───────── */
 /* While the section loads, the bars start where the text lands: after the mark's tile. */
 .connections-loading .settings-row {
 	padding-left: 56px;
-}
-
-/* A tracked repository folds out of the list and back in; the divider moves to the fold. */
-.repo-fold {
-	overflow: hidden;
-}
-.repo-fold + .repo-fold {
-	box-shadow: inset 0 1px 0 var(--line-subtle);
 }
 
 /* ───────── Token dialog ───────── */

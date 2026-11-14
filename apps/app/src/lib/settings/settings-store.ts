@@ -1,4 +1,10 @@
-import type { AgentProvider, AgentStatus, ModelSettings, ModelSettingsPatch } from '@recoder/shared';
+import {
+	agentReady,
+	type AgentProvider,
+	type AgentStatus,
+	type ModelSettings,
+	type ModelSettingsPatch
+} from '@recoder/shared';
 import { create } from 'zustand';
 
 import { failureText, isOffline, OFFLINE_TEXT } from '../api/http';
@@ -25,11 +31,6 @@ interface SettingsStore {
 	setProviders: (providers: AgentProvider[]) => void;
 	/** Reads the model list again, after something outside Settings changed it (a vLLM sync). A failure keeps the last list. */
 	reloadModels: () => Promise<void>;
-}
-
-/** Installed and running, and signed in when the CLI has its own account. */
-export function agentReady(agent: AgentStatus): boolean {
-	return agent.installed && !agent.error && agent.signedIn !== false;
 }
 
 type AgentState = Partial<Pick<SettingsStore, 'agents' | 'providers'>> & Pick<SettingsStore, 'agentError'>;

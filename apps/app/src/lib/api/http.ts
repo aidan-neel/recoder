@@ -1,8 +1,9 @@
 import type { FailureAction, UsageLimit } from '@recoder/shared';
 
 import { plainError } from './server-error';
+import { reportSessionRefused } from './session-refused';
 
-/** The review server. Every call is cross-origin; the server answers `Access-Control-Allow-Origin: *`. */
+/** The review server. Every call is cross-origin, and carries the session cookie (`credentials: 'include'`). */
 export const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
 interface ErrorBody {
@@ -74,7 +75,7 @@ export async function plainly<T>(action: () => Promise<T>): Promise<T> {
  */
 async function send(path: string, init?: RequestInit): Promise<Response> {
 	try {
-		return await fetch(`${API_BASE}${path}`, init);
+		return await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' });
 	} catch (error) {
 		if (error instanceof TypeError) throw new NetworkError(error.message, { cause: error });
 
@@ -82,9 +83,25 @@ async function send(path: string, init?: RequestInit): Promise<Response> {
 	}
 }
 
-/** The error a non-2xx response stands for, read from its `{ error, action, usageLimit }` body. */
+/** The `kind` of the 401 the server answers once an account exists and the request has no session. */
+const SIGNED_OUT = 'signed-out';
+
+/** The `kind` of the 403 the server answers during setup when the browser has not unlocked it, or its unlock ran out. */
+const SETUP_LOCKED = 'setup-locked';
+
+/** True for the two refusals the app answers by reading who is signed in again: sign-in, or the setup code. */
+function isSessionRefusal(status: number, kind: string | undefined): boolean {
+	return (status === 401 && kind === SIGNED_OUT) || (status === 403 && kind === SETUP_LOCKED);
+}
+
+/**
+ * The error a non-2xx response stands for, read from its `{ error, action, usageLimit }` body.
+ * A `401 signed-out` or `403 setup-locked` also tells the app, which opens sign-in or the setup code: no screen handles it itself.
+ */
 async function responseError(response: Response): Promise<ApiError> {
 	const body = (await response.json().catch(() => null)) as ErrorBody | null;
+
+	if (isSessionRefusal(response.status, body?.kind)) reportSessionRefused();
 
 	return new ApiError(
 		body?.error ?? `${response.status} ${response.statusText}`,
@@ -120,6 +137,11 @@ export function post<T>(path: string, body: unknown = {}, init?: RequestInit): P
 /** PUT a JSON body. */
 export function put<T>(path: string, body: unknown): Promise<T> {
 	return request<T>(path, { method: 'PUT', body: JSON.stringify(body) });
+}
+
+/** PATCH a JSON body. */
+export function patch<T>(path: string, body: unknown): Promise<T> {
+	return request<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
 /** DELETE, with no body. */

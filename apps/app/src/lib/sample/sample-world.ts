@@ -3,6 +3,7 @@ import {
 	latestReviews,
 	reviewListItem,
 	type FileDiff,
+	type ProgressMessage,
 	type PullPage,
 	type Review,
 	type ReviewListItem,
@@ -10,7 +11,7 @@ import {
 } from '@recoder/shared';
 
 import { ApiError } from '../api/http';
-import type { StreamHandlers } from '../review/review-stream';
+import type { StreamHandlers } from '../api/event-stream';
 import { SAMPLE_DIFFS } from './sample-diff';
 import { sampleSeed, type SamplePull, type SampleSeed } from './sample-pulls';
 import { SAMPLE_PULL } from './sample-review';
@@ -26,7 +27,7 @@ const SMALL_DIFF = 3;
 export function createSampleWorld() {
 	let seed: SampleSeed | null = null;
 	const progress = new Map<string, ReviewProgress>();
-	const followers = new Map<string, Set<StreamHandlers>>();
+	const followers = new Map<string, Set<StreamHandlers<ProgressMessage>>>();
 
 	function data(): SampleSeed {
 		seed ??= sampleSeed();
@@ -56,6 +57,11 @@ export function createSampleWorld() {
 		const newest = latestReviews(own).values().next().value;
 
 		return newest ? reviewListItem(newest) : null;
+	}
+
+	/** A review as the list carries it, with its pull request's state, which a merge or a close changes. */
+	function listedReview(review: Review): ReviewListItem {
+		return { ...reviewListItem(review), pullState: findPull(review.repoId, review.prNumber).status.state };
 	}
 
 	function progressOf(id: string): ReviewProgress {
@@ -89,6 +95,13 @@ export function createSampleWorld() {
 		}
 	}
 
+	/** Removes the review from the sample's memory, with its progress. */
+	function deleteReview(id: string): void {
+		findReview(id);
+		data().reviews = data().reviews.filter((review) => review.id !== id);
+		progress.delete(id);
+	}
+
 	/** Changes a stored review and sends it on, keeping its progress. */
 	function updateReview(id: string, change: (review: Review) => Review): Review {
 		const review = change(findReview(id));
@@ -100,8 +113,10 @@ export function createSampleWorld() {
 
 	return {
 		data,
+		deleteReview,
 		findPull,
 		findReview,
+		listedReview,
 		newestReview,
 		progressOf,
 		publish,
@@ -138,7 +153,7 @@ export function createSampleWorld() {
 		},
 
 		/** Follows a review: the snapshot comes first, a moment later, as the server sends it. */
-		follow(id: string, handlers: StreamHandlers): () => void {
+		follow(id: string, handlers: StreamHandlers<ProgressMessage>): () => void {
 			const set = followers.get(id) ?? new Set();
 
 			set.add(handlers);

@@ -14,11 +14,18 @@ import {
 import { promptText, systemText } from '../cli-prompt';
 import type { CliExit } from '../cli-stream';
 import { quotedLine } from '../quoted-line';
-import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { parseCursorModels } from './cursor-models';
 import { CURSOR_LOGIN, CursorReader, SIGNED_OUT_FIX, signInState } from './cursor-output';
 import { PRINT_ARGS, streamPrintCall } from './cursor-print';
-import { cursorEnv, cursorPlace, writeCursorConfig, type CursorPlace } from './cursor-process';
+import {
+	cursorConfigDir,
+	cursorEnv,
+	cursorPlace,
+	cursorSetupEnv,
+	writeCursorConfig,
+	type CursorPlace
+} from './cursor-process';
 import { CursorRun } from './cursor-run';
 
 const INSTALL = 'curl -fsSL https://cursor.com/install | bash';
@@ -30,21 +37,33 @@ const MODELS_TIMEOUT_MS = 20_000;
 /**
  * Cursor, run as one `cursor-agent -p` process per model call.
  *
- * The CLI signs in itself. Recoder never reads, copies or links its credential file; it runs the CLI under
- * isolated `CURSOR_CONFIG_DIR` and `CURSOR_DATA_DIR` dirs that deny its shell, file-edit and web tools, bound
+ * The CLI signs in itself. Recoder never reads its credential file; it runs the CLI under isolated
+ * `CURSOR_CONFIG_DIR` and `CURSOR_DATA_DIR` dirs that deny its shell, file-edit and web tools, bound
  * its file reads and searches to an empty working directory on CLIs with read access (Cursor 3.23+), and load no
- * user config, hooks, rules, plugins or MCP servers, and reads what the CLI prints. `CURSOR_API_KEY` is the
- * documented headless sign-in and reaches every call. Where the CLI keeps a `cursor-agent login` sign-in is not
- * confirmed: if it is the moved config folder, that sign-in is not seen, and the signed-out message says so.
+ * user config, hooks, rules, plugins or MCP servers, and reads what the CLI prints. One file of the user's own
+ * config is linked in: `auth.json`, the credential file a `cursor-agent login` sign-in leaves, so that sign-in
+ * reaches a run and the CLI can refresh it in place. `CURSOR_API_KEY` is the documented headless sign-in and
+ * reaches every call.
  */
 export class CursorAgent extends CliAgent {
 	readonly id = 'cursor';
 	readonly name = 'Cursor';
+	/** Its print mode documents no image input. */
+	readonly readsImages = false;
 	readonly install = INSTALL;
 	readonly login = CURSOR_LOGIN;
 	/** Each call runs one CLI process, so four run at once unless `RECODER_CURSOR_CONCURRENCY` says otherwise. */
 	readonly processCeiling = { env: 'RECODER_CURSOR_CONCURRENCY', fallback: 4 };
 	readonly signInFix = `${SIGNED_OUT_FIX} Or pick another model in Recoder settings.`;
+	/**
+	 * The setup Settings runs: the vendor install script, piped to `bash` by the job runner, and
+	 * `cursor-agent login` with `NO_OPEN_BROWSER` so it prints the sign-in URL instead of opening it; its loopback
+	 * callback finishes the sign-in once the browser does.
+	 */
+	readonly setup: AgentSetup = {
+		install: { argv: ['bash', '-s'], stdinUrl: 'https://cursor.com/install' },
+		signIn: { argv: ['cursor-agent', 'login'], env: { NO_OPEN_BROWSER: '1' } }
+	};
 
 	/**
 	 * The account's models, from `cursor-agent models`; throws when the CLI is missing or the list is empty. When
@@ -86,7 +105,7 @@ export class CursorAgent extends CliAgent {
 		const place = cursorPlace(scratch, this.env);
 
 		try {
-			await writeCursorConfig(place, null);
+			await writeCursorConfig(place, this.env, null);
 
 			const turns = opts.messages.filter((m) => m.role !== 'system');
 			const stdin = `${systemText(opts)}\n\n${promptText(turns)}`;
@@ -127,6 +146,18 @@ export class CursorAgent extends CliAgent {
 	}
 
 	/**
+	 * The environment a `cursor-agent login` job gets: the call env with the user's own `CURSOR_CONFIG_DIR` and
+	 * `CURSOR_DATA_DIR` back when they set them, so the sign-in lands where the user's own CLI reads it.
+	 */
+	override setupEnv(): Record<string, string> {
+		return cursorSetupEnv(this.env);
+	}
+
+	protected configDir(): string {
+		return cursorConfigDir(this.env);
+	}
+
+	/**
 	 * `cursor-agent status` reports the account's sign-in state; `--format json` is tried first since not every
 	 * version documents it, and a CLI that rejects the flag is asked again plainly. The check runs under the same
 	 * isolated config and data dirs a call gets, in an empty working directory, so it reports the sign-in a run
@@ -137,7 +168,7 @@ export class CursorAgent extends CliAgent {
 		const place = cursorPlace(scratch, this.env);
 
 		try {
-			await writeCursorConfig(place, null);
+			await writeCursorConfig(place, this.env, null);
 
 			const where = { cwd: place.cwd, env: place.env };
 

@@ -7,13 +7,25 @@ import { registeredAgents } from './agents/registry';
 import { initReviewSettings } from './review/session/review-settings';
 import { initVllmServers } from './models/vllm/vllm-store';
 import { startVllmSync } from './models/vllm/vllm-sync';
+import { findAdmin } from './accounts/account-store';
+import { startSetupCode } from './accounts/setup-code';
+import { sealStoredRefreshToken, startTokenRefresh } from './accounts/token-refresh';
+import { forgeAuthStatus } from './forge/auth-status';
 import { initTokenStore } from './forge/tokens';
+import { describeSecretKeySource, secretKey } from './secrets/secret-key';
+import { SharedSettingsConflictError } from './config/shared-settings';
+import { startPullSweep } from './forge/pulls/state-sweep';
 import { restartWatcher } from './forge/watch/watcher';
 import { closeStore, exitOnShutdownSignals, recoverStaleReviews } from './store';
-import { coordinator, initializeStorage, postgres } from './storage/backend';
+import { coordinator, initializeStorage, postgres, settingsOperation } from './storage/backend';
+import { resumeAfterUpdate } from './update/pauses';
+import { SUCCESSOR_ENV, waitForPortRelease } from './update/restart';
 import { startReviewWorkers } from './review/runtime/worker';
 import { executeReviewActor } from './review/runtime/actor';
 import { startSharedMaintenance } from './review/runtime/maintenance';
+import { recoverRepoChats } from './repo-chat/chat-turns';
+import { interruptLocalReplies } from './repo-chat/chat-reply';
+import { backfillModelCalls, pruneModelCalls } from './usage/model-calls';
 
 /**
  * Start the agents' checks now so Settings never waits on a cold start:
@@ -32,6 +44,13 @@ function warmAgents(): void {
 	}
 }
 
+/** Checks the forge connections now, so the first `/api/auth/me` of a fresh install answers from the cache. */
+function warmForgeStatus(): void {
+	void forgeAuthStatus().catch((error: unknown) =>
+		console.error('[accounts] forge status check failed', error instanceof Error ? error.name : typeof error)
+	);
+}
+
 /**
  * Requests that may sit quiet past Bun's 10 second idle timeout: review
  * conversations stay subscribed while the agents are idle, and model calls
@@ -40,6 +59,7 @@ function warmAgents(): void {
  */
 const LONG_LIVED = [
 	/^\/api\/reviews\/[^/]+\/(events|discuss|discuss\/stream|rereview|fixes\/suggest)$/,
+	/^\/api\/chats\/[^/]+\/events$/,
 	/^\/api\/guidelines\/draft$/,
 	/^\/api\/home\/brief$/,
 	/^\/api\/settings\/providers\/[^/]+\/(connect|catalog)$/,
@@ -72,15 +92,36 @@ function logStrayRejections(): void {
 	process.on('unhandledRejection', (reason) => console.error('[recoder] unhandled rejection', rejectionTrace(reason)));
 }
 
+/**
+ * Seals the credentials PostgreSQL holds from before sealing existed. A conflict means another replica saved the
+ * same documents first, and anything it saved is sealed.
+ */
+async function sealSharedCredentials(): Promise<void> {
+	try {
+		await settingsOperation(() => {
+			initTokenStore();
+			initReviewSettings();
+			initVllmServers();
+		});
+	} catch (error) {
+		if (!(error instanceof SharedSettingsConflictError)) throw error;
+	}
+}
+
 logStrayRejections();
 
+console.log(`recoder secret key: ${describeSecretKeySource(secretKey().source)}`);
 await initializeStorage();
 await deleteChatGptTokens(serverDataDir());
+await backfillModelCalls();
+await pruneModelCalls();
 
 let stopWorkers: (() => Promise<void>) | undefined;
 const stopMaintenance = postgres ? startSharedMaintenance(postgres) : undefined;
 
 if (coordinator) {
+	await sealSharedCredentials();
+
 	stopWorkers = startReviewWorkers(
 		coordinator,
 		{
@@ -97,10 +138,21 @@ if (coordinator) {
 	initReviewSettings();
 	initVllmServers();
 	await recoverStaleReviews();
+	await resumeAfterUpdate();
+	await recoverRepoChats();
 	warmAgents();
+	warmForgeStatus();
 	startVllmSync();
+	startPullSweep();
 	restartWatcher();
 }
+
+await sealStoredRefreshToken();
+await startSetupCode((await findAdmin()) !== undefined);
+startTokenRefresh();
+
+/** An update's successor waits for the old server's port before it binds its own. */
+if (process.env[SUCCESSOR_ENV]) await waitForPortRelease(env.HOST, env.PORT);
 
 const server = Bun.serve({
 	fetch(request, server) {
@@ -124,6 +176,7 @@ if (postgres) {
 
 			stopping = true;
 			await server.stop(true);
+			await interruptLocalReplies();
 			await stopMaintenance?.();
 			await stopWorkers?.();
 

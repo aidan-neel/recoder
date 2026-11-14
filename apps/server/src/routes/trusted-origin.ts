@@ -8,12 +8,21 @@ import { env } from '../env';
  */
 export const trustedOrigin: MiddlewareHandler = async (c, next) => {
 	const origin = c.req.header('origin');
-	const allowed = new Set([new URL(env.FRONTEND_URL).origin, new URL(c.req.url).origin]);
 
-	if (origin && !allowed.has(origin) && !devOrigin(origin)) return c.json({ error: 'Untrusted origin' }, 403);
+	if (origin && !isTrustedOrigin(origin, c.req.url)) return c.json({ error: 'Untrusted origin' }, 403);
 	c.header('Cache-Control', 'no-store');
 	await next();
 };
+
+/**
+ * Whether a page at `origin` may use credentials with this server: the configured `FRONTEND_URL`, the server's own
+ * origin, and in development any loopback origin.
+ */
+export function isTrustedOrigin(origin: string, requestUrl: string): boolean {
+	const allowed = new Set([new URL(env.FRONTEND_URL).origin, new URL(requestUrl).origin]);
+
+	return allowed.has(origin) || devOrigin(origin);
+}
 
 /** Vite moves to the next free port, so dev trusts any loopback origin. */
 function devOrigin(origin: string): boolean {

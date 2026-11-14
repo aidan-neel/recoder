@@ -19,6 +19,7 @@ export function mergeBlock(page: PullPage): MergeBlock | null {
 	if (status.draft) return 'draft';
 	if (status.mergeability === 'conflicts') return 'conflicts';
 	if (status.mergeability === 'blocked') return 'blocked';
+	if (status.mergeability === 'unknown') return 'unknown';
 	if (capabilities.mergeMethods.length === 0) return 'unavailable';
 
 	return null;

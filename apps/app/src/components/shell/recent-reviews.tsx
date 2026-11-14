@@ -1,11 +1,15 @@
 'use client';
 
-import { HoverList, RowButton, SkeletonRows, StatusGlyph, type GlyphKind } from '@recoder/ui';
-import Link from 'next/link';
+import { HoverList, SkeletonRows, StatusGlyph, type GlyphKind } from '@recoder/ui';
 import { usePathname } from 'next/navigation';
 
-import { OFFLINE_TEXT } from '@/lib/api/http';
+import { useSessionCache } from '@/lib/api/client';
 import type { RecentReview } from '@/lib/shell/types';
+
+import { RepoLabel } from '@/components/common/repo-label';
+
+import { useReviewActions } from './recent-actions';
+import { RecentRow } from './recent-row';
 
 /** The glyph for each state of a recent review. */
 const GLYPHS: Record<RecentReview['state'], GlyphKind> = {
@@ -19,51 +23,58 @@ const GLYPHS: Record<RecentReview['state'], GlyphKind> = {
 /** How many placeholder rows stand in while the reviews load. */
 const LOADING_ROWS = 4;
 
+/** A recent row's height in px: a 18px title and a 16px meta line inside 5px of padding, so the rows replace their placeholders in place. */
+const RECENT_ROW_HEIGHT = 44;
+
 interface RecentReviewsProps {
 	reviews: RecentReview[];
 	loading: boolean;
-	offline: boolean;
 }
 
-/** One recent review: its pull request's title, then where it is and how it ended. */
-function RecentRow({ review, active }: { review: RecentReview; active: boolean }) {
-	return (
-		<RowButton asChild data-recent data-active={active || undefined} className="recent-item">
-			<Link href={review.href} aria-current={active ? 'page' : undefined}>
-				<StatusGlyph kind={GLYPHS[review.state]} />
-				<span className="recent-text">
-					<span className="recent-title">{review.title}</span>
-					<span className="meta">
-						{review.repoName} #{review.number}
-						<span className="meta-sep">{review.label}</span>
-					</span>
-				</span>
-			</Link>
-		</RowButton>
-	);
-}
-
-/** What stands in the list's place when it has no rows. */
-function emptyLine(offline: boolean): string {
-	return offline ? OFFLINE_TEXT : 'Reviews you start show here.';
-}
-
-/** The newest review of each pull request, so the last few stay one click away. */
-export function RecentReviews({ reviews, loading, offline }: RecentReviewsProps) {
+/**
+ * The newest review of each open pull request, so the last few stay one click
+ * away. With none, the section is left out.
+ */
+export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 	const pathname = usePathname();
+	const sessions = useSessionCache();
+	const actionsFor = useReviewActions();
+
+	if (!loading && reviews.length === 0) return null;
 
 	return (
 		<section className="recent" aria-label="Recent reviews">
 			<h2 className="section-label recent-label">Recent reviews</h2>
-			{loading ? <SkeletonRows count={LOADING_ROWS} height={48} glyph lines={2} className="recent-list" /> : null}
-			{!loading && reviews.length === 0 ? <p className="recent-empty">{emptyLine(offline)}</p> : null}
-			{!loading && reviews.length > 0 ? (
+			{loading ? (
+				<SkeletonRows
+					count={LOADING_ROWS}
+					height={RECENT_ROW_HEIGHT}
+					glyph
+					lines={2}
+					className="recent-list"
+					rowClassName="recent-skeleton"
+				/>
+			) : (
 				<HoverList className="recent-list" itemSelector="[data-recent]">
 					{reviews.map((review) => (
-						<RecentRow key={review.reviewId} review={review} active={pathname === review.href.split('?')[0]} />
+						<RecentRow
+							key={review.reviewId}
+							href={review.href}
+							active={pathname === review.href.split('?')[0]}
+							mark={<StatusGlyph kind={GLYPHS[review.state]} />}
+							title={review.title}
+							actions={actionsFor(review)}
+							onIntent={() => sessions.warm(review.repoId, review.number)}
+							meta={
+								<>
+									<RepoLabel name={`${review.repoName} #${review.number}`} forge={review.repoForge} />
+									<span className="meta-sep">{review.label}</span>
+								</>
+							}
+						/>
 					))}
 				</HoverList>
-			) : null}
+			)}
 		</section>
 	);
 }

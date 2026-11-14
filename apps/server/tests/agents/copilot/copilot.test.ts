@@ -63,7 +63,7 @@ test('the fixed models are the ids copilot help config documents, each but auto 
 		model: 'auto',
 		label: 'Auto (Copilot picks)',
 		baseUrl: null,
-		apiKeyPreview: null,
+		apiKeySet: false,
 		contextWindow: 200_000
 	});
 

@@ -1,0 +1,137 @@
+/* ───────── Admin: the update strip, the version and the update beside it ───────── */
+
+/*
+ * The top of the page: the version over what the updater found, the button
+ * for the next step on the right, and a hairline that sets it apart from the
+ * groups below. Two lines, like a settings row, so a long update note never
+ * wraps into the version. An update's changes open under it.
+ */
+.update-strip {
+	padding-bottom: 12px;
+	box-shadow: inset 0 -1px 0 var(--line-subtle);
+}
+.update-line {
+	display: flex;
+	min-height: 28px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+/* The two lines while the status loads, each the height of a line of text. */
+.update-skeleton-name,
+.update-skeleton-detail {
+	height: 14px;
+	margin: 2px 0;
+}
+.update-skeleton-name {
+	width: 110px;
+}
+.update-skeleton-detail {
+	width: 200px;
+}
+.update-text {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+.update-detail {
+	display: inline-flex;
+	align-items: center;
+}
+.update-name {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+.update-headline {
+	color: var(--text-primary);
+}
+
+/* What the updater found reads as more facts on the line, a dot between each. */
+.update-available {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+}
+.update-available > * + *::before {
+	margin: 0 5px;
+	color: var(--text-ghost);
+	content: '·';
+}
+.update-text [data-tone='danger'] {
+	color: var(--danger);
+}
+.update-text [data-tone='success'] {
+	color: var(--success);
+}
+
+.update-disclosure {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	border-radius: var(--radius-chip);
+	outline: none;
+	color: var(--text-primary);
+}
+.update-disclosure:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.update-disclosure svg {
+	width: 14px;
+	height: 14px;
+	color: var(--text-muted);
+	transition: transform var(--dur-toggle) ease-out;
+}
+.update-disclosure[data-state='open'] svg {
+	transform: rotate(180deg);
+}
+
+.update-steps {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 16px;
+}
+.update-steps li {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-faint);
+}
+.update-step-mark {
+	display: inline-grid;
+	width: 12px;
+	height: 12px;
+	place-items: center;
+}
+.update-step-mark svg {
+	width: 12px;
+	height: 12px;
+}
+.update-steps li[data-stage='done'] {
+	color: var(--text-muted);
+}
+.update-steps li[data-stage='current'] {
+	color: var(--text-primary);
+}
+
+/* The commits an update brings in, one a line under the strip. */
+.update-commits {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-top: 10px;
+	color: var(--text-secondary);
+}
+.update-commit {
+	min-width: 0;
+	overflow: hidden;
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

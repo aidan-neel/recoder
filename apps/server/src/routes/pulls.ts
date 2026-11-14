@@ -1,3 +1,4 @@
+import type { Repo } from '@recoder/shared';
 import { Hono } from 'hono';
 import { freshOpenPulls, openPulls } from '../forge/pulls/cached';
 import { listOpenPulls } from '../forge/pulls/list';
@@ -6,9 +7,10 @@ import { db } from '../store';
 const app = new Hono();
 
 /**
- * Open pull requests across every tracked repository (or `?repoId=` alone),
- * each with its newest review. `?fresh=1` asks the forges again instead of
- * answering from the last ten seconds.
+ * The first page of open pull requests of every tracked repository (or
+ * `?repoId=` alone), each with its newest review. `?repoId=&after=` reads the
+ * page after a cursor from `nextCursors`. `?fresh=1` asks the forges again
+ * instead of answering from the last ten seconds.
  */
 app.get('/', async (c) => {
 	const repoId = c.req.query('repoId');
@@ -17,7 +19,12 @@ app.get('/', async (c) => {
 
 	if (repoId !== undefined && selected.length === 0) return c.json({ error: 'repo not found' }, 404);
 
-	const loadPulls = c.req.query('fresh') === '1' ? freshOpenPulls : openPulls;
+	const after = c.req.query('after') ?? null;
+
+	if (after !== null && repoId === undefined) return c.json({ error: 'after needs a repoId' }, 400);
+
+	const read = c.req.query('fresh') === '1' ? freshOpenPulls : openPulls;
+	const loadPulls = (repo: Repo) => read(repo, after);
 
 	return c.json(await listOpenPulls(selected, await db.reviews.list(), loadPulls));
 });

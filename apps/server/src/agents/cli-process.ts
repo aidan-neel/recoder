@@ -7,14 +7,21 @@ import { LlmError, cancelledError, timedOutError } from '../models/llm/errors';
 import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../models/llm/types';
 import { serverDataDir } from '../util/data-dir';
 import { cliFailure } from './cli-failure';
-import type { AgentAdapter, AgentModelSettings, AgentRun, AgentRunOptions, ProcessCeiling } from './contract';
+import type {
+	AgentAdapter,
+	AgentModelSettings,
+	AgentRun,
+	AgentRunOptions,
+	AgentSetup,
+	ProcessCeiling
+} from './contract';
 
 type Env = Record<string, string | undefined>;
 
 const VERSION_TIMEOUT_MS = 10_000;
 
 /** Where to look for an agent CLI: the env var that pins it, its command name and its installer's path under home. */
-interface CliLocation {
+export interface CliLocation {
 	pin: string;
 	command: string;
 	installed: string[];
@@ -182,9 +189,10 @@ export function stopOnShutdown(name: string, stop: () => void): void {
 
 /** What a CLI adapter reports before it has run anything: whether it is installed, and how to install and sign in. */
 function initialStatus(
-	agent: { id: string; name: string; install: string; login: string },
+	agent: { id: string; name: string; install: string; login: string; setup: AgentSetup | null },
 	path: string | null,
-	apiKeySource: string | null = null
+	apiKeySource: string | null = null,
+	config: string | null = null
 ): AgentStatus {
 	return {
 		id: agent.id,
@@ -198,7 +206,9 @@ function initialStatus(
 		login: agent.login,
 		providers: false,
 		authMethod: null,
-		apiKeySource
+		apiKeySource,
+		config,
+		setup: { install: !!agent.setup?.install, signIn: !!agent.setup?.signIn }
 	};
 }
 
@@ -262,6 +272,8 @@ export abstract class CliAgent implements AgentAdapter {
 
 	abstract readonly processCeiling: ProcessCeiling | null;
 	abstract readonly signInFix: string;
+	abstract readonly readsImages: boolean;
+	abstract readonly setup: AgentSetup | null;
 
 	constructor(protected readonly env: Env = process.env) {}
 
@@ -278,6 +290,17 @@ export abstract class CliAgent implements AgentAdapter {
 	/** The environment the CLI runs with: the server's, less its keys. */
 	protected abstract childEnv(): Record<string, string>;
 
+	/**
+	 * The environment a setup job runs with: the call environment by default — an adapter that isolates a call
+	 * from the user's own CLI home overrides it to drop that override, so sign-in lands where the user's CLI reads it.
+	 */
+	setupEnv(): Record<string, string> {
+		return this.childEnv();
+	}
+
+	/** The directory in the user's home the CLI signs in from, reported as the status `config`; null when it has none. */
+	protected abstract configDir(): string | null;
+
 	/** The sign-in fields of the status, from a check that makes no model call. */
 	protected abstract signIn(path: string): Promise<Partial<AgentStatus>>;
 
@@ -286,7 +309,7 @@ export abstract class CliAgent implements AgentAdapter {
 		if (this.status && !refresh) return this.status;
 
 		const path = this.find();
-		const base = initialStatus(this, path, this.apiKeySource);
+		const base = initialStatus(this, path, this.apiKeySource, this.configDir());
 
 		if (!path) return (this.status = base);
 

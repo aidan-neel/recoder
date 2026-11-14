@@ -355,23 +355,32 @@
 	font-weight: 500;
 }
 
-/* The streaming caret: 2px, blinking once a second; it holds still under reduced motion. */
-[data-ui='markdown-caret'] {
-	display: inline-block;
-	width: 2px;
-	height: 1em;
-	margin-left: 2px;
-	background: currentColor;
-	vertical-align: -0.12em;
-	animation: ui-caret-blink var(--dur-caret) steps(1) infinite;
+/* The words still arriving: a light band crosses them once every --dur-shimmer, from muted ink to the primary. */
+[data-ui='markdown-tail'] {
+	background:
+		linear-gradient(100deg, transparent 35%, var(--text-primary) 50%, transparent 65%) 0 0 / 250% 100% no-repeat,
+		var(--text-muted);
+	background-clip: text;
+	-webkit-background-clip: text;
+	color: transparent;
+	animation: ui-tail-sweep var(--dur-shimmer) linear infinite;
 }
-@keyframes ui-caret-blink {
-	50% {
-		opacity: 0;
+@keyframes ui-tail-sweep {
+	from {
+		background-position:
+			150% 0,
+			0 0;
+	}
+	to {
+		background-position:
+			-50% 0,
+			0 0;
 	}
 }
 @media (prefers-reduced-motion: reduce) {
-	[data-ui='markdown-caret'] {
+	[data-ui='markdown-tail'] {
+		background: none;
+		color: inherit;
 		animation: none;
 	}
 	[data-ui='code-line'] {

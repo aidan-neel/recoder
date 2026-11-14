@@ -1,5 +1,6 @@
 import type { Finding, FindingSeverity } from './findings';
 import type { ObligationResult } from './obligations';
+import type { PullState } from './pulls';
 import type { BriefQuestionResult } from './questions';
 import type { Review } from './review';
 
@@ -23,6 +24,11 @@ export interface ReviewListItem extends Pick<
 	findings: ReviewListFinding[];
 	questions?: { questions: { id: string; result: BriefQuestionResult }[] };
 	obligations?: { obligations: { id: string }[]; answers: { obligationId: string; result: ObligationResult }[] };
+	/**
+	 * The pull request's state on the forge when Recoder last saw it. The list
+	 * route adds it from the pull request, not the review; absent until known.
+	 */
+	pullState?: PullState;
 }
 
 /** How strongly a decision asks for attention: a finding by its severity, or a question no reviewer could settle. */
@@ -56,7 +62,7 @@ export function findingTone(severity: FindingSeverity): DecisionTone {
  * item carries, so it also cuts down a full review typed as a list item.
  */
 export function reviewListItem(review: ReviewListItem): ReviewListItem {
-	const { id, repoId, prNumber, headSha, status, summary, prTitle, prUrl, createdAt, updatedAt } = review;
+	const { id, repoId, prNumber, headSha, status, summary, prTitle, prUrl, createdAt, updatedAt, pullState } = review;
 
 	return {
 		id,
@@ -90,7 +96,8 @@ export function reviewListItem(review: ReviewListItem): ReviewListItem {
 					result: answer.result
 				}))
 			}
-		})
+		}),
+		...(pullState !== undefined && { pullState })
 	};
 }
 

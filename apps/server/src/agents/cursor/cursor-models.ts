@@ -41,7 +41,7 @@ export function parseCursorModels(output: string): ModelEntry[] {
 			label,
 			model,
 			baseUrl: null,
-			apiKeyPreview: null
+			apiKeySet: false
 		});
 	}
 

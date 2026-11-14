@@ -1,6 +1,10 @@
 /* ───────── First run: three steps on the pull request page, then the list takes it ───────── */
+/* The checklist is the whole page, so it sits in the middle of it rather than on the bar's gutter. */
+.page-scroll:has(> .setup) {
+	display: grid;
+}
 .setup {
-	padding-top: 56px;
+	margin: auto;
 	transition: opacity var(--dur-swap) ease-out;
 }
 .setup[data-leaving] {

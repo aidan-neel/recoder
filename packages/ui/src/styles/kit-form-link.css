@@ -39,7 +39,7 @@
 		gap: 4px;
 		margin: 0 1px;
 		padding: 0 5px;
-		border-radius: 5px;
+		border-radius: var(--radius-chip);
 		background-color: var(--sev-info-tint);
 		color: var(--text-secondary);
 		font-size: var(--font-size-label);
@@ -84,6 +84,35 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	/* An image: its thumbnail, its name in the link ink and its size, on the text with no fill until hovered. */
+	[data-ui='link-embed'][data-kind='image'] {
+		max-width: min(320px, 100%);
+		gap: 5px;
+		margin: 0 2px;
+		padding: 0 4px 0 2px;
+		background-color: transparent;
+		color: var(--accent-text);
+		font-weight: 400;
+	}
+	[data-ui='link-embed-thumb'] {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
+		align-self: center;
+		border-radius: 3px;
+		object-fit: cover;
+		box-shadow: 0 0 0 1px var(--line-subtle);
+	}
+	[data-ui='link-embed-size'] {
+		flex-shrink: 0;
+		color: var(--text-muted);
+		font-size: var(--font-size-meta);
+	}
+	[data-ui='link-embed'][data-kind='image']:hover,
+	[data-ui='link-embed'][data-kind='image'][data-selected] {
+		color: var(--accent-text);
+	}
+
 	/* A link that just became an embed settles in place: a short fade from the text's own colour. */
 	[data-ui='link-field'] [data-ui='link-embed'] {
 		animation: ui-embed-settle var(--dur-swap) var(--ease-menu);

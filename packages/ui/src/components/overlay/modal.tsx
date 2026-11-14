@@ -61,8 +61,8 @@ interface ModalContentProps {
 }
 
 /**
- * The modal panel and its scrim. The panel scales in from 0.95 through a 2px
- * blur (150ms) and leaves in 70ms; the scrim only fades. Under reduced motion
+ * The modal panel and its scrim. The panel fades in from a 0.97 scale (75ms)
+ * and leaves in 35ms; the scrim only fades. Under reduced motion
  * the panel only fades too. On close, focus returns to what had it when the
  * modal opened. The scrim covers the page, so the page's pointer lock stays
  * shallow (`ShallowBodyLock`).
@@ -109,7 +109,10 @@ export function ModalContent({
 	);
 }
 
-/** The X, quiet until hovered. It comes last in the DOM so the first control in the body takes focus on open. */
+/**
+ * The X, quiet until hovered. It comes last in the DOM so the first control in
+ * the body takes focus on open; `kit-overlay.css` centres it on the title.
+ */
 function CloseButton() {
 	return (
 		<Dialog.Close asChild>
@@ -118,7 +121,7 @@ function CloseButton() {
 				size="icon"
 				aria-label="Close"
 				data-slot="close"
-				className="absolute top-3.5 right-3.5 text-fg-subtle hover:text-fg"
+				className="absolute text-fg-subtle hover:text-fg"
 			>
 				<X />
 			</Button>

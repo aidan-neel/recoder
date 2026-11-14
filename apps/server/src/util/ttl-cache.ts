@@ -1,8 +1,9 @@
 /** Every cache, so `clearAllCaches` can reach them. */
 const registry = new Set<TtlCache<unknown>>();
 
-/** A stored load: its value, or the error it failed with when failures are kept. */
-type Entry<T> = { ok: true; value: T; expires: number } | { ok: false; error: unknown; expires: number };
+/** A stored load: its value and when it was stored, or the error it failed with when failures are kept. */
+type Entry<T> =
+	{ ok: true; value: T; expires: number; stored: number } | { ok: false; error: unknown; expires: number };
 
 /**
  * Short-lived cache for slow provider lookups (CLI spawns, REST calls).
@@ -36,13 +37,21 @@ export class TtlCache<T> {
 	/**
 	 * Stale-while-revalidate: any value this key has, at once, with a fresh
 	 * load started in the background once it has expired. Only a key with no
-	 * value yet (or only a kept error) waits for `load`.
+	 * value yet (or only a kept error) waits for `load`. A value stored longer
+	 * ago than `maxAgeMs` is too old to serve, so the caller joins the fresh
+	 * load instead; unlimited when omitted.
 	 */
-	stale(key: string, load: () => Promise<T>): Promise<T> {
+	stale(key: string, load: () => Promise<T>, maxAgeMs = Number.POSITIVE_INFINITY): Promise<T> {
 		const hit = this.read(key);
 
 		if (!hit?.ok) return this.get(key, load);
-		if (hit.expires <= Date.now()) this.load(key, load).catch(() => undefined);
+		if (hit.expires > Date.now()) return Promise.resolve(hit.value);
+
+		const fresh = this.load(key, load);
+
+		if (Date.now() - hit.stored > maxAgeMs) return fresh;
+
+		fresh.catch(() => undefined);
 
 		return Promise.resolve(hit.value);
 	}
@@ -80,7 +89,9 @@ export class TtlCache<T> {
 		const promise = load()
 			.then(
 				(value) => {
-					if (current()) this.store(key, { ok: true, value, expires: Date.now() + this.ttlMs });
+					if (current()) {
+						this.store(key, { ok: true, value, expires: Date.now() + this.ttlMs, stored: Date.now() });
+					}
 
 					return value;
 				},

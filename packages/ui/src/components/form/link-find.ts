@@ -7,8 +7,8 @@ export interface TextRange {
 /** The start of a link: `http://` or `https://`, in any case, not glued to a word before it. */
 const SCHEME = /(?<![\p{L}\p{N}_])https?:\/\//giu;
 
-/** A character that can never be part of a link: white space, angle brackets, quotes and backticks. */
-const STOP = /[\s<>"`]/u;
+/** A character that can never be part of a link: white space, angle brackets, quotes, backticks and an image's token mark. */
+const STOP = /[\s<>"`\uFFFC]/u;
 
 /** Punctuation that ends a sentence or a clause, never a link. */
 const TRAILING = new Set(['.', ',', '!', '?', ':', ';', "'", '’', '”', '*', '_']);

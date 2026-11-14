@@ -3,6 +3,8 @@
 import { useEffect, useMemo } from 'react';
 import { useStore } from 'zustand';
 
+import type { PullListItem } from '@recoder/shared';
+
 import { useApi, useListStore } from '../api/client';
 import type { ListData } from './list-store';
 import { byActivity, pullKey, pullRow, type ListedPull } from './pull-rows';
@@ -14,12 +16,20 @@ export interface RowEntry {
 	row: PullRow;
 }
 
-/** Each pull request with the review its row shows: one started here until the list catches up, else the server's. */
-function listedPulls(data: Pick<ListData, 'list' | 'started'>): ListedPull[] {
-	return (data.list?.items ?? []).map((item) => ({
-		item,
-		review: data.started[pullKey(item.repoId, item.pull.number)] ?? item.review
-	}));
+/** Each pull request as a row entry, newest activity first, with the review its row shows: one started here until the list catches up, else the server's. */
+function rowEntries(
+	items: PullListItem[],
+	started: ListData['started'],
+	repos: ListData['repos'],
+	base: string
+): RowEntry[] {
+	return items
+		.map((item) => {
+			const listed: ListedPull = { item, review: started[pullKey(item.repoId, item.pull.number)] ?? item.review };
+
+			return { listed, row: pullRow(listed, repos, base) };
+		})
+		.sort((a, b) => byActivity(a.row, b.row));
 }
 
 /** Keeps the shared list fresh while the calling screen shows. */
@@ -29,19 +39,23 @@ export function useWatchList(): void {
 	useEffect(() => list.watch(), [list]);
 }
 
-/** Every open pull request as a row, newest activity first; rebuilt only when the list, the repositories or a start changes. */
+/**
+ * Every open pull request as a row: the first pages newest activity first, then each page read since in the order it
+ * arrived, so rows already shown never move. Rebuilt only when the list, the repositories or a start changes.
+ */
 export function useRowEntries(): RowEntry[] {
 	const { base } = useApi();
 	const { state } = useListStore();
 	const list = useStore(state, (data) => data.list);
+	const more = useStore(state, (data) => data.more.items);
 	const started = useStore(state, (data) => data.started);
 	const repos = useStore(state, (data) => data.repos);
 
-	return useMemo(
-		() =>
-			listedPulls({ list, started })
-				.map((listed) => ({ listed, row: pullRow(listed, repos, base) }))
-				.sort((a, b) => byActivity(a.row, b.row)),
-		[list, started, repos, base]
-	);
+	return useMemo(() => {
+		const first = list?.items ?? [];
+		const shown = new Set(first.map((item) => pullKey(item.repoId, item.pull.number)));
+		const later = more.filter((item) => !shown.has(pullKey(item.repoId, item.pull.number)));
+
+		return [...rowEntries(first, started, repos, base), ...rowEntries(later, started, repos, base)];
+	}, [list, more, started, repos, base]);
 }

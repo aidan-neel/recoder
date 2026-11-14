@@ -40,7 +40,7 @@ test('connecting lists the server’s models in the settings registry, and disco
 
 	const { servers } = await connected.json();
 
-	expect(servers[0]).toMatchObject({ host: 'vllm.test:8000', apiKeyPreview: '••••1234', error: null });
+	expect(servers[0]).toMatchObject({ host: 'vllm.test:8000', apiKeySet: true, error: null });
 
 	const settings = await (await app.request('/api/settings/models')).json();
 

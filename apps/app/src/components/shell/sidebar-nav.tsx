@@ -1,6 +1,6 @@
 'use client';
 
-import { HoverList, NavPill, NavPillGroup, RowButton } from '@recoder/ui';
+import { HoverList, RowButton } from '@recoder/ui';
 import { BookOpen, Clock, GitPullRequest, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -30,7 +30,7 @@ function placeOf(pathname: string, base: string): Place | null {
 	return null;
 }
 
-/** The four places. The pill slides to the one on screen; the count beside Pull requests is the open ones. */
+/** The places. The one on screen sits on a still fill; the count beside Pull requests is the open ones. */
 export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	const { base } = useApi();
 	const active = placeOf(usePathname(), base);
@@ -44,24 +44,21 @@ export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 
 	return (
 		<nav aria-label="Main">
-			<NavPillGroup>
-				<HoverList className="sidebar-nav" itemSelector="[data-nav]">
-					{rows.map(({ id, label, href, icon: Icon }) => (
-						<RowButton key={id} asChild data-nav data-active={active === id || undefined} className="nav-item">
-							<Link href={href} aria-current={active === id ? 'page' : undefined}>
-								{active === id ? <NavPill value={id} /> : null}
-								<Icon aria-hidden />
-								{label}
-								{id === 'pulls' && openPulls !== null ? (
-									<span className="nav-count" aria-label={`${openPulls} open`}>
-										{openPulls}
-									</span>
-								) : null}
-							</Link>
-						</RowButton>
-					))}
-				</HoverList>
-			</NavPillGroup>
+			<HoverList className="sidebar-nav" itemSelector="[data-nav]">
+				{rows.map(({ id, label, href, icon: Icon }) => (
+					<RowButton key={id} asChild data-nav data-active={active === id || undefined} className="nav-item">
+						<Link href={href} aria-current={active === id ? 'page' : undefined}>
+							<Icon aria-hidden />
+							{label}
+							{id === 'pulls' && openPulls !== null ? (
+								<span className="nav-count" aria-label={`${openPulls} open`}>
+									{openPulls}
+								</span>
+							) : null}
+						</Link>
+					</RowButton>
+				))}
+			</HoverList>
 		</nav>
 	);
 }

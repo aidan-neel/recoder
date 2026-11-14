@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { withReviewMetrics } from '../../../../src/models/metrics';
+import { withUsageMetrics } from '../../../../src/models/metrics';
 import { createRun } from '../../../../src/review/pipeline/harness/context';
 import { recordHistorySources, recordLearnedHistory } from '../../../../src/review/pipeline/harness/history-record';
 import type { IntentSource } from '../../../../src/review/pipeline/intent/types';
@@ -30,7 +30,7 @@ async function recorded(repoId: string | undefined, record: (run: ReturnType<typ
 
 	run.topicTallies = new Map([['null-check', { useful: 1, dismissed: 3 }]]);
 
-	await withReviewMetrics(review.id, 'pipeline', () => record(run));
+	await withUsageMetrics(review.id, 'pipeline', () => record(run));
 
 	return (await reviewMetrics.get(review.id))?.runs?.[0]?.history;
 }

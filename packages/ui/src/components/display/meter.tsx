@@ -13,6 +13,8 @@ interface MeterProps {
 	value: number | null;
 	max?: number;
 	tone?: MeterTone;
+	/** Any CSS color for the fill, such as a chart token; it replaces the tone's. */
+	color?: string;
 	className?: string;
 	'aria-label': string;
 }
@@ -29,7 +31,7 @@ function percent(value: number, max: number): string {
  * changes and paints at its width on first render. A null value shows the
  * indeterminate state.
  */
-export function Meter({ value, max = 1, tone = 'neutral', className, 'aria-label': label }: MeterProps) {
+export function Meter({ value, max = 1, tone = 'neutral', color, className, 'aria-label': label }: MeterProps) {
 	const reduced = useReducedMotionConfig();
 	const indeterminate = value === null;
 
@@ -46,11 +48,16 @@ export function Meter({ value, max = 1, tone = 'neutral', className, 'aria-label
 			className={cn('relative h-[3px] w-full overflow-hidden rounded-full bg-line-subtle', className)}
 		>
 			{indeterminate ? (
-				<span data-ui="meter-fill" className="absolute inset-y-0 left-0 w-[32%] rounded-full" />
+				<span
+					data-ui="meter-fill"
+					className="absolute inset-y-0 left-0 w-[32%] rounded-full"
+					style={{ backgroundColor: color }}
+				/>
 			) : (
 				<motion.span
 					data-ui="meter-fill"
 					className="absolute inset-y-0 left-0 rounded-full"
+					style={{ backgroundColor: color }}
 					initial={false}
 					animate={{ width: percent(value, max) }}
 					transition={reduced ? { duration: 0 } : SPRING}

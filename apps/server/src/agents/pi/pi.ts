@@ -1,5 +1,8 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { supportedEffort, type AgentStatus, type ModelEntry, type ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
+import { turnImages } from '../../models/llm/message-images';
 import type { ChatOptions } from '../../models/llm/types';
 import {
 	CliAgent,
@@ -11,7 +14,8 @@ import {
 	stopOnShutdown
 } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
-import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
+import { writeImageFiles } from '../image-files';
 import { runPiCall } from './pi-call';
 import { parsePiModels } from './pi-models';
 import { PI_LOGIN, tokenUsage, totalUsage } from './pi-output';
@@ -43,11 +47,21 @@ const LIST_ARGS = ['--list-models', ...PI_ISOLATION_ARGS, '--no-session'];
 export class PiAgent extends CliAgent {
 	readonly id = 'pi';
 	readonly name = 'Pi';
+	/** Images go in as `@file` arguments, which Pi attaches to the prompt it reads on stdin. */
+	readonly readsImages = true;
 	readonly install = INSTALL;
 	readonly login = PI_LOGIN;
 	/** Each call runs one CLI process, so four run at once unless `RECODER_PI_CONCURRENCY` says otherwise. */
 	readonly processCeiling = { env: 'RECODER_PI_CONCURRENCY', fallback: 4 };
 	readonly signInFix = 'Sign in by running `pi` and typing /login, or pick another model in Recoder settings.';
+	/**
+	 * The setup Settings runs: the npm install. There is no headless sign-in — Pi's only one is the `/login`
+	 * slash command of its interactive mode — so `signIn` stays null.
+	 */
+	readonly setup: AgentSetup = {
+		install: { argv: ['npm', 'install', '-g', '@mariozechner/pi-coding-agent'] },
+		signIn: null
+	};
 
 	/**
 	 * The models Pi can run now, from `pi --list-models`; throws when the CLI is missing or lists none, which is how
@@ -78,13 +92,15 @@ export class PiAgent extends CliAgent {
 
 		try {
 			const thinking = opts.thinking === false ? 'off' : opts.reasoningEffort;
+			const turns = opts.messages.filter((m) => m.role !== 'system');
 
 			const args = printArgs({
 				model: opts.model,
 				thinking,
 				systemFile: files.system,
 				sessionFile: files.session,
-				toolArgs: NO_TOOLS_ARGS
+				toolArgs: NO_TOOLS_ARGS,
+				images: await writeImageFiles(files.root, turnImages(turns))
 			});
 
 			const session = new SessionTail(files.session, (event) => {
@@ -95,7 +111,7 @@ export class PiAgent extends CliAgent {
 				{ path, env: this.env, running: this.running, cwd: await emptyDirectory('pi-empty') },
 				{
 					args,
-					stdin: promptText(opts.messages.filter((m) => m.role !== 'system')),
+					stdin: promptText(turns),
 					session,
 					signal: deadline.signal,
 					onText: onToken
@@ -147,6 +163,11 @@ export class PiAgent extends CliAgent {
 
 	protected childEnv(): Record<string, string> {
 		return piEnv(this.env);
+	}
+
+	/** Pi's agent dir, where `/login` leaves its sign-in: `PI_CODING_AGENT_DIR`, else `~/.pi/agent`. */
+	protected configDir(): string {
+		return this.env.PI_CODING_AGENT_DIR || join(this.env.HOME || homedir(), '.pi', 'agent');
 	}
 
 	/** Pi has no status command; it is signed in when it lists a model, which only providers it can call give. */

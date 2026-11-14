@@ -1,7 +1,6 @@
-import { prettyModelName, type AgentProvider, type AgentStatus, type ModelSettings } from '@recoder/shared';
+import { agentReady, prettyModelName, type AgentProvider, type AgentStatus, type ModelSettings } from '@recoder/shared';
 
 import { joinNames } from '../shell/format';
-import { agentReady } from '../settings/settings-store';
 import { rolePick } from '../settings/model-options';
 
 /** Names past this many fold into "and N more". */

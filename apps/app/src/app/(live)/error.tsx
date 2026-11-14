@@ -8,6 +8,6 @@ interface ErrorProps {
 	retry: () => void;
 }
 
-export default function LiveError({ retry }: ErrorProps) {
-	return <PageError retry={retry} />;
+export default function LiveError({ error, retry }: ErrorProps) {
+	return <PageError error={error} retry={retry} />;
 }

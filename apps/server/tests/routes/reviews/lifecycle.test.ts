@@ -17,6 +17,7 @@ import {
 	type ReviewTask
 } from '@recoder/shared';
 import { app } from '../../../src/app';
+import { pullStateKey, pullStates } from '../../../src/forge/pulls/pull-states';
 import type { RunTokenCall, StoredMetrics } from '../../../src/models/metrics';
 import { reviewInstructions } from '../../../src/review/chat/review-chat';
 import { db, reviewMetrics, reviewProgress } from '../../../src/store';
@@ -213,6 +214,30 @@ test('the summary list cuts each review to what the queue counts, and counts the
 
 	expect(JSON.stringify(item).length).toBeLessThan(JSON.stringify(full).length / 5);
 	await db.reviews.delete(full.id);
+});
+
+test('the review list carries each pull request’s last known forge state, full and summary', async () => {
+	const settled = await db.reviews.set(testReview({ repoId: 'settled-repo', prNumber: 9 }));
+	const other = await db.reviews.set(testReview({ repoId: 'other-repo', prNumber: 9 }));
+
+	await pullStates.set({
+		id: pullStateKey('settled-repo', 9),
+		repoId: 'settled-repo',
+		number: 9,
+		state: 'merged',
+		checkedAt: new Date().toISOString()
+	});
+
+	const listed = (await (await app.request('/api/reviews')).json()) as Record<string, unknown>[];
+	const summary = (await (await app.request('/api/reviews?view=summary')).json()) as ReviewListItem[];
+
+	expect(listed.find((item) => item.id === settled.id)?.pullState).toBe('merged');
+	expect(summary.find((item) => item.id === settled.id)?.pullState).toBe('merged');
+	expect(listed.find((item) => item.id === other.id)).not.toHaveProperty('pullState');
+
+	await db.reviews.delete(settled.id);
+	await db.reviews.delete(other.id);
+	await pullStates.delete(pullStateKey('settled-repo', 9));
 });
 
 test('progress summaries list only reviews still queued or running', async () => {

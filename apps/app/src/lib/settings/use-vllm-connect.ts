@@ -26,8 +26,8 @@ export interface VllmConnect {
 
 /**
  * Connecting a vLLM server: idle, pending while the server lists the models
- * at the address, then success (the button says so for a beat, then the modal
- * closes) or an error under the address. Typing again clears an error.
+ * at the address, then success (the button shows a check for a beat, then the
+ * modal closes) or an error under the address. Typing again clears an error.
  */
 export function useVllmConnect(close: () => void): VllmConnect {
 	const [address, setAddressText] = useState('');

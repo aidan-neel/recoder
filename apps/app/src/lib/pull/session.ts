@@ -42,6 +42,11 @@ export function createSession(client: ApiClient, list: ListStore, repoId: string
 		pullChat,
 		merge: createMerge(context, pages.loadPage),
 
+		/** Reads the page and the diff ahead of an open; nothing follows or polls until `open`. */
+		warm(): Promise<void> {
+			return Promise.allSettled([pages.loadPage(), pages.loadDiff()]).then(() => undefined);
+		},
+
 		/** Loads the page and the diff at once and follows the review; returns the close. */
 		open(): () => void {
 			review.open();
@@ -49,9 +54,11 @@ export function createSession(client: ApiClient, list: ListStore, repoId: string
 			void pages.loadDiff();
 
 			const stopChecks = pages.pollChecks();
+			const stopMergeability = pages.pollMergeability();
 
 			return () => {
 				stopChecks();
+				stopMergeability();
 				review.close();
 			};
 		}

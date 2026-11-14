@@ -1,5 +1,5 @@
 import { signedOutAgent, signedOutReason } from '../../models/agent-sign-in.js';
-import { isReviewConfigured, stageConfigs } from '../../models/models.js';
+import { isReviewConfigured, ProviderSwitchedOffError, stageConfigs, type ModelConfig } from '../../models/models.js';
 import { CliError, EXIT, notReadyError } from '../exit.js';
 import type { ProgressSink } from '../progress.js';
 import { continuedReviewMessage } from '../output/target-since.js';
@@ -93,7 +93,18 @@ function assertReviewConfigured(): void {
  * out, as the server's review does. The CLI's status command is asked; no model call is made.
  */
 async function assertAgentsSignedIn(): Promise<void> {
-	const signedOut = await signedOutAgent(stageConfigs());
+	const signedOut = await signedOutAgent(stageModels());
 
 	if (signedOut) throw notReadyError(signedOutReason(signedOut));
+}
+
+/** Each stage's model. A model on a provider switched off in Settings leaves the machine not ready, as no model does. */
+function stageModels(): readonly ModelConfig[] {
+	try {
+		return stageConfigs();
+	} catch (error) {
+		if (error instanceof ProviderSwitchedOffError) throw notReadyError(error.message);
+
+		throw error;
+	}
 }

@@ -2,12 +2,12 @@ import type { ModelSettings } from '@recoder/shared';
 
 /**
  * Model settings as kept in localStorage: everything a picker needs to paint,
- * minus the API key previews, which never leave the server's answer.
+ * minus whether an API key is set, which never leaves the server's answer.
  */
 export function cacheableModelSettings(config: ModelSettings): ModelSettings {
 	return {
 		...config,
-		apiKeyPreview: null,
-		models: config.models.map((entry) => ({ ...entry, apiKeyPreview: null }))
+		apiKeySet: false,
+		models: config.models.map((entry) => ({ ...entry, apiKeySet: false }))
 	};
 }

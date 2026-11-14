@@ -2,6 +2,8 @@ server:
   image:
     repository: example.invalid/recoder/server
     tag: test
+  encryptionKey:
+    existingSecret: recoder-encryption
 app:
   image:
     repository: example.invalid/recoder/app

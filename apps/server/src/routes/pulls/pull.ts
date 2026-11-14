@@ -1,7 +1,15 @@
 import { Hono } from 'hono';
 import type { PullPage } from '@recoder/shared';
-import { fetchChecks } from '../../forge/checks';
-import { mergeMethods, pullDiff, pullEntry, pullForge } from '../../forge/pulls/cached';
+import {
+	mergeMethods,
+	pullChecks,
+	pullCommits,
+	pullConversation,
+	pullDiff,
+	pullEntryStale,
+	pullForge,
+	pullHead
+} from '../../forge/pulls/cached';
 import { newestReviews } from '../../forge/pulls/list';
 import { detectProvider } from '../../forge/providers';
 import { db } from '../../store';
@@ -10,13 +18,20 @@ import writes from './write';
 
 const app = new Hono();
 
+/** How old the page's pull request read may be and still answer at once; mergeability and checks poll anyway. */
+const PAGE_STALE_MS = 60_000;
+
 /** What the pull request page shows before its tabs load. Answers for a merged or closed pull request too. */
 app.get(
 	'/:id/pulls/:pr/page',
 	pullRoute(async (c, { repo, n }) => {
 		const forge = pullForge(repo);
 
-		const [entry, methods, reviews] = await Promise.all([pullEntry(repo, n), mergeMethods(repo), db.reviews.list()]);
+		const [entry, methods, reviews] = await Promise.all([
+			pullEntryStale(repo, n, PAGE_STALE_MS),
+			mergeMethods(repo),
+			db.reviews.list()
+		]);
 
 		const page: PullPage = {
 			provider: repo.provider ?? detectProvider(repo.url),
@@ -38,17 +53,17 @@ app.get(
 app.get(
 	'/:id/pulls/:pr/diff',
 	pullRoute(async (c, { repo, n }) => {
-		const { pull } = await pullEntry(repo, n);
+		const head = await pullHead(repo, n);
 
 		c.header('Cache-Control', 'private, no-cache');
 
-		if (etagMatches(c.req.header('if-none-match'), pull.headSha)) {
-			c.header('ETag', `"${pull.headSha}"`);
+		if (etagMatches(c.req.header('if-none-match'), head)) {
+			c.header('ETag', `"${head}"`);
 
 			return c.body(null, 304);
 		}
 
-		const diff = await pullDiff(repo, n, pull.headSha);
+		const diff = await pullDiff(repo, n, head);
 
 		c.header('ETag', `"${diff.headSha}"`);
 
@@ -59,9 +74,9 @@ app.get(
 app.get(
 	'/:id/pulls/:pr/commits',
 	pullRoute(async (c, { repo, n }) => {
-		const { pull } = await pullEntry(repo, n);
+		const { pull } = await pullEntryStale(repo, n, PAGE_STALE_MS);
 
-		return c.json(await pullForge(repo).commits(pull));
+		return c.json(await pullCommits(repo, pull));
 	})
 );
 
@@ -69,19 +84,18 @@ app.get(
 app.get(
 	'/:id/pulls/:pr/checks',
 	pullRoute(async (c, { repo, n }) => {
-		const { pull } = await pullEntry(repo, n);
+		const { pull } = await pullEntryStale(repo, n, PAGE_STALE_MS);
 
-		return c.json(await fetchChecks(repo, pull.headSha));
+		return c.json(await pullChecks(repo, pull));
 	})
 );
 
 app.get(
 	'/:id/pulls/:pr/comments',
 	pullRoute(async (c, { repo, n }) => {
-		const forge = pullForge(repo);
-		const { pull } = await pullEntry(repo, n);
+		const { pull } = await pullEntryStale(repo, n, PAGE_STALE_MS);
 
-		return c.json(await forge.conversation(pull));
+		return c.json(await pullConversation(repo, pull));
 	})
 );
 

@@ -2,7 +2,7 @@ import { expect, spyOn, test } from 'bun:test';
 import { chatCompletion } from '../../../src/models/llm';
 import { acquireLlmSlot, releaseLlmSlot } from '../../../src/models/llm/limiter';
 import { lockedModels, runLocked, type LockedModels } from '../../../src/models/llm/locked-models';
-import { withReviewMetrics } from '../../../src/models/metrics';
+import { withUsageMetrics } from '../../../src/models/metrics';
 import { configForOrchestrator, configForSubagent, withLockedModels } from '../../../src/models/models';
 import { saveReviewSettings } from '../../../src/review/session/review-settings';
 import { db, reviewMetrics } from '../../../src/store';
@@ -83,7 +83,7 @@ test('a pipeline that runs without locked models records each miss and warns onc
 		Response.json({ choices: [{ message: { content: 'ok' } }], usage: { completion_tokens: 1 } })) as typeof fetch;
 
 	try {
-		await withReviewMetrics(reviewId, 'pipeline', () =>
+		await withUsageMetrics(reviewId, 'pipeline', () =>
 			chatCompletion({ ...configForOrchestrator(), messages: [{ role: 'user', content: 'hi' }] }).then(() =>
 				configForSubagent()
 			)
@@ -116,11 +116,11 @@ test('outside a pipeline the live pick is used, with no run and no miss recorded
 	pickModels([...FIRST, ...SECOND]);
 
 	try {
-		const before = await withReviewMetrics(reviewId, 'discussion', () => configForOrchestrator().model);
+		const before = await withUsageMetrics(reviewId, 'discussion', () => configForOrchestrator().model);
 
 		saveReviewSettings({ orchestratorModelId: SECOND[0], specialistModelId: SECOND[1] });
 
-		const after = await withReviewMetrics(reviewId, 'fix', async () => {
+		const after = await withUsageMetrics(reviewId, 'fix', async () => {
 			await Bun.sleep(1);
 
 			return [configForOrchestrator().model, configForSubagent().model];

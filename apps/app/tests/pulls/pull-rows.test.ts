@@ -1,9 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { REVIEW_CANCELLED, type PullListItem, type PullStatus, type Repo, type ReviewListItem } from '@recoder/shared';
+import { REVIEW_CANCELLED, type PullListItem, type PullStatus, type ReviewListItem } from '@recoder/shared';
 
 import { needsReview, rowStatus, shortRepoName } from '../../src/lib/pulls/pull-rows';
-
-const HEAD = 'head1';
+import { HEAD, review, tracked } from '../fixtures';
 
 function item(status: Partial<PullStatus> = {}): PullListItem {
 	return {
@@ -31,23 +30,6 @@ function item(status: Partial<PullStatus> = {}): PullListItem {
 			...status
 		},
 		review: null
-	};
-}
-
-function review(change: Partial<ReviewListItem> = {}): ReviewListItem {
-	return {
-		id: 'rv1',
-		repoId: 'r1',
-		prNumber: 7,
-		headSha: HEAD,
-		status: 'passed',
-		summary: 'Fine.',
-		prTitle: null,
-		prUrl: null,
-		createdAt: '',
-		updatedAt: '',
-		findings: [],
-		...change
 	};
 }
 
@@ -129,18 +111,6 @@ describe('needsReview', () => {
 		expect(needsReview({ item: item(), review: review() })).toBe(false);
 	});
 });
-
-function tracked(id: string, name: string): Repo {
-	return {
-		id,
-		name,
-		url: `https://github.com/${name}`,
-		provider: 'github',
-		defaultBranch: 'main',
-		createdAt: '',
-		updatedAt: ''
-	};
-}
 
 describe('the repository name a row shows', () => {
 	test('a repository alone with its short name shows only that name', () => {

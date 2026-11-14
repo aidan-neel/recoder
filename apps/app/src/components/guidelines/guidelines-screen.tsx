@@ -8,9 +8,9 @@ import { useGlobalRow } from '@/lib/guidelines/use-global-row';
 import { useGuidelinesSection, type GuidelinesSection } from '@/lib/guidelines/use-guidelines-section';
 import { settingsHref } from '@/lib/shell/routes';
 
-import { ColumnPage } from '@/components/common/column-page';
 import { SectionNotice } from '@/components/settings/section-notice';
 import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
+import { SettingsPage } from '@/components/settings/settings-page';
 import { SettingsSkeleton } from '@/components/settings/settings-skeleton';
 
 import { LayerRow } from './layer-row';
@@ -82,7 +82,7 @@ export function GuidelinesScreen() {
 	const section = useGuidelinesSection();
 
 	return (
-		<ColumnPage title="Guidelines">
+		<SettingsPage name="Guidelines">
 			<Layers section={section} />
 			<ConfirmDialog
 				open={section.asking}
@@ -96,6 +96,6 @@ export function GuidelinesScreen() {
 				destructive
 				onConfirm={section.discard}
 			/>
-		</ColumnPage>
+		</SettingsPage>
 	);
 }

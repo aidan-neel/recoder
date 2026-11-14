@@ -15,6 +15,8 @@ function agent(patch: Partial<AgentStatus>): AgentStatus {
 		signedIn: true,
 		login: 'claude login',
 		providers: false,
+		config: null,
+		setup: { install: false, signIn: false },
 		...patch
 	};
 }

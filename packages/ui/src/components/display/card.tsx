@@ -16,7 +16,7 @@ export function Card({ as: Tag = 'div', className, children, ...props }: CardPro
 	return (
 		<Tag
 			data-ui="card"
-			className={cn('rounded-[12px] bg-raised shadow-[0_0_0_1px_var(--line-card)]', className)}
+			className={cn('rounded-(--radius-card) bg-raised shadow-[0_0_0_1px_var(--line-card)]', className)}
 			{...props}
 		>
 			{children}

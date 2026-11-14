@@ -1,4 +1,6 @@
 import { emptyReviewProgress, type CreateReviewInput, type Review } from '@recoder/shared';
+import { ADMIN_ACCOUNT_ID } from '../accounts/account-records';
+import { saveReviewImages } from '../attachments/image-store';
 import { db, reviewProgress } from '../store';
 import { isReviewConfigured } from '../models/models';
 import { recordBrief } from '../review/chat/chat-replies';
@@ -21,12 +23,12 @@ export async function touch(reviewId: string, patch: Partial<Review>): Promise<R
 }
 /**
  * Validate + queue a review, kicking the pipeline in the background. A brief
- * in `instructions` is recorded first, so the review runs with it.
- * Throws on bad input.
+ * in `instructions` and its `images` are recorded first, so the review runs
+ * with them. Throws on bad input.
  * A reviewer model is required — stub reviews that finish in seconds with
- * no real findings are worse than refusing outright.
+ * no real findings are worse than refusing outright. `startedBy` is the account whose model picks it runs on.
  */
-export async function queueReview(input: CreateReviewInput): Promise<Review> {
+export async function queueReview(input: CreateReviewInput, startedBy = ADMIN_ACCOUNT_ID): Promise<Review> {
 	if (!isReviewConfigured()) {
 		throw new Error(
 			'reviewer not configured: add a reviewer model in settings (or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL)'
@@ -34,16 +36,24 @@ export async function queueReview(input: CreateReviewInput): Promise<Review> {
 	}
 
 	return storageTransaction(async () => {
-		const review = await createReviewSession(input);
+		const review = await createReviewSession(input, undefined, startedBy);
 
+		await saveReviewImages(review.id, input.images ?? []);
 		recordBrief(review.id, input.instructions);
 		await flushReviewEvents(review.id);
 
 		return startReviewSession(review.id);
 	});
 }
-/** Opening a PR creates durable chat state without running models or the pipeline. */
-export async function createReviewSession(input: CreateReviewInput, trigger?: Review['trigger']): Promise<Review> {
+/**
+ * Opening a PR creates durable chat state without running models or the pipeline. The review is `startedBy` an
+ * account, the admin's when the watcher, a webhook or a schedule opens it.
+ */
+export async function createReviewSession(
+	input: CreateReviewInput,
+	trigger?: Review['trigger'],
+	startedBy = ADMIN_ACCOUNT_ID
+): Promise<Review> {
 	const repo = await db.repos.get(input.repoId);
 
 	if (!repo) throw new Error('repo not found');
@@ -66,6 +76,7 @@ export async function createReviewSession(input: CreateReviewInput, trigger?: Re
 		source: repo.provider ?? detectProvider(repo.url),
 		prTitle: input.prTitle ?? null,
 		prUrl: null,
+		startedBy,
 		...(trigger ? { trigger } : {}),
 		...(input.baselineCache === false ? { baselineCache: false as const } : {}),
 		...(input.postComment ? { pullComment: { state: 'posting' as const, updatedAt: now } } : {}),

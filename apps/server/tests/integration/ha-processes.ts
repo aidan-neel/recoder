@@ -116,6 +116,11 @@ export class Replica {
 		await this.process.exited;
 	}
 
+	/** Asks the replica to shut down, as a rolling update does, without waiting for it to exit. */
+	terminate(): void {
+		if (this.process.exitCode === null) this.process.kill('SIGTERM');
+	}
+
 	async logs(): Promise<string> {
 		await this.kill();
 

@@ -65,6 +65,8 @@ export interface PiPrintOptions {
 	sessionFile: string;
 	/** The flags that give the call its tools, or turn every tool off. */
 	toolArgs: readonly string[];
+	/** Image files Pi attaches to the prompt it reads on stdin, each passed as an `@<path>` argument. */
+	images: readonly string[];
 }
 
 /**
@@ -72,7 +74,7 @@ export interface PiPrintOptions {
  * session file, which lives in the call's scratch dir (`--session-dir` too, so nothing lands in the user's).
  * `--system-prompt` takes a file and reads it, replacing Pi's own prompt and the user's `SYSTEM.md`.
  */
-export function printArgs({ model, thinking, systemFile, sessionFile, toolArgs }: PiPrintOptions): string[] {
+export function printArgs({ model, thinking, systemFile, sessionFile, toolArgs, images }: PiPrintOptions): string[] {
 	const slash = model.indexOf('/');
 	const provider = slash > 0 ? ['--provider', model.slice(0, slash)] : [];
 
@@ -91,6 +93,7 @@ export function printArgs({ model, thinking, systemFile, sessionFile, toolArgs }
 		'--session',
 		sessionFile,
 		'--session-dir',
-		dirname(sessionFile)
+		dirname(sessionFile),
+		...images.map((path) => `@${path}`)
 	];
 }

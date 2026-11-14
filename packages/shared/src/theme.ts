@@ -34,7 +34,7 @@ function flushStyles(): number {
  * frame instead of some fading from the old theme. The rule lifts two frames
  * later, once the new colors are computed and painted.
  */
-function withoutTransitions(swap: () => void): void {
+export function withoutTransitions(swap: () => void): void {
 	const freeze = document.createElement('style');
 
 	freeze.textContent = '*, *::before, *::after { transition: none !important; }';

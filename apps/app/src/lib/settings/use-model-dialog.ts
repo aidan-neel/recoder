@@ -6,7 +6,7 @@ import { flushSync } from 'react-dom';
 
 import { queryTerms } from '../shell/search';
 import { followsWhenUnset, ROLE_NAME, type ModelCatalog, type ModelRole } from './model-options';
-import { layoutRows, scrollToCenter, scrollToReveal, stepChoice, type RowLayout } from './model-rows';
+import { layoutRows, listScrollTop, scrollToCenter, scrollToReveal, stepChoice, type RowLayout } from './model-rows';
 import { useRootScale } from '../shell/root-scale';
 
 /** The list row whose key is `id`, as cmdk marks it. */
@@ -93,7 +93,7 @@ export function useModelDialog({
 
 		landed.current = true;
 
-		if (at !== undefined) scrollList(list, layout.pad + scrollToCenter(layout, at, list.clientHeight));
+		if (at !== undefined) scrollList(list, listScrollTop(layout, scrollToCenter(layout, at, list.clientHeight)));
 	}, [list, current, layout]);
 
 	useEffect(() => {
@@ -120,7 +120,7 @@ export function useModelDialog({
 		flushSync(() => setSelected(key));
 
 		if (index === layout.rows.length - 1) scrollList(list, list.scrollHeight);
-		else scrollList(list, top <= 0 ? 0 : top + layout.pad);
+		else scrollList(list, listScrollTop(layout, top));
 
 		selectRow(rowElement(list, key));
 	}

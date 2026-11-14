@@ -90,6 +90,20 @@ test('storage class overrides distinguish the cluster default from no storage cl
 	expect(noClass.spec.storageClassName).toBe('');
 });
 
+test('the key that seals stored credentials comes from a Secret and never from values', () => {
+	const server = manifests(
+		'--set',
+		'server.encryptionKey.existingSecret=keys',
+		'--set',
+		'server.encryptionKey.secretKey=k'
+	).find((doc) => doc.kind === 'Deployment' && doc.metadata.labels['app.kubernetes.io/component'] === 'server');
+
+	expect(server.spec.template.spec.containers[0].env).toContainEqual({
+		name: 'RECODER_SECRET_KEY',
+		valueFrom: { secretKeyRef: { name: 'keys', key: 'k' } }
+	});
+});
+
 test('configured model endpoints and browser origins reach the API container', () => {
 	const docs = manifests(
 		'--set',
@@ -173,7 +187,9 @@ test('unsafe shared-data combinations fail before an API can scale', () => {
 		['--set', 'server.replicaCount=2'],
 		['--set', 'server.database.existingSecret=database', '--set', 'server.persistence.existingClaim=sqlite-data'],
 		['--set', 'server.env.RECODER_DATABASE_URL=postgres://example.invalid/recoder'],
-		['--set', 'app.replicaCount=0']
+		['--set', 'app.replicaCount=0'],
+		['--set', 'server.encryptionKey.existingSecret='],
+		['--set', 'server.env.RECODER_SECRET_KEY=bm90LWEtcmVhbC1rZXk=']
 	]) {
 		const result = render(...args);
 

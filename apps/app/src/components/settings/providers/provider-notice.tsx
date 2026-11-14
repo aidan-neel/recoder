@@ -7,8 +7,6 @@ import { pickNotice } from '@/lib/settings/providers/pick-notice';
 import { useCheckAgain } from '@/lib/settings/providers/use-check-again';
 import type { ProviderSource } from '@/lib/settings/providers/use-provider-source';
 
-import { SettingsRow } from '../settings-group';
-
 /** Why there is no provider list: the server is down, the check failed, or the agent is not ready. */
 type NoListSource = Exclude<ProviderSource, { state: 'loading' | 'ready' }>;
 
@@ -34,23 +32,6 @@ export function CheckAgain({ label }: { label: string }) {
  */
 export function Command({ command }: { command: string }) {
 	return <CodeBlock code={command} copy wrap className="provider-command" />;
-}
-
-/**
- * In the Providers card, in place of the rows: what is wrong as a settings
- * row, the way out at its end, and the command that fixes it under the text.
- */
-export function ProviderNotice({ source }: { source: NoListSource }) {
-	const notice = pickNotice(source);
-
-	return (
-		<div role="status" className="provider-notice">
-			<SettingsRow name={notice.lead} detail={notice.rest}>
-				{notice.retryLabel ? <CheckAgain label={notice.retryLabel} /> : null}
-			</SettingsRow>
-			{notice.command ? <Command command={notice.command} /> : null}
-		</div>
-	);
 }
 
 /**

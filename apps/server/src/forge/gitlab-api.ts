@@ -43,7 +43,7 @@ export async function gitlabRequest(
 			method: init.method ?? 'GET',
 			body: init.body === undefined ? undefined : JSON.stringify(init.body),
 			headers: {
-				...(env.GITLAB_TOKEN ? { 'PRIVATE-TOKEN': env.GITLAB_TOKEN } : {}),
+				...(env.GITLAB_TOKEN ? { Authorization: `Bearer ${env.GITLAB_TOKEN}` } : {}),
 				...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
 				Accept: 'application/json'
 			},
@@ -251,17 +251,19 @@ const GITLAB_PAGE_MAX = 100;
 export const MERGE_STATS_PARALLEL = 8;
 
 /**
- * The first `limit` objects of a paged GitLab list, a page at a time until
- * `limit` or a short page. `readPage` gets the page size and the page number.
+ * The first `limit` objects of a paged GitLab list from page `firstPage`, a
+ * page at a time until `limit` or a short page. `readPage` gets the page size
+ * and the page number. A `limit` of one page reads just that page.
  */
 export async function firstRows(
 	limit: number,
-	readPage: (perPage: number, page: number) => Promise<unknown>
+	readPage: (perPage: number, page: number) => Promise<unknown>,
+	firstPage = 1
 ): Promise<Record<string, unknown>[]> {
 	const perPage = Math.min(limit, GITLAB_PAGE_MAX);
 	const rows: Record<string, unknown>[] = [];
 
-	for (let page = 1; rows.length < limit; page++) {
+	for (let page = firstPage; rows.length < limit; page++) {
 		const batch = await readPage(perPage, page);
 
 		if (!Array.isArray(batch)) throw new GhError('unknown', `GitLab sent page ${page} of a list as non-array JSON`);
@@ -277,13 +279,17 @@ export async function firstRows(
 export async function apiMergeRows(
 	repoUrl: string,
 	env: Record<string, string>,
-	limit = 20
+	limit = 20,
+	firstPage = 1
 ): Promise<{ pr: PullRequest; row: Record<string, unknown> }[]> {
-	const rows = await firstRows(limit, (perPage, page) =>
-		gitlabGet(
-			`${gitlabProject(repoUrl)}/merge_requests?state=opened&order_by=created_at&sort=desc&per_page=${perPage}&page=${page}`,
-			env
-		)
+	const rows = await firstRows(
+		limit,
+		(perPage, page) =>
+			gitlabGet(
+				`${gitlabProject(repoUrl)}/merge_requests?state=opened&order_by=created_at&sort=desc&per_page=${perPage}&page=${page}`,
+				env
+			),
+		firstPage
 	);
 
 	const merges = rows.map((row) => ({ pr: toPull(row), row })).filter(({ pr }) => pr.number > 0);

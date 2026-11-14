@@ -49,10 +49,6 @@
 .install-command [data-ui='code-block-content'] {
 	margin: 0 1px;
 	padding: 8px 44px 8px 12px;
-	scrollbar-width: none;
-}
-.install-command [data-ui='code-block-content']::-webkit-scrollbar {
-	display: none;
 }
 .install-command [data-ui='code-block-content']::before {
 	content: '$';

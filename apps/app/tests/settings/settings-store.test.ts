@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import type { AgentProvider, AgentStatus, ModelSettings } from '@recoder/shared';
 
 import { useSettings } from '../../src/lib/settings/settings-store';
+import { openCodeStatus } from '../fixtures';
 
 /** What the fake review server answers; each test changes it. */
 interface Server {
@@ -24,28 +25,18 @@ function settings(subagentCap: ModelSettings['subagentCap']): ModelSettings {
 		configured: true,
 		baseUrl: '',
 		model: '',
-		apiKeyPreview: null,
+		apiKeySet: false,
 		sharedModelId: null,
 		models: [],
 		subagentCap,
 		tokenBudget: 'medium',
 		reportLowSeverity: true,
+		disabledProviders: [],
+		hiddenModels: [],
+		modelPolicy: { kind: 'choose' },
 		limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 }
 	};
 }
-
-const openCode: AgentStatus = {
-	id: 'opencode',
-	name: 'OpenCode',
-	installed: true,
-	version: '1.0.0',
-	path: '/usr/bin/opencode',
-	error: null,
-	install: '',
-	signedIn: null,
-	login: null,
-	providers: true
-};
 
 const anthropic: AgentProvider = {
 	id: 'anthropic',
@@ -56,6 +47,8 @@ const anthropic: AgentProvider = {
 	removable: true,
 	methods: []
 };
+
+const openCode = openCodeStatus({ install: '' });
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 

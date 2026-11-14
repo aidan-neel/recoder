@@ -17,7 +17,7 @@ import {
 	renderDoc,
 	scrollToCaret,
 	writeSelection,
-	type EmbedLook
+	type EmbedSource
 } from './link-dom';
 import {
 	deleteKind,
@@ -35,11 +35,11 @@ import {
 import { attachEditorEvents } from './link-events';
 import type { TextRange } from './link-find';
 import { EMPTY_HISTORY, record, redo, undo, type EditKind, type History, type Snapshot } from './link-history';
+import { withoutImageTokens } from './link-image';
 import { docFromText, embedLinks, linkAfter, linkBefore, replaceRange, wordAround, type LinkDoc } from './link-model';
 
 /** What the editor asks of its host, read fresh on every use so a prop change needs no new editor. */
-export interface EditorHost {
-	look: (url: string) => EmbedLook;
+export interface EditorHost extends EmbedSource {
 	maxLength: () => number | undefined;
 	disabled: () => boolean;
 	/** The person changed the text. */
@@ -101,7 +101,7 @@ export class LinkEditor {
 			remove: (inputType, target) => this.remove(inputType, target),
 			undo: () => this.stepHistory(undo),
 			redo: () => this.stepHistory(redo),
-			selectedText: (range) => this.doc.text.slice(range.start, range.end),
+			selectedText: (range) => withoutImageTokens(this.doc.text.slice(range.start, range.end)),
 			cutRange: (range) => this.edit(replaceRange(this.doc, range, ''), range.start, 'other'),
 			holdBeforeInput: () => {
 				this.composition = holdBeforeInput(this.composition, this.snapshot());
@@ -436,7 +436,7 @@ export class LinkEditor {
 	}
 
 	private draw(): void {
-		renderDoc(this.root, this.doc, this.host.look);
+		renderDoc(this.root, this.doc, this.host);
 		this.root.toggleAttribute('data-empty', this.doc.text === '');
 	}
 

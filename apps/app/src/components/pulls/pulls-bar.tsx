@@ -7,6 +7,8 @@ import { useRef, type KeyboardEvent } from 'react';
 import type { RepoOption } from '@/lib/pulls/types';
 import { useKeys } from '@/lib/shell/use-keys';
 
+import { RepoLabel } from '@/components/common/repo-label';
+
 /** The select value that stands for every repository. */
 const ALL_REPOS = 'all';
 
@@ -18,16 +20,23 @@ interface RepoScopeProps {
 
 /** Which repository's pull requests show: all of them, or one. Hidden until there are two to choose between. */
 export function RepoScope({ repos, repoId, onChange }: RepoScopeProps) {
-	if (repos.length < 2) return <span className="crumbs">{repos[0]?.name ?? 'Pull requests'}</span>;
+	const [only] = repos;
+
+	if (repos.length < 2) {
+		return (
+			<span className="crumbs">{only ? <RepoLabel name={only.name} forge={only.provider} /> : 'Pull requests'}</span>
+		);
+	}
 
 	const options: SelectOption[] = [
 		{ value: ALL_REPOS, label: 'All repositories' },
-		...repos.map((repo) => ({ value: repo.id, label: repo.name }))
+		...repos.map((repo) => ({ value: repo.id, label: <RepoLabel name={repo.name} forge={repo.provider} /> }))
 	];
 
 	return (
 		<Select
 			variant="quiet"
+			className="pulls-scope"
 			aria-label="Repository"
 			value={repoId ?? ALL_REPOS}
 			onValueChange={(value) => onChange(value === ALL_REPOS ? null : value)}
@@ -84,6 +93,7 @@ export function RefreshButton({ refreshing, onRefresh }: { refreshing: boolean; 
 			<Button
 				variant="ghost"
 				size="icon"
+				className="pulls-refresh"
 				aria-label="Refresh"
 				status={refreshing ? 'pending' : 'idle'}
 				onClick={onRefresh}

@@ -1,4 +1,9 @@
-/* ───────── New review: one question, one field, a few pull requests to pick from ───────── */
+/* ───────── New: one field, a few pull requests to pick from ───────── */
+/*
+ * The field sits a little above the middle: its centre lands near 42% of the
+ * page under the top bar (the title row over it and the box are about 170px
+ * tall), and the list below grows down without moving it.
+ */
 .compose {
 	display: flex;
 	min-height: 0;
@@ -6,60 +11,148 @@
 	flex-direction: column;
 	align-items: center;
 	overflow-y: auto;
-	padding: 18vh 24px 48px;
+	padding: max(48px, calc(42vh - 104px)) 24px 48px;
 }
 .compose-column {
 	display: flex;
 	width: 100%;
-	max-width: 680px;
+	max-width: 720px;
 	flex-direction: column;
 }
-.compose-title {
-	margin-bottom: 20px;
-	font-size: 24px;
-	font-weight: 600;
-	letter-spacing: -0.015em;
-	line-height: 32px;
-	text-align: center;
-}
-.compose .composer [data-ui='link-field'] {
-	padding-top: 16px;
-	font-size: 15px;
-}
-.compose-hint {
+
+/*
+ * The title over the field's text edge (the large composer's text starts 16px in; the title's ink, 2px past its
+ * box), the mode switch over the send. Both centre on one 28px line.
+ */
+.compose-head {
 	display: flex;
-	min-height: 28px;
+	min-width: 0;
 	align-items: center;
-	gap: 8px;
-	padding: 8px 12px 0;
-	color: var(--text-faint);
+	justify-content: space-between;
+	gap: 12px;
+	padding: 0 4px 12px 14px;
+}
+.compose-title {
+	margin: 0;
+	color: var(--text-primary);
+	font-size: 20px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	line-height: 28px;
+}
+.compose-mode {
+	flex-shrink: 0;
+}
+
+/* The repository and the pull request in the composer's bar: quiet and small like the models beside the send, its name cut short. */
+.bar-trigger {
+	min-width: 0;
+	max-width: 200px;
+	gap: 6px;
+	padding-inline: 8px;
+	color: var(--text-muted);
 	font-size: var(--font-size-meta);
 }
-.compose-hint[data-tone='danger'] {
-	color: var(--danger);
+.bar-trigger:hover,
+.bar-trigger[aria-expanded='true'] {
+	color: var(--text-primary);
 }
-.compose-hint[data-tone='ready'] {
+.bar-trigger-skeleton {
+	display: flex;
+	height: var(--size-control-md);
+	align-items: center;
+	padding-inline: 8px;
+}
+.bar-trigger-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.bar-trigger .bar-trigger-chevron {
+	width: 12px;
+	height: 12px;
+	color: var(--text-faint);
+}
+.bar-trigger .bar-trigger-add {
+	width: 14px;
+	height: 14px;
+}
+
+/* The pull request's trigger gives way first: it is the one with a long title, so it shrinks before the repository does. */
+.pull-trigger {
+	max-width: 280px;
+	flex-shrink: 1;
+}
+.pull-trigger .pull-mark {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+
+/* ───────── The repository and pull request dialogs ───────── */
+.repo-dialog {
+	max-width: 520px;
+}
+.pull-dialog {
+	max-width: 560px;
+}
+.repo-row [data-ui='command-item-leading'],
+.pick-row [data-ui='command-item-leading'] {
 	color: var(--text-secondary);
 }
+.repo-row .repo-row-check,
+.pick-row .pick-row-check {
+	width: 14px;
+	height: 14px;
+	color: var(--text-primary);
+}
+.pick-row .pick-row-picked {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+.pick-row .pull-mark {
+	width: 14px;
+	height: 14px;
+}
+
+/*
+ * Not reviewed yet: row boxes start 8px in and their content 16px, in the
+ * composer's lanes. The mark is 14px with a 6px gap, like the forge mark in
+ * the repository trigger, so the titles start on the repository name's edge.
+ */
 .compose-suggestions {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
-	margin-top: 22px;
+	padding: 24px 8px 0;
 }
 .compose-suggestions .section-label {
-	padding: 0 12px 4px;
+	padding: 0 8px 4px;
 }
 .suggestion-row {
-	height: 38px;
+	height: 32px;
 	align-items: center;
-	gap: 12px;
-	padding: 0 12px;
+	gap: 6px;
+	padding: 0 8px;
 	color: var(--text-secondary);
 	font-size: var(--font-size-body);
 }
-.suggestion-row:hover {
+.suggestion-row:hover,
+.suggestion-row[aria-pressed='true'] {
 	color: var(--text-primary);
+}
+
+/* The mark's stroke starts 1px inside its box; the nudge puts its ink on the text's edge without moving the title. */
+.suggestion-row .pull-mark {
+	width: 14px;
+	height: 14px;
+	translate: -1px 0;
+}
+
+/* The loading row's glyph is the mark's size, so its bar starts where the title lands. */
+.suggestion-row > [data-ui='skeleton']:first-child {
+	width: 14px;
+	height: 14px;
 }
 .suggestion-title {
 	min-width: 0;

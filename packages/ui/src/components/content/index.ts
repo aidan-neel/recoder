@@ -6,3 +6,4 @@ export { whenIdle } from './idle';
 export { langForPath } from './languages';
 export { Markdown } from './markdown';
 export { prepareMarkdown, StaticMarkdown } from './markdown-render';
+export { type LinkOverride } from './markdown-parts';

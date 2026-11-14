@@ -14,6 +14,8 @@ export interface TokenDialog {
 	forge: Forge;
 	/** Counts the openings, so a check or timer left from an earlier one can never reach the next. */
 	opening: number;
+	/** Runs once a token was saved and the dialog is closing. */
+	onSaved: (() => void) | undefined;
 }
 
 /**
@@ -22,7 +24,7 @@ export interface TokenDialog {
  * so the markup can mount a fresh dialog and nothing from an earlier one
  * reaches it.
  */
-export function useTokenDialog(): TokenDialog {
+export function useTokenDialog(onSaved?: () => void): TokenDialog {
 	const [target, setTarget] = useState<{ forge: Forge; opening: number }>({ forge: 'github', opening: 0 });
 	const [open, setOpen] = useState(false);
 
@@ -31,5 +33,5 @@ export function useTokenDialog(): TokenDialog {
 		setOpen(true);
 	}
 
-	return { connect, open, setOpen, forge: target.forge, opening: target.opening };
+	return { connect, open, setOpen, forge: target.forge, opening: target.opening, onSaved };
 }

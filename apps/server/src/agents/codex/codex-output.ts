@@ -1,7 +1,7 @@
 import type { TokenUsage } from '@recoder/shared';
 import { z } from 'zod';
 import { LlmError, UsageLimitError } from '../../models/llm/errors';
-import type { CliExit } from '../cli-stream';
+import { parseJson, type CliExit } from '../cli-stream';
 import type { AgentEvent } from '../contract';
 import { quotedLine } from '../quoted-line';
 
@@ -222,14 +222,5 @@ export class CodexReader {
 
 		if (item.type === 'error' && item.message)
 			this.onEvent({ type: 'error', message: quotedLine(item.message, QUOTED_CHARS) });
-	}
-}
-
-/** The text as JSON, or undefined when it is not JSON. */
-export function parseJson(line: string): unknown {
-	try {
-		return JSON.parse(line);
-	} catch {
-		return undefined;
 	}
 }

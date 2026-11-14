@@ -3,35 +3,33 @@
 	min-height: 0;
 	flex: 1;
 	overflow-y: auto;
-	scrollbar-width: thin;
-	scrollbar-color: var(--line-strong) transparent;
-	scrollbar-gutter: stable both-edges;
 }
+/* A tab's body fills the page on the header's gutter, on both sides; only prose keeps a reading measure. */
 .reading-column {
 	display: flex;
 	width: 100%;
-	max-width: 868px;
 	flex-direction: column;
 	gap: 10px;
-	margin: 0 auto;
-	padding: 20px 24px 64px;
+	padding: 12px var(--page-gutter) 64px var(--page-gutter);
 }
 .reading-column[data-width='narrow'] {
-	max-width: 768px;
+	max-width: 800px;
 }
 
 .bug-item {
 	border-bottom: 1px solid var(--line-subtle);
 	scroll-margin-top: 20px;
 }
+/* The head's hover fill reaches 12px past the gutter, so the title itself starts on it. */
 .bug-head {
 	display: grid;
-	width: 100%;
+	width: calc(100% + 24px);
 	align-items: center;
 	grid-template-columns: minmax(0, 1fr) auto;
 	gap: 8px 12px;
+	margin: 0 -12px;
 	padding: 14px 12px;
-	border-radius: 10px;
+	border-radius: var(--radius-row);
 	outline: none;
 	text-align: left;
 	transition: background-color var(--dur-hover) ease-out;
@@ -54,9 +52,11 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+/* Lucide's chevron-down inks 5 of its 24 units short of each side; hanging that out ends its ink on the edge. */
 .bug-head > svg {
 	width: 14px;
 	height: 14px;
+	margin-right: calc(14px * -5 / 24);
 	color: var(--text-faint);
 	transition: rotate var(--dur-toggle) var(--ease-menu);
 }
@@ -77,11 +77,12 @@
 .bug-facts {
 	grid-column: 1 / -1;
 }
+/* The body spans the card, so its evidence and its action row end on the page's right gutter; prose keeps 72ch. */
 .bug-body {
 	display: flex;
 	flex-direction: column;
 	gap: 16px;
-	padding: 2px 12px 18px;
+	padding: 2px 0 18px;
 }
 .bug-body [data-ui='markdown'] {
 	max-width: 72ch;
@@ -93,6 +94,10 @@
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
+}
+/* A closed section keeps an empty body; without a gap of its own it adds no space before the next block. */
+.bug-section[data-ui='collapsible'] {
+	gap: 0;
 }
 .bug-section-head .section-label {
 	margin-right: 2px;
@@ -113,7 +118,7 @@
 	gap: 8px;
 	margin-left: -4px;
 	padding: 0 4px;
-	border-radius: 6px;
+	border-radius: var(--radius-control);
 	color: var(--text-secondary);
 	font-size: var(--font-size-label);
 	outline: none;
@@ -143,12 +148,15 @@
 	padding-top: 8px;
 }
 
-/* A block of evidence: a quiet header line over mono content. */
+/*
+ * A block of evidence: a quiet header line over mono content, in a border highlighted lines cannot cover. The border
+ * takes 1px of the 12px inset, so the content keeps 11px and starts and ends where the banner's does.
+ */
 .proof {
 	overflow: hidden;
-	border-radius: 10px;
+	border: 1px solid var(--line-card);
+	border-radius: var(--radius-row);
 	background: var(--bg-canvas);
-	box-shadow: 0 0 0 1px var(--line-card);
 	font-family: var(--font-code);
 	font-size: 12.5px;
 	line-height: 20px;
@@ -158,7 +166,7 @@
 	min-height: 36px;
 	align-items: center;
 	gap: 12px;
-	padding: 7px 12px;
+	padding: 7px 11px;
 	border-bottom: 1px solid var(--line-card);
 	color: var(--text-primary);
 }
@@ -166,7 +174,6 @@
 	min-width: 0;
 	flex: 1;
 	overflow-x: auto;
-	scrollbar-width: none;
 	white-space: pre;
 }
 .proof-command::before {
@@ -185,9 +192,8 @@
 	max-height: 280px;
 	margin: 0;
 	overflow: auto;
-	padding: 10px 12px;
+	padding: 10px 11px;
 	color: var(--text-muted);
-	scrollbar-width: thin;
 	white-space: pre;
 }
 .proof [data-ui='code-lines'] {
@@ -247,10 +253,12 @@
 	align-items: center;
 	gap: 6px;
 }
+/* The votes are 28px icon buttons; they reach out by the 6px around their icon, so the last icon ends on the edge. */
 .bug-actions-end {
 	display: flex;
 	align-items: center;
 	gap: 2px;
+	margin-right: -6px;
 	margin-left: auto;
 	color: var(--text-faint);
 	font-size: var(--font-size-meta);
@@ -270,15 +278,19 @@
 	border-top: 1px solid var(--line-card);
 }
 
-/* A group under the open bugs: a quiet line that opens to its rows. */
+/*
+ * A group under the open bugs: a quiet line that opens to its rows. Its chevron and its title sit where the
+ * suggested fix's do: the kit hangs the 14px chevron a third outside the edge, then an 8px gap.
+ */
 .bug-group-head {
 	display: flex;
-	width: 100%;
+	width: calc(100% + 24px);
 	min-height: 40px;
 	align-items: center;
-	gap: 12px;
-	padding: 0 16px;
-	border-radius: 10px;
+	gap: 8px;
+	margin: 0 -12px;
+	padding: 0 12px;
+	border-radius: var(--radius-row);
 	color: var(--text-secondary);
 	font-size: var(--font-size-body);
 	outline: none;
@@ -304,11 +316,16 @@
 .bug-group-head .meta {
 	margin-left: auto;
 }
+/* A line that does not open leads with a 16px glyph: 1px wider each side, it centres where the chevrons do. */
+.bug-group-head[role='note'] > [data-ui='status-glyph'] {
+	margin: 0 -1px 0 calc(14px / -3 - 1px);
+}
+/* The rows start under the group's title: the chevron's two thirds inside the edge, then the gap. */
 .bug-group-list {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
-	padding: 2px 0 8px 42px;
+	padding: 2px 0 8px calc(14px * 2 / 3 + 8px);
 }
 .bug-line {
 	display: flex;
@@ -336,22 +353,29 @@
 
 /* ───────── Run card: a review in progress, step by step ───────── */
 .run-card {
-	border-radius: 12px;
+	border-radius: var(--radius-card);
 	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card);
+	box-shadow: inset 0 0 0 1px var(--line-card);
 }
+/* Inside the card, content starts and ends 12px in, as in the review banner and the merge strip. */
 .run-card-head {
 	display: flex;
 	height: 48px;
 	align-items: center;
 	gap: 10px;
-	padding: 0 8px 0 16px;
+	padding: 0 12px;
 	border-bottom: 1px solid var(--line-card);
 	font-size: var(--font-size-body);
 	font-weight: 500;
 }
 .run-card-head .meta {
 	font-weight: 400;
+}
+/* The spinner takes the stage marks' 16px column, so its centre is theirs; 2px less gap keeps the title on theirs. */
+.run-card-head > [data-ui='spinner'] {
+	width: 16px;
+	justify-content: center;
+	margin-right: -2px;
 }
 .run-card-end {
 	display: flex;
@@ -363,7 +387,7 @@
 	display: flex;
 	flex-direction: column;
 	margin: 0;
-	padding: 8px 16px 12px;
+	padding: 8px 12px 12px;
 	list-style: none;
 }
 .run-stage {
@@ -398,15 +422,21 @@
 	padding: 2px 0 8px;
 	grid-column: 1 / -1;
 }
+/* What the review does now: a plain sentence, with its file, search or command in code. */
 .run-activity {
 	overflow: hidden;
 	padding-left: 24px;
-	color: var(--text-faint);
-	font-family: var(--font-code);
-	font-size: 12px;
+	color: var(--text-subtle);
+	font-size: var(--font-size-label);
 	font-weight: 400;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.run-activity code {
+	margin-left: 0.4em;
+	color: var(--text-secondary);
+	font-family: var(--font-code);
+	font-size: 12px;
 }
 .run-stage-mark {
 	display: grid;

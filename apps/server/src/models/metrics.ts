@@ -3,7 +3,10 @@ import {
 	TOKEN_STAGES,
 	aggregateTokenCalls,
 	emptyTokenUsage,
+	type ModelCallOutcome,
+	type ModelCallRow,
 	type QueueDelay,
+	type ReasoningEffort,
 	type ReviewMetrics,
 	type TokenCall,
 	type TokenScope,
@@ -12,9 +15,17 @@ import {
 	type TokenUsage
 } from '@recoder/shared';
 import type { TopicTally } from '../review/guidelines/learned/votes';
-import { db, reviewMetrics } from '../store';
+import { db, modelCalls, reviewMetrics } from '../store';
 import { metricWrites } from '../storage/persistence-queue';
 import { providerErrorText } from './error-text';
+import {
+	CapacityError,
+	isRateLimitError,
+	LlmError,
+	OutOfTimeError,
+	TimedOutError,
+	UsageLimitError
+} from './llm/errors';
 import { lockedModels } from './llm/locked-models';
 import { withLlmLane } from './llm/lane';
 import { currentLease } from '../review/runtime/ownership';
@@ -76,22 +87,40 @@ export type RunTokenCall = TokenCall & { run?: number; lockMiss?: true };
 /** A review's stored metrics with its pipeline runs; rows older than recording runs have none. */
 export type StoredMetrics = NonNullable<Awaited<ReturnType<typeof reviewMetrics.get>>>;
 
-/** Who the running code spends tokens for; `run` is set for pipeline work only. */
+/** Who the running code spends tokens for: a review or a repository chat; `run` is set for pipeline work only. */
 interface MetricsOwner {
-	reviewId: string;
+	/** The review's or chat's id, which keys its metrics row. */
+	ownerId: string;
 	scope: TokenScope;
+	/** What `ownerId` names; `other` when it is neither a review nor a chat. */
+	kind: ModelCallRow['kind'];
+	/** The account that started the work (`startedBy`); null for `other` calls and owners stored without one. */
+	person: string | null;
 	run?: number;
 }
 
 /** Async context covers nested agent loops and retries without threading review IDs through model config. */
 const context = new AsyncLocalStorage<MetricsOwner>();
 
-function queueFor(reviewId: string) {
-	return metricWrites.for(reviewId);
+function queueFor(ownerId: string) {
+	return metricWrites.for(ownerId);
 }
 
-async function flushReviewMetrics(reviewId: string): Promise<void> {
-	await metricWrites.drain(reviewId);
+async function flushReviewMetrics(ownerId: string): Promise<void> {
+	await metricWrites.drain(ownerId);
+}
+
+/** The review or repository chat `ownerId` names and the account that started it; undefined when it is neither. */
+async function usageOwner(ownerId: string): Promise<Pick<MetricsOwner, 'kind' | 'person'> | undefined> {
+	const review = await db.reviews.get(ownerId);
+
+	if (review) return { kind: 'review', person: review.startedBy ?? null };
+
+	const chat = await db.repoChats.get(ownerId);
+
+	if (chat) return { kind: 'chat', person: chat.startedBy ?? null };
+
+	return undefined;
 }
 
 /** Opens a run segment on the review's metrics with the models locked for it, and returns its index. */
@@ -117,18 +146,19 @@ function openRun(metrics: StoredMetrics): number {
 }
 
 /**
- * Counts calls under `run` toward `reviewId`; a pipeline run also opens its own run segment. The calls wait for
- * model slots in the review's own lane, so the limiter takes turns between reviews.
+ * Counts calls under `run` toward the review or repository chat `ownerId`; a pipeline run also opens its own run
+ * segment. The calls wait for model slots in the owner's own lane, so the limiter takes turns between them.
  */
-export async function withReviewMetrics<T>(reviewId: string, scope: TokenScope, run: () => T): Promise<Awaited<T>> {
-	const owner: MetricsOwner = { reviewId, scope };
+export async function withUsageMetrics<T>(ownerId: string, scope: TokenScope, run: () => T): Promise<Awaited<T>> {
+	const found = await usageOwner(ownerId);
+	const owner: MetricsOwner = { ownerId, scope, kind: found?.kind ?? 'other', person: found?.person ?? null };
 
-	if (await db.reviews.get(reviewId)) {
-		await flushReviewMetrics(reviewId);
+	if (found) {
+		await flushReviewMetrics(ownerId);
 
-		await reviewMetrics.update(reviewId, (stored) => {
+		await reviewMetrics.update(ownerId, (stored) => {
 			const metrics: StoredMetrics = stored ?? {
-				id: reviewId,
+				id: ownerId,
 				startedAt: new Date().toISOString(),
 				pipelineTracked: scope === 'pipeline',
 				calls: []
@@ -141,9 +171,9 @@ export async function withReviewMetrics<T>(reviewId: string, scope: TokenScope, 
 	}
 
 	try {
-		return await context.run(owner, () => withLlmLane({ id: reviewId, recordWait: recordQueueDelay }, run));
+		return await context.run(owner, () => withLlmLane({ id: ownerId, recordWait: recordQueueDelay }, run));
 	} finally {
-		await flushReviewMetrics(reviewId);
+		await flushReviewMetrics(ownerId);
 	}
 }
 
@@ -175,8 +205,8 @@ function updateCurrentRun(mutate: (run: PipelineRun, owner: MetricsOwner) => voi
 
 	const index = owner.run;
 
-	queueFor(owner.reviewId).push(async () => {
-		await reviewMetrics.update(owner.reviewId, (stored) => {
+	queueFor(owner.ownerId).push(async () => {
+		await reviewMetrics.update(owner.ownerId, (stored) => {
 			const metrics = stored;
 			const run = metrics?.runs?.[index];
 
@@ -204,7 +234,7 @@ export function recordLockMiss(): void {
 	updateCurrentRun((run, owner) => {
 		run.lockMisses++;
 		if (run.lockMisses === 1)
-			console.warn(`[metrics] review ${owner.reviewId} run ${run.index} used a model it did not lock`);
+			console.warn(`[metrics] review ${owner.ownerId} run ${run.index} used a model it did not lock`);
 	});
 }
 
@@ -221,16 +251,48 @@ export function recordHistory(history: RunHistory): void {
 	});
 }
 
-export function trackTokenCall(model: string, provider: TokenCall['provider']) {
+/** Queue bucket for calls with no owning review or chat, so their rows drain together. */
+const UNOWNED_CALLS = 'model-calls';
+
+/** The error ended the call because its caller stopped it, not because the model or the transport did. */
+function isCancellation(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	if (err.name === 'AbortError' || err.name === 'ReviewAbortedError') return true;
+
+	return err instanceof LlmError && err.status === 0 && /cancelled/i.test(err.message);
+}
+
+/** A one-word classification of a failed call's error, so the usage report can group them. */
+function errorKindOf(err: unknown): string {
+	if (err instanceof UsageLimitError) return 'usage-limit';
+	if (err instanceof CapacityError) return 'capacity';
+	if (err instanceof TimedOutError) return 'timeout';
+	if (err instanceof OutOfTimeError) return 'deadline';
+	if (err instanceof Error && err.name === 'TimeoutError') return 'timeout';
+
+	if (err instanceof LlmError) {
+		if (isRateLimitError(err)) return 'rate-limit';
+		if (err.status >= 500) return 'provider';
+		if (err.status >= 400) return 'request';
+	}
+
+	return 'error';
+}
+
+export function trackTokenCall(model: string, provider: TokenCall['provider'], effort?: ReasoningEffort) {
 	const owner = context.getStore();
 	const tally = tallies.getStore();
 	const stage = stages.getStore();
 	const pipeline = owner?.run !== undefined;
+	const worker = currentLease()?.ownerId;
 
 	if (tally) tally.calls++;
 
+	const at = new Date().toISOString();
+
 	const call: RunTokenCall = {
 		id: crypto.randomUUID(),
+		at,
 		model,
 		provider,
 		scope: owner?.scope ?? 'pipeline',
@@ -241,22 +303,57 @@ export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 		...(pipeline && !lockedModels() && { lockMiss: true as const })
 	};
 
+	const queueId = owner?.ownerId ?? UNOWNED_CALLS;
+	const startedMs = Date.now();
+	let outcome: ModelCallOutcome | undefined;
+	let errorKind: string | undefined;
+	let durationMs: number | undefined;
+
+	/**
+	 * The call as a `model_calls` row once it settles, and nothing before: an outcome that is still
+	 * open is not history yet. Usage arriving after `complete`/`fail` still lands, as the row is
+	 * rewritten on every save while the call keeps reporting.
+	 */
+	const telemetry = (): ModelCallRow | undefined => {
+		if (outcome === undefined) return undefined;
+
+		return {
+			id: call.id,
+			at,
+			person: owner?.person ?? null,
+			kind: owner?.kind ?? 'other',
+			ownerId: owner?.kind === 'review' || owner?.kind === 'chat' ? owner.ownerId : null,
+			...(call.stage && { stage: call.stage }),
+			provider: call.provider,
+			model: call.model,
+			...(effort && { effort }),
+			usage: call.usage,
+			...(durationMs !== undefined && { durationMs }),
+			outcome,
+			...(errorKind && { errorKind }),
+			...(worker && { worker })
+		};
+	};
+
 	const save = () => {
-		if (!owner) return;
-
 		const saved = structuredClone(call);
+		const row = telemetry();
 
-		queueFor(owner.reviewId).push(async () => {
-			await reviewMetrics.update(owner.reviewId, (metrics) => {
-				if (!metrics) return metrics;
+		queueFor(queueId).push(async () => {
+			if (owner) {
+				await reviewMetrics.update(owner.ownerId, (metrics) => {
+					if (!metrics) return metrics;
 
-				const index = metrics.calls.findIndex((item) => item.id === saved.id);
+					const index = metrics.calls.findIndex((item) => item.id === saved.id);
 
-				if (index < 0) metrics.calls.push(saved);
-				else metrics.calls[index] = saved;
+					if (index < 0) metrics.calls.push(saved);
+					else metrics.calls[index] = saved;
 
-				return metrics;
-			});
+					return metrics;
+				});
+			}
+
+			if (row) await modelCalls.set(row);
 		});
 	};
 
@@ -277,13 +374,27 @@ export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 		},
 		complete: () => {
 			call.status = 'completed';
+			outcome = 'ok';
+			durationMs = Date.now() - startedMs;
 			save();
 		},
 		/** Records the call as failed with the provider's error, without any of `secrets` the call was given. */
 		fail: (err: unknown, secrets: readonly (string | undefined)[] = []) => {
 			call.status = 'failed';
 			call.error = providerErrorText(err, secrets);
+			durationMs = Date.now() - startedMs;
+
+			if (isCancellation(err)) outcome = 'cancelled';
+			else {
+				outcome = 'failed';
+				errorKind = errorKindOf(err);
+			}
+
 			save();
+		},
+		/** Waits until this call's queued records have reached durable storage. */
+		flush: async () => {
+			await metricWrites.drain(queueId);
 		}
 	};
 }

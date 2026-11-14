@@ -1,13 +1,22 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import type { ProviderAuth } from '@recoder/shared';
-import { ghAuth, ghAvailable, listGhRepos } from '../forge/gh';
-import { glabAuth, glabAvailable, listGlabRepos } from '../forge/glab';
+import { forgeAuthStatus } from '../forge/auth-status';
+import { ghAuth, listGhRepos } from '../forge/gh';
+import { glabAuth, listGlabRepos } from '../forge/glab';
 import { GhError } from '../forge/gh';
-import { getGitlabHost, normalizeGitlabHost, setGitlabHost } from '../forge/gitlab-host';
-import { clearAllCaches, TtlCache } from '../util/ttl-cache';
-import { clearToken, setToken, tokenEnv } from '../forge/tokens';
+import { findAdmin, updateLinkedForge } from '../accounts/account-store';
+import { currentAccount, hasBearerAccess } from '../accounts/enforcement';
+import { isKnownHost } from '../accounts/forge-host';
+import { ForgeOAuthError } from '../accounts/forge-oauth';
+import { knownForgeHosts } from '../accounts/members';
+import { setSessionCookie } from '../accounts/session-cookie';
+import { refuseWhileLocked } from '../accounts/setup-gate';
+import { completeSignIn } from '../accounts/sign-in';
+import { normalizeGitlabHost } from '../forge/gitlab-host';
+import { clearAllCaches } from '../util/ttl-cache';
+import { clearToken, tokenEnv } from '../forge/tokens';
 import { parseBody } from './parse-body';
+import { trustedOrigin } from './trusted-origin';
 
 const tokenSchema = z.object({
 	provider: z.enum(['github', 'gitlab']),
@@ -16,64 +25,40 @@ const tokenSchema = z.object({
 	host: z.string().max(253).optional()
 });
 
-async function githubStatus(): Promise<ProviderAuth> {
-	const available = await ghAvailable();
-
-	if (!available) return { provider: 'github', available, authenticated: false, user: null };
-
-	const { authenticated, user } = await ghAuth(tokenEnv('github'));
-
-	return { provider: 'github', available, authenticated, user };
-}
-
-/** GitLab's connection. A connected token talks to the REST API, so the CLI is optional. */
-async function gitlabStatus(): Promise<ProviderAuth> {
-	const env = tokenEnv('gitlab');
-	const host = getGitlabHost();
-	const available = await glabAvailable();
-
-	if (!available && !env.GITLAB_TOKEN) return { provider: 'gitlab', available, authenticated: false, user: null, host };
-
-	const { authenticated, user } = await glabAuth(env);
-
-	return { provider: 'gitlab', available, authenticated, user, host };
-}
-
-const statusCache = new TtlCache<{ github: ProviderAuth; gitlab: ProviderAuth }>(30_000);
-
-/** Both forges' sign-in state, checked side by side. */
-async function forgeStatus(): Promise<{ github: ProviderAuth; gitlab: ProviderAuth }> {
-	const [github, gitlab] = await Promise.all([githubStatus(), gitlabStatus()]);
-
-	return { github, gitlab };
-}
-
 const app = new Hono();
 
-/**
- * Each forge's sign-in state. The CLI checks take a while, so once the last
- * answer is old it is still served at once while a fresh check runs behind
- * it. Saving or clearing a token clears the cache, so that change is never served stale.
- */
-app.get('/status', async (c) => c.json(await statusCache.stale('status', forgeStatus)));
+app.use('/token', trustedOrigin);
+
+app.get('/status', async (c) => c.json(await forgeAuthStatus()));
 
 app.post('/token', async (c) => {
 	const body = await parseBody(c, tokenSchema);
 
 	if (body instanceof Response) return body;
 
+	const locked = await refuseWhileLocked(c);
+
+	if (locked) return locked;
+
 	const { provider, token } = body;
 	const rawHost = provider === 'gitlab' ? (body.host?.trim() ?? '') : '';
-	const host = rawHost === '' ? null : normalizeGitlabHost(rawHost);
+	const normalized = rawHost === '' ? null : normalizeGitlabHost(rawHost);
 
-	if (rawHost !== '' && !host) {
+	if (rawHost !== '' && !normalized) {
 		return c.json({ error: 'That GitLab URL is not a valid host.', kind: 'host' }, 400);
 	}
 
+	const host = normalized === 'gitlab.com' ? null : normalized;
+
+	const stored = await findAdmin();
+	const linkTo = stored ? await linkingAccountId(c, stored.id) : null;
+
+	if (stored && linkTo === null && !isKnownHost({ provider, host }, await knownForgeHosts())) {
+		return c.json({ error: 'Sign in with a forge host this server already knows.', kind: 'host' }, 400);
+	}
+
 	const candidate: Record<string, string> =
-		provider === 'gitlab'
-			? { GITLAB_TOKEN: token, ...(host && host !== 'gitlab.com' ? { GITLAB_HOST: host } : {}) }
-			: { GH_TOKEN: token };
+		provider === 'gitlab' ? { GITLAB_TOKEN: token, ...(host ? { GITLAB_HOST: host } : {}) } : { GH_TOKEN: token };
 
 	const check = provider === 'gitlab' ? await glabAuth(candidate) : await ghAuth(candidate);
 
@@ -84,14 +69,38 @@ app.post('/token', async (c) => {
 		return c.json({ error, kind: 'auth' }, 401);
 	}
 
-	setToken(provider, token);
-	if (provider === 'gitlab') setGitlabHost(host);
-	clearAllCaches();
+	try {
+		const outcome = await completeSignIn(
+			{ provider, host },
+			{ accessToken: token, refreshToken: null, expiresAt: null },
+			linkTo
+		);
+
+		if (outcome.kind === 'rejected') {
+			return c.json({ error: 'That token belongs to a different account than this server’s.', kind: 'account' }, 403);
+		}
+
+		if (outcome.signIn.session) setSessionCookie(c, outcome.signIn.session);
+	} catch (error) {
+		if (error instanceof ForgeOAuthError) return c.json({ error: error.message, kind: error.reason }, 502);
+		throw error;
+	}
 
 	return c.json({ provider, user: check.user });
 });
 
-app.delete('/token/:provider', (c) => {
+/**
+ * The account a pasted token links to: the admin, when the request is the admin's session or the bearer token
+ * programs on this machine use. Otherwise it is null, and the token is a sign-in, which makes the person a member
+ * unless they were removed; a member cannot link more forges.
+ */
+async function linkingAccountId(c: Context, adminId: string): Promise<string | null> {
+	if (hasBearerAccess(c)) return adminId;
+
+	return (await currentAccount(c))?.role === 'admin' ? adminId : null;
+}
+
+app.delete('/token/:provider', async (c) => {
 	const provider = c.req.param('provider');
 
 	if (provider !== 'github' && provider !== 'gitlab') {
@@ -99,6 +108,7 @@ app.delete('/token/:provider', (c) => {
 	}
 
 	clearToken(provider);
+	await updateLinkedForge(provider, (forge) => (forge.refresh ? { ...forge, refresh: null } : undefined));
 	clearAllCaches();
 
 	return c.json({ cleared: true });

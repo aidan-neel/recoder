@@ -9,6 +9,7 @@ export function sqlite(): Database {
 	if (!handle) {
 		handle = new Database(join(serverDataDir(), 'recoder.db'));
 		handle.run('PRAGMA journal_mode = WAL');
+		handle.run('PRAGMA secure_delete = ON');
 
 		for (const table of [
 			'repos',
@@ -17,7 +18,18 @@ export function sqlite(): Database {
 			'review_progress',
 			'review_metrics',
 			'review_checkpoints',
-			'review_replays'
+			'review_replays',
+			'repo_chats',
+			'images',
+			'review_images',
+			'accounts',
+			'sessions',
+			'setup',
+			'oauth_redirects',
+			'member_models',
+			'update_state',
+			'pull_states',
+			'model_calls'
 		]) {
 			handle.run(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 		}

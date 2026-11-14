@@ -1,4 +1,4 @@
-import type { ReviewChatMessage, ReviewReasoningEntry, TokenStage } from '@recoder/shared';
+import type { ImageUpload, ReviewChatMessage, ReviewReasoningEntry, TokenStage } from '@recoder/shared';
 import type { EvidenceStore, ToolCallReport } from '../../../evidence/evidence.js';
 import type { RetrievalAction, ToolResult } from '../../../evidence/types.js';
 import type { ModelConfig } from '../../../models/models.js';
@@ -12,6 +12,8 @@ export interface JsonAgentOptions<T> {
 	agentId?: string;
 	system: string;
 	user: string;
+	/** Images that go with `user`, the first prompt: the brief's, for a reviewer on the Review model. */
+	images?: readonly ImageUpload[];
 	config: ModelConfig;
 	budget: ModelBudget;
 	evidence: EvidenceStore;

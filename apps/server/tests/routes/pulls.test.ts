@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { PullDiff, PullList, PullPage } from '@recoder/shared';
 import { app } from '../../src/app';
+import { pullStateKey, pullStates } from '../../src/forge/pulls/pull-states';
 import { db } from '../../src/store';
 import { fakeGh, type GhReply } from '../helpers/fake-gh';
 import { localForgeFixture } from '../helpers/local-forge';
@@ -64,9 +65,10 @@ const TOKEN = 'ghp_abcdefghijklmnopqrstuvwxyz0123';
 
 /**
  * `gh pr view` for open, ready PR 7 at {@link HEAD}, in a repository that
- * allows merge commits and squashes, plus the `more` replies a test needs.
+ * allows merge commits and squashes, plus the `more` replies and later `pr
+ * view` answers a test needs.
  */
-function openPullGh(more: Record<string, GhReply[]> = {}) {
+function openPullGh(more: Record<string, GhReply[]> = {}, views: GhReply[] = []) {
 	return fakeGh({
 		...more,
 		'pr-view': [
@@ -80,9 +82,19 @@ function openPullGh(more: Record<string, GhReply[]> = {}) {
 					isDraft: false,
 					mergeStateStatus: 'CLEAN'
 				}
-			}
+			},
+			...views
 		],
-		'repo-view': [{ out: { mergeCommitAllowed: true, squashMergeAllowed: true, rebaseMergeAllowed: false } }]
+		'repo-view': [
+			{
+				out: {
+					viewerPermission: 'ADMIN',
+					mergeCommitAllowed: true,
+					squashMergeAllowed: true,
+					rebaseMergeAllowed: false
+				}
+			}
+		]
 	});
 }
 
@@ -200,6 +212,25 @@ test('the list loads the repositories that answer and names the one that failed'
 
 	expect(mine.map((item) => item.pull.number)).toEqual([7]);
 	expect(list.failures.filter((failure) => failure.repoId === id)).toHaveLength(1);
+});
+
+test('a merge the forge took records the pull request as merged', async () => {
+	const id = await githubRepo();
+
+	/** The merge reads `pr view` again to confirm, so the second answer reports the pull request merged. */
+	const gh = await openPullGh({ 'pr-merge': [{ text: '' }] }, [
+		{ out: { state: 'MERGED', mergeCommit: { oid: 'c'.repeat(40) } } }
+	]);
+
+	process.env.PATH = gh.path;
+
+	const res = await post(`/api/repos/${id}/pulls/7/merge`, { method: 'squash', headSha: HEAD });
+
+	expect(res.status).toBe(200);
+	expect(await answer<{ merged: boolean }>(res)).toMatchObject({ merged: true });
+	expect((await pullStates.get(pullStateKey(id, 7)))?.state).toBe('merged');
+
+	await pullStates.delete(pullStateKey(id, 7));
 });
 
 test('a push between the merge check and the merge is refused with 409', async () => {

@@ -63,7 +63,7 @@ Temporary checkouts, caches, CLI login files, and unrelated files are not import
 
 1. Wait for active forge publications to finish, then stop the source server and all destination API replicas.
 2. Back up the complete source data directory, including SQLite WAL files.
-3. Load `RECODER_DATABASE_URL` for an empty destination from your secret manager.
+3. Load `RECODER_DATABASE_URL` for an empty destination and `RECODER_SECRET_KEY` from your secret manager. If the source server made its own key file, set `RECODER_SECRET_KEY` to the contents of that `secret.key`, so the sealed credentials in the settings files open; any still in plaintext are sealed under it. See [stored credentials](review/configuration.md#stored-credentials).
 4. From the Recoder checkout, run the import.
 
    ```sh
@@ -92,6 +92,12 @@ Persisted pause and cancellation state survives that change. Clients can reconne
 Failover can pause progress for the lease period, polling delay, and checkout or model recovery time.
 An in-flight model request can repeat after a crash, so token charges can repeat too.
 Persisted chat commands retain their message identifiers when delivered to a successor.
+
+Repository chats (`/chats/<id>`) are not review work, so no lease or command inbox carries their replies.
+The replica that received a message writes its reply and stamps a heartbeat on the chat about once a second, using the database clock.
+On SIGTERM or SIGINT, a replica stops its open replies and closes each one as interrupted, with its partial text kept, before it exits.
+A rolling update therefore leaves no reply waiting. If a replica crashes, its open reply stays in progress until the heartbeat is 30 seconds old.
+The next replica that reads the chat then closes the reply as interrupted. The person asks again; the reply does not resume on another replica.
 
 Forge publication records retain uncertain create attempts. A retry searches for the comment marker before creating another comment.
 If Recoder cannot establish the outcome of a previous create, inspect the pull request and resolve that uncertainty before another create.

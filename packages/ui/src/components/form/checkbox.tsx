@@ -21,7 +21,7 @@ const DRAW: Transition = { pathLength: { duration: DURATION.toggle, ease: EASE_O
 const ERASE: Transition = { duration: DURATION.menuOut, ease: EASE_IN };
 
 /**
- * A 16px checkbox. Ticked, the box fills with the primary color and the
+ * A 14px checkbox. Ticked, the box fills with the primary color and the
  * check draws itself in. Inside a `Field`, the field's label names it.
  */
 export function Checkbox({ checked, onCheckedChange, disabled, id, 'aria-label': label, className }: CheckboxProps) {

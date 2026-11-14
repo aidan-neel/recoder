@@ -11,12 +11,14 @@ import { initTokenStore } from '../forge/tokens';
 import { readStoredGitlabHost } from '../forge/gitlab-host';
 import { readAutoReviewSettings } from '../forge/watch/settings';
 import { readWatchState } from '../forge/watch/cursor';
-import { listVllmServers } from '../models/vllm/vllm-store';
+import { initVllmServers } from '../models/vllm/vllm-store';
 import { readGlobalGuidelines } from '../review/guidelines/guidelines';
 import { listDismissals } from '../review/guidelines/learned/dismissals';
 import { listProposals } from '../review/guidelines/learned/proposals';
 import { topicTallies } from '../review/guidelines/learned/votes';
-import { getStoredSettings, parseSavedReviewSettings } from '../review/session/review-settings';
+import { initReviewSettings, parseSavedReviewSettings } from '../review/session/review-settings';
+import { SealedValueError } from '../secrets/seal';
+import { SecretKeyError } from '../secrets/secret-key';
 import { enqueueActor, enqueueCommand } from '../review/runtime/inbox';
 
 const MAX_DATABASE_BYTES = 1024 * 1024 * 1024;
@@ -31,7 +33,10 @@ const collections = [
 	'review_progress',
 	'review_metrics',
 	'review_checkpoints',
-	'review_replays'
+	'review_replays',
+	'repo_chats',
+	'images',
+	'review_images'
 ] as const;
 
 const recordSchema = z.object({ id: z.string().min(1).max(200) }).passthrough();
@@ -86,6 +91,11 @@ async function sourceFile(directory: string, name: string, limit: number): Promi
 	return path;
 }
 
+/** A secret that cannot be opened or a key that is missing says so itself, which "invalid" would hide. */
+function isSecretError(error: unknown): boolean {
+	return error instanceof SealedValueError || error instanceof SecretKeyError;
+}
+
 async function readSettings(directory: string): Promise<{ name: SharedSettingName; value: unknown }[]> {
 	const documents: { name: SharedSettingName; value: unknown }[] = [];
 
@@ -114,8 +124,10 @@ async function readSettings(directory: string): Promise<{ name: SharedSettingNam
 				if (value === null) throw new Error('A saved settings file cannot contain a null document.');
 
 				if (setting.name === 'review-settings') value = parseSavedReviewSettings(value).settings;
-			} catch {
-				throw new Error(`Source file ${setting.file} is invalid. Repair it before importing.`);
+			} catch (error) {
+				if (isSecretError(error)) throw error;
+
+				throw new Error(`Source file ${setting.file} is invalid. Repair it before importing.`, { cause: error });
 			}
 
 			documents.push({ name: setting.name, value });
@@ -177,11 +189,12 @@ async function requireEmptyDestination(transaction: TransactionSQL): Promise<voi
 	}
 }
 
+/** Reads every imported settings document, which also seals any credential in it that was saved in plaintext. */
 function validateSharedSettings(): void {
 	initTokenStore();
 	readStoredGitlabHost();
-	getStoredSettings();
-	listVllmServers();
+	initReviewSettings();
+	initVllmServers();
 	readGlobalGuidelines();
 	readAutoReviewSettings();
 	readWatchState();
@@ -319,8 +332,12 @@ export async function importLocalData(
 
 				try {
 					validateSharedSettings();
-				} catch {
-					throw new Error('A source settings document is invalid. Repair the source before importing.');
+				} catch (error) {
+					if (isSecretError(error)) throw error;
+
+					throw new Error('A source settings document is invalid. Repair the source before importing.', {
+						cause: error
+					});
 				}
 			});
 

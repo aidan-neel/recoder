@@ -19,13 +19,19 @@ export function localPullForge(repoUrl: string): PullForge {
 		async list() {
 			const entries = (await listLocalPulls(repoUrl)).map((pull) => ({ pull, status: localStatus(pull, 'open') }));
 
-			return { entries, truncated: false };
+			return { entries, nextCursor: null };
 		},
 
 		async view(n) {
 			const { pr, state } = await viewLocalPull(repoUrl, n);
 
 			return { pull: pr, status: localStatus(pr, state) };
+		},
+
+		async head(n) {
+			const { pr } = await viewLocalPull(repoUrl, n);
+
+			return pr.headSha;
 		},
 
 		async commits(pull) {

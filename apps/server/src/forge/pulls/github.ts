@@ -7,22 +7,22 @@ import type {
 	PullState
 } from '@recoder/shared';
 import { str } from '../context/sources.js';
-import { extractJson, gh, listPullRows, parseRepoSlug, viewPullRow, type PullRow } from '../gh.js';
+import { extractJson, gh, GhError, parseRepoSlug, viewPullRow, type PullRow } from '../gh.js';
 import { tokenEnv } from '../tokens.js';
+import { listGithubPulls } from './github-list.js';
 import { githubCommits, githubConversation, githubPostComment } from './github-conversation.js';
 import {
-	capOpenPulls,
 	mergeRefusal,
-	OPEN_PULLS_ASKED,
 	record,
 	records,
 	refusedMerge,
+	STATUS_CONTEXT_STATES,
 	tallyChecks,
 	type PullEntry,
 	type PullForge
 } from './status.js';
 
-/** The `gh pr list` / `gh pr view` fields `PullStatus` is read from. */
+/** The `gh pr view` fields `PullStatus` is read from. */
 const STATUS_FIELDS = ['state', 'isDraft', 'updatedAt', 'mergeable', 'mergeStateStatus', 'statusCheckRollup'];
 
 /** Pull requests on GitHub: metadata, status and merges through `gh`, the conversation through the REST API. */
@@ -34,14 +34,19 @@ export function githubPullForge(repoUrl: string): PullForge {
 		comments: true,
 		checks: true,
 
-		async list() {
-			const rows = await listPullRows(repoUrl, { env, limit: OPEN_PULLS_ASKED, fields: STATUS_FIELDS });
-
-			return capOpenPulls(rows.map(githubEntry));
-		},
+		list: (after) => listGithubPulls(repoUrl, env, after),
 
 		async view(n) {
 			return githubEntry(await viewPullRow(repoUrl, n, { env, fields: [...STATUS_FIELDS, 'commits'] }));
+		},
+
+		async head(n) {
+			const row = record(extractJson(await gh(['pr', 'view', String(n), '--repo', slug, '--json', 'headRefOid'], env)));
+			const sha = str(row.headRefOid);
+
+			if (!sha) throw new GhError('not-found', `pull request ${n} has no head`);
+
+			return sha;
 		},
 
 		commits: (pull) => githubCommits(slug, pull.number),
@@ -51,9 +56,20 @@ export function githubPullForge(repoUrl: string): PullForge {
 		async mergeMethods() {
 			const view = record(
 				extractJson(
-					await gh(['repo', 'view', slug, '--json', 'mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed'], env)
+					await gh(
+						[
+							'repo',
+							'view',
+							slug,
+							'--json',
+							'viewerPermission,mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed'
+						],
+						env
+					)
 				)
 			);
+
+			if (!MERGE_PERMISSIONS.has(String(view.viewerPermission))) return [];
 
 			return MERGE_SETTINGS.flatMap(([field, method]) => (view[field] === true ? [method] : []));
 		},
@@ -62,6 +78,9 @@ export function githubPullForge(repoUrl: string): PullForge {
 	};
 }
 
+/** The `viewerPermission` levels that can merge; READ and TRIAGE cannot, whatever the repository allows. */
+const MERGE_PERMISSIONS: ReadonlySet<string> = new Set(['ADMIN', 'MAINTAIN', 'WRITE']);
+
 /** The repository setting that allows each merge method. */
 const MERGE_SETTINGS: [string, PullMergeMethod][] = [
 	['mergeCommitAllowed', 'merge'],
@@ -69,7 +88,7 @@ const MERGE_SETTINGS: [string, PullMergeMethod][] = [
 	['rebaseMergeAllowed', 'rebase']
 ];
 
-/** A `gh` row with the status fields as a list or page entry. */
+/** A `gh pr view` row with the status fields as a page entry. */
 function githubEntry({ pr, row }: PullRow): PullEntry {
 	const commits = Array.isArray(row.commits) ? row.commits.length : null;
 
@@ -108,12 +127,6 @@ function rollupState(entry: Record<string, unknown>): PrCheck['state'] {
 
 	return CHECK_RUN_CONCLUSIONS[String(entry.conclusion)] ?? 'failed';
 }
-
-const STATUS_CONTEXT_STATES: Record<string, PrCheck['state']> = {
-	SUCCESS: 'passed',
-	PENDING: 'pending',
-	EXPECTED: 'pending'
-};
 
 const CHECK_RUN_CONCLUSIONS: Record<string, PrCheck['state']> = {
 	SUCCESS: 'passed',

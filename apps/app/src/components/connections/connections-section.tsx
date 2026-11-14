@@ -1,30 +1,31 @@
 'use client';
 
+import { useAccount } from '@/lib/account/account-store';
+
+import { AccountGroup } from '@/components/account/account-group';
+import { AdminControls } from '@/components/settings/admin-controls';
 import { SectionNotice } from '@/components/settings/section-notice';
 import { SettingsSkeleton } from '@/components/settings/settings-skeleton';
 import { useConnectionsSection } from '@/lib/connections/use-connections-section';
 
 import { FailedGroup } from './failed-group';
 import { ForgeGroup } from './forge-group';
-import { RepoBrowser } from './repo-browser';
-import { RepoGroup } from './repo-group';
 import { TokenModal } from './token-modal';
 
-/** Two rows a group, the shape the section has while it loads. */
-const SKELETON_GROUPS = [2, 2] as const;
+/** The Forges group's two rows, the shape the section has while it loads; with an account, its one row leads. */
+const FORGES_SKELETON = [2] as const;
 
-/**
- * Settings → Connections: the forges Recoder reads pull requests from, and
- * the repositories it tracks. A group whose load failed says so in its own
- * card, so the other group still works.
- */
+const ACCOUNT_SKELETON = [1, 2] as const;
+
+/** Settings → Connections: the forges Recoder reads pull requests from. */
 export function ConnectionsSection() {
 	const section = useConnectionsSection();
+	const hasAccount = useAccount((state) => Boolean(state.auth?.account));
 
 	if (section.view === 'loading') {
 		return (
 			<div className="connections-loading">
-				<SettingsSkeleton groups={SKELETON_GROUPS} />
+				<SettingsSkeleton groups={hasAccount ? ACCOUNT_SKELETON : FORGES_SKELETON} />
 			</div>
 		);
 	}
@@ -33,18 +34,15 @@ export function ConnectionsSection() {
 
 	return (
 		<div className="settings">
-			{section.auth ? (
-				<ForgeGroup auth={section.auth} onConnect={section.token.connect} />
-			) : (
-				<FailedGroup title="Forges" reason={section.authError} retry={section.authRetry} />
-			)}
-			{section.repos ? (
-				<RepoGroup repos={section.repos} onAdd={() => section.setBrowsing(true)} />
-			) : (
-				<FailedGroup title="Repositories" reason={section.reposError} retry={section.reposRetry} />
-			)}
+			<AccountGroup />
+			<AdminControls>
+				{section.auth ? (
+					<ForgeGroup auth={section.auth} onConnect={section.token.connect} />
+				) : (
+					<FailedGroup title="Forges" reason={section.authError} retry={section.retry} />
+				)}
+			</AdminControls>
 			<TokenModal dialog={section.token} />
-			<RepoBrowser open={section.browsing} onOpenChange={section.setBrowsing} />
 		</div>
 	);
 }

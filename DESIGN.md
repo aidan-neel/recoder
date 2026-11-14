@@ -136,7 +136,7 @@ When a model's plan runs out (ChatGPT's cap, a hosted provider's 429 or 402 afte
 
 ## Behavior
 - **Composer**: one box (radius 14, 10px padding all round) holding the input above a toolbar row: + (attach) on the left; the output speed, the model name, the effort select (no chevron, same muted color as the model) and Send on the right. The output speed is the newest reply's tokens per second in faint 11.5px mono with tabular digits (`~84 tok/s` while it is an estimate, `84 tok/s` once the provider's count arrives). It hides when another model is picked until a reply on that model reports one. Focus moves the ring from `#2a2826` to `#3d3935` over 150ms. Send is a round 28px up arrow: quiet while empty, primary with text. Enter sends; Shift+Enter inserts a newline. While a reply is pending Send becomes Stop (a 9px square). While the review or a reply is working, a spinner circles Send. The reply shows a shimmering "Thinking" line.
-- **Streaming**: tool rows grow in (240ms) with a spinner that becomes a check, then their duration fades in. Streaming text shows a 2px caret blinking at 1s.
+- **Streaming**: tool rows grow in (240ms) with a spinner that becomes a check, then their duration fades in. Streaming text has no caret; its last few words shimmer (a light band every `--dur-shimmer`).
 - **Async buttons keep a fixed width** across states. Apply fix is 112px: Apply fix → Applying (spinner) → Applied (check, transparent bg, success text). The finding's pill crossfades to "Fixed" and its title dims. A toast follows with Undo.
 - **Copy** flips to "✓ Copied" in success green for 1.2s.
 - **Trigger label changes** fade in and rise 2px over 180ms.

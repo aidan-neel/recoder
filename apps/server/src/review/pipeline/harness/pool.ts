@@ -1,4 +1,4 @@
-import type { BriefQuestion, ReviewAssignment } from '@recoder/shared';
+import type { BriefQuestion, ImageUpload, ReviewAssignment } from '@recoder/shared';
 import { formatToolResults, type EvidenceStore } from '../../../evidence/evidence.js';
 import {
 	configForOrchestrator,
@@ -67,6 +67,8 @@ export interface PoolContext extends ReviewerPromptContext {
 	recommended: Set<string>;
 	/** Reviewers may run code in the review sandbox. */
 	exec: boolean;
+	/** The brief's images, which reviewers on the Review model read with their first prompt; subagents do not. */
+	images: readonly ImageUpload[];
 	/** Dependency setup and baseline check results as they stand when a reviewer starts; the checks finish mid-review. */
 	setupNotes: () => string;
 	/** How many subagents each reviewer may ask for, its share of the review's cap; 0 when subagents are off. */
@@ -302,6 +304,7 @@ function askReviewer(
 			initialEvidence,
 			dismissedNote(item, subagent, ctx)
 		),
+		images: subagent ? [] : ctx.images,
 		config: cfg,
 		budget: ctx.budget,
 		evidence: ctx.evidence,

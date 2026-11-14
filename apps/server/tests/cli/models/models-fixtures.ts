@@ -106,7 +106,7 @@ function openCodeEntry(): ModelEntry {
 		label: 'GPT 6.1 Sol',
 		model: 'openai/gpt-6.1-sol',
 		baseUrl: null,
-		apiKeyPreview: null,
+		apiKeySet: false,
 		efforts: ['low', 'medium', 'high']
 	};
 }

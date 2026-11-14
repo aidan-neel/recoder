@@ -10,7 +10,7 @@ import {
 import { failureText, plainly } from '../api/http';
 import { isReviewing } from '../pulls/pull-rows';
 import type { SessionContext } from '../pull/session-state';
-import type { Connection } from '../review/review-stream';
+import type { Connection } from '../api/event-stream';
 
 /** What the rest of the session hears about the review. */
 interface ReviewEvents {

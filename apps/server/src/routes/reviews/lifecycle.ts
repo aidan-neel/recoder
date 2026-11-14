@@ -1,10 +1,16 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { reviewListItem } from '@recoder/shared';
+import { imageBodyLimit, refuseUnreadImages, serveImage } from '../../attachments/image-http';
+import { deleteReviewImages } from '../../attachments/image-store';
+import { imagesSchema } from '../../attachments/image-upload';
 import { createReviewSession, queueReview, startReviewSession } from '../../commands/pipeline';
 import { continueReviewSession, replayReviewSession } from '../../commands/rerun';
+import { pullStateKey, pullStateMap } from '../../forge/pulls/pull-states';
 import { getReviewMetrics, type StoredMetrics } from '../../models/metrics';
-import { isReviewConfigured } from '../../models/models';
+import { withStarterModels } from '../../models/model-policy';
+import { configForOrchestrator, isReviewConfigured } from '../../models/models';
+import { requestAccountId } from '../../accounts/enforcement';
 import { cancelReviewChats, prepareDraftSession } from '../../review/chat/review-chat';
 import { clearReviewEvents, emitReviewEvent } from '../../review/session/events';
 import { getReviewControl, type ReviewControl } from '../../review/session/review-control';
@@ -32,7 +38,8 @@ const createReviewSchema = z.object({
 	baselineCache: z.literal(false).optional(),
 	prTitle: z.string().max(500).optional(),
 	postComment: z.boolean().optional(),
-	instructions: z.string().max(4000).optional()
+	instructions: z.string().max(4000).optional(),
+	images: imagesSchema
 });
 
 const app = new Hono();
@@ -71,14 +78,22 @@ async function sessionAction(c: Context, start: (id: string) => Promise<unknown>
  * Every review without its context record, which only the single-review route
  * serves: the list is polled and the record is large. `?view=summary` lists
  * each as a `ReviewListItem` instead, with findings cut to their ids and
- * severities, which is all a queue or a picker reads.
+ * severities, which is all a queue or a picker reads. Each carries the pull
+ * request's last known forge state, so a settled pull request's reviews can
+ * group apart.
  */
 app.get('/', async (c) => {
-	const reviews = await db.reviews.list();
+	const [reviews, states] = await Promise.all([db.reviews.list(), pullStateMap()]);
 
-	if (c.req.query('view') === 'summary') return c.json(reviews.map(reviewListItem));
+	const withPullState = <T extends { repoId: string; prNumber: number }>(item: T): T => {
+		const pullState = states.get(pullStateKey(item.repoId, item.prNumber));
 
-	return c.json(reviews.map(({ context: _context, ...review }) => review));
+		return pullState === undefined ? item : { ...item, pullState };
+	};
+
+	if (c.req.query('view') === 'summary') return c.json(reviews.map((review) => withPullState(reviewListItem(review))));
+
+	return c.json(reviews.map(({ context: _context, ...review }) => withPullState(review)));
 });
 
 /** Task and reviewer counts per review still queued or running, for list rows. */
@@ -116,6 +131,9 @@ app.get('/:id', async (c) => {
 	return c.json(review);
 });
 
+/** One image of the review's brief; another review's image is not found here. */
+app.get('/:id/images/:imageId', (c) => serveImage(c, 'review'));
+
 app.delete('/:id', async (c) => {
 	const review = await requireReview(c);
 
@@ -130,6 +148,7 @@ app.delete('/:id', async (c) => {
 		await reviewMetrics.delete(review.id);
 		await reviewCheckpoints.delete(review.id);
 		await reviewReplays.delete(review.id);
+		await deleteReviewImages(review.id);
 		reviewSandboxes.delete(review.id);
 		await clearReviewEvents(review.id);
 
@@ -220,15 +239,31 @@ app.post('/:id/replay', async (c) => {
 	);
 });
 
-app.post('/', async (c) => {
+/**
+ * Opens a review: started with its brief and the brief's images, or as a draft session, which takes neither. The
+ * Review model must read images for a brief that has them. It is resolved only then, since resolving it throws when
+ * no model is set up, and a review without images gets the queue's own refusal for that.
+ */
+app.post('/', imageBodyLimit, async (c) => {
 	const body = await parseBody(c, createReviewSchema);
 
 	if (body instanceof Response) return body;
 
-	try {
-		if (body.start !== false) return c.json(await queueReview(body), 201);
+	if (body.start === false && body.images.length)
+		return c.json({ error: 'Images go with a review brief. Start the review to send them.' }, 400);
 
-		const review = await createReviewSession(body);
+	const startedBy = await requestAccountId(c);
+
+	const refused = body.images.length
+		? refuseUnreadImages(c, body.images, (await withStarterModels(startedBy, configForOrchestrator)).provider)
+		: null;
+
+	if (refused) return refused;
+
+	try {
+		if (body.start !== false) return c.json(await queueReview(body, startedBy), 201);
+
+		const review = await createReviewSession(body, undefined, startedBy);
 
 		if (coordinator) await prepareDraftSession(review.id, isReviewConfigured());
 		else void prepareDraftSession(review.id, isReviewConfigured());

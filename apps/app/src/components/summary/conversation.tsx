@@ -6,6 +6,7 @@ import { Markdown, Pill, SkeletonRows, type PillTone } from '@recoder/ui';
 import type { PullConversationView } from '@/lib/pull/types';
 import { author } from '@/lib/shell/format';
 
+import { ChatComposer } from '@/components/ask/chat-composer';
 import { Age } from '@/components/common/age';
 import { Avatar } from '@/components/common/avatar';
 
@@ -24,27 +25,27 @@ function place(entry: PullComment): string | null {
 	return entry.line ? `${file}:${entry.line}` : file;
 }
 
-/** One entry of the forge conversation: who, what kind, when, then what they wrote. */
+/** One entry of the timeline: who, what kind, where, when, then what they wrote. */
 function Entry({ entry }: { entry: PullComment }) {
 	const by = author(entry.author.login);
 	const verdict = entry.verdict ? VERDICTS[entry.verdict] : null;
 	const where = place(entry);
 
 	return (
-		<article className="entry" aria-label={`${by.name} wrote`}>
+		<article className="timeline-entry" aria-label={`${by.name} wrote`}>
 			<Avatar name={by.name} src={entry.author.avatarUrl} tone={entry.byRecoder ? 'recoder' : 'person'} />
-			<div className="entry-head">
-				<span className="entry-author">{entry.byRecoder ? 'Recoder' : by.name}</span>
+			<div className="timeline-head">
+				<span className="timeline-author">{entry.byRecoder ? 'Recoder' : by.name}</span>
 				{verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : null}
 				{where ? (
-					<span className="meta mono" title={entry.path}>
+					<Pill face="code" title={entry.path}>
 						{where}
-					</span>
+					</Pill>
 				) : null}
-				<Age at={entry.createdAt} className="meta" />
+				<Age at={entry.createdAt} className="timeline-age" />
 			</div>
 			{entry.body ? (
-				<div className="entry-body">
+				<div className="timeline-body">
 					<Markdown>{entry.body}</Markdown>
 				</div>
 			) : null}
@@ -52,30 +53,60 @@ function Entry({ entry }: { entry: PullComment }) {
 	);
 }
 
-/**
- * The pull request's conversation on its forge, oldest first. Its text is
- * other people's: it renders as markdown with no raw HTML. A forge with no
- * conversation shows nothing.
- */
-export function Conversation({ view }: { view: PullConversationView }) {
-	if (view.phase === 'off') return null;
+/** The entries, or why there are none yet. */
+function Timeline({ view }: { view: PullConversationView }) {
 	if (view.phase === 'loading') return <SkeletonRows count={2} height={56} glyph />;
 
 	if (view.phase === 'failed') {
 		return (
-			<p className="meta text-danger" role="alert">
+			<p className="timeline-note text-danger" role="alert">
 				The conversation did not load. {view.error}
 			</p>
 		);
 	}
 
-	if (view.entries.length === 0) return <p className="meta">Nobody has commented yet.</p>;
+	if (view.entries.length === 0) return <p className="timeline-note">Nobody has commented yet.</p>;
 
 	return (
-		<div className="thread">
+		<div className="timeline">
 			{view.entries.map((entry) => (
 				<Entry key={entry.id} entry={entry} />
 			))}
 		</div>
+	);
+}
+
+/**
+ * The pull request's conversation on its forge as a quiet timeline, oldest
+ * first, with a field at its end that comments on the pull request. Its text
+ * is other people's: it renders as markdown with no raw HTML. A forge with no
+ * conversation shows nothing.
+ */
+export function Conversation({ view }: { view: PullConversationView }) {
+	if (view.phase === 'off') return null;
+
+	return (
+		<section className="summary-section" aria-labelledby="conversation-title">
+			<div className="summary-section-head">
+				<h2 id="conversation-title" className="summary-section-title">
+					Conversation
+					{view.entries.length > 0 ? <span className="summary-count">{view.entries.length}</span> : null}
+				</h2>
+			</div>
+			<Timeline view={view} />
+			{view.phase === 'ready' ? (
+				<div className="timeline-reply">
+					<ChatComposer
+						layout="row"
+						minRows={1}
+						label="Comment on this pull request"
+						placeholder="Comment on this pull request"
+						sendLabel="Comment"
+						busy={view.posting}
+						onSend={view.post}
+					/>
+				</div>
+			) : null}
+		</section>
 	);
 }

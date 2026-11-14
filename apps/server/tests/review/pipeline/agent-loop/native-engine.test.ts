@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EvidenceStore } from '../../../../src/evidence/evidence';
-import { getReviewMetrics, withReviewMetrics } from '../../../../src/models/metrics';
+import { getReviewMetrics, withUsageMetrics } from '../../../../src/models/metrics';
 import { ModelBudget } from '../../../../src/review/pipeline/agent-loop/budget';
 import { runNativeAgent } from '../../../../src/review/pipeline/agent-loop/native-engine';
 import type { JsonAgentOptions } from '../../../../src/review/pipeline/agent-loop/options';
@@ -178,7 +178,7 @@ test('an OpenCode 1.x server that names the session on the part alone still has 
 	const review = await db.reviews.set(testReview({ repoId: 'missing-repo' }));
 
 	try {
-		const result = await withReviewMetrics(review.id, 'pipeline', async () =>
+		const result = await withUsageMetrics(review.id, 'pipeline', async () =>
 			runNativeAgent(agentOptions({ user: script([[readDiff]], { sdkEvents: true }) }), await startAgent())
 		);
 

@@ -29,51 +29,48 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 export type ButtonStatus = 'idle' | 'pending' | 'success' | 'error';
 
 /**
- * The look every button shares. Depth is a hairline and a soft lift set per
- * variant in `--button-shadow`, so the focus ring can sit over it. Hover and
+ * The look every button shares: flat, with any edge drawn as an inset
+ * hairline in `--button-shadow`, so the focus ring can sit over it. Hover and
  * press on the see-through variants lay a wash over whatever is behind them,
- * so they still show inside a hovered row. A press shrinks the button a touch
- * and shades it; under reduced motion it only shades. A failed action tints
- * the button red while its cross shows. These class lists hold no two classes
- * that conflict, so they are plain strings: merging them as the module loads
- * would set up tailwind-merge on every route that imports the kit.
+ * so they still show inside a hovered row. A press shades the button; it
+ * never changes size. A failed action tints the button red while its cross
+ * shows. These class lists hold no two classes that conflict, so they are
+ * plain strings: merging them as the module loads would set up
+ * tailwind-merge on every route that imports the kit.
  */
 const BASE = [
 	'relative inline-flex shrink-0 items-center justify-center whitespace-nowrap select-none outline-none',
 	'font-normal text-[length:var(--font-size-button)] leading-none',
 	'shadow-(--button-shadow) focus-visible:shadow-[var(--focus-ring),var(--button-shadow)]',
-	'transition-[background-color,color,box-shadow,scale] duration-(--dur-hover) ease-out',
-	'active:scale-(--press-scale) aria-busy:active:scale-none motion-reduce:active:scale-none',
+	'transition-[background-color,color,box-shadow] duration-(--dur-hover) ease-out',
 	'disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none [&_svg]:pointer-events-none',
-	'data-[status=error]:bg-danger-tint data-[status=error]:bg-none data-[status=error]:text-danger',
+	'data-[status=error]:bg-danger-tint data-[status=error]:text-danger',
 	'data-[status=error]:[--button-shadow:inset_0_0_0_1px_color-mix(in_oklab,var(--danger)_30%,transparent)]'
 ].join(' ');
 
 /** The wash a see-through button takes on hover and when open, and the deeper one while pressed. */
 const WASH = 'hover:bg-[rgb(var(--wash-rgb)/6%)] active:bg-[rgb(var(--wash-rgb)/10%)]';
 
+/** The hairline edge of the secondary and outline buttons, the same line a field draws. */
+const EDGE = '[--button-shadow:inset_0_0_0_1px_var(--line-control)]';
+
 const VARIANTS: Record<ButtonVariant, string> = {
 	primary: [
-		'bg-(--primary) bg-(image:--button-primary-sheen) font-medium text-(--on-primary)',
-		'[--button-shadow:var(--button-primary-lift),inset_0_0_0_1px_color-mix(in_oklab,var(--primary),black_14%)]',
+		'bg-(--primary) font-medium text-(--on-primary) [--button-shadow:0_0_transparent]',
 		'hover:bg-(--primary-hover) active:bg-(--primary) data-[state=open]:bg-(--primary-hover)'
 	].join(' '),
 	secondary: [
-		'bg-raised bg-(image:--button-sheen) text-fg [--button-shadow:var(--button-lift),inset_0_0_0_1px_var(--line-menu)]',
-		'hover:bg-hover hover:[--button-shadow:var(--button-lift),inset_0_0_0_1px_var(--line-hover)]',
-		'active:bg-selected data-[state=open]:bg-hover'
+		`bg-[rgb(var(--wash-rgb)/5%)] text-fg ${EDGE}`,
+		'hover:bg-[rgb(var(--wash-rgb)/9%)] active:bg-[rgb(var(--wash-rgb)/12%)] data-[state=open]:bg-[rgb(var(--wash-rgb)/9%)]'
 	].join(' '),
-	outline: [
-		'bg-transparent text-fg [--button-shadow:inset_0_0_0_1px_var(--line-menu)]',
-		`hover:[--button-shadow:inset_0_0_0_1px_var(--line-hover)] ${WASH} data-[state=open]:bg-[rgb(var(--wash-rgb)/6%)]`
-	].join(' '),
+	outline: `bg-transparent text-fg ${EDGE} ${WASH} data-[state=open]:bg-[rgb(var(--wash-rgb)/6%)]`,
 	ghost: [
 		'bg-transparent text-fg-subtle [--button-shadow:0_0_transparent] hover:text-fg data-[state=open]:text-fg',
 		`${WASH} data-[state=open]:bg-[rgb(var(--wash-rgb)/6%)]`
 	].join(' '),
 	quiet: `bg-transparent text-fg [--button-shadow:0_0_transparent] ${WASH} data-[state=open]:bg-[rgb(var(--wash-rgb)/10%)]`,
 	destructive: [
-		'bg-danger-tint text-danger [--button-shadow:inset_0_0_0_1px_color-mix(in_oklab,var(--danger)_22%,transparent)]',
+		'bg-danger-tint text-danger [--button-shadow:0_0_transparent]',
 		'hover:brightness-115 active:brightness-100'
 	].join(' ')
 };
@@ -85,18 +82,18 @@ const VARIANTS: Record<ButtonVariant, string> = {
  */
 const SIZES: Record<ButtonSize, string> = {
 	sm: [
-		'h-(--size-control-sm) gap-1 rounded-[6px] px-2 text-[12.5px] [&_svg:not([class*=size-])]:size-[13px]',
-		'data-[icon-start]:pl-1.5 data-[icon-end]:pr-1.5'
+		'h-(--size-control-sm) gap-1 rounded-(--radius-chip) px-[7px] text-[12.5px] [&_svg:not([class*=size-])]:size-[13px]',
+		'data-[icon-start]:pl-[5px] data-[icon-end]:pr-[5px]'
 	].join(' '),
 	md: [
-		'h-(--size-control-md) gap-1.5 rounded-[8px] px-2.5 [&_svg:not([class*=size-])]:size-3.5',
-		'data-[icon-start]:pl-2 data-[icon-end]:pr-2'
+		'h-(--size-control-md) gap-1.5 rounded-(--radius-control) px-[9px] [&_svg:not([class*=size-])]:size-3.5',
+		'data-[icon-start]:pl-[7px] data-[icon-end]:pr-[7px]'
 	].join(' '),
 	lg: [
-		'h-(--size-control-lg) gap-2 rounded-[9px] px-3 text-[13.5px] [&_svg:not([class*=size-])]:size-4',
-		'data-[icon-start]:pl-2.5 data-[icon-end]:pr-2.5'
+		'h-(--size-control-lg) gap-2 rounded-(--radius-control) px-[11px] text-[13.5px] [&_svg:not([class*=size-])]:size-4',
+		'data-[icon-start]:pl-[9px] data-[icon-end]:pr-[9px]'
 	].join(' '),
-	icon: 'size-(--size-icon-md) min-w-(--size-icon-md) rounded-[8px] p-0 [&_svg:not([class*=size-])]:size-4'
+	icon: 'size-(--size-icon-md) min-w-(--size-icon-md) rounded-(--radius-control) p-0 [&_svg:not([class*=size-])]:size-4'
 };
 
 /** The class list for a button look, for elements that must not be a `Button` (a Radix trigger rendered as a link). */

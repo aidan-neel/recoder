@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import type { ImageUpload } from '@recoder/shared';
 import { LlmError, cancelledError } from '../../../models/llm/errors';
+import { imageDataUrl } from '../../../models/llm/message-images';
 import type { SessionHandlers } from '../opencode-events';
 import { OpenCodeError, providerError } from '../opencode-error';
 import type { OpenCodeServer, ServerRequest } from '../opencode-server';
@@ -172,6 +174,13 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 /** `location[directory]`, the query form v2 reads a directory from. */
 function locationQuery(directory: string): string {
 	return `location%5Bdirectory%5D=${encodeURIComponent(directory)}`;
+}
+
+/** A prompt's `files`, one `data:` URI per image, which the server decodes; none when there are no images. */
+function attachments(images: readonly ImageUpload[]): { files?: { uri: string; name: string }[] } {
+	if (images.length === 0) return {};
+
+	return { files: images.map((image) => ({ uri: imageDataUrl(image), name: image.name })) };
 }
 
 /**
@@ -371,7 +380,7 @@ export class V2Api implements OpenCodeApi {
 
 		const sent = await this.data(z.object({ id: z.string() }), `${path}/prompt`, {
 			method: 'POST',
-			body: { text: request.text },
+			body: { text: request.text, ...attachments(request.images) },
 			signal
 		});
 

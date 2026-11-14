@@ -12,6 +12,8 @@ interface PullListProps {
 	rows: PullRowView[];
 	starting: ReadonlySet<string>;
 	onReview: (row: PullRowView) => void;
+	/** Runs once the pointer or focus has rested on a row: prefetching its page. */
+	onWarm?: (row: PullRowView) => void;
 }
 
 /** The link of every row, top to bottom. */
@@ -23,7 +25,7 @@ function rowLinks(list: HTMLElement | null): HTMLElement[] {
  * The rows, with `j` and `k` walking them (focus moves, so Enter opens the
  * row it rests on) and `r` reviewing that row.
  */
-export function PullList({ rows, starting, onReview }: PullListProps) {
+export function PullList({ rows, starting, onReview, onWarm }: PullListProps) {
 	const list = useRef<HTMLDivElement | null>(null);
 
 	/** Moves focus `by` rows from the focused one; with none focused, to the first or the last. */
@@ -54,7 +56,7 @@ export function PullList({ rows, starting, onReview }: PullListProps) {
 		<div ref={list}>
 			<HoverList as="ul" className="pull-list" itemSelector="[data-pull-row]" aria-label="Open pull requests">
 				{rows.map((row) => (
-					<PullRow key={row.key} row={row} starting={starting.has(row.key)} onReview={onReview} />
+					<PullRow key={row.key} row={row} starting={starting.has(row.key)} onReview={onReview} onIntent={onWarm} />
 				))}
 			</HoverList>
 		</div>

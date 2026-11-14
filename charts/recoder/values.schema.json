@@ -27,6 +27,7 @@
 				"persistence",
 				"replicaCount",
 				"database",
+				"encryptionKey",
 				"dataSizeLimit"
 			],
 			"properties": {
@@ -45,7 +46,8 @@
 								"FRONTEND_URL",
 								"RECODER_DATA_DIR",
 								"RECODER_WORKDIR",
-								"RECODER_DATABASE_URL"
+								"RECODER_DATABASE_URL",
+								"RECODER_SECRET_KEY"
 							]
 						}
 					},
@@ -78,6 +80,21 @@
 					"required": ["existingSecret", "secretKey"],
 					"properties": {
 						"existingSecret": { "type": "string", "maxLength": 253, "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" },
+						"secretKey": { "type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$" }
+					}
+				},
+				"encryptionKey": {
+					"description": "The Secret key that holds RECODER_SECRET_KEY, which seals stored credentials. Required: without it the key would live in a temporary directory and be lost on restart.",
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["existingSecret", "secretKey"],
+					"properties": {
+						"existingSecret": {
+							"type": "string",
+							"minLength": 1,
+							"maxLength": 253,
+							"pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+						},
 						"secretKey": { "type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$" }
 					}
 				},

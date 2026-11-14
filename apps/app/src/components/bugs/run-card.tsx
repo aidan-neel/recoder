@@ -3,11 +3,14 @@
 import { Button, Meter, Spinner } from '@recoder/ui';
 import { Check } from 'lucide-react';
 
+import type { RunActivity } from '@/lib/run/run-activity';
 import type { RunStage, RunView } from '@/lib/run/types';
 import { runClock } from '@/lib/shell/age';
 import { errorToast } from '@/lib/shell/notify';
 import { useAction } from '@/lib/shell/use-action';
 import { useNow } from '@/lib/shell/use-now';
+
+import { CancelReviewButton } from '@/components/common/cancel-review';
 
 /** The first seven characters of a commit, as every forge shortens it. */
 function shortSha(sha: string): string {
@@ -33,7 +36,7 @@ function StageMark({ state }: Pick<RunStage, 'state'>) {
 interface StageRowProps {
 	stage: RunStage;
 	/** What the review does right now, shown under the active step. */
-	activity: string | null;
+	activity: RunActivity | null;
 }
 
 /** One step: its mark, its name and its count; the active one shows how far it is and what it does now. */
@@ -50,7 +53,12 @@ function StageRow({ stage, activity }: StageRowProps) {
 					{stage.share !== null ? (
 						<Meter value={stage.share} max={1} aria-label={`${stage.label}: ${stage.detail ?? ''}`} />
 					) : null}
-					{activity ? <span className="run-activity">{activity}</span> : null}
+					{activity ? (
+						<span className="run-activity">
+							{activity.verb}
+							{activity.subject ? <code>{activity.subject}</code> : null}
+						</span>
+					) : null}
 				</div>
 			) : null}
 		</li>
@@ -63,7 +71,6 @@ function StageRow({ stage, activity }: StageRowProps) {
  * queued review says why it waits.
  */
 export function RunCard({ run }: { run: RunView }) {
-	const stopping = useAction();
 	const pausing = useAction();
 	const queued = run.phase === 'queued';
 
@@ -88,13 +95,11 @@ export function RunCard({ run }: { run: RunView }) {
 					{run.connection === 'reconnecting' ? <span className="meta">Reconnecting…</span> : null}
 					{run.startedAt && !queued ? <Clock since={run.startedAt} /> : null}
 					{!queued ? (
-						<Button variant="ghost" status={pausing.status} onClick={() => control(pausing, run.pause)}>
+						<Button variant="secondary" status={pausing.status} onClick={() => control(pausing, run.pause)}>
 							Pause
 						</Button>
 					) : null}
-					<Button variant="ghost" status={stopping.status} onClick={() => control(stopping, run.cancel)}>
-						Cancel
-					</Button>
+					<CancelReviewButton variant="secondary" />
 				</div>
 			</header>
 			<ol className="run-stages">

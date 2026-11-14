@@ -12,18 +12,6 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 
-/* Large screens scale the whole UI: px compiles to rem, so the root size carries every length. */
-@media (min-width: 1920px) {
-	html {
-		font-size: 112.5%;
-	}
-}
-@media (min-width: 2400px) {
-	html {
-		font-size: 125%;
-	}
-}
-
 ::selection {
 	background: var(--selection);
 }
@@ -50,21 +38,17 @@ button,
 .ai-voice code,
 .inline-code {
 	padding: 1px 5px;
-	border-radius: 4px;
+	border-radius: var(--radius-chip);
 	background: var(--bg-bubble);
 	font-family: var(--font-code);
 	font-size: 0.8em;
 }
 
-/* Native scrollbars stay quiet; scroll areas never show edge cues. */
-.thin-scroll {
-	scrollbar-width: thin;
-	scrollbar-color: var(--line-strong) transparent;
-}
-.no-scrollbar {
+/* No scrollbar shows anywhere; every scroller still scrolls by wheel, touch and keys. */
+* {
 	scrollbar-width: none;
 }
-.no-scrollbar::-webkit-scrollbar {
+*::-webkit-scrollbar {
 	display: none;
 }
 

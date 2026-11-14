@@ -21,6 +21,7 @@ import { LinkCard, openLink, type CardTarget } from './link-card';
 import { describeLink, type LinkDescription, type LinkFacts } from './link-describe';
 import { embedOf, urlOf, type EmbedLook } from './link-dom';
 import { LinkEditor, type EditorHost } from './link-editor';
+import { imageIdOf, isImageToken, type InlineImage } from './link-image';
 
 interface LinkFieldProps extends Omit<
 	HTMLAttributes<HTMLDivElement>,
@@ -44,6 +45,8 @@ interface LinkFieldProps extends Omit<
 	maxLength?: number;
 	/** What the host knows about a link (a pull request's title and state), for its embed and card. */
 	linkFacts?: LinkFacts;
+	/** The images whose tokens (`imageToken`) the text holds, each drawn where its token stands. */
+	images?: readonly InlineImage[];
 	ref?: Ref<HTMLDivElement>;
 }
 
@@ -107,6 +110,7 @@ export function LinkField({
 	autoFocus = false,
 	maxLength,
 	linkFacts,
+	images,
 	className,
 	style,
 	id,
@@ -125,12 +129,13 @@ export function LinkField({
 	const composed = useComposedRefs(ref, setNode);
 	const [editor, setEditor] = useState<LinkEditor | null>(null);
 	const [card, setCard] = useState<CardTarget | null>(null);
+	const [edits, setEdits] = useState(0);
 	const hover = useRef(0);
-	const latest = useRef({ value, onValueChange, linkFacts, maxLength, disabled });
+	const latest = useRef({ value, onValueChange, linkFacts, images, maxLength, disabled });
 	const looks = useRef(new Map<string, LinkDescription>());
 
 	useLayoutEffect(() => {
-		latest.current = { value, onValueChange, linkFacts, maxLength, disabled };
+		latest.current = { value, onValueChange, linkFacts, images, maxLength, disabled };
 	});
 
 	const look = useCallback((url: string): EmbedLook => {
@@ -148,9 +153,13 @@ export function LinkField({
 
 		const host: EditorHost = {
 			look,
+			image: (token) => latest.current.images?.find((image) => image.id === imageIdOf(token)),
 			maxLength: () => latest.current.maxLength,
 			disabled: () => latest.current.disabled,
-			onChange: (text) => latest.current.onValueChange(text),
+			onChange: (text) => {
+				latest.current.onValueChange(text);
+				setEdits((count) => count + 1);
+			},
 			onCaret: () => setCard((open) => caretCard(current, open, look))
 		};
 
@@ -177,13 +186,17 @@ export function LinkField({
 		if (editor && autoFocus && !disabled) editor.focusAtEnd();
 	}, [editor, autoFocus, disabled]);
 
+	/**
+	 * `edits` runs this after every edit too, so a caller that takes part of the text out of its value (a pasted
+	 * link that moves elsewhere) and ends on the value it already had still has the field follow it.
+	 */
 	useLayoutEffect(() => {
 		editor?.setValue(value);
-	}, [editor, value]);
+	}, [editor, value, edits]);
 
 	useLayoutEffect(() => {
 		editor?.refresh();
-	}, [editor, linkFacts]);
+	}, [editor, linkFacts, images]);
 
 	useEffect(() => () => window.clearTimeout(hover.current), []);
 
@@ -224,7 +237,9 @@ export function LinkField({
 
 		event.preventDefault();
 
-		if (event.ctrlKey || event.metaKey) openLink(urlOf(embed) ?? '');
+		const url = urlOf(embed) ?? '';
+
+		if ((event.ctrlKey || event.metaKey) && !isImageToken(url)) openLink(url);
 		else if (disabled) return;
 		else if (event.detail === 2) editor.selectEmbed(embed);
 		else editor.placeBeside(embed, event.clientX);
@@ -236,7 +251,7 @@ export function LinkField({
 		const embed = embedOf(event.target instanceof Node ? event.target : null);
 		const url = embed ? urlOf(embed) : null;
 
-		if (embed && url && event.pointerType !== 'touch')
+		if (embed && url && !isImageToken(url) && event.pointerType !== 'touch')
 			schedule({ element: embed, look: look(url), via: 'pointer' }, HOVER_OPEN_MS);
 	}
 
@@ -318,7 +333,8 @@ function caretCard(
 	open: CardTarget | null,
 	look: (url: string) => EmbedLook
 ): CardTarget | null {
-	const beside = editor && !editor.editedLast ? editor.embedBesideCaret() : null;
+	const found = editor && !editor.editedLast ? editor.embedBesideCaret() : null;
+	const beside = found && !isImageToken(urlOf(found.element) ?? '') ? found : null;
 
 	if (!beside) return open?.via === 'pointer' ? pointerCard(open, look) : null;
 

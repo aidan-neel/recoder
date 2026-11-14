@@ -1,0 +1,150 @@
+/* ───────── Files: a file opened from a chat, in a panel beside it ───────── */
+/*
+ * The host holds the chat on the left and the panel on the right. The chat keeps the rest of the width and gives
+ * way first; the panel is half the host, never under 420px or over 820px, so it holds the tree and some code at 1280.
+ */
+.file-host {
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+	flex: 1;
+}
+.file-host-main {
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+	flex: 1 1 0;
+	flex-direction: column;
+}
+.file-panel {
+	display: flex;
+	min-width: 0;
+	flex: 0 0 clamp(420px, 50%, 820px);
+	flex-direction: column;
+	border-left: 1px solid var(--line-subtle);
+	background: var(--bg-canvas);
+}
+
+/* The 44px header, level with the ask pane's and the page bar's. */
+.file-panel-head {
+	display: flex;
+	height: var(--bar-height);
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+	padding: 0 8px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.file-crumbs {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 2px;
+	font-family: var(--font-code);
+	font-size: 12px;
+}
+.file-crumbs > svg {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-ghost);
+}
+.file-crumb {
+	min-width: 0;
+	height: 24px;
+	flex: 0 1 auto;
+	padding: 0 5px;
+	overflow: hidden;
+	color: var(--text-muted);
+	font-family: inherit;
+	font-size: inherit;
+	white-space: nowrap;
+}
+.file-crumb-current {
+	min-width: 0;
+	flex: 0 1 auto;
+	overflow: hidden;
+	padding: 0 5px;
+	color: var(--text-primary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.file-panel-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+}
+
+.file-panel-body {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+}
+
+/* What stands where the code goes: a line of words, with its one action under it. */
+.file-state {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 20px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 20px;
+}
+.file-skeleton {
+	min-width: 0;
+	flex: 1;
+	padding: 8px 16px;
+	overflow: hidden;
+}
+
+/* The tree: 30% of the panel, between 150px and 240px. */
+.file-tree {
+	display: flex;
+	min-height: 0;
+	flex: 0 0 clamp(150px, 30%, 240px);
+	flex-direction: column;
+	border-right: 1px solid var(--line-subtle);
+}
+.file-tree > [data-ui='tree'] {
+	flex: 1;
+}
+.file-tree-skeleton-row {
+	padding: 0 12px;
+}
+
+/* The code runs flush to the panel's edges: the panel is its frame. */
+.file-scroll {
+	min-width: 0;
+	min-height: 0;
+	flex: 1;
+	overflow-y: auto;
+}
+/* The file on show while the next one loads: after the skeleton's delay it dims, so a quick swap never blinks. */
+.file-stale {
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+	flex: 1;
+	animation: file-stale-dim var(--dur-swap) ease-in var(--skeleton-delay) forwards;
+}
+@keyframes file-stale-dim {
+	to {
+		opacity: 0.5;
+	}
+}
+.file-code {
+	min-height: 100%;
+	border-radius: 0;
+	box-shadow: none;
+}
+.file-note {
+	padding: 12px 16px 16px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}

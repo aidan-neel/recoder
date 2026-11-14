@@ -1,8 +1,9 @@
 'use client';
 
+import { agentReady } from '@recoder/shared';
 import { useShallow } from 'zustand/react/shallow';
 
-import { agentReady, useSettings } from './settings-store';
+import { useSettings } from './settings-store';
 import { missingNote, MODEL_ROLES, ROLE_NAME, rolePick, type ModelRole } from './model-options';
 
 /** One model pick's row: its name, what it does, and why it can't run when it can't. */

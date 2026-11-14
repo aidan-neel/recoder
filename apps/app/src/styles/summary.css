@@ -1,214 +1,253 @@
-/* ───────── Summary: what changed, the order to read it in, the conversation ───────── */
-/* The reading scrolls; the composer stays docked at the bottom of the tab, also when the text is short. */
-.summary-reading {
+/* ───────── Summary: the reading on the left, the Ask pane on the right ───────── */
+/*
+ * Each side scrolls on its own. The reading starts on the header's text edge, and every block in it keeps one
+ * 760px measure, so the banner, the lede, the walkthrough and the comment field all end on the same edge.
+ */
+.summary {
 	display: flex;
-	flex-direction: column;
-	scroll-padding-bottom: 200px;
+	min-width: 0;
+	min-height: 0;
+	flex: 1;
+}
+.summary > .reading {
+	min-width: 0;
 }
 .summary-column {
-	flex: 1 0 auto;
-	padding-bottom: 0;
-}
-.summary-dock {
-	position: sticky;
-	z-index: 1;
-	bottom: 0;
-	margin-top: auto;
-	padding: 16px 0 20px;
-	background: var(--bg-canvas);
-}
-.summary-dock .ask-suggestions {
-	margin: 0 0 10px;
-}
-
-/* A hairline marks the dock's edge only while text is scrolled under it; at the end of the text it is gone. */
-@supports (animation-timeline: scroll()) {
-	.summary-dock {
-		animation: summary-dock-edge linear both;
-		animation-timeline: scroll(nearest block);
-		animation-range: calc(100% - 24px) 100%;
-	}
-}
-@keyframes summary-dock-edge {
-	from {
-		box-shadow: 0 -1px 0 var(--line-subtle);
-	}
-	to {
-		box-shadow: 0 -1px 0 transparent;
-	}
-}
-.summary-analysis [data-ui='markdown'] {
-	color: var(--text-primary);
-	font-size: 14px;
-	line-height: 22px;
-}
-.summary-block {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	margin-top: 28px;
+	gap: 32px;
+	padding: 24px 32px 48px var(--page-gutter);
 }
-.summary-block:first-child {
-	margin-top: 0;
-}
-.summary-block-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	min-height: 20px;
-}
-.summary-description [data-ui='markdown'] {
-	color: var(--text-secondary);
-	line-height: 22px;
+.summary-column > * {
+	max-width: 760px;
 }
 
-/* The parts of the guide as a short ordered list, split by hairlines. */
-.guide-list {
+/* The overview: the review's account as the lede, its findings as badges, the author's words as a quote. */
+.summary-overview {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+.summary-lede [data-ui='markdown'] {
+	color: var(--text-primary);
+	font-size: 15px;
+	letter-spacing: -0.005em;
+	line-height: 24px;
+}
+.summary-facts {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.summary-reviewed {
+	display: inline-flex;
+	align-items: center;
+	margin-left: 4px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 20px;
+}
+.summary-reviewed .mono {
+	margin-left: 4px;
+	font-size: 11.5px;
+}
+.summary-description {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-top: 4px;
+	padding-left: 12px;
+	border-left: 2px solid var(--line-strong);
+}
+.summary-description-label {
+	color: var(--text-subtle);
+	font-size: var(--font-size-meta);
+	font-weight: 500;
+	line-height: 18px;
+}
+.summary-description [data-ui='markdown'] {
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 20px;
+}
+
+/* Headings in the lede and the quote read as a bold line of the text, so the cut shows words, not a title. */
+:is(.summary-lede, .summary-description) [data-ui='markdown'] :where(h1, h2, h3, h4, h5, h6) {
+	margin: 0;
+	color: var(--text-secondary);
+	font-size: inherit;
+	font-weight: 500;
+	line-height: inherit;
+}
+.summary-description [data-ui='markdown'] :where(p, ul, ol) {
+	margin: 0.3em 0;
+}
+
+/* A section of the reading: a quiet title with its count, an action at the right. */
+.summary-section {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.summary-section-head {
+	display: flex;
+	min-height: 28px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+/* The action's chevron ends on the list's right edge; its hover fill reaches the 7px past it. */
+.summary-section-head > [data-ui='button'] {
+	margin-right: -7px;
+}
+.summary-section-title {
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	color: var(--text-muted);
+	font-size: 12.5px;
+	font-weight: 500;
+	line-height: 18px;
+}
+.summary-count {
+	color: var(--text-faint);
+	font-weight: 400;
+	font-variant-numeric: tabular-nums;
+}
+
+/* The walkthrough: numbered steps split by hairlines; each title and note holds one line. */
+.walkthrough {
 	margin: 0;
 	padding: 0;
 	list-style: none;
 }
-.guide-list li + li {
+.walkthrough-step {
+	display: grid;
+	align-items: start;
+	padding: 10px 0;
 	border-top: 1px solid var(--line-subtle);
+	grid-template-columns: 24px minmax(0, 1fr) auto;
 }
-.guide-list-row {
+.walkthrough-place {
+	color: var(--text-faint);
+	font-size: 12.5px;
+	font-variant-numeric: tabular-nums;
+	line-height: 20px;
+}
+.walkthrough-text {
 	display: flex;
-	min-height: 40px;
-	align-items: center;
-	gap: 8px;
-	padding: 6px 0;
-	font-size: var(--font-size-body);
-}
-.guide-list-title {
 	min-width: 0;
-	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+	padding-right: 16px;
+}
+.walkthrough-title,
+.walkthrough-note {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.walkthrough-title {
 	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+	line-height: 20px;
+}
+.walkthrough-note {
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	line-height: 18px;
+}
+.walkthrough-facts {
+	display: flex;
+	height: 20px;
+	align-items: center;
+	gap: 10px;
+}
+.walkthrough-size {
+	min-width: 44px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
 }
 
-/* ───────── Conversation: who said what, oldest first ───────── */
-.thread {
+/* ───────── Conversation: the forge's timeline, oldest first, a hairline joining the avatars ───────── */
+.timeline {
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
+	padding-top: 6px;
 }
-.entry {
+.timeline-entry {
+	position: relative;
 	display: grid;
-	grid-template-columns: 24px minmax(0, 1fr);
-	gap: 2px 12px;
+	padding-bottom: 18px;
+	column-gap: 10px;
+	grid-template-columns: 20px minmax(0, 1fr);
 }
-.entry-head {
+.timeline-entry::before {
+	position: absolute;
+	top: 26px;
+	bottom: 6px;
+	left: 10px;
+	width: 1px;
+	background: var(--line-card);
+	content: '';
+}
+.timeline-entry:last-child::before {
+	content: none;
+}
+.timeline-entry .avatar {
+	width: 20px;
+	height: 20px;
+	font-size: 10px;
+}
+.timeline-head {
 	display: flex;
-	min-height: 24px;
+	min-height: 20px;
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 0 8px;
 }
-.entry-author {
+.timeline-author {
 	color: var(--text-primary);
 	font-size: var(--font-size-label);
 	font-weight: 500;
+	line-height: 20px;
 }
-.entry-body {
-	grid-column: 2;
+.timeline-age {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.timeline-body {
+	padding-top: 2px;
 	color: var(--text-secondary);
+	grid-column: 2;
 }
-.entry-body [data-ui='markdown'] {
+.timeline-body [data-ui='markdown'] {
 	font-size: var(--font-size-body);
 	line-height: 22px;
 }
-.entry-plain {
-	white-space: pre-wrap;
-	overflow-wrap: anywhere;
+.timeline-note {
+	padding-top: 2px;
+	color: var(--text-subtle);
+	font-size: var(--font-size-body);
+	line-height: 20px;
 }
-.entry-failed {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	color: var(--danger);
-	font-size: var(--font-size-label);
+.timeline-reply {
+	padding-top: 6px;
 }
 .avatar[data-recoder] {
 	background: var(--primary);
 	color: var(--on-primary);
 }
 
-/* The composer: a field over one row of tools, ringed as one control. */
-.composer {
-	border-radius: 12px;
-	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-control);
-	transition: box-shadow var(--dur-hover) ease-out;
+/* With a file open beside the conversation, the conversation takes the reading room and the reading steps aside. */
+.file-host[data-open] .summary > .reading {
+	display: none;
 }
-.composer:focus-within {
-	box-shadow: 0 0 0 1px var(--line-focus);
-}
-.composer [data-ui='link-field'] {
-	display: block;
+.file-host[data-open] .ask-pane {
 	width: 100%;
-	padding: 14px 16px 6px;
-	border: 0;
-	background: none;
-	box-shadow: none;
-	color: var(--text-primary);
-	font-size: var(--font-size-body);
-	line-height: 22px;
-	outline: none;
-	resize: none;
-}
-.composer-foot {
-	display: flex;
-	min-height: 44px;
-	align-items: center;
-	gap: 6px;
-	padding: 0 8px 8px 10px;
-}
-.composer-end {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin-left: auto;
-}
-.composer-send {
-	border-radius: 999px;
-}
-.ask-suggestions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-	margin-top: 10px;
-}
-
-/* ───────── Commits ───────── */
-.commit-list {
-	display: flex;
-	flex-direction: column;
-	margin: 0 -12px;
-	padding: 0;
-	list-style: none;
-}
-.commit-row {
-	position: relative;
-	display: grid;
-	min-height: 52px;
-	align-items: center;
-	grid-template-columns: 24px minmax(0, 1fr) auto auto;
-	gap: 0 12px;
-	padding: 6px 12px;
-	--row-button-radius: 10px;
-}
-.commit-row-text {
-	display: flex;
-	min-width: 0;
-	flex-direction: column;
-}
-.commit-title {
-	overflow: hidden;
-	color: var(--text-primary);
-	font-size: var(--font-size-body);
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.commit-sha {
-	position: relative;
-	z-index: 1;
+	border-left-width: 0;
 }

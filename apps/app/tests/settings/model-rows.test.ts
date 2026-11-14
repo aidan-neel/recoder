@@ -6,7 +6,7 @@ import { FOLLOW_ID, layoutRows, mountedRows, stepChoice } from '../../src/lib/se
 import { queryTerms } from '../../src/lib/shell/search';
 
 function entry(id: string, source: string): ModelEntry {
-	return { id, label: id, model: id, source, agent: 'OpenCode', baseUrl: null, apiKeyPreview: null };
+	return { id, label: id, model: id, source, agent: 'OpenCode', baseUrl: null, apiKeySet: false };
 }
 
 /** Two providers of three models each: rows are heading, 3 models, heading, 3 models. */

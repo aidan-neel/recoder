@@ -42,7 +42,7 @@
 	--text-tertiary: #bdbdbd;
 	--text-muted: #a1a1a1;
 	--text-subtle: #8a8a8a;
-	--text-faint: #6e6e6e;
+	--text-faint: #737373;
 	--text-ghost: #555555;
 	--text-brief-body: #8f8f8f;
 
@@ -72,6 +72,14 @@
 	--sent: #c8a6f2;
 	--sent-tint: rgba(200, 166, 242, 0.13);
 
+	/* Chart series, in a fixed order: hues checked apart for colour-blind readers and at 3:1 on the canvas */
+	--chart-1: #3987e5;
+	--chart-2: #d95926;
+	--chart-3: #199e70;
+	--chart-4: #c98500;
+	--chart-5: #d55181;
+	--chart-6: #9085e9;
+
 	/* Diff and code */
 	--diff-add: rgba(61, 214, 140, 0.09);
 	--diff-del: rgba(255, 99, 105, 0.09);
@@ -87,9 +95,9 @@
 	--syn-string: #d9c59a;
 	--syn-comment: var(--text-subtle);
 
-	/* Elevation: only menus and dialogs float. */
-	--shadow-menu: 0 0 0 1px var(--line-menu), 0 16px 40px rgba(0, 0, 0, 0.5);
-	--shadow-modal: 0 0 0 1px var(--line-control), 0 8px 32px rgba(0, 0, 0, 0.4);
+	/* Elevation: only menus and dialogs float, on a short, tight shadow. */
+	--shadow-menu: 0 0 0 1px var(--line-menu), 0 8px 24px rgba(0, 0, 0, 0.45);
+	--shadow-modal: 0 0 0 1px var(--line-control), 0 8px 24px rgba(0, 0, 0, 0.4);
 	--shadow-composer: 0 0 0 1px var(--line-control);
 	--scrim: rgba(0, 0, 0, 0.55);
 
@@ -185,6 +193,13 @@
 	--sent: #6b3fb0;
 	--sent-tint: rgba(107, 63, 176, 0.1);
 
+	--chart-1: #2a78d6;
+	--chart-2: #eb6834;
+	--chart-3: #1baf7a;
+	--chart-4: #eda100;
+	--chart-5: #e87ba4;
+	--chart-6: #6250d6;
+
 	--diff-add: rgba(26, 127, 55, 0.09);
 	--diff-del: rgba(214, 53, 44, 0.08);
 	--diff-add-gutter: rgba(26, 127, 55, 0.15);
@@ -197,8 +212,8 @@
 	--syn-plain: #2a2a2a;
 	--syn-string: #8a5a00;
 
-	--shadow-menu: 0 0 0 1px rgb(0 0 0 / 0.08), 0 8px 24px -4px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.04);
-	--shadow-modal: 0 0 0 1px rgb(0 0 0 / 0.08), 0 24px 64px -12px rgb(0 0 0 / 0.2);
+	--shadow-menu: 0 0 0 1px rgb(0 0 0 / 0.08), 0 6px 16px -4px rgb(0 0 0 / 0.12);
+	--shadow-modal: 0 0 0 1px rgb(0 0 0 / 0.08), 0 16px 48px -12px rgb(0 0 0 / 0.2);
 	--scrim: rgba(0, 0, 0, 0.3);
 	--focus-color: rgb(var(--ink-rgb) / 0.5);
 }

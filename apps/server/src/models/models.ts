@@ -20,11 +20,13 @@ import {
 	supportedEffort,
 	type ModelProvider,
 	type ModelRuntimeProfile,
+	type ProviderRef,
 	type ReasoningEffort
 } from '@recoder/shared';
-import { lockedModels, runLocked, type LockedModels } from './llm/locked-models.js';
+import { lockedModels, runLocked, starterPicks, type LockedModels } from './llm/locked-models.js';
 import { recordLockMiss } from './metrics.js';
 import { hostedProvider } from './model-providers.js';
+import { providerName, providerSwitches } from './provider-switches.js';
 import { resolveRuntime } from './runtime-profiles.js';
 import { vllmTarget } from './vllm/vllm-models.js';
 import { agentForModel } from '../agents/registry.js';
@@ -75,20 +77,44 @@ function reviewConfig(): { baseUrl: string; apiKey: string; model: string } {
 	return parsed.data;
 }
 
+/**
+ * A run's model is on a provider switched off in Settings → Providers. The pick stays saved, and runs again once the
+ * provider is switched back on.
+ */
+export class ProviderSwitchedOffError extends ModelConfigError {
+	constructor(provider: ProviderRef) {
+		super(`${providerName(provider)} is switched off in Settings → Providers.`);
+		this.name = 'ProviderSwitchedOffError';
+	}
+}
+
 /** Which stage pick is being resolved. */
 type StageRole = 'orchestrator' | 'subagent' | 'verifier';
 
-/** True when every configured pick resolves (registry or legacy env trio). */
+/**
+ * True when every configured pick resolves (registry or legacy env trio). A pick on a provider switched off in
+ * Settings still counts: it stays set, and a run on it fails saying where to switch the provider back on.
+ */
 export function isReviewConfigured(): boolean {
-	try {
-		configForVerifier();
-		configForSubagent();
-		configForOrchestrator();
+	return stagePickErrors().every((error) => error === null || error instanceof ProviderSwitchedOffError);
+}
 
-		return true;
-	} catch {
-		return false;
-	}
+/** True when a review can run on the picks now: each one resolves, on providers that are all switched on. */
+export function isReviewRunnable(): boolean {
+	return stagePickErrors().every((error) => error === null);
+}
+
+/** What resolving each stage pick throws, or null for a pick that resolves. */
+function stagePickErrors(): unknown[] {
+	return [configForOrchestrator, configForSubagent, configForVerifier].map((configFor) => {
+		try {
+			configFor();
+
+			return null;
+		} catch (error) {
+			return error;
+		}
+	});
 }
 
 /**
@@ -193,18 +219,22 @@ export function savedReviewModelId(): string | undefined {
 function resolveConfig(role: StageRole): ModelConfig {
 	const stored = getStoredSettings();
 	const entries = stored.models ?? [];
-	const reviewId = savedReviewModelId();
+	const member = starterPicks();
+	const reviewId = member?.orchestratorModelId ?? savedReviewModelId();
+	const reviewEffort = member ? member.orchestratorEffort : stored.orchestratorEffort;
 
 	const rolePicks: Record<StageRole, { id: string | null | undefined; effort: ReasoningEffort | null | undefined }> = {
-		orchestrator: { id: reviewId, effort: stored.orchestratorEffort },
-		subagent: { id: stored.specialistModelId, effort: stored.specialistEffort },
+		orchestrator: { id: reviewId, effort: reviewEffort },
+		subagent: member
+			? { id: member.specialistModelId, effort: member.specialistEffort }
+			: { id: stored.specialistModelId, effort: stored.specialistEffort },
 		verifier: { id: stored.verifierModelId, effort: stored.verifierEffort }
 	};
 
 	const { id: pickedId, effort: ownEffort } = rolePicks[role];
 	const followsReview = role === 'orchestrator' || !pickedId;
 	const entryId = followsReview ? reviewId : pickedId;
-	const inheritedEffort = followsReview ? stored.orchestratorEffort : undefined;
+	const inheritedEffort = followsReview ? reviewEffort : undefined;
 	const requested = role === 'orchestrator' ? ownEffort : (ownEffort ?? inheritedEffort);
 
 	if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, requested);
@@ -300,11 +330,18 @@ function vllmConfig(entryId: string, requested: ReasoningEffort | null | undefin
  * A model an agent CLI runs (`claude-code:opus`, `opencode:openai/gpt-5`) is listed live or by the adapter
  * rather than stored, so the config comes from its id. It needs no endpoint or key; the adapter says which effort
  * the model takes and which hosted provider it routes to. Null when no agent owns the id.
+ *
+ * Every run reaches an agent CLI's model through here, so this is where a provider switched off in Settings stops
+ * it, before any call: a review when it locks its models, and a chat or Ask when it resolves its pick.
  */
 function agentConfig(id: string, requested: ReasoningEffort | undefined): ModelConfig | null {
 	const owner = agentForModel(id);
 
 	if (!owner) return null;
+
+	const switchedOff = providerSwitches().offProviderOf(id);
+
+	if (switchedOff) throw new ProviderSwitchedOffError(switchedOff);
 
 	const { agent, model } = owner;
 

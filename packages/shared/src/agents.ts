@@ -20,6 +20,26 @@ export interface AgentStatus {
 	authMethod?: string | null;
 	/** What paid for the CLI's latest call (Claude Code's `apiKeySource`; `none` is the subscription). */
 	apiKeySource?: string | null;
+	/** The directory in the user's home the CLI signs in from (`~/.claude`, `~/.codex`); null when it has none. */
+	config: string | null;
+	/** The setup steps Recoder can run itself: installing the CLI and signing it in. */
+	setup: { install: boolean; signIn: boolean };
+}
+
+/**
+ * One install or sign-in Recoder runs for an agent CLI. `output` is the last lines the CLI printed with secrets
+ * redacted; `url` is the first https URL it printed, for opening the browser sign-in; `needsInput` is true while
+ * the CLI waits for a pasted code or token on its stdin.
+ */
+export interface AgentSetupJob {
+	id: string;
+	agent: string;
+	step: 'install' | 'sign-in';
+	status: 'running' | 'done' | 'failed' | 'cancelled';
+	output: string;
+	url: string | null;
+	needsInput: boolean;
+	error: string | null;
 }
 
 /** Installed and running, and signed in when the CLI has its own account. */

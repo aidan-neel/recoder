@@ -1,7 +1,14 @@
 import { normalizeTokenUsage } from '../metrics';
 import { asLlmError, cancelledError, LlmError, timedOutError } from './errors';
+import { imageDataUrl } from './message-images';
 import { reasoningFields, responseFormat, thinkingFields } from './request-fields';
-import { DEFAULT_TIMEOUT_MS, type ChatOptions } from './types';
+import { DEFAULT_TIMEOUT_MS, type ChatMessage, type ChatOptions } from './types';
+
+/** A turn of a `/chat/completions` request: text alone, or text and images as content parts. */
+interface ApiMessage {
+	role: ChatMessage['role'];
+	content: string | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } })[];
+}
 
 /** Non-streaming `/chat/completions` reply body. */
 interface ChatResponse {
@@ -56,7 +63,7 @@ export async function postChat(opts: ChatOptions, signal: AbortSignal, stream: b
 		},
 		body: JSON.stringify({
 			model: opts.model,
-			messages: opts.messages,
+			messages: opts.messages.map(apiMessage),
 			...(opts.temperature === null ? {} : { temperature: opts.temperature ?? 0.2 }),
 			...(opts.topP === undefined ? {} : { top_p: opts.topP }),
 			max_tokens: opts.maxTokens ?? 4000,
@@ -76,6 +83,19 @@ export async function postChat(opts: ChatOptions, signal: AbortSignal, stream: b
 	}
 
 	return res;
+}
+
+/** A turn as `/chat/completions` takes it: its text, or its text and an `image_url` part per image it carries. */
+function apiMessage({ role, content, images }: ChatMessage): ApiMessage {
+	if (!images?.length) return { role, content };
+
+	return {
+		role,
+		content: [
+			{ type: 'text', text: content },
+			...images.map((image) => ({ type: 'image_url' as const, image_url: { url: imageDataUrl(image) } }))
+		]
+	};
 }
 
 /**

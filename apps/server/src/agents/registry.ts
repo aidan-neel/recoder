@@ -40,6 +40,19 @@ export function agentById(id: string | undefined): AgentAdapter | null {
 	return AGENTS.find((agent) => agent.id === id) ?? null;
 }
 
+/**
+ * Why a request with images cannot run on a model of `provider`, or null when it can: an OpenAI-compatible model is
+ * always sent them (a server whose model cannot see them answers with its own error), an agent CLI's only when the
+ * agent reads them.
+ */
+export function imageRefusal(provider: string | undefined): string | null {
+	const agent = agentById(provider);
+
+	if (!agent || agent.readsImages) return null;
+
+	return `${agent.name} can't read images; pick another model or remove the images.`;
+}
+
 /** The agent that runs model `id` (`<agent id>:<model>`) and the model without that prefix, or null. */
 export function agentForModel(id: string): { agent: AgentAdapter; model: string } | null {
 	const agent = AGENTS.find((item) => id.startsWith(`${item.id}:`));

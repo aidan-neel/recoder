@@ -1,5 +1,7 @@
 import type { FailureAction } from '@recoder/shared';
 
+import type { RunActivity } from './run-activity';
+
 /** Where the newest review of a pull request stands. `none`: never reviewed. `cancelled`: a person stopped it. */
 export type RunPhase = 'none' | 'queued' | 'running' | 'paused' | 'passed' | 'failed' | 'cancelled';
 
@@ -27,8 +29,8 @@ export interface RunView {
 	finishedAt: string | null;
 	/** Read the change, find what to check, check each claim, write the summary. Empty when `phase` is `none`. */
 	stages: RunStage[];
-	/** What the review does right now: the command it runs or the file it reads. */
-	activity: string | null;
+	/** What the review does right now: the file it reads, the text it searches for, the command it runs. */
+	activity: RunActivity | null;
 	/** Why a queued review has not started, in a few words. */
 	waiting: string | null;
 	/** The model and effort the review runs with: `Opus 5.5 · High`. */

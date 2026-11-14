@@ -1,6 +1,7 @@
 import { VLLM_MODEL_PREFIX, isRoutedModelId, type EffortChoices, type ModelEntry } from '@recoder/shared';
 import type { AgentAdapter } from '../../agents/contract.js';
 import { agentForModel, registeredAgents } from '../../agents/registry.js';
+import { providerSwitches } from '../../models/provider-switches.js';
 import { vllmEntries } from '../../models/vllm/vllm-models.js';
 import { effectiveReviewEnv, getStoredSettings } from '../../review/session/review-settings.js';
 import { CliError, EXIT, notReadyError, usageError } from '../exit.js';
@@ -80,10 +81,12 @@ export async function namedModelChoices(id: string, lookup: ModelLookup): Promis
  * list, the environment's model, and what the agents that list by running list, each listing under `lookup`. An
  * agent that is not installed is skipped: that is no problem. A listing that fails or is too slow adds a problem,
  * built without the agent's own text, and the other sources are still listed. A stop during the lookup throws as
- * cancelled.
+ * cancelled. A model on a provider switched off in Settings is left out, as the app's pickers leave it out, and a
+ * switched-off agent is not asked.
  */
 export async function listAcceptedModels(lookup: ModelLookup): Promise<AcceptedModels> {
-	const agents = liveAgents().filter((agent) => agent.installed());
+	const switches = providerSwitches();
+	const agents = liveAgents().filter((agent) => agent.installed() && switches.isOn({ kind: 'cli', id: agent.id }));
 	const listings = await Promise.all(agents.map((agent) => listWithin(agent, lookup)));
 
 	if (listings.some((listing) => listing.kind === 'stopped')) {
@@ -91,7 +94,7 @@ export async function listAcceptedModels(lookup: ModelLookup): Promise<AcceptedM
 	}
 
 	const listed = listings.flatMap((listing) => (listing.kind === 'listed' ? listing.models : []));
-	const entries: KnownModel[] = [...listedModels(), ...environmentModels(), ...listed];
+	const entries: KnownModel[] = switches.onlySwitchedOn([...listedModels(), ...environmentModels(), ...listed]);
 
 	return {
 		models: uniqueById(entries).map((entry) => ({ entry, choices: choicesOf(entry) })),

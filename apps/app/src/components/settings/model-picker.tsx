@@ -3,6 +3,7 @@
 import type { ReasoningEffort } from '@recoder/shared';
 import { Button, Select, Skeleton, SwapText } from '@recoder/ui';
 import { ChevronDown } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { ROLE_NAME, type ModelRole } from '@/lib/settings/model-options';
 import type { ModelPickerView } from '@/lib/settings/use-model-picker';
@@ -12,8 +13,13 @@ import { ModelDialog } from './model-dialog';
 /** The trigger's words while no pick can be read. */
 const NO_PICK = 'Choose a model';
 
-/** What the trigger reads: the pick, a placeholder when the server is down, or a bar while settings load. */
-function TriggerLabel({ picker }: { picker: ModelPickerView }) {
+/**
+ * What the trigger reads: the pick, a placeholder when the server is down, or
+ * a bar while settings load. It is called, not rendered as a component, so the
+ * button sees the label itself and gives it the text side's padding: a
+ * component element with no children reads to the kit as a leading icon.
+ */
+function triggerLabel(picker: ModelPickerView): ReactNode {
 	if (picker.label) {
 		return (
 			<SwapText
@@ -39,10 +45,11 @@ interface EffortSelectProps {
 	/** The efforts the picked model accepts. */
 	options: NonNullable<ModelPickerView['effortOptions']>;
 	onChoose: (effort: ReasoningEffort) => void;
+	disabled: boolean;
 }
 
 /** The effort the picked model runs at. The options are the model's own, so a value outside them never saves. */
-function EffortSelect({ name, effort, options, onChoose }: EffortSelectProps) {
+function EffortSelect({ name, effort, options, onChoose, disabled }: EffortSelectProps) {
 	function choose(value: string): void {
 		const option = options.find((candidate) => candidate.value === value);
 
@@ -55,7 +62,9 @@ function EffortSelect({ name, effort, options, onChoose }: EffortSelectProps) {
 			value={effort}
 			onValueChange={choose}
 			options={options}
+			disabled={disabled}
 			aria-label={`${name} reasoning effort`}
+			align="end"
 			className="effort-trigger"
 			contentClassName="effort-menu"
 		/>
@@ -71,7 +80,7 @@ interface ModelPickerProps {
 
 /**
  * The model picker: a quiet trigger that opens the searchable model dialog,
- * with a quiet effort select beside it when the picked model has a reasoning
+ * with a quiet effort select before it when the picked model has a reasoning
  * control. A pick saves at once; the row shows where that save stands.
  */
 export function ModelPicker({ role, picker }: ModelPickerProps) {
@@ -79,6 +88,15 @@ export function ModelPicker({ role, picker }: ModelPickerProps) {
 
 	return (
 		<div className="model-picker">
+			{picker.effort && picker.effortOptions ? (
+				<EffortSelect
+					name={name}
+					effort={picker.effort}
+					options={picker.effortOptions}
+					onChoose={picker.chooseEffort}
+					disabled={picker.locked}
+				/>
+			) : null}
 			<Button
 				variant="quiet"
 				className="model-trigger"
@@ -88,17 +106,9 @@ export function ModelPicker({ role, picker }: ModelPickerProps) {
 				aria-label={picker.label ? `${name}: ${picker.label.text}` : name}
 				onClick={() => picker.setOpen(true)}
 			>
-				<TriggerLabel picker={picker} />
+				{triggerLabel(picker)}
 				<ChevronDown aria-hidden className="model-trigger-chevron" />
 			</Button>
-			{picker.effort && picker.effortOptions ? (
-				<EffortSelect
-					name={name}
-					effort={picker.effort}
-					options={picker.effortOptions}
-					onChoose={picker.chooseEffort}
-				/>
-			) : null}
 			<ModelDialog
 				open={picker.open}
 				onOpenChange={picker.setOpen}

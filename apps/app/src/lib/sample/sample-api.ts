@@ -1,5 +1,4 @@
 import {
-	reviewListItem,
 	type CreateReviewInput,
 	type Finding,
 	type MergePullInput,
@@ -13,7 +12,13 @@ import {
 import type { ApiClient } from '../api/client';
 import { isOpenFinding, type DecisionInput } from '../api/reviews';
 import { isReviewing } from '../pulls/pull-rows';
+import { createSampleAuth } from './sample-auth';
 import { createSampleChat } from './sample-chat';
+import { createSampleFiles } from './sample-files';
+import { createSampleMembers } from './sample-members';
+import { createSampleUpdate } from './sample-update';
+import { createSampleUsage } from './sample-usage';
+import { createSampleRepoChats } from './sample-repo-chat';
 import { sampleCommits } from './sample-pulls';
 import { SAMPLE_REVIEW } from './sample-review';
 import { adoptSampleRun, playSampleRun, type RunScript, type SampleRun } from './sample-run';
@@ -113,7 +118,8 @@ function createSampleReviews(world: SampleWorld) {
 
 		pauseReview: async (id: string) => runOf(id).pause(),
 		resumeReview: async (id: string) => runOf(id).resume(),
-		cancelReview: async (id: string) => runOf(id).cancel()
+		cancelReview: async (id: string) => runOf(id).cancel(),
+		deleteReview: async (id: string) => world.deleteReview(id)
 	};
 }
 
@@ -195,6 +201,10 @@ export function createSampleApi(): ApiClient {
 
 	return {
 		base: '/sample',
+		auth: createSampleAuth(),
+		members: createSampleMembers(),
+		usage: createSampleUsage(),
+		update: createSampleUpdate(),
 		account: async () => 'you',
 		repos: async () => world.data().repos,
 
@@ -224,7 +234,7 @@ export function createSampleApi(): ApiClient {
 				.pulls.filter((item) => item.status.state === 'open' && (!query.repoId || item.repoId === query.repoId))
 				.map(({ repoId, pull, status }) => ({ repoId, pull, status, review: world.newestReview(repoId, pull.number) }));
 
-			return { items, failures: [], fetchedAt: new Date().toISOString() };
+			return { items, failures: [], nextCursors: {}, fetchedAt: new Date().toISOString() };
 		},
 
 		pullPage: async (repoId, number) => world.page(repoId, number),
@@ -266,14 +276,16 @@ export function createSampleApi(): ApiClient {
 			return { merged: true, sha: `${input.headSha}merge` };
 		},
 
-		reviews: async () => world.data().reviews.map(reviewListItem),
+		reviews: async () => world.data().reviews.map((review) => world.listedReview(review)),
 		review: async (id) => world.findReview(id),
 		...createSampleReviews(world),
 		...createSampleFindings(world),
 		markUseful: async () => {},
 		unmarkUseful: async () => {},
 		follow: world.follow,
-		...chat
+		...chat,
+		...createSampleRepoChats(world),
+		...createSampleFiles()
 	};
 }
 

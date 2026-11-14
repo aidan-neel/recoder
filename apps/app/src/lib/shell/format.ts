@@ -10,7 +10,7 @@ export function plural(count: number, word: string, many = `${word}s`): string {
 	return `${count} ${count === 1 ? word : many}`;
 }
 
-/** A span of time in the largest whole unit: "40 seconds", "2 minutes", "3 hours". */
+/** A span of time in the largest whole unit: "40 seconds", "2 minutes", "3 hours", "4 days". */
 export function span(ms: number): string {
 	const seconds = Math.max(0, Math.round(ms / 1000));
 
@@ -18,7 +18,11 @@ export function span(ms: number): string {
 
 	const minutes = Math.round(seconds / 60);
 
-	return minutes < 60 ? plural(minutes, 'minute') : plural(Math.round(minutes / 60), 'hour');
+	if (minutes < 60) return plural(minutes, 'minute');
+
+	const hours = Math.round(minutes / 60);
+
+	return hours < 24 ? plural(hours, 'hour') : plural(Math.round(hours / 24), 'day');
 }
 
 /** The repository's own name, without its owner: `api` for `acme/api`. */

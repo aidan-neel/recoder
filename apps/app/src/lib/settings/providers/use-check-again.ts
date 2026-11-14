@@ -5,7 +5,7 @@ import type { ButtonStatus } from '@recoder/ui';
 import { useAction } from '../../shell/use-action';
 import { useSettings } from '../settings-store';
 
-/** How a failed agent check reads, on the Agent CLIs card and in the provider modal. */
+/** How a failed agent check reads, on Settings → Providers and in the provider modal. */
 export const CHECK_FAILED = 'Couldn’t check the agents';
 
 /** Runs the agent check again and reloads the providers; rejects when the agent or the server still can't be reached. */

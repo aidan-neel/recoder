@@ -85,6 +85,11 @@ spec:
               value: /app/data
             - name: RECODER_WORKDIR
               value: /tmp/recoder-work
+            - name: RECODER_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $config.encryptionKey.existingSecret }}
+                  key: {{ $config.encryptionKey.secretKey }}
             {{- if $shared }}
             - name: RECODER_DATABASE_URL
               valueFrom:

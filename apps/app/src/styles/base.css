@@ -7,37 +7,30 @@
 	text-rendering: optimizeLegibility;
 }
 
-.app-frame {
-	display: grid;
-	height: 100dvh;
-	grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-	background: var(--bg-canvas);
-	color: var(--text-primary);
-	transition: grid-template-columns var(--dur-disclose) var(--ease-menu);
-}
-.app-frame[data-sidebar='closed'] {
-	grid-template-columns: 0 minmax(0, 1fr);
-}
-
-/* A page: a 44px bar, then a column that scrolls. */
+/*
+ * A page: a 44px bar, then a column that scrolls. Every text, icon and box on it starts and ends on
+ * --page-gutter from the page's sides; quiet controls and row fills reach past it so their text lands on it.
+ * The page is a size container, so a column can centre on the page's 100cqw.
+ */
 .page {
+	--page-gutter: 20px;
+
 	display: flex;
 	min-width: 0;
 	height: 100dvh;
 	flex-direction: column;
 	background: var(--bg-canvas);
+	container-type: inline-size;
 }
+/* The bar's rule is a border inside its 44px, so the controls centre between the top and the rule. */
 .page-bar {
 	display: flex;
 	height: var(--bar-height);
 	flex-shrink: 0;
 	align-items: center;
 	gap: 8px;
-	padding: 0 16px 0 20px;
+	padding: 0 var(--page-gutter);
 	border-bottom: 1px solid var(--line-subtle);
-}
-.app-frame[data-sidebar='closed'] .page-bar {
-	padding-left: 10px;
 }
 .page-bar-side {
 	display: flex;
@@ -53,25 +46,17 @@
 	min-height: 0;
 	flex: 1;
 	overflow-y: auto;
-	scrollbar-width: thin;
-	scrollbar-color: var(--line-strong) transparent;
-	scrollbar-gutter: stable;
 }
+/* The column starts on the bar's gutter at every width, so the bar's first text and the column's line up. */
 .page-column {
 	width: 100%;
 	max-width: 1180px;
-	margin: 0 auto;
-	padding: 20px 24px 48px;
+	padding: 20px var(--page-gutter) 48px var(--page-gutter);
 }
 .page-column[data-width='reading'] {
 	max-width: 768px;
 }
 
-/* A page's head under the bar: its title, then a row of tabs with the open tab's own tools at the right. */
-.page-head {
-	flex-shrink: 0;
-	padding: 20px 24px 0;
-}
 .page-title {
 	display: flex;
 	min-width: 0;
@@ -87,17 +72,7 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.page-tabs-row {
-	display: flex;
-	height: 48px;
-	flex-shrink: 0;
-	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
-	margin-top: 8px;
-	padding: 0 16px 0 18px;
-	border-bottom: 1px solid var(--line-subtle);
-}
+/* Text tabs: the open one is brighter on a quiet fill drawn in place. One weight throughout, so nothing shifts. */
 .page-tabs {
 	position: relative;
 	display: flex;
@@ -108,11 +83,11 @@
 .page-tab {
 	position: relative;
 	display: inline-flex;
-	height: 30px;
+	height: 26px;
 	align-items: center;
-	gap: 7px;
-	padding: 0 10px;
-	border-radius: 8px;
+	gap: 6px;
+	padding: 0 8px;
+	border-radius: var(--radius-control);
 	color: var(--text-muted);
 	font-size: var(--font-size-label);
 	outline: none;
@@ -122,8 +97,8 @@
 .page-tab[aria-current] {
 	color: var(--text-primary);
 }
-.page-tab[aria-current] {
-	font-weight: 500;
+.page-tab [data-ui='nav-pill'] {
+	background-color: var(--bg-hover);
 }
 .page-tab:focus-visible {
 	box-shadow: var(--focus-ring);
@@ -132,7 +107,6 @@
 	color: var(--text-faint);
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
-	font-weight: 400;
 }
 .page-tab-count[data-tone='bugs'] {
 	color: var(--sev-high);
@@ -158,7 +132,7 @@
 	font-size: var(--font-size-label);
 }
 .crumbs a {
-	border-radius: 4px;
+	border-radius: var(--radius-chip);
 	color: inherit;
 	outline: none;
 	transition: color var(--dur-hover) ease-out;
@@ -259,7 +233,7 @@
 .avatar[data-shape='square'] {
 	width: 20px;
 	height: 20px;
-	border-radius: 6px;
+	border-radius: var(--radius-chip);
 }
 .avatar img {
 	position: absolute;
@@ -271,7 +245,7 @@
 
 /* Links inside running text. */
 .text-link {
-	border-radius: 3px;
+	border-radius: var(--radius-chip);
 	color: var(--accent-text);
 	outline: none;
 	text-decoration: underline;
@@ -302,7 +276,7 @@
 	align-items: center;
 	gap: 8px;
 	padding: 6px 10px 6px 12px;
-	border-radius: 8px;
+	border-radius: var(--radius-row);
 	background: var(--sev-medium-tint);
 	color: var(--sev-medium);
 	font-size: var(--font-size-label);
@@ -335,8 +309,8 @@
 .app-skin [data-ui='pill'] {
 	height: 20px;
 	gap: 5px;
-	padding: 0 7px;
-	border-radius: 6px;
+	padding: 0 6px;
+	border-radius: var(--radius-chip);
 }
 .app-skin [data-ui='pill'][data-face='code'] {
 	font-size: 11px;
@@ -361,14 +335,25 @@
 	font-size: 8px;
 }
 .app-skin [data-ui='hover-list-highlight'] {
-	border-radius: 8px;
+	border-radius: var(--radius-row);
 	background-color: var(--bg-hover);
-}
-.app-skin [data-ui='nav-pill'] {
-	background-color: var(--bg-selected);
 }
 .app-skin [data-ui='keycap'] {
 	height: 18px;
-	border-radius: 5px;
+	border-radius: var(--radius-chip);
 	font-size: 11px;
+}
+
+/* A repository's name behind its forge's mark, in the line's own color. */
+.repo-label {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 4px;
+}
+.repo-label-mark {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	opacity: 0.8;
 }

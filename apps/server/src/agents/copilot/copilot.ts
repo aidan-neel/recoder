@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { supportedEffort, type AgentStatus, type ModelEntry, type ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import {
 	CliAgent,
 	callDeadline,
@@ -18,7 +18,7 @@ import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import { AUTO_MODEL, copilotEfforts, copilotModels, effortArgs } from './copilot-models';
 import { EventReader, GH_LOGIN, readUsage } from './copilot-output';
-import { copilotEnv, copilotEnvWithHome } from './copilot-process';
+import { copilotEnv, copilotEnvWithHome, copilotHome, linkCopilotSignIn } from './copilot-process';
 import { CopilotRun, NO_TOOLS_ARGS, PROMPT_ARGS } from './copilot-run';
 
 const INSTALL = 'npm install -g @github/copilot';
@@ -49,15 +49,17 @@ function isShim(path: string): boolean {
  * GitHub Copilot, run as one prompt-mode process per model call.
  *
  * The CLI signs in to the user's GitHub account: `gh auth login` or `COPILOT_GITHUB_TOKEN`, the one token
- * variable forwarded. Its own `copilot login` sign-in is invisible to a run, since every call gets an empty
- * scratch `COPILOT_HOME`; `GH_TOKEN`/`GITHUB_TOKEN` are the server's forge credentials and never cross. Recoder
- * never reads the CLI's credential files, runs it without the server's keys in its environment, and reads the
- * JSONL the CLI prints.
+ * variable forwarded. A `copilot login` sign-in lives in the OS keychain or in `~/.copilot/config.json` — the
+ * keychain reaches a run untouched, and the file is linked into the call's scratch `COPILOT_HOME` so it reaches
+ * one too. `GH_TOKEN`/`GITHUB_TOKEN` are the server's forge credentials and never cross. Recoder never reads the
+ * CLI's credential files, runs it without the server's keys in its environment, and reads the JSONL the CLI prints.
  */
 export class CopilotAgent extends CliAgent {
 	readonly id = 'copilot';
 
 	readonly name = 'GitHub Copilot';
+	/** Its print mode documents no image input. */
+	readonly readsImages = false;
 
 	readonly install = INSTALL;
 
@@ -67,6 +69,16 @@ export class CopilotAgent extends CliAgent {
 	readonly processCeiling = { env: 'RECODER_COPILOT_CONCURRENCY', fallback: 4 };
 
 	readonly signInFix = `Sign in with \`${GH_LOGIN}\` or set COPILOT_GITHUB_TOKEN, or pick another model in Recoder settings.`;
+
+	/**
+	 * The setup Settings runs: the npm install, and `copilot login`, the CLI's device-code sign-in — it prints the
+	 * URL and user code and polls until the browser authorizes it. The job runs without the `COPILOT_HOME`
+	 * override, so the credential lands in the user's keychain or `~/.copilot`, where the user's own CLI reads it.
+	 */
+	readonly setup: AgentSetup = {
+		install: { argv: ['npm', 'install', '-g', '@github/copilot'] },
+		signIn: { argv: ['copilot', 'login'] }
+	};
 
 	/** The fixed list, offered whether or not the CLI is installed: it has no command that lists models. */
 	override fixedModels(): ModelEntry[] {
@@ -121,6 +133,7 @@ export class CopilotAgent extends CliAgent {
 
 		try {
 			await mkdir(home, { recursive: true });
+			await linkCopilotSignIn(this.env, home);
 
 			const system = systemText(opts);
 			const turns = opts.messages.filter((m) => m.role !== 'system');
@@ -188,10 +201,13 @@ export class CopilotAgent extends CliAgent {
 		return copilotEnv(this.env);
 	}
 
+	protected configDir(): string {
+		return copilotHome(this.env);
+	}
+
 	/**
-	 * Nothing: the CLI has no command that reports sign-in state without making a model call (only `login`,
-	 * which Recoder never runs), so the status leaves the state unknown and a signed-out call surfaces as the
-	 * 401 that names the sign-in command.
+	 * Nothing: the CLI has no command that reports sign-in state without making a model call, so the status
+	 * leaves the state unknown and a signed-out call surfaces as the 401 that names the sign-in command.
 	 */
 	protected async signIn(): Promise<Partial<AgentStatus>> {
 		return {};

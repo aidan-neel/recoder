@@ -11,7 +11,7 @@ interface MenuHighlightProps {
 
 /**
  * The traveling highlight every menu-like list shares: one layer under the
- * items that slides to the item the pointer highlights (120ms, ease-out) and
+ * items that slides to the item the pointer highlights (60ms, ease-out) and
  * snaps to one an arrow key or typing highlights, instead of each item
  * painting its own background. Place it as the first child of the list;
  * kit-menu.css positions that list and keeps the highlight under its rows.

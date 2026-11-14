@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
+import { writeImageFiles } from '../image-files';
 import { SessionRun, type SessionHost } from '../session-run';
 import { CodexReader, type SessionUsage } from './codex-output';
 import { callArgs, codexEnv } from './codex-process';
@@ -15,6 +16,16 @@ interface RunFiles {
 	system: string;
 	cwd: string;
 	catalog: string;
+	/** The brief's images, which go with the first prompt. */
+	images: string[];
+}
+
+/**
+ * `--image` for each file. The flag takes several values, so these go before the other flags: a flag ends the list,
+ * where the `-` that reads the prompt from stdin would be taken for one more image.
+ */
+export function imageArgs(paths: readonly string[]): string[] {
+	return paths.flatMap((path) => ['--image', path]);
 }
 
 /**
@@ -27,11 +38,12 @@ export class CodexRun extends SessionRun<RunFiles> {
 
 	static async open(host: SessionHost, catalog: string, options: AgentRunOptions): Promise<CodexRun> {
 		const root = await SessionRun.scratchDirectory('codex');
-		const files = { system: join(root, 'system.md'), cwd: join(root, 'work'), catalog };
+		const files: RunFiles = { system: join(root, 'system.md'), cwd: join(root, 'work'), catalog, images: [] };
 
 		return SessionRun.ready(new CodexRun(host, options, root, files), async () => {
 			await writeFile(files.system, options.system, { mode: 0o600 });
 			await mkdir(files.cwd);
+			files.images = await writeImageFiles(root, options.images ?? []);
 		});
 	}
 
@@ -79,6 +91,8 @@ export class CodexRun extends SessionRun<RunFiles> {
 			lease: this.lease
 		});
 
-		return this.session ? ['exec', 'resume', ...flags, this.session, '-'] : ['exec', ...flags, '-'];
+		return this.session
+			? ['exec', 'resume', ...flags, this.session, '-']
+			: ['exec', ...imageArgs(this.files.images), ...flags, '-'];
 	}
 }

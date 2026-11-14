@@ -33,7 +33,7 @@ All in `apps/server/src/models/models.ts`. Saved settings come from `getStoredSe
 
 ## vLLM servers
 
-`apps/server/src/models/vllm/` keeps each connected vLLM server's model list in step with the server. A server (address, key, last list, last error) is saved in `vllm-servers.json` in the data dir. Its models are not saved entries: their ids are `vllm:<server id>/<model id>` (`vllmModelId` in `@recoder/shared`), and `vllmTarget` resolves one to the server's base URL, key and the model id the server listed. The request goes through the same OpenAI-compatible transport as any endpoint, so every agent loop, verifier and chat reaches it the same way.
+`apps/server/src/models/vllm/` keeps each connected vLLM server's model list in step with the server. A server (address, key, last list, last error) is saved in `vllm-servers.json` in the data dir, its key sealed. Its models are not saved entries: their ids are `vllm:<server id>/<model id>` (`vllmModelId` in `@recoder/shared`), and `vllmTarget` resolves one to the server's base URL, key and the model id the server listed. The request goes through the same OpenAI-compatible transport as any endpoint, so every agent loop, verifier and chat reaches it the same way.
 
 - `GET {base}/v1/models` is read by `discoverModels` (a missing `/v1` is added); `max_model_len` is the context window.
 - A sync runs on connect, at boot, every 5 minutes (`VLLM_SYNC_INTERVAL_MS`), when Settings opens (`POST /api/settings/vllm/refresh`, skipped for a server tried in the last 15 s) and on the Refresh button (`force`).
@@ -240,7 +240,9 @@ Stored in the SQLite table `review_metrics` (`reviewMetrics` in `apps/server/src
 
 `PipelineRun` fields: `index`, `startedAt`, `orchestrator`, `subagent` and `verifier` (the locked model ids, null when the run went unlocked), `lockMisses`, `tokenBudget`, and `history`: which repository history the run received (`RunHistory`: `sources`, the brief's history sources without their text; `dismissals`, the fingerprints of dismissed findings; `topics`, the votes per topic). A part the run never read is absent; one it read and found empty is empty.
 
-`trackTokenCall` in `apps/server/src/models/metrics.ts` opens a call record. `runChat` and `StepRelay` (`apps/server/src/review/pipeline/agent-loop/step-relay.ts`, which every agent CLI's pipeline run uses through `native-engine.ts`) call it. A call is saved only when it runs under `withReviewMetrics` for an existing review. Its `complete()` or `fail(err, secrets)` closes it. An agent prompt that fails before its first step starts (a spent plan, a rejected key) is still saved as one failed call.
+`trackTokenCall` in `apps/server/src/models/metrics.ts` opens a call record. `runChat` and `StepRelay` (`apps/server/src/review/pipeline/agent-loop/step-relay.ts`, which every agent CLI's pipeline run uses through `native-engine.ts`) call it. Its `complete()` or `fail(err, secrets)` closes it. An agent prompt that fails before its first step starts (a spent plan, a rejected key) is still saved as one failed call.
+
+A settled call is also written to `model_calls` (`modelCalls` in `apps/server/src/store.ts`), one `ModelCallRow` (`packages/shared/src/telemetry.ts`) per call: `id`, `at`, `person` (the account that started the work, null for work with no starter), `kind` (`review`, `chat` or `other`), `ownerId` (the review's or chat's id, null for `other`), `stage`, `provider`, `model`, `effort`, `usage`, `durationMs`, `outcome` (`ok`, `failed` or `cancelled`), `errorKind` on failures and `worker`. Calls outside any review or chat record as `other`. `apps/server/src/usage/model-calls.ts` backfills the collection once from `review_metrics` at startup and prunes rows older than `MODEL_CALL_KEEP_DAYS` (400) days; the admin usage report (`GET /api/usage`) reads it instead of scanning review metrics.
 
 A call record (`TokenCall` in `packages/shared/src/metrics.ts`, extended by `RunTokenCall`):
 
@@ -271,7 +273,7 @@ Routes in `apps/server/src/routes/settings.ts`, mounted at `/api/settings`.
 
 `GET /api/settings/models` returns `settingsPayload()`:
 
-- `configured`, `baseUrl`, `model`, `apiKeyPreview`.
+- `configured`, `baseUrl`, `model`, `apiKeySet` (whether an API key is saved; a key is never returned, not even in part).
 - `sharedModelId`, `orchestratorModelId`, `specialistModelId`, `verifierModelId`.
 - `models`: the connected vLLM servers' models and the agent CLIs' models.
 - `orchestratorEffort`, `specialistEffort`, `verifierEffort`, `subagentCap`, `tokenBudget`, `reportLowSeverity`. `tokenBudget` is the last budget picked; the cap and efforts may since have been changed by hand. `subagentCap` is one of 0, 3, 8, 12 or `'uncapped'`; a file saved with 2 or 4 (the caps before) loads as the nearest cap at least as large (`migrateSubagentCap`) and is saved again that way. See [pipeline.md](pipeline.md#token-budget).
@@ -302,7 +304,7 @@ Hosted provider keys live in `connections`, by provider id. They are not in the 
 - Recovery: after the cooldown, each successful call raises the limit by one until it reaches the ceiling.
 - Rate-limit errors are HTTP 429, 529 or an "overloaded" message (`isRateLimitError` in `apps/server/src/models/llm/errors.ts`). A `UsageLimitError` does not count: it means a usage cap or a spent plan.
 - Lowering the limit never revokes a held slot. New callers wait until the active count is under it.
-- Fair turns: each review's calls wait in their own lane (`withLlmLane`, opened by `withReviewMetrics`). A freed slot goes to the next lane in round-robin order and to that lane's oldest waiter, so one large review cannot hold back another. Calls made outside a review share one lane.
+- Fair turns: each review's calls wait in their own lane (`withLlmLane`, opened by `withUsageMetrics`). A freed slot goes to the next lane in round-robin order and to that lane's oldest waiter, so one large review cannot hold back another. Calls made outside a review share one lane.
 - `acquireLlmSlot()` is called only when a call is ready to run. It waits up to the timeout its caller passes. `runChat` passes the call's own budget, capped by its settle time. A wait that times out throws `CapacityError` (`apps/server/src/models/llm/errors.ts`), a failure kind of its own: the model never saw the call.
 - Queue delay: each pipeline run records how long its calls waited for a slot (`queueDelay` on the run and on `GET /api/reviews/:id/metrics`: requests, total and longest wait in milliseconds).
 - Load sweep: `bun run --filter @recoder/server eval:load` runs fake reviews against a fake model server through this limiter at several concurrency levels. It prints throughput, queue delay, review duration and capacity failures per level, and the range where more concurrency still helps. It uses no model, forge or storage. Flags: `--reviews`, `--requests` (per review, sent at once), `--levels` (comma-separated), `--model-parallel`, `--latency` (ms) and `--queue-timeout` (seconds).

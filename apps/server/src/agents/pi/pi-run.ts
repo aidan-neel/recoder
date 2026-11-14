@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import { removeScratchDir } from '../cli-process';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
+import { writeImageFiles } from '../image-files';
 import { ProcessRun } from '../process-run';
 import { runPiCall, type PiHost } from './pi-call';
 import { PI_DEFAULT_EFFORT, printArgs } from './pi-process';
@@ -26,6 +27,8 @@ export class PiRun extends ProcessRun {
 	/** The working directory: empty, inside the scratch dir, so the run reaches no file but through its tools. */
 	private readonly cwd: string;
 	private toolArgs: readonly string[] = NO_TOOLS_ARGS;
+	/** The brief's image files, until the first prompt sends them; the session holds them after that. */
+	private unsentImages: readonly string[] = [];
 
 	private constructor(
 		private readonly host: PiRunHost,
@@ -60,8 +63,11 @@ export class PiRun extends ProcessRun {
 			thinking: reasoningEffort ?? PI_DEFAULT_EFFORT,
 			systemFile: this.files.system,
 			sessionFile: this.files.session,
-			toolArgs: this.toolArgs
+			toolArgs: this.toolArgs,
+			images: this.unsentImages
 		});
+
+		this.unsentImages = [];
 
 		try {
 			const outcome = await runPiCall(
@@ -85,9 +91,11 @@ export class PiRun extends ProcessRun {
 		await removeScratchDir(this.host.scratch, this.files.root);
 	}
 
-	/** Makes the empty working directory and, when the run has tools, writes the tool bridge. */
+	/** Makes the empty working directory, writes the brief's images and, when the run has tools, the tool bridge. */
 	private async setUp(): Promise<this> {
 		await mkdir(this.cwd, { recursive: true });
+
+		this.unsentImages = await writeImageFiles(this.files.root, this.options.images ?? []);
 
 		if (this.lease) this.toolArgs = await writeToolBridge(this.files.root, this.lease, this.options.tools);
 

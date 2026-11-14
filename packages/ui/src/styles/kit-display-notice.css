@@ -1,0 +1,248 @@
+/*
+ * kit: notices. What a page, a section or a line says in place of its
+ * content, and where a long task stands. Every variant has the same parts: a
+ * glyph, the title with its facts, the reason under it, the actions after it.
+ * Layered like the rest of the kit, so a class passed to a notice still wins.
+ */
+@layer components {
+	/* ───────── The parts every notice shares ───────── */
+	[data-ui='status-notice'] {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		font-size: var(--font-size-label);
+		line-height: 20px;
+	}
+	[data-ui='status-notice-body'] {
+		display: flex;
+		min-width: 0;
+		gap: 10px;
+	}
+	/*
+	 * The glyph's lane: as wide as a status glyph, so the glyph's edge is the notice's inset, and a button tall,
+	 * so the glyph centres on the title's line beside one.
+	 */
+	[data-ui='status-notice-glyph'] {
+		display: flex;
+		width: 16px;
+		height: var(--size-control-md);
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		color: var(--text-subtle);
+	}
+	[data-ui='status-notice-glyph'] > svg {
+		width: 15px;
+		height: 15px;
+	}
+	[data-ui='status-notice-text'] {
+		display: flex;
+		min-width: 0;
+		flex: 1;
+		flex-direction: column;
+		gap: 2px;
+	}
+	[data-ui='status-notice-head'] {
+		display: flex;
+		min-width: 0;
+		flex-wrap: wrap;
+		align-items: baseline;
+		column-gap: 10px;
+	}
+	[data-ui='status-notice-title'] {
+		margin: 0;
+		color: var(--text-primary);
+		font-size: var(--font-size-body);
+		font-weight: 500;
+		line-height: 20px;
+		text-wrap: pretty;
+	}
+	/*
+	 * 18px, not the title's 20px: on the title's baseline a smaller face with a 20px line hangs 1px below it,
+	 * so a banner grew to 45px the moment its facts arrived.
+	 */
+	[data-ui='status-notice-meta'] {
+		color: var(--text-subtle);
+		font-size: var(--font-size-meta);
+		font-variant-numeric: tabular-nums;
+		line-height: 18px;
+	}
+	[data-ui='status-notice-detail'] {
+		margin: 0;
+		color: var(--text-tertiary);
+		overflow-wrap: anywhere;
+		text-wrap: pretty;
+	}
+	[data-ui='status-notice-actions'] {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+	}
+
+	/*
+	 * Banner: a full-width box at the top of the content it stands for. It
+	 * keeps to the top and fills the width even inside a centring wrapper.
+	 */
+	[data-ui='status-notice'][data-variant='banner'] {
+		--notice-edge: var(--line-card);
+		--notice-rule: var(--line-card);
+
+		width: 100%;
+		flex-shrink: 0;
+		align-self: start;
+		border-radius: var(--radius-row);
+		background: var(--bg-raised);
+		box-shadow: inset 0 0 0 1px var(--notice-edge);
+	}
+	[data-ui='status-notice'][data-variant='banner'][data-tone='danger'] {
+		--notice-edge: color-mix(in srgb, var(--sev-high-icon) 24%, transparent);
+		--notice-rule: color-mix(in srgb, var(--sev-high-icon) 14%, transparent);
+
+		background: color-mix(in srgb, var(--sev-high-icon) 5%, transparent);
+	}
+	/*
+	 * The same 12px inset on both sides, as a file card's header: the glyph starts where its chevron does and
+	 * the last action ends where its Viewed control does. The box itself stays on the page's gutters.
+	 */
+	[data-variant='banner'] > [data-ui='status-notice-body'] {
+		align-items: flex-start;
+		padding: 8px 12px;
+	}
+	/* 4px above and below the 20px line: the title centres on a 28px button, and one line makes a 44px banner. */
+	[data-variant='banner'] > [data-ui='status-notice-body'] > [data-ui='status-notice-text'] {
+		padding-block: 4px;
+	}
+	[data-variant='banner'] > [data-ui='status-notice-body'] > [data-ui='status-notice-actions'] {
+		flex-shrink: 0;
+		flex-wrap: nowrap;
+	}
+	/* The footer starts on the text's lane: the 12px inset, the 16px glyph and the 10px gap. */
+	[data-variant='banner'] > [data-ui='status-notice-footer'] {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px 14px;
+		padding: 8px 12px 8px 38px;
+		border-top: 1px solid var(--notice-rule);
+		color: var(--text-muted);
+		font-size: var(--font-size-meta);
+		line-height: 16px;
+	}
+	[data-variant='banner']:not(:has(> [data-ui='status-notice-body'] > [data-ui='status-notice-glyph']))
+		> [data-ui='status-notice-footer'] {
+		padding-left: 12px;
+	}
+	[data-ui='status-notice-footer'] svg {
+		width: 12px;
+		height: 12px;
+		flex-shrink: 0;
+	}
+
+	/* Details: a disclosure line in the footer that opens the raw error in a code block. */
+	[data-ui='status-notice-footer'] > [data-ui='collapsible'] {
+		min-width: 0;
+		flex: 1 1 100%;
+	}
+	[data-ui='status-notice-footer'] [data-ui='collapsible-trigger'] {
+		--disclosure-chevron-size: 12px;
+
+		display: inline-flex;
+		height: 20px;
+		align-items: center;
+		gap: 4px;
+		margin-left: -4px;
+		padding: 0 4px;
+		border: 0;
+		border-radius: var(--radius-chip);
+		background: none;
+		color: var(--text-muted);
+		font: inherit;
+		outline: none;
+		transition: color var(--dur-hover) ease-out;
+	}
+	[data-ui='status-notice-footer'] [data-ui='collapsible-trigger']:hover {
+		color: var(--text-primary);
+	}
+	[data-ui='status-notice-footer'] [data-ui='collapsible-trigger']:focus-visible {
+		box-shadow: var(--focus-ring);
+	}
+	[data-ui='status-notice-footer'] [data-ui='collapsible-trigger'] > svg {
+		color: var(--text-faint);
+		transition: rotate var(--dur-toggle) var(--ease-menu);
+	}
+	[data-ui='status-notice-footer'] [data-ui='collapsible-trigger'][data-state='open'] > svg {
+		rotate: 90deg;
+	}
+	[data-ui='status-notice-footer'] [data-ui='collapsible-body'] {
+		padding-top: 8px;
+	}
+
+	/* Section: no box, centred in the room an empty list would fill, the reason quieter on its own line. */
+	[data-ui='status-notice'][data-variant='section'] {
+		height: 100%;
+		justify-content: center;
+		padding: 32px;
+		text-align: center;
+	}
+	[data-variant='section'] > [data-ui='status-notice-body'] {
+		flex-direction: column;
+		align-items: center;
+		gap: 12px;
+	}
+	[data-variant='section'] [data-ui='status-notice-glyph'] {
+		height: 20px;
+	}
+	[data-variant='section'] [data-ui='status-notice-text'] {
+		align-items: center;
+	}
+	[data-variant='section'] [data-ui='status-notice-head'] {
+		justify-content: center;
+	}
+	[data-variant='section'] [data-ui='status-notice-title'] {
+		text-wrap: balance;
+	}
+	[data-variant='section'] [data-ui='status-notice-detail'] {
+		color: var(--text-subtle);
+		text-wrap: balance;
+	}
+	[data-variant='section'] [data-ui='status-notice-actions'] {
+		justify-content: center;
+	}
+
+	/* Inline: one quiet line in a form, at least a control tall so an action never resizes it. */
+	[data-ui='status-notice'][data-variant='inline'] {
+		min-height: var(--size-control-md);
+		justify-content: center;
+		font-size: 12.5px;
+		line-height: 18px;
+	}
+	[data-variant='inline'] > [data-ui='status-notice-body'] {
+		align-items: center;
+		gap: 8px;
+	}
+	[data-variant='inline'] [data-ui='status-notice-glyph'] {
+		height: 18px;
+	}
+	[data-variant='inline'] [data-ui='status-notice-text'] {
+		flex-flow: row wrap;
+		align-items: baseline;
+		column-gap: 6px;
+	}
+	[data-variant='inline'] [data-ui='status-notice-title'] {
+		color: var(--text-muted);
+		font-size: inherit;
+		font-weight: 400;
+		line-height: inherit;
+	}
+	[data-variant='inline'][data-tone='danger'] [data-ui='status-notice-title'] {
+		color: var(--danger);
+	}
+	[data-variant='inline'] [data-ui='status-notice-detail'] {
+		color: var(--text-subtle);
+	}
+	[data-variant='inline'] > [data-ui='status-notice-body'] > [data-ui='status-notice-actions'] {
+		flex-shrink: 0;
+		flex-wrap: nowrap;
+	}
+}

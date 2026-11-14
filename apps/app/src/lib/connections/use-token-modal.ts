@@ -54,9 +54,13 @@ function rejection(error: unknown): TokenRejection {
  * the token with the forge before it keeps it; a rejection lands under the
  * field it is about (`error.field`). While the check runs the fields are
  * read-only and the dialog holds still: Escape, a click outside and Cancel
- * wait for the answer. It closes a beat after the check face.
+ * wait for the answer. It closes a beat after the check face, then calls `onSaved`.
  */
-export function useTokenModal(forge: Forge, onOpenChange: (open: boolean) => void): TokenModalView {
+export function useTokenModal(
+	forge: Forge,
+	onOpenChange: (open: boolean) => void,
+	onSaved?: () => void
+): TokenModalView {
 	const info = FORGES.find((item) => item.id === forge) ?? FORGES[0];
 	const savedHost = useConnections((state) => state.auth?.gitlab.host ?? '');
 	const [token, setTokenText] = useState('');
@@ -65,7 +69,10 @@ export function useTokenModal(forge: Forge, onOpenChange: (open: boolean) => voi
 	const [status, setStatus] = useState<ButtonStatus>('idle');
 	const pending = status === 'pending';
 
-	useCloseOnSuccess(status, () => onOpenChange(false));
+	useCloseOnSuccess(status, () => {
+		onOpenChange(false);
+		onSaved?.();
+	});
 
 	async function submit(): Promise<void> {
 		if (!token.trim() || status !== 'idle') return;

@@ -1,20 +1,44 @@
-/* ───────── Settings, and the pages built like it: one reading column of titled groups ───────── */
-/* The tabs stay at the top of the column while its groups scroll under them. */
-.column-tabs {
-	position: sticky;
-	z-index: 2;
-	top: 0;
+/* ───────── Settings, and the pages built like it: one column of titled groups, centred ───────── */
+
+/*
+ * Settings, Automations and Guidelines share one 704px column: the widest
+ * rows (a model with its effort, the ignored paths) fit on one line. It is
+ * centred on the page (100cqw is the page's width). Narrower than the column
+ * plus the gutters, it keeps the gutter on both sides.
+ *
+ * A group's title, the note under its card and the card itself start on one
+ * edge. Inside the card, a row's text starts `--settings-inset` in and its
+ * control ends `--settings-end` before the right edge; the group's own action
+ * ends there too. These pages set both tighter than the 16px elsewhere.
+ */
+.settings-page {
+	--settings-inset: 12px;
+	--settings-end: 8px;
+	--settings-column: 704px;
+
 	display: flex;
-	height: 48px;
-	align-items: center;
-	margin: -12px -1px 24px;
-	padding: 0 1px;
-	border-bottom: 1px solid var(--line-subtle);
-	background: var(--bg-canvas);
+	width: min(var(--settings-column), 100cqw - 2 * var(--page-gutter));
+	flex-direction: column;
+	gap: 24px;
+	margin-left: max(var(--page-gutter), (100cqw - var(--settings-column)) / 2);
+	padding: 32px 0 48px;
 }
-/* A pill's label sits 10px inside it; pull the row back so the first label lines up with the title. */
-.column-tabs .page-tabs {
-	margin-left: -10px;
+
+.settings-page .settings {
+	gap: 24px;
+}
+.settings-page .settings-group-head {
+	min-height: 28px;
+}
+
+/* A row is 52px: an 18px name over a 16px detail, 8px above and below. */
+.settings-page .settings-row {
+	min-height: 52px;
+	padding-block: 8px;
+}
+.settings-page .settings-row-detail {
+	font-size: var(--font-size-meta);
+	line-height: 16px;
 }
 
 .settings {
@@ -33,7 +57,7 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	padding: 0 2px;
+	padding-right: var(--settings-end, 16px);
 }
 .settings-group-title {
 	color: var(--text-primary);
@@ -42,7 +66,6 @@
 	line-height: 18px;
 }
 .settings-group-note {
-	padding: 2px 2px 0;
 	color: var(--text-faint);
 	font-size: var(--font-size-meta);
 	line-height: 18px;
@@ -55,15 +78,16 @@
 
 /*
  * One setting: what it is on the left, its control on the right. Two lines
- * of text make exactly 60px, and the divider is drawn inside the row, so the
- * skeleton and the rows that replace it sit on the same lines.
+ * of text make exactly 60px here and 52px on the Settings page, and the
+ * divider is drawn inside the row, so the skeleton and the rows that replace
+ * it sit on the same lines.
  */
 .settings-row {
 	display: flex;
 	min-height: 60px;
 	align-items: center;
 	gap: 12px 24px;
-	padding: 11px 16px;
+	padding: 11px var(--settings-end, 16px) 11px var(--settings-inset, 16px);
 }
 .settings-row + .settings-row {
 	box-shadow: inset 0 1px 0 var(--line-subtle);
@@ -81,8 +105,10 @@
 .settings-row[data-led] .settings-row-end {
 	margin-left: 12px;
 }
+/* A smaller mono word, such as a branch, keeps out of the line box so the row stays its height. */
 .settings-row-detail .mono {
 	font-size: 12px;
+	line-height: 1;
 }
 /* A forge's mark on a quiet tile, leading its row. */
 .forge-tile {
@@ -91,7 +117,7 @@
 	height: 28px;
 	flex-shrink: 0;
 	place-items: center;
-	border-radius: 8px;
+	border-radius: var(--radius-control);
 	background: var(--bg-hover);
 	color: var(--text-secondary);
 }
@@ -142,8 +168,10 @@
 	flex-shrink: 0;
 	place-items: center;
 }
+/* Each face is a flex box, so it is as tall as its glyph: a block would take the line's 20px and sit the glyph on its baseline. */
 .save-status > * {
 	position: absolute;
+	display: flex;
 	opacity: 0;
 	scale: 0.25;
 	filter: blur(4px);
@@ -167,4 +195,43 @@
 }
 .save-status [data-face='error'] {
 	color: var(--danger);
+}
+
+/* Admin → People: a person's row, and its Remove that shows on hover or focus. */
+.member-name,
+.member-handle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.member-name {
+	height: 18px;
+}
+.member-handle {
+	gap: 6px;
+}
+.member-remove {
+	opacity: 0;
+	transition: opacity var(--dur-hover) ease-out;
+}
+.settings-row:hover .member-remove,
+.member-remove:focus-visible,
+.member-remove[data-state='open'] {
+	opacity: 1;
+}
+@media (hover: none) {
+	.member-remove {
+		opacity: 1;
+	}
+}
+
+/* Settings a member may read and not change: one column, the note over the groups. */
+.admin-controls {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	border: 0;
 }

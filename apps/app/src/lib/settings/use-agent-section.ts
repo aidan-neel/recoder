@@ -1,9 +1,9 @@
 'use client';
 
-import type { AgentStatus } from '@recoder/shared';
+import { agentReady, type AgentStatus } from '@recoder/shared';
 import { useState } from 'react';
 
-import { agentReady, useSettings } from './settings-store';
+import { useSettings } from './settings-store';
 
 /** Everything the provider modal host needs: whether it is open, on which provider, and how it closes. */
 export interface ProviderHost {
@@ -14,10 +14,8 @@ export interface ProviderHost {
 	onOpenChange: (open: boolean) => void;
 }
 
-/** Everything the Models section's top half needs: the provider manager, whether its list shows, and the modal host. */
+/** Whether model providers can be connected, and the host of the dialog that connects them. */
 export interface AgentSectionView {
-	/** The agent that connects model providers itself (OpenCode), or null. */
-	manager: AgentStatus | null;
 	/** The connected-providers list shows: a manager is ready and its list (or a kept last one) loaded. */
 	providersReady: boolean;
 	/** The provider modal's open state, target and close. */
@@ -32,10 +30,9 @@ export function useProviderManager(): AgentStatus | null {
 }
 
 /**
- * Settings → Models, top half: the agent CLIs, the model providers connected
- * in OpenCode, and the vLLM servers. Providers show once the agent that
- * connects them is ready; a later check that fails keeps the last list it
- * loaded.
+ * The model provider dialog's host for Settings → Providers. Providers can
+ * be connected once the agent that connects them is ready; a later check
+ * that fails keeps the last list it loaded.
  */
 export function useAgentSection(): AgentSectionView {
 	const manager = useProviderManager();
@@ -52,7 +49,6 @@ export function useAgentSection(): AgentSectionView {
 	};
 
 	return {
-		manager,
 		providersReady: ready,
 		host,
 		addProvider: (providerId) => setRequest({ providerId: providerId ?? null })

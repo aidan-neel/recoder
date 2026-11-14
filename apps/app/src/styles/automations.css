@@ -26,12 +26,12 @@
 	min-width: var(--radix-select-trigger-width);
 }
 
-/* The ignored globs under their row: each a chip that holds its own remove button. */
+/* The ignored globs under their row, on its text's edge and its control's: each a chip that holds its own remove button. */
 .automations-globs {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
-	padding: 0 16px 14px;
+	padding: 0 var(--settings-end) 14px var(--settings-inset);
 }
 .automations-glob {
 	display: inline-flex;
@@ -39,7 +39,7 @@
 	align-items: center;
 	gap: 2px;
 	padding-left: 10px;
-	border-radius: 8px;
+	border-radius: var(--radius-control);
 	background: var(--bg-hover);
 	color: var(--text-secondary);
 }
@@ -66,7 +66,7 @@
 /* Recent: each row is one link, and the hover band runs edge to edge inside the card. */
 .automations-links {
 	overflow: hidden;
-	border-radius: 12px;
+	border-radius: var(--radius-card);
 }
 .automations-links [data-ui='hover-list-highlight'] {
 	border-radius: 0;
@@ -80,13 +80,13 @@
 }
 /* The focus ring follows the card's corners on the first and the last row. */
 .automations-link-row:nth-child(1 of .automations-link-row) {
-	--row-button-radius: 12px 12px 0 0;
+	--row-button-radius: var(--radius-card) var(--radius-card) 0 0;
 }
 .automations-link-row:last-child {
-	--row-button-radius: 0 0 12px 12px;
+	--row-button-radius: 0 0 var(--radius-card) var(--radius-card);
 }
 .automations-link-row:nth-child(1 of .automations-link-row):last-child {
-	--row-button-radius: 12px;
+	--row-button-radius: var(--radius-card);
 }
 .automations-link-row [data-ui='row-button'] {
 	color: var(--text-primary);

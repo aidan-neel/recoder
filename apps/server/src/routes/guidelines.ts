@@ -107,14 +107,15 @@ app.get('/repos/:id', async (c) => {
 	const host = repoFileHost(repo);
 
 	return withHost(c, async () => {
-		const head = await host.defaultBranch();
-
-		const [file, pending] = await Promise.all([
-			readRepoGuidelinesFile(host, head.branch),
+		const [head, pending] = await Promise.all([
+			host.defaultBranch(),
 			host.findPending(BRANCH_PREFIX).catch(() => null)
 		]);
 
-		const pendingFile = pending ? await readRepoGuidelinesFile(host, pending.branch).catch(() => null) : null;
+		const [file, pendingFile] = await Promise.all([
+			readRepoGuidelinesFile(host, head.branch),
+			pending ? readRepoGuidelinesFile(host, pending.branch).catch(() => null) : null
+		]);
 
 		const body: RepoGuidelines = {
 			repoId: repo.id,

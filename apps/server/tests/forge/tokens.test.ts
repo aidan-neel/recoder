@@ -2,7 +2,8 @@ import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { clearToken, hasToken, setToken, tokenEnv } from '../../src/forge/tokens';
+import { clearToken, hasToken, initTokenStore, setToken, tokenEnv } from '../../src/forge/tokens';
+import { SealedValueError } from '../../src/secrets/seal';
 
 const originalDataDir = process.env.RECODER_DATA_DIR;
 
@@ -18,13 +19,45 @@ function restoreDataDir(): void {
 
 afterAll(restoreDataDir);
 
-test('saving another provider preserves tokens not loaded in memory', () => {
+test('saving another provider preserves tokens not loaded in memory, sealed', () => {
 	const file = join(process.env.RECODER_DATA_DIR!, 'tokens.json');
 
 	writeFileSync(file, JSON.stringify({ github: 'saved-github' }));
 	setToken('gitlab', 'saved-gitlab');
-	expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ github: 'saved-github', gitlab: 'saved-gitlab' });
+
+	const stored = JSON.parse(readFileSync(file, 'utf8'));
+
+	expect(stored.github).toStartWith('enc:v1:');
+	expect(stored.gitlab).toStartWith('enc:v1:');
+	expect(tokenEnv('github').GH_TOKEN).toBe('saved-github');
+	expect(tokenEnv('gitlab').GITLAB_TOKEN).toBe('saved-gitlab');
 	expect(statSync(file).mode & 0o777).toBe(0o600);
+});
+
+test('a plaintext tokens file from before sealing is sealed at start and still works', () => {
+	const file = join(process.env.RECODER_DATA_DIR!, 'tokens.json');
+
+	writeFileSync(file, JSON.stringify({ github: 'gho_plain_github', gitlab: 'glpat_plain_gitlab' }), { mode: 0o600 });
+	initTokenStore();
+
+	const raw = readFileSync(file, 'utf8');
+
+	expect(raw).not.toContain('gho_plain_github');
+	expect(raw).not.toContain('glpat_plain_gitlab');
+	expect(JSON.parse(raw).github).toStartWith('enc:v1:');
+	expect(tokenEnv('github').GH_TOKEN).toBe('gho_plain_github');
+	expect(tokenEnv('gitlab').GITLAB_TOKEN).toBe('glpat_plain_gitlab');
+});
+
+test('a sealed token copied to the other provider does not open', () => {
+	const file = join(process.env.RECODER_DATA_DIR!, 'tokens.json');
+
+	setToken('github', 'gho_only_github');
+
+	const { github } = JSON.parse(readFileSync(file, 'utf8'));
+
+	writeFileSync(file, JSON.stringify({ gitlab: github }));
+	expect(() => tokenEnv('gitlab')).toThrow(SealedValueError);
 });
 
 test('credentials survive a fresh process launched from another directory', () => {

@@ -20,6 +20,7 @@
 		"./form": "./src/components/form/index.ts",
 		"./display": "./src/components/display/index.ts",
 		"./content": "./src/components/content/index.ts",
+		"./chart": "./src/components/chart/index.ts",
 		"./styles.css": "./src/styles/index.css",
 		"./px-to-rem": "./px-to-rem.ts"
 	},
@@ -30,6 +31,7 @@
 	},
 	"dependencies": {
 		"@fontsource/geist-mono": "5.3.0",
+		"@fontsource/geist-sans": "5.3.0",
 		"@fontsource/inter": "5.3.0",
 		"@fontsource/lora": "5.3.0",
 		"clsx": "2.1.1",

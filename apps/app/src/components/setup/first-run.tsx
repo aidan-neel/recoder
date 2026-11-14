@@ -8,7 +8,6 @@ import { useFirstRun } from '@/lib/setup/use-first-run';
 
 import { Page } from '@/components/common/page';
 import { RepoBrowser } from '@/components/connections/repo-browser';
-import { TokenModal } from '@/components/connections/token-modal';
 import { ProviderModal } from '@/components/settings/providers/provider-modal';
 
 import { ModelStep } from './model-step';
@@ -50,12 +49,7 @@ export function FirstRun() {
 							onAdd={() => view.openDialog('provider')}
 						/>
 						<ModelStep done={steps.model} current={view.current === 'model'} offered={steps.provider} />
-						<RepoStep
-							done={steps.repo}
-							current={view.current === 'repo'}
-							onBrowse={() => view.openDialog('browse')}
-							onConnect={view.token.connect}
-						/>
+						<RepoStep done={steps.repo} current={view.current === 'repo'} onBrowse={() => view.openDialog('browse')} />
 					</Card>
 					<div className="setup-foot">
 						<p>Reviews run on this machine. Your model provider sees the code under review.</p>
@@ -67,7 +61,6 @@ export function FirstRun() {
 			</div>
 			<ProviderModal open={view.dialog === 'provider'} providerId={null} onOpenChange={view.dialogOpenChange} />
 			<RepoBrowser open={view.dialog === 'browse'} onOpenChange={view.dialogOpenChange} />
-			<TokenModal dialog={view.token} />
 		</Page>
 	);
 }

@@ -124,7 +124,8 @@ export interface ModelEntry {
 	label: string;
 	model: string;
 	baseUrl: string | null;
-	apiKeyPreview: string | null;
+	/** Whether an API key is saved. The key itself is never returned, not even in part. */
+	apiKeySet: boolean;
 	/** Reasoning levels this model accepts, when the provider reports them. */
 	efforts?: ReasoningEffort[];
 	/** The provider's default level for this model. */
@@ -169,7 +170,21 @@ export interface HostedProvider {
 	/** Where to check usage; null when the provider has no page for it. */
 	usageUrl: string | null;
 	connected: boolean;
-	apiKeyPreview: string | null;
+	/** Whether an API key is saved. The key itself is never returned, not even in part. */
+	apiKeySet: boolean;
+}
+
+/**
+ * A model's price in USD per million tokens, as models.dev and OpenRouter list it. `input` and `output` are always
+ * known; a cache price is null when the catalog lists none, and a call that used that kind of token then has no cost.
+ */
+export interface ModelCost {
+	input: number;
+	output: number;
+	/** Reading a token from the provider's prompt cache. */
+	cacheRead: number | null;
+	/** Writing a token to the provider's prompt cache. */
+	cacheWrite: number | null;
 }
 
 /** A model a hosted provider serves, from its catalog. */
@@ -177,8 +192,8 @@ export interface CatalogModel {
 	id: string;
 	name: string;
 	contextWindow: number | null;
-	/** Input price in USD per million tokens, when known. */
-	inputCost: number | null;
+	/** What the provider charges for the model, when it lists a price. */
+	cost: ModelCost | null;
 	/** False when the model needs an API Recoder doesn't speak yet (Responses, Anthropic Messages). */
 	supported: boolean;
 	/** Reasoning levels the model accepts, when the provider reports them. */
@@ -186,12 +201,48 @@ export interface CatalogModel {
 	defaultEffort?: ReasoningEffort;
 }
 
+/**
+ * The two models a person's reviews and chats run on, with their reasoning efforts. A null model follows the admin's
+ * settings (the Review model's saved pick; for the Subagent model, the Review model). A null effort is the model's
+ * default (the Subagent model's follows the Review effort).
+ */
+export interface ModelPicks {
+	/** The "Review" model: reviewers, consolidation and chat. */
+	orchestratorModelId: string | null;
+	orchestratorEffort: ReasoningEffort | null;
+	/** The "Subagent" model: subagents and workers. */
+	specialistModelId: string | null;
+	specialistEffort: ReasoningEffort | null;
+}
+
+/**
+ * Who chooses the models members' reviews and chats run on. `choose` (the default) lets each member pick their own,
+ * and a member who has not follows the admin's settings. `enforced` runs every member's reviews and chats on
+ * exactly these picks, whatever they chose. The admin's own runs always use the admin's settings.
+ */
+export type ModelPolicy = { kind: 'choose' } | ({ kind: 'enforced' } & ModelPicks);
+
+/**
+ * `GET /api/me/models`: the picks that apply to the signed-in person. `enforced` is true when the admin's policy sets
+ * them, and a member's `PATCH /api/me/models` is then refused with 403 `{ error: 'models-enforced' }`.
+ */
+export interface MyModels extends ModelPicks {
+	enforced: boolean;
+}
+
+/**
+ * `PATCH /api/me/models`: the picks to change; a field left out keeps its value. A member saves their own picks. For
+ * the admin it changes the server's settings, the same save as `PATCH /api/settings/models`.
+ */
+export type MyModelsPatch = Partial<ModelPicks>;
+
 /** Reviewer model configuration (keys are never exposed). */
 export interface ModelSettings {
 	configured: boolean;
 	baseUrl: string;
 	model: string;
-	apiKeyPreview: string | null;
+	/** Whether an API key is saved. The key itself is never returned, not even in part. */
+	apiKeySet: boolean;
 	sharedModelId: string | null;
 	orchestratorModelId?: string | null;
 	/** Subagents and workers run on this second model; null follows the Review model. */
@@ -211,6 +262,20 @@ export interface ModelSettings {
 	tokenBudget: TokenBudget;
 	/** Whether reviews report low-severity findings; off keeps them to medium and above. */
 	reportLowSeverity: boolean;
+	/**
+	 * The providers switched off in Settings, by `providerKey` (`cli:codex`, `opencode:anthropic`). Their models
+	 * leave every picker and the catalog, and a review whose pick runs on one fails before it starts.
+	 */
+	disabledProviders: string[];
+	/**
+	 * Model entry ids the admin switched off in Settings, sorted. The model lists the pickers read leave them out and a
+	 * hidden model cannot be newly picked (by the admin, a member or the enforced policy); a pick saved before it was
+	 * hidden keeps working until changed. `models` holds every model of a switched-on provider, hidden ones included, only
+	 * when asked with `?hidden=1`, so the chooser can show each with its switch.
+	 */
+	hiddenModels: string[];
+	/** Who picks the models members run on; see {@link ModelPolicy}. */
+	modelPolicy: ModelPolicy;
 	/** Where overrides are saved, e.g. `~/.recoder/data/review-config.json`. */
 	configPath?: string;
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
@@ -245,6 +310,12 @@ export interface ModelSettingsPatch {
 	subagentCap?: SubagentCap;
 	tokenBudget?: TokenBudget;
 	reportLowSeverity?: boolean;
+	/** Replaces the switched-off providers, by `providerKey`. */
+	disabledProviders?: string[];
+	/** Replaces the hidden models; an id the server does not list is dropped on save. */
+	hiddenModels?: string[];
+	/** Replaces the policy. An enforced policy must name models the server offers on providers that are switched on. */
+	modelPolicy?: ModelPolicy;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;

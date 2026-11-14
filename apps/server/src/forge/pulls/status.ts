@@ -1,5 +1,4 @@
 import {
-	PULL_LIST_REPO_MAX,
 	type MergePullInput,
 	type MergePullResult,
 	type PrCheck,
@@ -8,6 +7,7 @@ import {
 	type PullCommit,
 	type PullMergeMethod,
 	type PullRequest,
+	type PullState,
 	type PullStatus
 } from '@recoder/shared';
 import { GhError, isJsonObject } from '../cli.js';
@@ -19,11 +19,11 @@ export interface PullEntry {
 	status: PullStatus;
 }
 
-/** A repository's open pull requests, at most {@link PULL_LIST_REPO_MAX}. */
+/** One page of a repository's open pull requests. */
 export interface OpenPulls {
 	entries: PullEntry[];
-	/** The repository has more open pull requests than the list keeps. */
-	truncated: boolean;
+	/** Where the next page starts, or null on the last page. The forge decides what it means. */
+	nextCursor: string | null;
 }
 
 /**
@@ -34,10 +34,12 @@ export interface PullForge {
 	/** The forge keeps a conversation and takes new comments. */
 	comments: boolean;
 	checks: boolean;
-	/** Open pull requests, newest first, in as few forge calls as the forge allows. */
-	list(): Promise<OpenPulls>;
+	/** One page of at most {@link PULL_LIST_PAGE} open pull requests, from `after` (null for the first page). */
+	list(after: string | null): Promise<OpenPulls>;
 	/** One pull request in any state. */
 	view(n: number): Promise<PullEntry>;
+	/** The pull request's head commit alone, without the status fields a `view` costs. */
+	head(n: number): Promise<string>;
 	/** The pull request's commits, oldest first. */
 	commits(pull: PullRequest): Promise<PullCommit[]>;
 	/** Comments, review summaries and inline comments, in the order the forge lists them. */
@@ -57,14 +59,6 @@ export class PullHeadMoved extends Error {
 	constructor() {
 		super('The pull request has new commits since you loaded it. Reload and try again.');
 	}
-}
-
-/** How many open pull requests to ask a forge for: one more than the list keeps, so a cut list shows. */
-export const OPEN_PULLS_ASKED = PULL_LIST_REPO_MAX + 1;
-
-/** The first {@link PULL_LIST_REPO_MAX} of a forge's {@link OPEN_PULLS_ASKED} newest open pull requests. */
-export function capOpenPulls(entries: PullEntry[]): OpenPulls {
-	return { entries: entries.slice(0, PULL_LIST_REPO_MAX), truncated: entries.length > PULL_LIST_REPO_MAX };
 }
 
 /**
@@ -92,6 +86,14 @@ export function mergeRefusal(err: unknown): MergePullResult {
 	return refusedMerge(err.message);
 }
 
+/** `locked` is GitLab's brief state while a merge runs, so the request still reads as open. */
+export const GITLAB_STATES: Record<string, PullState> = {
+	opened: 'open',
+	locked: 'open',
+	merged: 'merged',
+	closed: 'closed'
+};
+
 /** Counts the head commit's checks by how each ended; a skipped check counts as passed. Null with no checks. */
 export function tallyChecks(states: PrCheck['state'][]): PullCheckTally | null {
 	if (states.length === 0) return null;
@@ -102,6 +104,13 @@ export function tallyChecks(states: PrCheck['state'][]): PullCheckTally | null {
 
 	return tally;
 }
+
+/** How GitHub's commit statuses, legacy checks, end up as check states; a state not listed is a failure. */
+export const STATUS_CONTEXT_STATES: Record<string, PrCheck['state']> = {
+	SUCCESS: 'passed',
+	PENDING: 'pending',
+	EXPECTED: 'pending'
+};
 
 /** Which tally count each check state adds to. */
 const CHECK_OUTCOME: Record<PrCheck['state'], keyof PullCheckTally> = {

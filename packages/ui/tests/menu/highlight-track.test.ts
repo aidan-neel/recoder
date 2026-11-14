@@ -22,6 +22,14 @@ let nextFrame = 1;
 /** The tracker's mutation callback, so a test can report list changes as a commit would. */
 let notify: () => void = () => {};
 
+/** The attributes the tracker asked to hear about. */
+let watched: string[] = [];
+
+/** Reports a row's attribute changing, as the browser would: only when the tracker watches it. */
+function flip(attribute: string): void {
+	if (watched.includes(attribute)) notify();
+}
+
 /** How many times the tracker read the selected row's box. */
 let reads = 0;
 
@@ -110,7 +118,9 @@ beforeEach(() => {
 				notify = callback;
 			}
 
-			observe(): void {}
+			observe(_target: unknown, options: { attributeFilter?: string[] }): void {
+				watched = options.attributeFilter ?? [];
+			}
 
 			disconnect(): void {}
 		},
@@ -211,5 +221,17 @@ describe('trackHighlight', () => {
 		flush();
 
 		expect(highlight.snap).toBe(true);
+	});
+
+	test('a row marked current moves the highlight onto it', () => {
+		const { highlight, container } = setup();
+		const next = new FakeElement(84);
+
+		next.offsetParent = container;
+		container.selected = next;
+		flip('data-current');
+		flush();
+
+		expect(highlight.style.transform).toBe('translate3d(0, 84px, 0)');
 	});
 });

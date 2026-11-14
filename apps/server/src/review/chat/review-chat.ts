@@ -8,7 +8,8 @@ import { db, reviewDiffs, reviewProgress } from '../../store';
 import { flushReviewEvents, reportReviewReasoning } from '../session/events';
 import { configForAgent } from '../../models/models';
 import { streamChatCompletion } from '../../models/llm';
-import { withReviewMetrics } from '../../models/metrics';
+import { withUsageMetrics } from '../../models/metrics';
+import { withReviewModels } from '../../models/model-policy';
 import { extractJsonValue } from '../../models/json-extract';
 import { streamedMessage } from '../../models/response-text';
 import { CHAT_STYLE } from '../pipeline/prompts';
@@ -154,7 +155,16 @@ async function rerunFromChat(
  * as its brief, and the acknowledgement is finished before pipeline messages begin arriving.
  * A failed reply carries its reason as a notice, never as the model's words.
  */
-export async function startReviewChat(
+export function startReviewChat(
+	reviewId: string,
+	assignmentId: string,
+	text: string,
+	codeContext?: ReviewCodeContext
+): Promise<ReviewChatMessage> {
+	return withReviewModels(reviewId, () => replyInReview(reviewId, assignmentId, text, codeContext));
+}
+
+async function replyInReview(
 	reviewId: string,
 	assignmentId: string,
 	text: string,
@@ -245,7 +255,7 @@ export async function startReviewChat(
 		.map((tool) => `${tool.command}\n${tool.result?.content?.slice(0, 4000) ?? tool.summary ?? ''}`)
 		.join('\n\n');
 
-	const generation = withReviewMetrics(reviewId, 'discussion', async () => {
+	const generation = withUsageMetrics(reviewId, 'discussion', async () => {
 		let reasoning = '';
 		let lastUpdate = 0;
 

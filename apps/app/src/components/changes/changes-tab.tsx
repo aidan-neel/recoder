@@ -15,6 +15,7 @@ import { useRunView } from '@/lib/run/use-run';
 import { pullHref } from '@/lib/shell/routes';
 import { useKeys } from '@/lib/shell/use-keys';
 
+import { PanelResizer } from '@/components/common/panel-resizer';
 import { RunBanner } from '@/components/pull/run-banner';
 
 import type { ChangesMode } from './changes-tools';
@@ -125,6 +126,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 				) : (
 					<FileTree tree={tree} current={current} onOpenFile={(path) => scrollToFile(scroller.current, path)} />
 				)}
+				<PanelResizer panel="changes" label="Resize file tree" />
 			</aside>
 			<div ref={scroller} className="changes-main">
 				<div className="changes-stack">

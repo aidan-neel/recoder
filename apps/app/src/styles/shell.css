@@ -1,20 +1,83 @@
+/* ───────── Frame: the sidebar's column beside the page ───────── */
+/*
+ * Hiding the sidebar shrinks its column to 0. The sidebar keeps its width and rides the column's right edge, so it
+ * slides out whole, its text never rewraps, and the page's left edge stays glued to it: one property on one clock,
+ * nothing fades or overlaps. Every row in the sidebar keeps one lane: icons centred 24px in, text 40px in.
+ */
+.app-frame {
+	--dur-sidebar: 220ms;
+	--ease-sidebar: cubic-bezier(0.2, 0, 0, 1);
+
+	display: grid;
+	height: 100dvh;
+	grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+	overflow: clip;
+	background: var(--bg-canvas);
+	color: var(--text-primary);
+	transition: grid-template-columns var(--dur-sidebar) var(--ease-sidebar);
+}
+.app-frame[data-sidebar='closed'] {
+	grid-template-columns: 0 minmax(0, 1fr);
+}
+
 /* ───────── Sidebar: who you are, where you can go, what ran last ───────── */
+/* Its own layer, contained, so sliding moves the layer and never repaints or relays out what is inside. */
 .sidebar {
 	display: flex;
 	width: var(--sidebar-width);
 	height: 100dvh;
 	flex-direction: column;
-	overflow: hidden;
+	justify-self: end;
 	border-right: 1px solid var(--line-subtle);
 	background: var(--bg-chrome);
-	transition:
-		translate var(--dur-disclose) var(--ease-menu),
-		opacity var(--dur-toggle) ease-out;
+	contain: strict;
+	will-change: transform;
+	transition: visibility 0s linear;
 }
+/* Once it is out of sight it stops painting. */
 .app-frame[data-sidebar='closed'] .sidebar {
+	visibility: hidden;
+	transition-delay: var(--dur-sidebar);
+}
+
+/*
+ * The page bar's button that brings the sidebar back. It opens from zero width at the bar's left edge as the sidebar
+ * leaves, on the sidebar's clock, so the breadcrumb beside it slides instead of jumping.
+ */
+.sidebar-reveal {
+	display: flex;
+	width: 0;
+	flex-shrink: 0;
+	margin-right: -8px;
+	clip-path: inset(-4px);
 	opacity: 0;
-	translate: -16px 0;
-	pointer-events: none;
+	transition:
+		width var(--dur-sidebar) var(--ease-sidebar),
+		margin var(--dur-sidebar) var(--ease-sidebar),
+		opacity var(--dur-hover) ease-out;
+}
+.app-frame[data-sidebar='closed'] .sidebar-reveal {
+	width: var(--size-icon-md);
+	margin-right: 0;
+	margin-left: -6px;
+	opacity: 1;
+	transition:
+		width var(--dur-sidebar) var(--ease-sidebar),
+		margin var(--dur-sidebar) var(--ease-sidebar),
+		opacity var(--dur-sidebar) ease-out;
+}
+
+/* A drag follows the pointer with no easing; the open and close slide is untouched. */
+.app-frame:has([data-ui='resize-handle'][data-dragging]) {
+	transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.app-frame,
+	.app-frame .sidebar,
+	.app-frame .sidebar-reveal {
+		transition: none;
+	}
 }
 
 .sidebar-head {
@@ -23,25 +86,90 @@
 	flex-shrink: 0;
 	align-items: center;
 	gap: 2px;
-	padding: 0 8px 0 10px;
+	/* The text of an Inter line sits a little low in its box, and the page bar loses 1px to its border; 2px lifts the row onto whole pixels, level with the bar's title. */
+	padding: 0 8px 2px;
 }
 
-/* The account row is a quiet menu trigger: square initial, login, chevron. */
+/*
+ * Settings swaps two spots of the sidebar: the account row for Back to app, the places and reviews for its sections.
+ * Each spot stacks both layers in one grid cell. The old one fades out on the hover clock, then the new one fades in
+ * over the rest of --dur-swap: a cross-fade would put two labels on one lane at half strength. The search, the
+ * toggle and the foot stay still. Settings opened or reloaded paints at once: only a change of page runs the fade.
+ * The arriving layer turns visible at once, still at opacity 0, so keyboard focus can land in it on the first frame.
+ */
+.sidebar-swap {
+	--swap-out: var(--dur-hover);
+	--swap-in: calc(var(--dur-swap) - var(--dur-hover));
+
+	display: grid;
+	min-width: 0;
+	grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+.sidebar-swap-head {
+	flex: 0 1 auto;
+	margin-right: auto;
+}
+.sidebar-swap-body {
+	min-height: 0;
+	flex: 1;
+}
+.sidebar-layer {
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+	flex-direction: column;
+	grid-area: 1 / 1;
+	transition: opacity var(--swap-in) ease-out var(--swap-out);
+}
+.sidebar-layer[data-shown='false'] {
+	visibility: hidden;
+	opacity: 0;
+	transition:
+		opacity var(--swap-out) ease-out,
+		visibility 0s linear var(--swap-out);
+}
+.sidebar-swap-head .sidebar-layer {
+	flex-direction: row;
+	align-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.sidebar-layer,
+	.sidebar-layer[data-shown='false'] {
+		transition: none;
+	}
+}
+
+/* Back to app holds the account row's place and the nav rows' lanes: its arrow in the icon lane, its words on the text lane. */
+.sidebar-back {
+	width: auto;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.sidebar-back:hover {
+	background: var(--bg-hover);
+}
+
+/* The account row is a quiet menu trigger: square initial, login, chevron. The initial sits in the icon lane. */
 .account {
 	display: flex;
 	min-width: 0;
-	height: 30px;
+	height: 28px;
 	flex: 0 1 auto;
 	align-items: center;
-	gap: 8px;
+	gap: 7px;
 	margin-right: auto;
-	padding: 0 8px 0 6px;
-	border-radius: 8px;
+	padding: 0 8px 0 7px;
+	border-radius: var(--radius-control);
 	color: var(--text-primary);
 	font-size: var(--font-size-label);
 	font-weight: 500;
 	outline: none;
 	transition: background-color var(--dur-hover) ease-out;
+}
+.account .avatar {
+	width: 18px;
+	height: 18px;
+	font-size: 10px;
 }
 .account:hover,
 .account[data-state='open'] {
@@ -60,24 +188,26 @@
 	height: 12px;
 	flex-shrink: 0;
 	color: var(--text-faint);
-	transition: rotate var(--dur-toggle) var(--ease-menu);
-}
-.account[data-state='open'] > svg {
-	rotate: 180deg;
 }
 
+/* The sidebar's lists: compact rows on a small radius, the hover a quiet wash, the place on screen a still fill. */
+.sidebar [data-ui='hover-list-highlight'] {
+	border-radius: var(--radius-row);
+}
 .sidebar-nav {
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
-	padding: 6px 10px 0;
+	gap: 2px;
+	padding: 4px 8px 0;
 }
 .nav-item {
-	height: 32px;
+	--row-button-radius: var(--radius-row);
+
+	height: 28px;
 	align-items: center;
-	gap: 10px;
-	padding: 0 10px;
-	color: var(--text-muted);
+	gap: 8px;
+	padding: 0 6px 0 8px;
+	color: var(--text-secondary);
 	font-size: var(--font-size-label);
 	line-height: 18px;
 }
@@ -98,14 +228,13 @@
 	color: var(--text-primary);
 }
 .nav-item[data-active] {
-	font-weight: 500;
+	background: var(--bg-hover);
 }
 .nav-count {
 	margin-left: auto;
 	color: var(--text-faint);
-	font-size: 12px;
+	font-size: var(--font-size-meta);
 	font-variant-numeric: tabular-nums;
-	font-weight: 400;
 }
 
 /* Recent reviews: two lines a row, the state as a glyph and as words. */
@@ -114,27 +243,90 @@
 	min-height: 0;
 	flex: 1;
 	flex-direction: column;
-	margin-top: 22px;
+	margin-top: 20px;
 }
 .recent-label {
-	padding: 0 20px 6px;
+	padding: 0 16px 2px;
+	color: var(--text-subtle);
 }
+/* The 2px on top keeps the first row's focus ring inside the scroller, which clips. */
 .recent-list {
 	display: flex;
 	min-height: 0;
 	flex-direction: column;
-	gap: 1px;
+	gap: 2px;
 	overflow-y: auto;
-	padding: 0 10px 12px;
-	scrollbar-width: none;
+	padding: 2px 8px 12px;
 }
 .recent-item {
+	--row-button-radius: var(--radius-row);
+
 	align-items: flex-start;
-	gap: 10px;
-	padding: 6px 10px;
+	gap: 8px;
+	padding: 5px 8px;
 }
 .recent-item [data-ui='status-glyph'] {
 	margin-top: 1px;
+}
+.recent-mark {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	margin-top: 1px;
+	padding: 1px;
+	color: var(--text-subtle);
+	stroke-width: 1.75;
+	transition: color var(--dur-hover) ease-out;
+}
+.recent-item:hover .recent-mark,
+.recent-item[data-active] .recent-mark {
+	color: var(--text-primary);
+}
+/* The row's "more" button waits until the row is pointed at, focused, or its menu is open; the text steps aside for it. */
+.recent-entry {
+	position: relative;
+}
+.recent-more {
+	position: absolute;
+	top: 50%;
+	right: 4px;
+	opacity: 0;
+	transform: translateY(-50%);
+	transition:
+		opacity var(--dur-hover) ease-out,
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
+}
+.recent-entry:hover .recent-more,
+.recent-entry:focus-within .recent-more,
+.recent-more[data-state='open'] {
+	opacity: 1;
+}
+.recent-entry:hover .recent-text,
+.recent-entry:focus-within .recent-text,
+.recent-entry:has([data-state='open']) .recent-text {
+	padding-right: 24px;
+}
+@media (hover: none) {
+	.recent-more {
+		opacity: 1;
+	}
+	.recent-text {
+		padding-right: 24px;
+	}
+}
+/* Chats sit above the reviews at their own height; the reviews take the rest and scroll. */
+.recent-chats {
+	flex: none;
+}
+.recent-chats .recent-list {
+	overflow: visible;
+	padding-bottom: 0;
+}
+/* A placeholder row on the same lanes as the row that replaces it. */
+.recent-skeleton {
+	gap: 8px;
+	padding: 0 8px;
 }
 .recent-text {
 	display: flex;
@@ -150,35 +342,35 @@
 	white-space: nowrap;
 	transition: color var(--dur-hover) ease-out;
 }
+.recent-text .meta {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .recent-item:hover .recent-title,
 .recent-item[data-active] .recent-title {
 	color: var(--text-primary);
 }
-.recent-empty {
-	padding: 2px 20px;
-	color: var(--text-faint);
-	font-size: var(--font-size-meta);
-	line-height: 18px;
-}
 
 .sidebar-foot {
 	display: flex;
-	height: 52px;
+	height: var(--bar-height);
 	flex-shrink: 0;
 	align-items: center;
 	gap: 2px;
-	padding: 0 8px 0 10px;
+	padding: 0 8px;
 }
+/* The model in use: its dot centred in the icon lane, its name on the text lane. */
 .model-chip {
 	display: flex;
 	min-width: 0;
-	height: 30px;
+	height: 28px;
 	align-items: center;
-	gap: 10px;
+	gap: 8px;
 	margin-right: auto;
-	padding: 0 8px 0 10px;
-	border-radius: 8px;
-	color: var(--text-primary);
+	padding: 0 8px;
+	border-radius: var(--radius-control);
+	color: var(--text-secondary);
 	font-size: var(--font-size-label);
 	font-weight: 500;
 	outline: none;
@@ -199,6 +391,7 @@
 	width: 6px;
 	height: 6px;
 	flex-shrink: 0;
+	margin: 0 5px;
 	border-radius: 999px;
 	background: var(--success);
 }
@@ -209,20 +402,27 @@
 	background: var(--sev-medium);
 }
 
-/* The button that brings a hidden sidebar back sits where the sidebar's own button was. */
-.sidebar-open {
-	margin-right: 4px;
+/* ───────── Command palette ───────── */
+/* A pull request's mark draws at the kit's command icon size, so it matches the Go to icons below it. */
+[data-ui='command-item-leading'] > .pull-mark {
+	width: 14px;
+	height: 14px;
 }
 
 /* ───────── Shortcuts sheet ───────── */
+/* Every group label stands 16px clear of what is above it, the title included, and 4px over its own rows. */
 .shortcuts {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
-	gap: 4px 32px;
+	gap: 16px 32px;
+	padding-top: 4px;
+}
+.shortcuts .section-label {
+	margin-bottom: 4px;
 }
 .shortcut-row {
 	display: flex;
-	min-height: 30px;
+	min-height: 28px;
 	align-items: center;
 	justify-content: space-between;
 	gap: 16px;
@@ -232,4 +432,21 @@
 .shortcut-keys {
 	display: flex;
 	gap: 4px;
+}
+
+/* The name and role that head the account menu. */
+.account-menu-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 8px 4px;
+}
+.account-menu-name {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }

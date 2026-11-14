@@ -1,26 +1,42 @@
-/* ───────── Changes: the file tree beside the diff ───────── */
+/*
+ * ───────── Changes: the file tree beside the diff ─────────
+ * --changes-width is the viewer's dragged width, set on <html>; it is never declared here, or this rule would shadow
+ * it. The tree never leaves the diff under 480px.
+ */
 .changes {
+	--changes-side: max(200px, min(var(--changes-width, 264px), calc(100cqw - 480px)));
+
 	display: grid;
 	min-height: 0;
 	flex: 1;
-	grid-template-columns: 264px minmax(0, 1fr);
+	grid-template-columns: var(--changes-side) minmax(0, 1fr);
 }
+/*
+ * The filter field starts on the page's gutter, level with the diff's first box; the rows' fill reaches 8px past
+ * the gutter, so their text starts on it.
+ */
 .changes-side {
+	position: relative;
 	display: flex;
 	min-height: 0;
 	flex-direction: column;
 	gap: 8px;
-	padding: 10px 8px 0 10px;
+	padding: 12px 8px 0 var(--page-gutter);
 	border-right: 1px solid var(--line-subtle);
+}
+.changes-side .tree {
+	margin-left: -8px;
 }
 .changes-main {
 	min-width: 0;
 	min-height: 0;
 	overflow-y: auto;
-	padding: 12px 16px 48px;
-	scrollbar-width: thin;
-	scrollbar-color: var(--line-strong) transparent;
+	padding: 12px 0 48px;
 	scroll-padding-top: 12px;
+}
+/* The diff ends on the page's right gutter, as the header does. */
+.changes-main > .changes-stack {
+	padding: 0 var(--page-gutter);
 }
 .changes-stack {
 	display: flex;
@@ -36,7 +52,6 @@
 	flex-direction: column;
 	overflow-y: auto;
 	padding-bottom: 12px;
-	scrollbar-width: none;
 }
 .tree-row {
 	display: flex;
@@ -46,7 +61,7 @@
 	align-items: center;
 	gap: 6px;
 	padding: 0 8px 0 calc(8px + var(--depth, 0) * 14px);
-	border-radius: 7px;
+	border-radius: var(--radius-row);
 	color: var(--text-muted);
 	font-size: var(--font-size-label);
 	line-height: 18px;
@@ -124,12 +139,21 @@
 	font-size: var(--font-size-meta);
 }
 
-/* File card: a header that stays in view while its diff scrolls under it. */
+/*
+ * File card: a header that stays in view while its diff scrolls under it. Its border is a real border inside the
+ * box, so the card's edge lands on the gutter like every other box, and the coloured diff lines cannot cover it;
+ * the parts inside round to the radius left inside it, and the head keeps 11px of the 12px inset the border shares, so
+ * "Viewed" ends where the review banner's last button does. A card off screen skips layout and paint until it nears the
+ * view, and keeps its last drawn height: on a large pull request at 4x CPU throttle this cut the sidebar toggle's
+ * worst layout from 26–37ms to 6–17ms.
+ */
 .file-card {
-	border-radius: 10px;
+	border: 1px solid var(--line-card);
+	border-radius: var(--radius-row);
 	background: var(--bg-canvas);
-	box-shadow: 0 0 0 1px var(--line-card);
 	scroll-margin-top: 12px;
+	content-visibility: auto;
+	contain-intrinsic-size: auto 600px;
 }
 .file-head {
 	position: sticky;
@@ -139,8 +163,8 @@
 	height: 40px;
 	align-items: center;
 	gap: 8px;
-	padding: 0 12px 0 6px;
-	border-radius: 10px;
+	padding: 0 11px 0 5px;
+	border-radius: calc(var(--radius-row) - 1px);
 	background: var(--bg-raised);
 	font-size: var(--font-size-label);
 }
@@ -157,18 +181,25 @@
 	align-items: center;
 	gap: 8px;
 	padding: 0 8px 0 6px;
-	border-radius: 7px;
+	border-radius: var(--radius-control);
 	outline: none;
 	text-align: left;
 }
 .file-toggle:focus-visible {
 	box-shadow: var(--focus-ring);
 }
+/*
+ * The kit's optical chevron, as on its collapsible triggers: Lucide's chevron inks from a third of its width, so it
+ * hangs that far out and its ink starts on the toggle's padding; it turns about its ink's centre, so the ink keeps
+ * that edge open and shut.
+ */
 .file-toggle > svg {
 	width: 14px;
 	height: 14px;
 	flex-shrink: 0;
+	margin-left: calc(14px / -3);
 	color: var(--text-faint);
+	transform-origin: 56.25% 56.25%;
 	transition: rotate var(--dur-toggle) var(--ease-menu);
 }
 .file-card[data-open] .file-toggle > svg {
@@ -201,12 +232,12 @@
 	gap: 12px;
 	margin-left: auto;
 }
+/* No padding of its own, so "Viewed" ends on the head's inset. */
 .file-viewed {
 	display: inline-flex;
 	height: 28px;
 	align-items: center;
 	gap: 8px;
-	padding: 0 4px;
 	color: var(--text-muted);
 	font-size: var(--font-size-label);
 	user-select: none;
@@ -230,8 +261,8 @@
 }
 .file-body > :last-child {
 	overflow: hidden;
-	border-bottom-right-radius: 10px;
-	border-bottom-left-radius: 10px;
+	border-bottom-right-radius: calc(var(--radius-row) - 1px);
+	border-bottom-left-radius: calc(var(--radius-row) - 1px);
 }
 .file-body [data-ui='code-lines'] {
 	border-radius: 0;
@@ -265,7 +296,7 @@
 	align-items: center;
 	gap: 10px;
 	padding: 7px 10px 7px 12px;
-	border-radius: 8px;
+	border-radius: var(--radius-row);
 	background: var(--bg-raised);
 	box-shadow: inset 0 0 0 1px var(--line-control);
 	color: var(--text-primary);
@@ -347,6 +378,6 @@
 }
 .changes-skeleton > div {
 	height: 180px;
-	border-radius: 10px;
-	box-shadow: 0 0 0 1px var(--line-card);
+	border-radius: var(--radius-row);
+	box-shadow: inset 0 0 0 1px var(--line-card);
 }

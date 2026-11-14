@@ -49,7 +49,7 @@ export function claudeCodeModels(): ModelEntry[] {
 		label,
 		model,
 		baseUrl: null,
-		apiKeyPreview: null,
+		apiKeySet: false,
 		contextWindow: contextWindow ?? CONTEXT_WINDOW,
 		...claudeCodeEfforts(model)
 	}));

@@ -124,8 +124,8 @@ interface CommandBarProps {
  * A command search that lives in the page: a 44px field that opens in place
  * as a small modal. At rest it is a button. Open, the page dims under the
  * modal scrim and a live field lands exactly on the resting one, with its
- * results floating under it on the menu surface (a short fade, a 0.95 scale
- * and a 2px blur). Focus stays inside the bar, the page behind takes no
+ * results floating under it on the menu surface (a short fade from a 0.97
+ * scale). Focus stays inside the bar, the page behind takes no
  * pointer or scroll, Escape or a click outside closes it, and focus returns
  * to what had it before. Arrow keys move the highlight and wrap; Enter runs
  * the highlighted row.
@@ -209,8 +209,8 @@ export function CommandBar({
 											data-ui="command-bar-panel"
 											variants={variants}
 											className={cn(
-												'mt-1.5 flex max-h-(--command-bar-room) origin-top flex-col overflow-hidden',
-												'rounded-[12px] bg-menu text-fg shadow-(--shadow-menu)'
+												'mt-1 flex max-h-(--command-bar-room) origin-top flex-col overflow-hidden',
+												'rounded-(--radius-card) bg-menu text-fg shadow-(--shadow-menu)'
 											)}
 											onKeyDown={keepControlKeys}
 										>

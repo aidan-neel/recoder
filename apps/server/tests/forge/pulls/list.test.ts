@@ -27,9 +27,9 @@ afterAll(() => {
 	warn.mockRestore();
 });
 
-/** A forge's whole open list: nothing was cut. */
+/** A forge's last page of open pull requests. */
 function whole(...entries: PullEntry[]): OpenPulls {
-	return { entries, truncated: false };
+	return { entries, nextCursor: null };
 }
 
 function entry(number: number, updatedAt: string): PullEntry {
@@ -66,7 +66,7 @@ test('a repository whose forge fails is named in failures and the others still l
 	expect(list.failures).toEqual([{ repoId: 'b', error: expect.any(String) }]);
 	expect(list.failures[0].error).not.toContain('ghp_secret');
 	expect(list.failures[0].error).not.toContain('/home/al');
-	expect(list.truncatedRepoIds).toBeUndefined();
+	expect(list.nextCursors).toEqual({});
 });
 
 test('a failure is logged without the credentials the forge output quotes', async () => {
@@ -80,15 +80,15 @@ test('a failure is logged without the credentials the forge output quotes', asyn
 	expect(JSON.stringify(warn.mock.calls)).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz0123');
 });
 
-test('a repository whose forge list was cut is named in truncatedRepoIds', async () => {
+test('a repository with more pages has its next cursor in nextCursors', async () => {
 	const load = async (r: Repo): Promise<OpenPulls> => ({
 		entries: [entry(1, '2026-11-01T00:00:00Z')],
-		truncated: r.id === 'b'
+		nextCursor: r.id === 'b' ? 'cursor-2' : null
 	});
 
 	const list = await listOpenPulls([repo('a'), repo('b')], [], load);
 
-	expect(list.truncatedRepoIds).toEqual(['b']);
+	expect(list.nextCursors).toEqual({ b: 'cursor-2' });
 	expect(list.items).toHaveLength(2);
 });
 

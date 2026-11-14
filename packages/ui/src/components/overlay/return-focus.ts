@@ -2,6 +2,8 @@
 
 import { useCallback, useInsertionEffect, useRef, type RefCallback } from 'react';
 
+import { isKeyboardLast } from './input-modality';
+
 /**
  * Where each open kit dialog may send focus when it closes, best first, keyed
  * by its panel. A dialog opened from inside another one that is closing (a
@@ -25,7 +27,7 @@ export function rememberOpener(menu: Element, opener: Element): void {
 }
 
 /** The element a menu stands for once it closes: a dropdown's trigger, or what had focus as a context menu opened. */
-function menuOpener(menu: Element): Element | null {
+export function menuOpener(menu: Element): Element | null {
 	const trigger = menu.getAttribute('aria-labelledby');
 
 	return trigger ? document.getElementById(trigger) : (openers.get(menu) ?? null);
@@ -66,6 +68,23 @@ function focusMovedOut(panel: EventTarget | null): boolean {
 	const active = document.activeElement;
 
 	return active instanceof HTMLElement && active !== document.body && panel instanceof Node && !panel.contains(active);
+}
+
+/**
+ * Hands focus back to a menu's or select's trigger as it closes, for Radix's
+ * `onCloseAutoFocus`. After a key press it leaves Radix's own return, ring
+ * included, alone. After a pointer press Chrome would mark the returned focus
+ * visible, so it focuses the trigger without the ring instead; focus that the
+ * press already moved out of the panel stays where it is.
+ */
+export function returnFocusQuietly(event: Event, trigger: Element | null): void {
+	if (isKeyboardLast()) return;
+
+	event.preventDefault();
+
+	if (focusMovedOut(event.target) || !(trigger instanceof HTMLElement)) return;
+
+	trigger.focus({ preventScroll: true, focusVisible: false });
 }
 
 /** What a dialog wires into Radix: a ref for its panel and the close-focus handler for its content. */

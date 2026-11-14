@@ -1,4 +1,6 @@
-import { mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, rm, symlink } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cliEnv } from '../cli-process';
 import type { ToolLease } from '../tools/mcp-host';
@@ -49,6 +51,34 @@ const BUILT_IN_DENIES = [
 /** The environment the CLI runs with: the server's, less its keys and Cursor overrides. */
 export function cursorEnv(env: Env): Record<string, string> {
 	return cliEnv(env, STRIPPED);
+}
+
+/**
+ * The directory the CLI reads its config and sign-in from: `CURSOR_CONFIG_DIR`, else `$XDG_CONFIG_HOME/cursor` when
+ * that is set (the documented Linux path), else `~/.cursor`.
+ */
+export function cursorConfigDir(env: Env): string {
+	if (env.CURSOR_CONFIG_DIR) return env.CURSOR_CONFIG_DIR;
+	if (env.XDG_CONFIG_HOME) return join(env.XDG_CONFIG_HOME, 'cursor');
+
+	return join(env.HOME || homedir(), '.cursor');
+}
+
+/**
+ * The environment a `cursor-agent login` job runs with: the call env, plus the user's `CURSOR_CONFIG_DIR` and
+ * `CURSOR_DATA_DIR` back when they set them, so the sign-in lands where the user's own CLI reads it. Nothing else
+ * of the isolation a call gets is undone — there are no scratch dirs to drop, since a job never gets them.
+ */
+export function cursorSetupEnv(env: Env): Record<string, string> {
+	const out = cursorEnv(env);
+
+	for (const name of ['CURSOR_CONFIG_DIR', 'CURSOR_DATA_DIR'] as const) {
+		const value = env[name];
+
+		if (value) out[name] = value;
+	}
+
+	return out;
 }
 
 /** The folders one call or run is isolated in, under one scratch root, and the environment that points the CLI at them. */
@@ -109,19 +139,35 @@ function mcpConfig(lease: ToolLease | null): string | null {
 
 /**
  * Writes what a call's isolated dirs need: the deny-everything `cli-config.json` in `CURSOR_CONFIG_DIR`, the
- * `mcp.json` naming Recoder's server in `CURSOR_DATA_DIR` when the run leased one, and the working directory.
- * The CLI's sign-in is never touched: Recoder does not read, copy or link its credential file. Where the CLI
- * keeps a `cursor-agent login` sign-in is not confirmed; if it is the config folder moved here, a call does not
- * see it, and `CURSOR_API_KEY` is the sign-in that reaches every call.
+ * `mcp.json` naming Recoder's server in `CURSOR_DATA_DIR` when the run leased one, the working directory, and a
+ * link to the user's own sign-in.
  */
-export async function writeCursorConfig(place: CursorPlace, lease: ToolLease | null): Promise<void> {
+export async function writeCursorConfig(place: CursorPlace, env: Env, lease: ToolLease | null): Promise<void> {
 	await mkdir(place.config, { recursive: true });
 	await mkdir(place.data, { recursive: true });
 	await mkdir(place.cwd, { recursive: true });
 
 	await Bun.write(join(place.config, 'cli-config.json'), cliConfig(lease));
+	await linkSignIn(place, env);
 
 	const servers = mcpConfig(lease);
 
 	if (servers) await Bun.write(join(place.data, 'mcp.json'), servers);
+}
+
+/**
+ * Links the user's own `auth.json` — the credential file the CLI keeps next to `cli-config.json` in
+ * {@link cursorConfigDir} — into the call's isolated config dir, so a `cursor-agent login` sign-in reaches a run.
+ * A link, never a copy or a read: the CLI sees and refreshes the real file in place, and nothing else of the
+ * user's config (settings, rules, MCP servers, trust) is imported. On macOS the session lives in the Keychain
+ * instead, so there may be no file to link; `CURSOR_API_KEY` still signs every call in.
+ */
+async function linkSignIn(place: CursorPlace, env: Env): Promise<void> {
+	const real = join(cursorConfigDir(env), 'auth.json');
+	const link = join(place.config, 'auth.json');
+
+	if (!existsSync(real) || real === link) return;
+
+	await rm(link, { force: true });
+	await symlink(real, link);
 }

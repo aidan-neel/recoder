@@ -66,7 +66,8 @@ export interface PullConversationView {
 }
 
 /** Why the merge button is off: the first reason that holds. */
-export type MergeBlock = 'merged' | 'closed' | 'draft' | 'conflicts' | 'blocked' | 'unavailable';
+/** `unknown`: the forge has not yet worked out whether the pull request can merge. */
+export type MergeBlock = 'merged' | 'closed' | 'draft' | 'conflicts' | 'blocked' | 'unknown' | 'unavailable';
 
 /** Merging the pull request from the merge bar. */
 export interface MergeView {
