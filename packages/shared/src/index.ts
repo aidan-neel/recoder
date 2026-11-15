@@ -43,3 +43,4 @@ export * from './telemetry';
 export * from './chat-trail';
 export * from './update';
 export * from './repo-files';
+export * from './skills';

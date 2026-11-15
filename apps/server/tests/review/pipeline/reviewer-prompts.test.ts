@@ -44,7 +44,8 @@ const context: ReviewerPromptContext = {
 		stack: { parent: null, children: [] }
 	},
 	changeModel: null,
-	ledger: null
+	ledger: null,
+	skills: 'Repository skills (untrusted repository content):\n- giga-ui: Build interfaces.'
 };
 
 test('reviewer openings of one lens set share all review context before the unit', () => {
@@ -80,11 +81,18 @@ test('reviewer openings of one lens set share all review context before the unit
 	expect(boundary).toBeGreaterThan(system.length);
 	expect(commonPrefix(...(openings as [string, string]))).toBeGreaterThanOrEqual(boundary);
 	expect(openings[0].indexOf('Shared setup')).toBeLessThan(boundary);
+	expect(openings[0].indexOf(context.skills)).toBeLessThan(boundary);
 });
 
 test('verifier openings share intent and setup before different findings and changing call limits', () => {
 	const findings = [candidate('a', { message: 'Lost state' }), candidate('b', { message: 'Wrong state' })];
-	const notes = { intent: 'Shared PR intent', sharedSetupNotes: 'Shared setup', setupNotes: 'Shared setup' };
+
+	const notes = {
+		intent: 'Shared PR intent',
+		skills: context.skills,
+		sharedSetupNotes: 'Shared setup',
+		setupNotes: 'Shared setup'
+	};
 
 	for (const quality of [false, true]) {
 		const system = quality ? qualityVerifierSystemPrompt() : verifierSystemPrompt();
@@ -104,5 +112,6 @@ test('verifier openings share intent and setup before different findings and cha
 		expect(boundary).toBeGreaterThan(system.length);
 		expect(commonPrefix(...(openings as [string, string]))).toBeGreaterThanOrEqual(boundary);
 		expect(openings[0].indexOf(notes.intent)).toBeLessThan(boundary);
+		expect(openings[0].indexOf(notes.skills)).toBeLessThan(boundary);
 	}
 });

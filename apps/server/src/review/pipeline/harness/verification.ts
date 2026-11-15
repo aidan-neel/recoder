@@ -83,7 +83,12 @@ export function startVerification(run: ReviewRun, checks: () => Promise<void>): 
 		signal: run.controller.signal,
 		events: run.events,
 		task: run.task,
-		notes: () => ({ sharedSetupNotes, setupNotes: run.setupNotes, intent: intentBlock(run.intent) }),
+		notes: () => ({
+			sharedSetupNotes,
+			setupNotes: run.setupNotes,
+			intent: intentBlock(run.intent),
+			skills: run.skills
+		}),
 		intent: run.intent,
 		ledger: run.ledger,
 		inventory: run.inventory,

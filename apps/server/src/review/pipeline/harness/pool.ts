@@ -241,6 +241,7 @@ function delegateFor(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolCon
 		exec: Boolean(ctx.exec),
 		label: item.title,
 		changedFiles: ctx.inventory.files.filter((file) => !file.excludeReason).map((file) => file.path),
+		skills: ctx.skills,
 		setupNotes: ctx.setupNotes,
 		onTool: (tool) => ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role: 'worker' }),
 		onLog: (message) => ctx.events?.onLog?.(message, meta)

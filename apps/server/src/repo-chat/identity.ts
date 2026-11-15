@@ -20,10 +20,11 @@ export interface PromptTool {
 /**
  * The system prompt for a repository chat reply. `tools` is empty for a plain
  * chat completion, which cannot call tools; an agent run passes the chat tools,
- * so the list cannot drift from the tools the run is given.
+ * so the list cannot drift from the tools the run is given. `skillCatalog` lists the repository's skills, for a run
+ * that can read them.
  */
-export function recoderSystemPrompt(tools: readonly PromptTool[]): string {
-	return [IDENTITY, capabilities(tools), RULES, CHAT_STYLE].join('\n\n');
+export function recoderSystemPrompt(tools: readonly PromptTool[], skillCatalog = ''): string {
+	return [IDENTITY, capabilities(tools), RULES, skillCatalog, CHAT_STYLE].filter(Boolean).join('\n\n');
 }
 
 function capabilities(tools: readonly PromptTool[]): string {

@@ -6,6 +6,7 @@ import { withUsageMetrics } from '../models/metrics';
 import { modelFailure } from '../models/model-failure';
 import type { ModelConfig } from '../models/models';
 import { settingsOperation } from '../storage/backend';
+import type { LoadedSkill } from '../skills/discovery';
 import { answerWithAgent } from './chat-agent';
 import { INTERRUPTED, MAX_REPLY_CHARS, WRITER_HEARTBEAT_MS, type ChatTurn, type StoredRepoChat } from './chat-record';
 import { replyPrompt } from './chat-prompt';
@@ -32,6 +33,8 @@ export interface ReplyJob {
 	turn: ChatTurn;
 	/** Resolved from the request's settings, so a settings change mid-reply does not switch models. */
 	config: ModelConfig;
+	/** The skills the person attached to the message, read when it was accepted. */
+	skills: readonly LoadedSkill[];
 }
 
 /** A reply this server is writing. */
@@ -168,7 +171,7 @@ export async function answer(
 
 	trail.startReading();
 
-	const { messages, files } = await replyPrompt(job.repo, job.chat, signal);
+	const { messages, files } = await replyPrompt(job.repo, job.chat, job.skills, signal);
 
 	trail.finishReading(files);
 

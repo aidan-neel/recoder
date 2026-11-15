@@ -39,7 +39,7 @@ export async function queueReview(input: CreateReviewInput, startedBy = ADMIN_AC
 		const review = await createReviewSession(input, undefined, startedBy);
 
 		await saveReviewImages(review.id, input.images ?? []);
-		recordBrief(review.id, input.instructions);
+		recordBrief(review.id, input.instructions, input.skills);
 		await flushReviewEvents(review.id);
 
 		return startReviewSession(review.id);
@@ -81,6 +81,7 @@ export async function createReviewSession(
 		...(input.baselineCache === false ? { baselineCache: false as const } : {}),
 		...(input.findingHistory === false ? { findingHistory: false as const } : {}),
 		...(input.postComment ? { pullComment: { state: 'posting' as const, updatedAt: now } } : {}),
+		...(input.skills?.length ? { skills: input.skills } : {}),
 		createdAt: now,
 		updatedAt: now
 	};

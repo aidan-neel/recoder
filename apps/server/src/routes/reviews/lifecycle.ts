@@ -29,6 +29,8 @@ import { coordinator, storageTransaction } from '../../storage/backend';
 import { enqueueCommand } from '../../review/runtime/inbox';
 import { requestReviewControl } from '../../review/runtime/requests';
 import { ReviewChatError } from '../../review/chat/chat-input';
+import { isEmptyRequest, loadRepoSkills, pullHeadSha, skillNames, skillRequest } from '../../skills/repo-skills';
+import { skillsSchema } from '../../skills/names';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),
@@ -40,8 +42,28 @@ const createReviewSchema = z.object({
 	prTitle: z.string().max(500).optional(),
 	postComment: z.boolean().optional(),
 	instructions: z.string().max(4000).optional(),
-	images: imagesSchema
+	images: imagesSchema,
+	skills: skillsSchema
 });
+
+/** Reading a pull request's skills never runs past this. */
+const SKILLS_TIMEOUT_MS = 10_000;
+
+/**
+ * The skills the review loads: the attached ones and the ones its brief mentions with `@name`, looked up where the
+ * review will read them, the pull request's head when this server holds it, else the default branch. Refuses
+ * attached skills the repository lacks. A repository that is not tracked is left to the review's own refusal.
+ */
+async function reviewSkills(body: z.infer<typeof createReviewSchema>): Promise<string[] | undefined> {
+	const request = skillRequest(body.skills, body.instructions);
+	const repo = isEmptyRequest(request) ? undefined : await db.repos.get(body.repoId);
+
+	if (!repo) return body.skills;
+
+	const headSha = body.headSha ?? (await pullHeadSha(repo, body.prNumber));
+
+	return skillNames(await loadRepoSkills(repo, request, headSha, AbortSignal.timeout(SKILLS_TIMEOUT_MS)));
+}
 
 const app = new Hono();
 
@@ -246,9 +268,11 @@ app.post('/:id/replay', async (c) => {
  * no model is set up, and a review without images gets the queue's own refusal for that.
  */
 app.post('/', imageBodyLimit, async (c) => {
-	const body = await parseBody(c, createReviewSchema);
+	const parsed = await parseBody(c, createReviewSchema);
 
-	if (body instanceof Response) return body;
+	if (parsed instanceof Response) return parsed;
+
+	const body = { ...parsed, skills: await reviewSkills(parsed) };
 
 	if (body.start === false && body.images.length)
 		return c.json({ error: 'Images go with a review brief. Start the review to send them.' }, 400);

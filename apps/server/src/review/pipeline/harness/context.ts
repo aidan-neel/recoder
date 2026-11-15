@@ -87,6 +87,8 @@ export interface ReviewRun {
 	intent: ChangeIntent | null;
 	/** The repo's guidelines as numbered rules; null when the repo has none. */
 	ledger: RuleLedger | null;
+	/** What every agent reads about repository skills, built once; empty when there are none or no checkout. */
+	skills: string;
 	/** Findings people dismissed in this repository, newest first; empty without a repository. */
 	dismissals: Dismissal[];
 	/** How people in this repository decided each topic's findings, by topic id; empty without a repository. */
@@ -182,6 +184,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		changeModel: null,
 		intent: null,
 		ledger: null,
+		skills: '',
 		dismissals: input.repoId ? listDismissals(input.repoId) : [],
 		topicTallies: input.repoId ? topicTallies(input.repoId) : new Map(),
 		baseline: [],
@@ -395,6 +398,7 @@ export function poolContext(run: ReviewRun): PoolContext {
 		changeModel: run.changeModel,
 		intent: run.intent,
 		ledger: run.ledger,
+		skills: run.skills,
 		dismissals: run.dismissals,
 		requests: run.subagents.requests,
 		questions: run.questions,

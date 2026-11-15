@@ -105,7 +105,7 @@ test('a read-only agent sees run but its call is refused by the role gate', asyn
 	expect(offered.value?.results).toEqual([
 		{
 			isError: true,
-			text: 'Tool run is not available to your role. Your tools: read_diff, read_file, search, list_files.'
+			text: 'Tool run is not available to your role. Your tools: read_diff, read_file, search, list_files, load_skill.'
 		}
 	]);
 });

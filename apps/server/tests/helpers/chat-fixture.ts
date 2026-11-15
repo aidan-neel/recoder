@@ -54,7 +54,7 @@ export function chatting(repo: Repo, text: string, provider: ModelConfig['provid
 		messages: [user, reply]
 	};
 
-	const job: ReplyJob = { chat, repo, turn: { user, reply }, config: modelConfig(provider) };
+	const job: ReplyJob = { chat, repo, turn: { user, reply }, config: modelConfig(provider), skills: [] };
 
 	return { job, reply, trail: new TrailRecorder(reply, () => undefined), chat };
 }

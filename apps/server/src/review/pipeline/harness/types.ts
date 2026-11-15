@@ -73,6 +73,8 @@ export interface AdaptiveReviewInput {
 	instructions?: string | null;
 	/** Images the developer attached to the brief; each reviewer on the Review model reads them with it. */
 	images?: readonly ImageUpload[];
+	/** Names of the repository skills attached to the brief; every agent of the review reads them. */
+	skills?: readonly string[];
 	/** Subagents the review may run in all, from Settings (any count in tests); the shared default when unset. */
 	subagentCap?: SubagentCap;
 	/** How many tokens the review may spend, from Settings; Medium when unset. Sets how many reviewers run, their turns and the model-call ceiling; which lenses run is `lenses`. */

@@ -5,6 +5,7 @@ import { sliceLines } from '../evidence/text';
 import { RepoFilesError } from '../repo-files/errors';
 import { listDirectory, readRepoFileAt } from '../repo-files/listing';
 import { cleanRepoPath } from '../repo-files/paths';
+import { findSkills, type LoadedSkill } from '../skills/discovery';
 import { reviewFromChat } from './chat-review';
 import { repoAtDefaultBranch } from './repo-context';
 
@@ -86,6 +87,12 @@ export const CHAT_TOOLS: readonly ChatTool[] = [
 		description: 'List one page of files, optionally under a directory prefix.',
 		inputSchema: schema({ prefix: str }, []),
 		run: listFiles
+	},
+	{
+		name: 'load_skill',
+		description: "Read one of the repository's skills (its SKILL.md) on the default branch by name.",
+		inputSchema: schema({ name: str }, ['name']),
+		run: loadSkill
 	},
 	{
 		name: 'start_review',
@@ -220,6 +227,28 @@ async function listFiles(args: Record<string, unknown>, ctx: ChatToolContext): P
 	const more = entries.length > shown.length ? '\nThere are more entries. Pass a narrower prefix.' : '';
 
 	return { text: `${shown.join('\n')}${more}`, isError: false };
+}
+
+async function loadSkill(args: Record<string, unknown>, ctx: ChatToolContext): Promise<ToolOutcome> {
+	const taken = takeString(args, 'name');
+
+	if (taken.invalid || !taken.value) return refused('name must be the name of a skill.');
+
+	const tree = await repoAtDefaultBranch(ctx.repo);
+
+	if (!tree) return refused(NO_COPY);
+
+	const { skills } = await findSkills([{ root: tree.root, sha: tree.sha }], [taken.value], ctx.signal);
+	const [skill] = skills;
+
+	if (!skill) return refused(`This repository has no skill named "${taken.value}".`);
+
+	return { text: skillText(skill), isError: false };
+}
+
+/** The skill's `SKILL.md`, with a note when it was cut. */
+function skillText(skill: LoadedSkill): string {
+	return skill.truncated ? `${skill.text}\n…[truncated]` : skill.text;
 }
 
 async function startReview(args: Record<string, unknown>, ctx: ChatToolContext): Promise<ToolOutcome> {

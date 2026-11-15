@@ -74,7 +74,7 @@ this. Treat a lint error as a bug, not a suggestion.
   flat `lib/`:
   - Server `apps/server/src/`: `agents/<cli>/`, `models/`,
     `review/{pipeline,session,chat,guidelines,fixes}/`, `evidence/`,
-    `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `eval/`, `util/`,
+    `skills/`, `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `eval/`, `util/`,
     `cli/{args,doctor,init,mcp,models,output,report,review,run,runs,signals,skill,target,terminal,upgrade}/`.
     A command's view for a person is a `*-view.ts` beside the command, built
     from `cli/terminal/` (surface, paint, glyphs, text, live region, prompts).

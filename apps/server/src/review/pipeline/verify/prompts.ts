@@ -95,6 +95,8 @@ export interface VerifierNotes {
 	sharedSetupNotes?: string;
 	/** `intentBlock(run.intent)`; empty without an intent. */
 	intent: string;
+	/** The review's skills block, the same for every agent; empty when there are none. */
+	skills: string;
 }
 
 /** The prompt a verifier starts from; `turns` is its turn limit, the last of which is the final answer. */
@@ -108,6 +110,7 @@ export function verifierUserPrompt(
 
 	return [
 		notes.intent,
+		notes.skills,
 		notes.sharedSetupNotes ?? notes.setupNotes,
 		`Finding ${candidate.candidateId} (${candidate.severity}, ${candidate.agent}) at ${candidateLocation(candidate)}`,
 		candidate.title ? `Title: ${candidate.title}` : '',

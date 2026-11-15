@@ -314,7 +314,8 @@ test('reviewers assigned different lenses wait on the same warm-start gate', asy
 						pr: { title: '', body: '', context: '', inventory: buildInventory(''), repo: null },
 						changeModel: null,
 						intent: null,
-						ledger: null
+						ledger: null,
+						skills: ''
 					},
 					'',
 					'Unit'

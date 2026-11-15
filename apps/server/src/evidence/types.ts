@@ -5,7 +5,16 @@ export type RevisionAlias = 'head' | 'target' | 'mergeBase';
 export const REVISION_ALIASES: RevisionAlias[] = ['head', 'target', 'mergeBase'];
 
 /** `delegate` is not evidence: the agent loop hands it to a worker and never to the evidence store. */
-export const ACTION_NAMES = ['listFiles', 'readFile', 'search', 'readDiff', 'run', 'writeFile', 'delegate'] as const;
+export const ACTION_NAMES = [
+	'listFiles',
+	'readFile',
+	'search',
+	'readDiff',
+	'loadSkill',
+	'run',
+	'writeFile',
+	'delegate'
+] as const;
 
 export type ActionName = (typeof ACTION_NAMES)[number];
 

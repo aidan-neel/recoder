@@ -16,6 +16,8 @@ export function actionCommand(action: RetrievalAction): string {
 			return `list ${action.prefix || '.'}`;
 		case 'readDiff':
 			return `readDiff ${action.path ?? 'scoped hunks'}`;
+		case 'loadSkill':
+			return `skill ${action.skill ?? ''}`.trim();
 		case 'run':
 			return `$ ${action.command ?? ''}`;
 		case 'writeFile':

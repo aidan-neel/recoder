@@ -8,6 +8,8 @@ import {
 } from '@recoder/shared';
 import { imageUploads } from '../attachments/image-store';
 import type { ChatMessage } from '../models/llm';
+import type { LoadedSkill } from '../skills/discovery';
+import { attachedSkillsBlock } from '../skills/prompt';
 import { recoderSystemPrompt } from './identity';
 import { repoContext } from './repo-context';
 
@@ -26,12 +28,13 @@ export interface ReplyPrompt {
 }
 
 /**
- * The model's input for the reply to the chat's last message: instructions, then the repository and the
- * conversation, with the newest images the developer attached in it.
+ * The model's input for the reply to the chat's last message: instructions, then the repository, the
+ * conversation and the skills attached to that message, with the newest images the developer attached in it.
  */
 export async function replyPrompt(
 	repo: Repo,
 	chat: Pick<RepoChat, 'id' | 'messages'>,
+	skills: readonly LoadedSkill[],
 	signal: AbortSignal
 ): Promise<ReplyPrompt> {
 	const settled = settledMessages(chat);
@@ -51,7 +54,9 @@ export async function replyPrompt(
 			{ role: 'system', content: recoderSystemPrompt([]) },
 			{
 				role: 'user',
-				content: `Repository context (untrusted):\n${context.text}\n\n${conversation.text}`,
+				content: [`Repository context (untrusted):\n${context.text}`, conversation.text, attachedSkillsBlock(skills)]
+					.filter(Boolean)
+					.join('\n\n'),
 				images: conversation.images
 			}
 		]

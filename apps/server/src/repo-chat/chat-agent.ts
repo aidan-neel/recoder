@@ -1,9 +1,11 @@
 import type { Repo, RepoChatMessage } from '@recoder/shared';
+import type { LoadedSkill } from '../skills/discovery';
 import type { AgentAdapter, AgentEvent, AgentReply, AgentRun, ToolRunner } from '../agents/contract';
 import { withMcpToolCatalog } from '../agents/tools/mcp-host';
 import { LlmError } from '../models/llm';
 import { withUsageMetrics } from '../models/metrics';
 import { StepUsage } from '../models/step-usage';
+import { attachedSkillsBlock, skillCatalogBlock } from '../skills/prompt';
 import { MAX_REPLY_CHARS } from './chat-record';
 import { agentConversation } from './chat-prompt';
 import {
@@ -16,6 +18,7 @@ import {
 	toolArguments,
 	type ChatToolContext
 } from './chat-tools';
+import { chatSkillCatalog } from './chat-skills';
 import { citationsFor, TrailRecorder, type ToolStepDetail } from './chat-trail';
 import { recoderSystemPrompt } from './identity';
 import type { ReplyJob } from './chat-reply';
@@ -37,6 +40,7 @@ export async function answerWithAgent(
 		const usage = new StepUsage(job.config);
 		const { runTool, onEvent } = chatHandlers(job, reply, trail, usage, signal, grew);
 		const { text, images } = await agentConversation(job.chat);
+		const catalog = skillCatalogBlock(await chatSkillCatalog(job.repo, signal));
 
 		let run: AgentRun | undefined;
 		let result: AgentReply | undefined;
@@ -47,7 +51,7 @@ export async function answerWithAgent(
 				agent.openRun({
 					model: job.config.model,
 					reasoningEffort: job.config.reasoningEffort,
-					system: recoderSystemPrompt(CHAT_TOOLS),
+					system: recoderSystemPrompt(CHAT_TOOLS, catalog),
 					tools: CHAT_TOOLS.map((tool) => tool.name),
 					runTool,
 					onEvent,
@@ -69,7 +73,7 @@ export async function answerWithAgent(
 			signal.addEventListener('abort', onAbort, { once: true });
 
 			try {
-				result = await run.prompt(conversationText(job.repo, text), {
+				result = await run.prompt(conversationText(job.repo, text, job.skills), {
 					tools: true,
 					timeoutMs: CHAT_RUN_TIMEOUT_MS
 				});
@@ -96,8 +100,10 @@ export async function answerWithAgent(
 	});
 }
 
-function conversationText(repo: Repo, transcript: string): string {
-	return `Repository: ${repo.name} (${repo.url}), default branch ${repo.defaultBranch}.\n\n${transcript}`;
+function conversationText(repo: Repo, transcript: string, skills: readonly LoadedSkill[]): string {
+	const attached = attachedSkillsBlock(skills);
+
+	return `Repository: ${repo.name} (${repo.url}), default branch ${repo.defaultBranch}.\n\n${transcript}${attached ? `\n\n${attached}` : ''}`;
 }
 
 /** The tool runner and the event handler for one reply. The runner stops at {@link MAX_CHAT_TOOL_CALLS}. */
@@ -205,6 +211,7 @@ function toolDetail(name: string, args: unknown): ToolStepDetail {
 	if (name === 'search') return searchDetail(record);
 	if (name === 'list_files') return listDetail(record);
 	if (name === 'start_review') return { command: `start_review #${pullLabel(record)}` };
+	if (name === 'load_skill') return { command: `load_skill ${textField(record, 'name') ?? ''}`.trim() };
 
 	return {};
 }

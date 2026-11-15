@@ -121,6 +121,8 @@ export interface Review {
 	 * earlier review of the pull request. An evaluation scores each review alone.
 	 */
 	findingHistory?: false;
+	/** Names of the repository skills attached to the review's brief. */
+	skills?: string[];
 	/** Present once someone asked Recoder to comment on the pull request. */
 	pullComment?: ReviewPullComment;
 	/** Findings posted to the pull request, by finding id, so posting again edits them. */
@@ -157,6 +159,8 @@ export interface CreateReviewInput {
 	instructions?: string;
 	/** Images that go with the brief (a screenshot of the bug), at most `MAX_IMAGES`; the review's models see them. */
 	images?: ImageUpload[];
+	/** Names of repository skills attached to the brief, at most `MAX_MESSAGE_SKILLS`; every agent of the review reads them. */
+	skills?: string[];
 }
 
 export interface CommandRun {

@@ -8,6 +8,8 @@ import { localGitDir } from '../forge/local/schema';
 import { detectProvider } from '../forge/providers';
 import { fetchPullPreview } from '../forge/pull-preview';
 import { tokenEnv } from '../forge/tokens';
+import { RepoFilesError } from '../repo-files/errors';
+import { listRepoSkills, pullHeadSha } from '../skills/repo-skills';
 import { TtlCache } from '../util/ttl-cache';
 import { db } from '../store';
 import { parseBody } from './parse-body';
@@ -21,6 +23,9 @@ import { parseBody } from './parse-body';
  */
 const pullsCache = new TtlCache<unknown>(30_000, 200, 60_000);
 const previewCache = new TtlCache<unknown>(60_000);
+
+/** Reading a repository's skills never runs past this. */
+const SKILLS_TIMEOUT_MS = 10_000;
 
 /** A local repo is a `file://` URL, and only a local repo may be one. */
 const createRepoSchema = z
@@ -95,6 +100,32 @@ app.get('/:id/pulls', async (c) => {
 		return c.json(prs);
 	} catch (err) {
 		if (err instanceof GhError) return c.json({ error: err.message, kind: err.kind }, 502);
+		throw err;
+	}
+});
+
+/**
+ * The skills the repository ships (`.claude/skills` and `.agents/skills`), by name. With `?pull=<number>` also
+ * those of the pull request's head when this server's git copy holds that commit; the head's version of a skill
+ * wins over the default branch's.
+ */
+app.get('/:id/skills', async (c) => {
+	const repo = await db.repos.get(c.req.param('id'));
+
+	if (!repo) return c.json({ error: 'repo not found' }, 404);
+
+	const pull = c.req.query('pull');
+	const number = pull === undefined ? undefined : Number(pull);
+
+	if (number !== undefined && (!Number.isSafeInteger(number) || number <= 0))
+		return c.json({ error: 'invalid PR number' }, 400);
+
+	try {
+		const headSha = number === undefined ? null : await pullHeadSha(repo, number);
+
+		return c.json({ skills: await listRepoSkills(repo, headSha, AbortSignal.timeout(SKILLS_TIMEOUT_MS)) });
+	} catch (err) {
+		if (err instanceof RepoFilesError) return c.json({ error: err.message }, err.status);
 		throw err;
 	}
 });

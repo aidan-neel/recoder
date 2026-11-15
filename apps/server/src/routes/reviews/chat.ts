@@ -20,13 +20,15 @@ import {
 import { findReviewCheckout } from '../../review/session/review-checkout';
 import { rereviewRequestSchema, runRereview } from '../../review/session/rereview';
 import { db } from '../../store';
+import { skillProblem, skillsSchema } from '../../skills/names';
 import { reviewWithDiff } from './shared';
 import { coordinator, settingsOperation } from '../../storage/backend';
 
 const chatSchema = z.object({
 	assignmentId: z.string().min(1).max(100),
 	text: z.string().trim().min(1).max(MAX_CHAT_MESSAGE_CHARS),
-	codeContext: reviewCodeContextSchema.optional()
+	codeContext: reviewCodeContextSchema.optional(),
+	skills: skillsSchema
 });
 
 const app = new Hono();
@@ -76,14 +78,19 @@ app.post('/:id/chat', async (c) => {
 	if (!parsed.success)
 		return c.json(
 			{
-				error: `Enter a message of at most ${MAX_CHAT_MESSAGE_CHARS.toLocaleString('en-US')} characters and a valid code selection.`
+				error:
+					skillProblem(parsed.error) ??
+					`Enter a message of at most ${MAX_CHAT_MESSAGE_CHARS.toLocaleString('en-US')} characters and a valid code selection.`
 			},
 			400
 		);
 
 	try {
 		return c.json(
-			await startReviewChat(c.req.param('id'), parsed.data.assignmentId, parsed.data.text, parsed.data.codeContext),
+			await startReviewChat(c.req.param('id'), parsed.data.assignmentId, parsed.data.text, {
+				codeContext: parsed.data.codeContext,
+				skills: parsed.data.skills
+			}),
 			202
 		);
 	} catch (error) {

@@ -169,6 +169,8 @@ export interface ReviewerPromptContext {
 	changeModel: ChangeModel | null;
 	intent: ChangeIntent | null;
 	ledger: RuleLedger | null;
+	/** The review's skills block (`reviewSkillsContext`), the same for every agent; empty when there are none. */
+	skills: string;
 }
 
 /** Changed files listed for orientation; a reviewer reads only its own unit's patch up front. */
@@ -240,6 +242,7 @@ export function reviewerUserPrompt(
 	return [
 		developerInstructions(ctx.directive),
 		...pullRequestLines(ctx.pr),
+		ctx.skills,
 		intentBlock(ctx.intent),
 		setupNotes,
 		heading === 'Unit' && !unit.purpose ? reviewerAssignment(unit, questions) : '',

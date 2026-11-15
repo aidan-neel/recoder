@@ -439,6 +439,7 @@ export function qualityVerifierUserPrompt(
 
 	return [
 		notes.intent,
+		notes.skills,
 		`Quality finding ${candidate.candidateId} (${candidate.category}) at ${candidateLocation(candidate)}`,
 		candidate.title ? `Title: ${candidate.title}` : '',
 		`Standard:\n${standard(candidate, notes.rule)}`,

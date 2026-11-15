@@ -39,7 +39,7 @@ test('read-only roles refuse execution and delegation before running or counting
 
 	for (const name of ['run', 'write_file', 'delegate']) {
 		expect(await gate.run(name, {})).toEqual({
-			text: `Tool ${name} is not available to your role. Your tools: read_diff, read_file, search, list_files.`,
+			text: `Tool ${name} is not available to your role. Your tools: read_diff, read_file, search, list_files, load_skill.`,
 			isError: true
 		});
 	}

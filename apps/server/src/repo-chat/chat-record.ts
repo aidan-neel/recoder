@@ -71,6 +71,11 @@ export function withImages(turn: ChatTurn, images: StoredImage[]): ChatTurn {
 	return images.length ? { ...turn, user: { ...turn.user, images } } : turn;
 }
 
+/** The turn with the names of the skills the person attached on their message, or as it is when there are none. */
+export function withSkills(turn: ChatTurn, skills: readonly string[] | undefined): ChatTurn {
+	return skills?.length ? { ...turn, user: { ...turn.user, skills: [...skills] } } : turn;
+}
+
 /** The chat with `turn` added and its reply's writer set, its first heartbeat at `now` by the storage clock. */
 export function withTurn(chat: StoredRepoChat, turn: ChatTurn, now: number): StoredRepoChat {
 	const at = new Date(now).toISOString();

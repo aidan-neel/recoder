@@ -222,6 +222,7 @@ async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal):
 					prsForCommit: (sha, signal) => prsForCommit(repo, provider, sha, signal),
 					instructions: await reviewInstructions(reviewId, initial.startedAt),
 					images,
+					skills: review.skills,
 					signal: analysis.signal,
 					subagentCap: effectiveSubagentCap(),
 					tokenBudget,
