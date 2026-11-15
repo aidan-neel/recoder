@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
-	matchCommands,
+	matchItems,
 	typedCommand,
 	withCommand,
 	type ComposerCommand
@@ -15,7 +15,7 @@ const COMMANDS: ComposerCommand[] = [
 
 /** The names of the commands that match a query, in the order the menu lists them. */
 function namesFor(query: string): string[] {
-	return matchCommands(COMMANDS, query).map((command) => command.name);
+	return matchItems(COMMANDS, query).map((command) => command.name);
 }
 
 describe('typedCommand', () => {
@@ -32,7 +32,7 @@ describe('typedCommand', () => {
 	});
 });
 
-describe('matchCommands', () => {
+describe('matchItems', () => {
 	test('lists every command in its own order for an empty query', () => {
 		expect(namesFor('')).toEqual(['summary', 'review', 'risks']);
 	});

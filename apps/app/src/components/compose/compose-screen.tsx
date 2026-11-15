@@ -10,6 +10,7 @@ import { useCompose } from '@/lib/compose/use-compose';
 import { useImageDraft } from '@/lib/compose/use-image-draft';
 import { useOpenStarted } from '@/lib/compose/use-open-started';
 import type { PullRow } from '@/lib/pulls/types';
+import { useRepoSkills } from '@/lib/skills/use-repo-skills';
 
 import { ComposerModels } from '@/components/ask/model-menu';
 import { Crumbs } from '@/components/common/crumbs';
@@ -36,7 +37,8 @@ const MODES: { value: ComposeMode; label: string }[] = [
  * opens the pull request. In Chat mode the field takes anything about the
  * repository; Enter opens the chat. The title and the mode sit over the
  * field; the repository, the pull request, images and models sit in its bar.
- * Images go with the brief or the chat's first message. The pull requests
+ * Images go with the brief or the chat's first message, and "@" offers the
+ * repository's skills, a chosen pull request's head included. The pull requests
  * with no review yet sit below; a click chooses one and puts the caret in
  * the field.
  */
@@ -48,6 +50,7 @@ export function ComposeScreen() {
 	const [browsing, setBrowsing] = useState(false);
 	const column = useRef<HTMLDivElement>(null);
 	const chat = compose.mode === 'chat';
+	const skills = useRepoSkills(skillSource(compose));
 
 	/** Starts a review or a chat and opens its page; a refusal stays in the composer's bar. */
 	function start(begin: () => Promise<string>): void {
@@ -135,6 +138,8 @@ export function ComposeScreen() {
 						onFiles={images.add}
 						images={images.images}
 						onRemoveImage={images.remove}
+						mentions={skills}
+						menuSide="bottom"
 						tools={
 							<>
 								<AttachImages onAttach={images.add} />
@@ -179,6 +184,15 @@ export function ComposeScreen() {
 			<RepoBrowser open={browsing} onOpenChange={browse} />
 		</Page>
 	);
+}
+
+/** Where "@" reads skills: the chosen pull request in Review mode, else the chosen repository. */
+function skillSource(compose: ComposeView): { repoId: string | null; pull?: number } {
+	const target = compose.mode === 'review' ? compose.pick?.target : undefined;
+
+	if (target?.kind === 'pull') return { repoId: target.repoId, pull: target.number };
+
+	return { repoId: compose.repoId };
 }
 
 /** What to write, by mode; a chat names its repository. */

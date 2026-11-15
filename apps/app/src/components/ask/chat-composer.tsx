@@ -1,6 +1,6 @@
 'use client';
 
-import { Composer, ComposerSend, ComposerStop, type ComposerCommand } from '@recoder/ui';
+import { Composer, ComposerSend, ComposerStop, type ComposerCommand, type ComposerMentions } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import { useDraft } from '@/lib/ask/use-draft';
@@ -25,6 +25,8 @@ interface ChatComposerProps {
 	/** What sending does, for a screen reader; "Send" by default. */
 	sendLabel?: string;
 	commands?: readonly ComposerCommand[];
+	/** What "@" offers: the repository's skills, which a message loads by naming them. */
+	mentions?: ComposerMentions;
 	/** Quiet tools at the bar's start, given a way to add words to what is written. */
 	tools?: (append: (words: string) => void) => ReactNode;
 	/** Controls before the send: the model menu. */
@@ -49,6 +51,7 @@ export function ChatComposer({
 	layout,
 	sendLabel,
 	commands,
+	mentions,
 	tools,
 	trailing,
 	images
@@ -75,6 +78,7 @@ export function ChatComposer({
 			invalid={draft.over}
 			linkFacts={linkFacts}
 			commands={commands}
+			mentions={mentions}
 			tools={
 				<>
 					{images ? <AttachImages onAttach={images.add} /> : null}

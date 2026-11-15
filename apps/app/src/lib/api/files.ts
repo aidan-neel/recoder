@@ -1,4 +1,4 @@
-import type { RepoFile, RepoTree } from '@recoder/shared';
+import type { RepoFile, RepoTree, SkillSummary } from '@recoder/shared';
 
 import { ApiError, request, seg } from './http';
 
@@ -40,5 +40,13 @@ export const filesApi = {
 	tree: (repoId: string, path: string, ref: string | undefined) =>
 		readOnceCopied(() => request<RepoTree>(`/api/repos/${seg(repoId)}/tree?${filesQuery(path, ref)}`)),
 	file: (repoId: string, path: string, ref: string | undefined) =>
-		readOnceCopied(() => request<RepoFile>(`/api/repos/${seg(repoId)}/file?${filesQuery(path, ref)}`))
+		readOnceCopied(() => request<RepoFile>(`/api/repos/${seg(repoId)}/file?${filesQuery(path, ref)}`)),
+
+	/** The skills the repository ships on its default branch, and with `pull` the ones its head adds or changes. */
+	async skills(repoId: string, pull?: number): Promise<SkillSummary[]> {
+		const query = pull === undefined ? '' : `?pull=${pull}`;
+		const listed = await request<{ skills: SkillSummary[] }>(`/api/repos/${seg(repoId)}/skills${query}`);
+
+		return listed.skills;
+	}
 };

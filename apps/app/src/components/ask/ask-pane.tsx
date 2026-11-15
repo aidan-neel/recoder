@@ -2,6 +2,8 @@
 
 import { useAskView } from '@/lib/ask/use-ask';
 import { useFollowEnd } from '@/lib/ask/use-follow-end';
+import { useSession } from '@/lib/pull/pull-session';
+import { useRepoSkills } from '@/lib/skills/use-repo-skills';
 
 import { AskComposer } from './ask-composer';
 import { AskSuggestions, AskThread } from './ask-thread';
@@ -10,13 +12,16 @@ import { AskSuggestions, AskThread } from './ask-thread';
  * The conversation with Recoder about the whole pull request, as a pane
  * beside the reading: its thread scrolls and sits on the composer, which stays
  * docked at the pane's foot with the "+" for a changed file, the "/"
- * commands and the models. While the thread is empty, questions to start
+ * commands, the "@" skills of the repository and the pull request's head,
+ * and the models. While the thread is empty, questions to start
  * from stand where the first message will. A sent question and its reply stay
  * in view as the reply arrives.
  */
 export function AskPane() {
 	const ask = useAskView({ kind: 'pull' });
 	const scroller = useFollowEnd(ask.replying);
+	const session = useSession();
+	const skills = useRepoSkills({ repoId: session.repoId, pull: session.number });
 
 	return (
 		<aside className="ask-pane" aria-labelledby="ask-pane-title">
@@ -32,7 +37,7 @@ export function AskPane() {
 				</div>
 			</div>
 			<div className="ask-pane-foot">
-				<AskComposer ask={ask} label="Ask about this pull request" />
+				<AskComposer ask={ask} label="Ask about this pull request" mentions={skills} />
 			</div>
 		</aside>
 	);

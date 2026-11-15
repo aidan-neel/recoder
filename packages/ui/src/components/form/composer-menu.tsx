@@ -1,13 +1,19 @@
 'use client';
 
 import { AnimatePresence, motion } from 'motion/react';
-import { useState, type KeyboardEvent, type RefObject } from 'react';
+import { useEffect, useState, type KeyboardEvent, type RefObject } from 'react';
 
 import { menuMotion } from '../../motion/presets';
 import { useMotionVariants } from '../../motion/reduced';
 import { PRESENCE } from '../overlay/panel';
 import { MenuHighlight } from '../menu/menu-highlight';
-import { matchCommands, typedCommand, withCommand, type ComposerCommand } from './composer-commands';
+import {
+	matchItems,
+	typedCommand,
+	withCommand,
+	type ComposerCommand,
+	type ComposerMenuItem
+} from './composer-commands';
 
 /** Where the menu opens: over the composer when it sits at a pane's foot, under it when it sits high on a page. */
 export type ComposerMenuSide = 'top' | 'bottom';
@@ -65,7 +71,7 @@ export function useCommandMenu({ value, onValueChange, commands, field }: Comman
 	const [dismissedAt, setDismissedAt] = useState<string | null>(null);
 	const [cursor, setCursor] = useState({ query: '', index: 0 });
 	const query = typedCommand(value) ?? (forced ? '' : null);
-	const matches = query === null ? [] : matchCommands(commands, query);
+	const matches = query === null ? [] : matchItems(commands, query);
 	const open = matches.length > 0 && dismissedAt !== value;
 	const active = cursor.query === query ? Math.min(cursor.index, matches.length - 1) : 0;
 
@@ -124,25 +130,51 @@ export function useCommandMenu({ value, onValueChange, commands, field }: Comman
 	return { open, matches, active, setActive, keyDown, pick, toggle, edit };
 }
 
-interface ComposerMenuProps {
-	menu: CommandMenu;
+/** What a composer menu shows: its rows, the active one, and how a row is picked. */
+interface MenuRows<Item extends ComposerMenuItem> {
+	open: boolean;
+	matches: readonly Item[];
+	active: number;
+	setActive: (index: number) => void;
+	pick: (item: Item) => void;
+}
+
+interface ComposerMenuProps<Item extends ComposerMenuItem> {
+	menu: MenuRows<Item>;
 	/** The listbox's id, which the field points at. */
 	id: string;
 	side: ComposerMenuSide;
+	/** The list's name for a screen reader: "Commands". */
+	label: string;
+	/** What each row's name starts with, as it is typed: "/" or "@". */
+	prefix: string;
 }
 
-/** The id of a command's row, for the field's `aria-activedescendant`. */
-export function commandOptionId(menuId: string, command: ComposerCommand): string {
-	return `${menuId}-${command.name}`;
+/** The id of a row, for the field's `aria-activedescendant`. */
+export function commandOptionId(menuId: string, item: ComposerMenuItem): string {
+	return `${menuId}-${item.name}`;
 }
 
 /**
- * The list of commands, floating over or under the composer from its left
- * edge, on the menu surface. Focus stays in the field; the pointer picks without
- * taking it. Rows show the command in mono, then what it does.
+ * A list of commands or mentions, floating over or under the composer from
+ * its left edge, on the menu surface. Focus stays in the field; the pointer
+ * picks without taking it. Rows show the name in mono, then what it is.
  */
-export function ComposerMenu({ menu, id, side }: ComposerMenuProps) {
+export function ComposerMenu<Item extends ComposerMenuItem>({
+	menu,
+	id,
+	side,
+	label,
+	prefix
+}: ComposerMenuProps<Item>) {
 	const variants = useMotionVariants(menuMotion);
+	const activeItem = menu.open ? menu.matches[menu.active] : undefined;
+	const activeId = activeItem ? commandOptionId(id, activeItem) : null;
+
+	/** Arrow keys can move the active row past the list's scroll, so it is brought back into view. */
+	useEffect(() => {
+		if (activeId) document.getElementById(activeId)?.scrollIntoView({ block: 'nearest' });
+	}, [activeId]);
 
 	return (
 		<AnimatePresence>
@@ -155,20 +187,23 @@ export function ComposerMenu({ menu, id, side }: ComposerMenuProps) {
 					data-side={side}
 					onMouseDown={(event) => event.preventDefault()}
 				>
-					<div id={id} role="listbox" aria-label="Commands" data-ui="composer-menu-list">
+					<div id={id} role="listbox" aria-label={label} data-ui="composer-menu-list">
 						<MenuHighlight selector="[aria-selected='true']" />
-						{menu.matches.map((command, index) => (
+						{menu.matches.map((item, index) => (
 							<div
-								key={command.name}
-								id={commandOptionId(id, command)}
+								key={item.name}
+								id={commandOptionId(id, item)}
 								role="option"
 								aria-selected={index === menu.active}
 								data-ui="composer-menu-item"
 								onPointerMove={() => menu.setActive(index)}
-								onClick={() => menu.pick(command)}
+								onClick={() => menu.pick(item)}
 							>
-								<span data-ui="composer-menu-name">/{command.name}</span>
-								<span data-ui="composer-menu-description">{command.description}</span>
+								<span data-ui="composer-menu-name">
+									{prefix}
+									{item.name}
+								</span>
+								<span data-ui="composer-menu-description">{item.description}</span>
 							</div>
 						))}
 					</div>

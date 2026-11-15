@@ -21,6 +21,7 @@ import { createSampleTelemetry } from './sample-telemetry';
 import { createSampleUpdate } from './sample-update';
 import { createSampleUsage } from './sample-usage';
 import { createSampleRepoChats } from './sample-repo-chat';
+import { createSampleSkills } from './sample-skills';
 import { sampleCommits } from './sample-pulls';
 import { SAMPLE_REVIEW } from './sample-review';
 import { adoptSampleRun, playSampleRun, type RunScript, type SampleRun } from './sample-run';
@@ -291,7 +292,8 @@ export function createSampleApi(): ApiClient {
 		...chat,
 		...repoChats,
 		chatMetrics: async (chatId) => sampleChatMetrics(await repoChats.repoChat(chatId)),
-		...createSampleFiles()
+		...createSampleFiles(),
+		...createSampleSkills()
 	};
 }
 

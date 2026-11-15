@@ -27,6 +27,7 @@ import type {
 	ReviewListItem,
 	ReviewMetrics,
 	SendRepoChatInput,
+	SkillSummary,
 	StartRepoChatInput
 } from '@recoder/shared';
 import { ORCHESTRATOR_ID } from '@recoder/shared';
@@ -131,6 +132,8 @@ export interface ApiClient {
 	repoTree: (repoId: string, path: string, ref?: string) => Promise<RepoTree>;
 	/** One file of a repository at `ref` (the default branch when omitted). */
 	repoFile: (repoId: string, path: string, ref?: string) => Promise<RepoFile>;
+	/** The skills a repository ships for agents, which "@" offers; with `pull`, its head's as well. */
+	repoSkills: (repoId: string, pull?: number) => Promise<SkillSummary[]>;
 }
 
 /** The first signed-in forge's login. */
@@ -198,7 +201,8 @@ export const liveApi: ApiClient = {
 	deleteRepoChat: chatsApi.delete,
 	followRepoChat: (chatId, handlers) => followStream(`/api/chats/${seg(chatId)}/events`, handlers),
 	repoTree: filesApi.tree,
-	repoFile: filesApi.file
+	repoFile: filesApi.file,
+	repoSkills: filesApi.skills
 };
 
 interface ApiContext {

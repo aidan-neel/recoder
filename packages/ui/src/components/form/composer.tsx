@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUp, Square, SquareSlash } from 'lucide-react';
+import { ArrowUp, AtSign, Square, SquareSlash } from 'lucide-react';
 import { useId, useRef, type ComponentProps, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
@@ -10,6 +10,7 @@ import type { ComposerCommand } from './composer-commands';
 import { useComposerFiles } from './composer-files';
 import { useInlineImages } from './composer-images';
 import { commandOptionId, ComposerMenu, focusAtEnd, useCommandMenu, type ComposerMenuSide } from './composer-menu';
+import { useMentionMenu, type ComposerMentions } from './composer-mentions';
 import type { LinkFacts } from './link-describe';
 import { LinkField } from './link-field';
 import type { InlineImage } from './link-image';
@@ -48,7 +49,9 @@ interface ComposerProps {
 	linkFacts?: LinkFacts;
 	/** The commands "/" offers; none leaves out the "/" button and the menu. */
 	commands?: readonly ComposerCommand[];
-	/** Where the "/" menu opens; over the composer by default. */
+	/** What "@" offers anywhere in the text; none leaves out the "@" button and the menu. */
+	mentions?: ComposerMentions;
+	/** Where the "/" and "@" menus open; over the composer by default. */
 	menuSide?: ComposerMenuSide;
 	/** Quiet tools at the bar's start, before the "/" button (`ComposerTool`s). */
 	tools?: ReactNode;
@@ -77,7 +80,9 @@ interface ComposerProps {
  * text, and a chip in the text where each image went in. Removing either
  * removes the image (`useInlineImages`).
  * With `commands`, a slash at the start of the field, or the "/" button,
- * opens a list of them; a pick puts its prompt in the field to send. The
+ * opens a list of them; a pick puts its prompt in the field to send. With
+ * `mentions`, an `@` anywhere, or the "@" button, opens a list of those; a
+ * pick puts `@name` in the text where it was typed. The
  * caller owns the text and the images and decides what a submit does; the
  * composer keeps only where in the text each image's chip sits.
  */
@@ -97,6 +102,7 @@ export function Composer({
 	spellCheck,
 	linkFacts,
 	commands = [],
+	mentions,
 	menuSide = 'top',
 	tools,
 	trailing,
@@ -110,13 +116,26 @@ export function Composer({
 	const field = useRef<HTMLDivElement>(null);
 	const { dropping, ...fileHandlers } = useComposerFiles(onFiles);
 	const menuId = useId();
+	const mentionId = useId();
 	const menu = useCommandMenu({ value, onValueChange, commands, field });
 	const inline = useInlineImages({ value, onValueChange: menu.edit, images, onRemoveImage, field });
-	const activeCommand = menu.open ? menu.matches[menu.active] : undefined;
+	const mention = useMentionMenu({ text: inline.text, onTextChange: inline.edit, items: mentions?.items ?? [], field });
+	const listbox = openListbox();
 
-	/** The menu takes its keys first; then Enter submits, unless Shift is held or the text is still being composed. */
+	/** The open menu's id and its active row's, for the field's ARIA; the "/" menu wins in the rare case both are open. */
+	function openListbox(): { id: string; active: string | undefined } | null {
+		const command = menu.matches[menu.active];
+		const named = mention.matches[mention.active];
+
+		if (menu.open) return { id: menuId, active: command ? commandOptionId(menuId, command) : undefined };
+		if (mention.open) return { id: mentionId, active: named ? commandOptionId(mentionId, named) : undefined };
+
+		return null;
+	}
+
+	/** The menus take their keys first; then Enter submits, unless Shift is held or the text is still being composed. */
 	function onKeyDown(event: KeyboardEvent<HTMLElement>): void {
-		if (menu.keyDown(event)) return;
+		if (menu.keyDown(event) || mention.keyDown(event)) return;
 		if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
 
 		event.preventDefault();
@@ -144,7 +163,8 @@ export function Composer({
 		focusAtEnd(field);
 	}
 
-	const hasTools = tools !== undefined || commands.length > 0;
+	const hasMentions = (mentions?.items.length ?? 0) > 0;
+	const hasTools = tools !== undefined || commands.length > 0 || hasMentions;
 
 	return (
 		<div
@@ -158,7 +178,12 @@ export function Composer({
 			onMouseDown={focusField}
 			{...fileHandlers}
 		>
-			{commands.length > 0 ? <ComposerMenu menu={menu} id={menuId} side={menuSide} /> : null}
+			{commands.length > 0 ? (
+				<ComposerMenu menu={menu} id={menuId} side={menuSide} label="Commands" prefix="/" />
+			) : null}
+			{mentions && hasMentions ? (
+				<ComposerMenu menu={mention} id={mentionId} side={menuSide} label={mentions.label} prefix="@" />
+			) : null}
 			<ImageTiles images={images} onRemove={onRemoveImage ? removeImage : undefined} />
 			<LinkField
 				ref={field}
@@ -166,8 +191,8 @@ export function Composer({
 				minRows={minRows}
 				maxRows={maxRows}
 				aria-label={label}
-				aria-controls={menu.open ? menuId : undefined}
-				aria-activedescendant={activeCommand ? commandOptionId(menuId, activeCommand) : undefined}
+				aria-controls={listbox?.id}
+				aria-activedescendant={listbox?.active}
 				placeholder={placeholder}
 				spellCheck={spellCheck}
 				autoFocus={autoFocus}
@@ -194,6 +219,19 @@ export function Composer({
 								onClick={menu.toggle}
 							>
 								<SquareSlash />
+							</ComposerTool>
+						) : null}
+						{mentions && hasMentions ? (
+							<ComposerTool
+								label={mentions.label}
+								shortcut="@"
+								aria-haspopup="listbox"
+								aria-expanded={mention.open}
+								data-state={mention.open ? 'open' : 'closed'}
+								disabled={disabled}
+								onClick={mention.toggle}
+							>
+								<AtSign />
 							</ComposerTool>
 						) : null}
 					</div>
