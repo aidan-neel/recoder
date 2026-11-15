@@ -18,6 +18,11 @@ interface GuidelinesStore {
 	error: string | null;
 	repos: Record<string, RepoState>;
 	/**
+	 * Loads the overview alone: the global layer and the repository list,
+	 * without reading each repository's file.
+	 */
+	loadOverview: () => Promise<void>;
+	/**
 	 * Loads the overview, then every tracked repository's file. A reload keeps
 	 * what is on screen, and a retry after a failure keeps the notice up until
 	 * the answer lands.
@@ -56,14 +61,12 @@ export const useGuidelines = create<GuidelinesStore>((set, get) => {
 		if (overview) set({ overview: { ...overview, global } });
 	}
 
-	async function loadOverview(): Promise<void> {
+	async function fetchOverview(): Promise<void> {
 		try {
 			const overview = await guidelinesApi.overview();
 
 			set({ status: 'ready', overview, error: null });
 			closeUntracked(overview);
-
-			await Promise.all(overview.repos.map((repo) => get().loadRepo(repo.id)));
 		} catch (error) {
 			if (get().overview) return;
 
@@ -77,12 +80,18 @@ export const useGuidelines = create<GuidelinesStore>((set, get) => {
 		error: null,
 		repos: {},
 
-		load() {
-			inflight ??= loadOverview().finally(() => {
+		loadOverview() {
+			inflight ??= fetchOverview().finally(() => {
 				inflight = null;
 			});
 
 			return inflight;
+		},
+
+		async load() {
+			await get().loadOverview();
+
+			await Promise.all((get().overview?.repos ?? []).map((repo) => get().loadRepo(repo.id)));
 		},
 
 		async loadRepo(repoId) {

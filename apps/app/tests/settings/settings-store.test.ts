@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import type { AgentProvider, AgentStatus, ModelSettings } from '@recoder/shared';
 
 import { useSettings } from '../../src/lib/settings/settings-store';
-import { openCodeStatus } from '../fixtures';
+import { modelSettings, openCodeStatus } from '../fixtures';
 
 /** What the fake review server answers; each test changes it. */
 interface Server {
@@ -21,21 +21,7 @@ interface Server {
 let server: Server;
 
 function settings(subagentCap: ModelSettings['subagentCap']): ModelSettings {
-	return {
-		configured: true,
-		baseUrl: '',
-		model: '',
-		apiKeySet: false,
-		sharedModelId: null,
-		models: [],
-		subagentCap,
-		tokenBudget: 'medium',
-		reportLowSeverity: true,
-		disabledProviders: [],
-		hiddenModels: [],
-		modelPolicy: { kind: 'choose' },
-		limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 }
-	};
+	return modelSettings({ subagentCap });
 }
 
 const anthropic: AgentProvider = {

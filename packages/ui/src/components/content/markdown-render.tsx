@@ -6,7 +6,6 @@ import { cn } from '../../lib/cn';
 import { whenIdle } from './idle';
 import { cachedMarkdown } from './markdown-cache';
 import { MARKDOWN_PARTS, partsWithLinkOverride, STATIC_MARKDOWN_PARTS, type LinkOverride } from './markdown-parts';
-import { rehypeStreamingTail } from './rehype-tail';
 
 type MarkdownVariant = 'ui' | 'ai';
 
@@ -21,17 +20,13 @@ interface StaticMarkdownProps {
 
 /** A client Markdown's props: text that may still be arriving. */
 export interface MarkdownProps extends StaticMarkdownProps {
-	/** The text is still arriving: its last few words shimmer. */
+	/** The text is still arriving: the whole reply shimmers in white. */
 	streaming?: boolean;
 	/** Draws the links with this target prefix through a component of the caller's, keeping every other link as is. */
 	linkOverride?: LinkOverride;
 }
 
 const REMARK = [remarkGfm];
-
-const WITH_TAIL = [rehypeStreamingTail];
-
-const WITHOUT_TAIL: [] = [];
 
 const VOICE: Record<MarkdownVariant, string> = {
 	ui: 'font-sans text-[13.5px] leading-[1.6] text-fg',
@@ -118,7 +113,8 @@ function plainTree(paragraphs: string[], parts: Components): ReactElement {
 
 /**
  * The React tree for a source. Complete text is parsed once and kept, so a
- * remount reuses it; streaming text is parsed on every render, its last words shimmering.
+ * remount reuses it; streaming text is parsed on every render while the whole
+ * block shimmers.
  * Complete text with no Markdown in it but code spans (a summary that names
  * a status code or a function, often) skips the parser and builds the same
  * paragraphs itself, unless `parts` draws them: the parser's first run, its
@@ -131,7 +127,6 @@ function markdownTree(source: string, streaming: boolean, parts: Components): Re
 		ReactMarkdown({
 			children: source,
 			remarkPlugins: REMARK,
-			rehypePlugins: streaming ? WITH_TAIL : WITHOUT_TAIL,
 			components: parts
 		});
 

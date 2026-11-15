@@ -5,7 +5,8 @@ import type {
 	FindingDecision,
 	Repo,
 	Review,
-	ReviewListItem
+	ReviewListItem,
+	ReviewMetrics
 } from '@recoder/shared';
 
 import { del, post, put, request, seg } from './http';
@@ -34,6 +35,7 @@ export const reviewsApi = {
 	/** Every review, cut down to what a list reads. */
 	list: () => request<ReviewListItem[]>('/api/reviews?view=summary'),
 	review: (id: string) => request<Review>(reviewPath(id)),
+	metrics: (id: string, signal?: AbortSignal) => request<ReviewMetrics | null>(`${reviewPath(id)}/metrics`, { signal }),
 
 	/** Queues a review, or with `start: false` opens a draft session to talk the change through. */
 	create: (input: CreateReviewInput) => post<Review>('/api/reviews', input),

@@ -355,32 +355,43 @@
 	font-weight: 500;
 }
 
-/* The words still arriving: a light band crosses them once every --dur-shimmer, from muted ink to the primary. */
-[data-ui='markdown-tail'] {
-	background:
-		linear-gradient(100deg, transparent 35%, var(--text-primary) 50%, transparent 65%) 0 0 / 250% 100% no-repeat,
-		var(--text-muted);
-	background-clip: text;
-	-webkit-background-clip: text;
-	color: transparent;
-	animation: ui-tail-sweep var(--dur-shimmer) linear infinite;
+/* While a reply is still working, a bright white band sweeps across the whole block every --dur-shimmer. */
+[data-ui='markdown'][data-state='streaming'] {
+	--md-shimmer-rest: rgb(0 0 0 / 0.74);
+	--md-shimmer-band: rgb(0 0 0 / 1);
+
+	color: var(--brand-ink);
+	mask-image: linear-gradient(
+		105deg,
+		var(--md-shimmer-rest) 32%,
+		var(--md-shimmer-band) 50%,
+		var(--md-shimmer-rest) 68%
+	);
+	mask-size: 260% 100%;
+	mask-repeat: no-repeat;
+	animation: ui-markdown-sweep var(--dur-shimmer) linear infinite;
 }
-@keyframes ui-tail-sweep {
+[data-ui='markdown'][data-state='streaming'] :where(a) {
+	color: inherit;
+}
+:root:not(.dark) [data-ui='markdown'][data-state='streaming'] {
+	--md-shimmer-rest: rgb(0 0 0 / 0.92);
+	--md-shimmer-band: rgb(0 0 0 / 0.4);
+
+	color: var(--text-primary);
+}
+@keyframes ui-markdown-sweep {
 	from {
-		background-position:
-			150% 0,
-			0 0;
+		mask-position: 140% 0;
 	}
 	to {
-		background-position:
-			-50% 0,
-			0 0;
+		mask-position: -40% 0;
 	}
 }
 @media (prefers-reduced-motion: reduce) {
-	[data-ui='markdown-tail'] {
-		background: none;
+	[data-ui='markdown'][data-state='streaming'] {
 		color: inherit;
+		mask-image: none;
 		animation: none;
 	}
 	[data-ui='code-line'] {

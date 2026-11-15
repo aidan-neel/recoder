@@ -16,6 +16,8 @@ import { createSampleAuth } from './sample-auth';
 import { createSampleChat } from './sample-chat';
 import { createSampleFiles } from './sample-files';
 import { createSampleMembers } from './sample-members';
+import { sampleChatMetrics, sampleReviewMetrics } from './sample-metrics';
+import { createSampleTelemetry } from './sample-telemetry';
 import { createSampleUpdate } from './sample-update';
 import { createSampleUsage } from './sample-usage';
 import { createSampleRepoChats } from './sample-repo-chat';
@@ -197,6 +199,7 @@ function createSampleFindings(world: SampleWorld) {
 export function createSampleApi(): ApiClient {
 	const world = createSampleWorld();
 	const chat = createSampleChat(world);
+	const repoChats = createSampleRepoChats(world);
 	let added = 0;
 
 	return {
@@ -204,6 +207,7 @@ export function createSampleApi(): ApiClient {
 		auth: createSampleAuth(),
 		members: createSampleMembers(),
 		usage: createSampleUsage(),
+		telemetry: createSampleTelemetry(),
 		update: createSampleUpdate(),
 		account: async () => 'you',
 		repos: async () => world.data().repos,
@@ -278,13 +282,15 @@ export function createSampleApi(): ApiClient {
 
 		reviews: async () => world.data().reviews.map((review) => world.listedReview(review)),
 		review: async (id) => world.findReview(id),
+		reviewMetrics: async (id) => sampleReviewMetrics(world.findReview(id), world.progressOf(id).messages),
 		...createSampleReviews(world),
 		...createSampleFindings(world),
 		markUseful: async () => {},
 		unmarkUseful: async () => {},
 		follow: world.follow,
 		...chat,
-		...createSampleRepoChats(world),
+		...repoChats,
+		chatMetrics: async (chatId) => sampleChatMetrics(await repoChats.repoChat(chatId)),
 		...createSampleFiles()
 	};
 }

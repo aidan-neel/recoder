@@ -2,6 +2,7 @@
 
 import { HoverList, RowButton } from '@recoder/ui';
 import {
+	Activity,
 	ArrowLeft,
 	Blocks,
 	ChartNoAxesColumn,
@@ -25,30 +26,40 @@ const ICONS: Record<SettingsSection, LucideIcon> = {
 	connections: Link2,
 	limits: Gauge,
 	usage: ChartNoAxesColumn,
+	telemetry: Activity,
 	admin: ShieldUser,
 	appearance: Palette
 };
 
-/** Settings' sections, on the app nav's lanes. The open one sits on a still fill. */
+/**
+ * Settings' sections, on the app nav's lanes. The open one sits on a still
+ * fill. The admin's own sections run under an Admin label below the rest.
+ */
 export function SettingsNav() {
 	const active = sectionOfPath(usePathname());
 	const sections = sectionsFor(useIsAdmin());
+	const own = sections.filter((section) => !('adminOnly' in section));
+	const admin = sections.filter((section) => 'adminOnly' in section);
+
+	function row({ id, label }: (typeof sections)[number]) {
+		const Icon = ICONS[id];
+
+		return (
+			<RowButton key={id} asChild data-nav data-active={active === id || undefined} className="nav-item">
+				<Link href={settingsHref(id)} aria-current={active === id ? 'page' : undefined}>
+					<Icon aria-hidden />
+					{label}
+				</Link>
+			</RowButton>
+		);
+	}
 
 	return (
 		<nav aria-label="Settings">
 			<HoverList className="sidebar-nav" itemSelector="[data-nav]">
-				{sections.map(({ id, label }) => {
-					const Icon = ICONS[id];
-
-					return (
-						<RowButton key={id} asChild data-nav data-active={active === id || undefined} className="nav-item">
-							<Link href={settingsHref(id)} aria-current={active === id ? 'page' : undefined}>
-								<Icon aria-hidden />
-								{label}
-							</Link>
-						</RowButton>
-					);
-				})}
+				{own.map(row)}
+				{admin.length > 0 ? <h2 className="section-label nav-group-label">Admin</h2> : null}
+				{admin.map(row)}
 			</HoverList>
 		</nav>
 	);

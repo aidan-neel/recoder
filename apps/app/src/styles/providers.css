@@ -456,18 +456,111 @@
 	height: 3px;
 }
 
-/* Add provider: the same blocks, on the dialog's own inset. */
-.add-provider .detail-block {
-	padding-inline: 0;
+/* ───────── Add provider: missing agent CLIs and their install commands ───────── */
+.add-provider {
+	--bg-code: var(--bg-canvas);
 }
-.add-provider .detail-block:first-child {
-	padding-top: 0;
+/* Bleeds 4px into the modal's inset so 2px outset focus rings inside the scroller never clip. */
+.add-provider-scroll {
+	max-height: min(420px, calc(100dvh - 180px));
+	margin: 0 -4px;
 }
-.add-provider-cli {
+.add-provider-list {
 	display: flex;
 	flex-direction: column;
+	padding: 0 4px;
+}
+.add-provider-item {
+	display: flex;
+	flex-direction: column;
+}
+.add-provider-item + .add-provider-item {
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+}
+.add-provider-row {
+	display: flex;
+	min-height: 52px;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 0;
+}
+.add-provider-item:first-child > .add-provider-row {
+	min-height: 48px;
+	padding-top: 4px;
+}
+.add-provider-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+}
+.add-provider-name {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 18px;
+}
+.add-provider-cmd {
+	overflow: hidden;
+	color: var(--text-muted);
+	font-family: var(--font-code);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.add-provider-error {
+	color: var(--danger);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+	text-wrap: pretty;
+}
+.add-provider-actions {
+	position: relative;
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: flex-end;
+}
+.add-provider-controls {
+	display: inline-flex;
+	align-items: center;
 	gap: 6px;
-	padding-bottom: 6px;
+}
+.add-provider-installed {
+	display: inline-flex;
+	height: var(--size-control-md);
+	align-items: center;
+	gap: 6px;
+	padding-right: 2px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+}
+.add-provider-installed svg {
+	width: 14px;
+	height: 14px;
+	color: var(--success);
+	stroke-width: 2.25;
+}
+/* Indented past the 28px mark and 12px gap so live output lines up with the row's text. */
+.add-provider-job {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 8px;
+	padding: 2px 0 12px 40px;
+}
+.add-provider-empty {
+	padding: 16px 0;
+}
+.add-provider-footer {
+	padding-top: 12px;
+	border-top: 1px solid var(--line-subtle);
+}
+.add-provider-check {
+	margin-right: auto;
+	margin-left: -7px;
 }
 
 /* ───────── Install and sign-in run by Recoder ───────── */

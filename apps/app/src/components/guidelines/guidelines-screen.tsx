@@ -1,10 +1,10 @@
 'use client';
 
 import type { GuidelinesOverview } from '@recoder/shared';
-import { Button, ConfirmDialog } from '@recoder/ui';
+import { Button } from '@recoder/ui';
 import Link from 'next/link';
 
-import { useGlobalRow } from '@/lib/guidelines/use-global-row';
+import { useGuidelines } from '@/lib/guidelines/guidelines-store';
 import { useGuidelinesSection, type GuidelinesSection } from '@/lib/guidelines/use-guidelines-section';
 import { settingsHref } from '@/lib/shell/routes';
 
@@ -13,20 +13,11 @@ import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group
 import { SettingsPage } from '@/components/settings/settings-page';
 import { SettingsSkeleton } from '@/components/settings/settings-skeleton';
 
-import { LayerRow } from './layer-row';
+import { GuidelinesConfirm } from './guidelines-confirm';
 import { RepoRow } from './repo-row';
 
-/** The rows of the two groups, for the skeleton that stands in while they load. */
-const SKELETON_GROUPS = [1, 2] as const;
-
-/**
- * The global layer: saved on this machine and applied to every repository.
- * Never saved, it holds Recoder's defaults, which the editor opens on so they
- * can be adjusted and not retyped.
- */
-function GlobalRow({ overview }: { overview: GuidelinesOverview }) {
-	return <LayerRow name="Global guidelines" view={useGlobalRow(overview)} />;
-}
+/** The rows of the group, for the skeleton that stands in while they load. */
+const SKELETON_GROUPS = [2] as const;
 
 /** Tracked repositories, each with its own file; or the way to connect one. */
 function Repositories({ overview }: { overview: GuidelinesOverview }) {
@@ -51,16 +42,13 @@ function Repositories({ overview }: { overview: GuidelinesOverview }) {
 	);
 }
 
-/** The two layers once the overview loads: a skeleton before that, and a notice when it does not. */
+/** The repositories once the overview loads: a skeleton before that, and a notice when it does not. */
 function Layers({ section }: { section: GuidelinesSection }) {
 	const { overview, status } = section;
 
 	if (overview) {
 		return (
 			<div className="settings">
-				<SettingsGroup title="Every review">
-					<GlobalRow overview={overview} />
-				</SettingsGroup>
 				<Repositories overview={overview} />
 			</div>
 		);
@@ -74,28 +62,17 @@ function Layers({ section }: { section: GuidelinesSection }) {
 }
 
 /**
- * Guidelines: what reviewers follow. One layer applies to every review; each
- * tracked repository adds its own file. A layer edits in place, one at a
- * time, and leaving unsaved text asks first.
+ * Guidelines: each tracked repository's own `RECODER.md`, which a change to
+ * proposes as a pull request. The layer that applies to every review is the
+ * admin's, under Settings → Recoder.
  */
 export function GuidelinesScreen() {
-	const section = useGuidelinesSection();
+	const section = useGuidelinesSection(useGuidelines.getState().load);
 
 	return (
 		<SettingsPage name="Guidelines">
 			<Layers section={section} />
-			<ConfirmDialog
-				open={section.asking}
-				onOpenChange={(open) => {
-					if (!open) section.keepEditing();
-				}}
-				title="Discard your changes?"
-				description="Your edits to these guidelines will be lost."
-				confirmLabel="Discard"
-				cancelLabel="Keep editing"
-				destructive
-				onConfirm={section.discard}
-			/>
+			<GuidelinesConfirm />
 		</SettingsPage>
 	);
 }

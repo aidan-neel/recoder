@@ -5,15 +5,19 @@ interface SectionInfo {
 	adminOnly?: true;
 }
 
-/** The sections of Settings, in the sidebar's order. Each is a page: `/settings/<id>`. */
+/**
+ * The sections of Settings, in the sidebar's order. Each is a page:
+ * `/settings/<id>`. The admin's own run last, under the sidebar's Admin label.
+ */
 export const SETTINGS_SECTIONS = [
 	{ id: 'models', label: 'Models' },
 	{ id: 'providers', label: 'Providers' },
 	{ id: 'connections', label: 'Connections' },
-	{ id: 'limits', label: 'Review limits' },
-	{ id: 'usage', label: 'Usage', adminOnly: true },
-	{ id: 'admin', label: 'Admin', adminOnly: true },
-	{ id: 'appearance', label: 'Appearance' }
+	{ id: 'appearance', label: 'Appearance' },
+	{ id: 'admin', label: 'Recoder', adminOnly: true },
+	{ id: 'limits', label: 'Limits', adminOnly: true },
+	{ id: 'telemetry', label: 'Telemetry', adminOnly: true },
+	{ id: 'usage', label: 'Usage', adminOnly: true }
 ] as const satisfies readonly SectionInfo[];
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]['id'];
@@ -33,7 +37,7 @@ export function isSettingsSection(value: string): value is SettingsSection {
 	return SETTINGS_SECTIONS.some((section) => section.id === value);
 }
 
-/** A section's name, as the sidebar and the top of its page show it: "Review limits". */
+/** A section's name, as the sidebar and the top of its page show it: "Limits". */
 export function sectionLabel(section: SettingsSection): string {
 	return SETTINGS_SECTIONS.find((item) => item.id === section)?.label ?? section;
 }

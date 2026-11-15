@@ -6,7 +6,8 @@ import { ArrowUpRight } from 'lucide-react';
 
 import type { AgentSetupStep } from '@/lib/api/agent-setup';
 import { cliState } from '@/lib/settings/providers/agent-cli';
-import { useAgentSetup } from '@/lib/settings/providers/use-agent-setup';
+import { tailLines } from '@/lib/settings/providers/tail-lines';
+import { useAgentSetup, type AgentSetup as AgentSetupState } from '@/lib/settings/providers/use-agent-setup';
 
 import { Command } from './provider-notice';
 import { SetupCodeForm } from './setup-code-form';
@@ -51,8 +52,7 @@ export function AgentSetup({ agent }: { agent: AgentStatus }) {
 /** One step, from its button through the running job to its failure. */
 function SetupStep({ agentId, plan }: { agentId: string; plan: StepPlan }) {
 	const setup = useAgentSetup(agentId);
-	const { job } = setup;
-	const live = job?.status === 'running' ? job : null;
+	const live = setup.job?.status === 'running' ? setup.job : null;
 
 	if (!plan.canRun) return plan.command ? <Command command={plan.command} /> : null;
 
@@ -69,15 +69,33 @@ function SetupStep({ agentId, plan }: { agentId: string; plan: StepPlan }) {
 				) : null}
 				{live?.url ? <SignInLink url={live.url} /> : null}
 			</div>
-			{live?.needsInput ? <SetupCodeForm onSubmit={setup.sendInput} /> : null}
 			{setup.error ? <p className="row-problem">{setup.error}</p> : null}
-			{job ? <SetupOutput output={job.output} /> : null}
+			<SetupJobDetail setup={setup} />
+		</div>
+	);
+}
+
+/**
+ * What a running or finished setup job adds under its controls: the code prompt
+ * while the CLI waits on stdin, and the tailed terminal output once any arrives.
+ * Renders nothing while empty, so starting a job never shifts the layout early.
+ */
+export function SetupJobDetail({ setup, className }: { setup: AgentSetupState; className?: string }) {
+	const live = setup.job?.status === 'running' ? setup.job : null;
+	const hasOutput = Boolean(setup.job && tailLines(setup.job.output));
+
+	if (!live?.needsInput && !hasOutput) return null;
+
+	return (
+		<div className={className ?? 'agent-setup'}>
+			{live?.needsInput ? <SetupCodeForm onSubmit={setup.sendInput} /> : null}
+			{setup.job ? <SetupOutput output={setup.job.output} /> : null}
 		</div>
 	);
 }
 
 /** Opens the sign-in page the CLI printed in a new tab. */
-function SignInLink({ url }: { url: string }) {
+export function SignInLink({ url }: { url: string }) {
 	return (
 		<Button variant="outline" asChild>
 			<a href={url} target="_blank" rel="noopener noreferrer">

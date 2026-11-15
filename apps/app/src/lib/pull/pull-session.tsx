@@ -85,22 +85,24 @@ export function usePullPageView(): PullPageView {
 	const repos = useStore(useListStore().state, (data) => data.repos);
 	const value = page.value;
 
-	return useMemo(
-		() => ({
+	return useMemo(() => {
+		const activeReview = countedReview(review, value?.review ?? null);
+
+		return {
 			phase: page.phase,
 			error: page.error,
 			offline: page.offline,
 			page: value,
+			reviewId: activeReview?.id ?? null,
 			repoName: shortRepoName(repos, session.repoId),
 			counts: {
 				files: files ?? value?.pull.changedFiles ?? null,
-				bugs: openBugCount(countedReview(review, value?.review ?? null)),
+				bugs: openBugCount(activeReview),
 				commits: value?.status.commits ?? commits
 			},
 			refresh: () => void session.pages.loadPage()
-		}),
-		[page, value, repos, session, files, review, commits]
-	);
+		};
+	}, [page, value, repos, session, files, review, commits]);
 }
 
 /** The diff of the Changes tab; it loads with the page. */

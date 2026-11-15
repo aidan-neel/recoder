@@ -12,7 +12,7 @@ import {
 	shortList,
 	trackingLine
 } from '../../src/lib/setup/step-text';
-import { openCodeStatus } from '../fixtures';
+import { modelSettings, openCodeStatus } from '../fixtures';
 
 describe('shortening a list of names', () => {
 	test('three or fewer join plainly; past that the tail folds into a count', () => {
@@ -98,21 +98,7 @@ describe('the repository step’s lines', () => {
 
 describe('the review model’s display name', () => {
 	function settings(model: string): ModelSettings {
-		return {
-			configured: true,
-			baseUrl: '',
-			model,
-			apiKeySet: false,
-			sharedModelId: null,
-			models: [],
-			subagentCap: 8,
-			tokenBudget: 'medium',
-			reportLowSeverity: true,
-			disabledProviders: [],
-			hiddenModels: [],
-			modelPolicy: { kind: 'choose' },
-			limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 }
-		};
+		return modelSettings({ model });
 	}
 
 	test('falls back to the saved model id pretty-printed', () => {

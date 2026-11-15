@@ -1,14 +1,9 @@
 import type { UsageModel, UsagePerson, UsageReport, UsageTotals } from '@recoder/shared';
 import type { BarSegment, ChartSeries } from '@recoder/ui';
 
-/** The chart tokens `--chart-1` to `--chart-6`. */
-const CHART_COLORS = 6;
+import { foldSeries, formatWhole, OTHERS_COLOR, othersLabel, rankColor } from './report-shared';
 
-/** The color of whatever is folded together past the colored ones: a grey, so it never reads as one of them. */
-export const OTHERS_COLOR = 'var(--text-faint)';
-
-/** The id of the line and the row that add up everything past the fifth. */
-export const OTHERS_ID = 'others';
+export { formatWhole, OTHERS_COLOR };
 
 /** What a cost shows: the dollars, or nothing known, or a sum that leaves out models with no price. */
 export interface Cost {
@@ -36,27 +31,11 @@ const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-const wholeNumber = new Intl.NumberFormat('en-US');
 const modelList = new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' });
-
-/**
- * The color of the `index`th of `count` things, most tokens first. Up to six
- * get one each; past six, the first five keep theirs and the rest share a grey.
- */
-function rankColor(index: number, count: number): string {
-	const colored = count <= CHART_COLORS ? CHART_COLORS : CHART_COLORS - 1;
-
-	return index >= 0 && index < colored ? `var(--chart-${index + 1})` : OTHERS_COLOR;
-}
 
 /** Dollars with cents ($12,301.39), or a dash for a cost nobody knows. */
 export function formatCost(value: number | null): string {
 	return value === null ? '—' : usd.format(value);
-}
-
-/** A count in full, with separators: 1,350,000,000. */
-export function formatWhole(value: number): string {
-	return wholeNumber.format(value);
 }
 
 /** "1,732 sessions", and "1 session". */
@@ -119,26 +98,6 @@ export function personColor(report: UsageReport, accountId: string): string {
 /** The person with the id, if the report has them and they used any tokens. */
 export function findActivePerson(report: UsageReport, accountId: string | null): UsagePerson | null {
 	return activePeople(report).find((person) => person.accountId === accountId) ?? null;
-}
-
-/**
- * Folds the grey series into one line that adds them up, so a big team draws
- * six lines, not twenty. A lone grey series keeps its own name.
- */
-function foldSeries(series: readonly ChartSeries[], othersLabel: (count: number) => string): ChartSeries[] {
-	const shown = series.filter((line) => line.color !== OTHERS_COLOR);
-	const folded = series.filter((line) => line.color === OTHERS_COLOR);
-
-	if (folded.length <= 1) return [...series];
-
-	const values = folded[0].values.map((_, index) => folded.reduce((sum, line) => sum + (line.values[index] ?? 0), 0));
-
-	return [...shown, { id: OTHERS_ID, label: othersLabel(folded.length), color: OTHERS_COLOR, values }];
-}
-
-/** "3 others", for the people folded together. */
-export function othersLabel(count: number): string {
-	return `${count} others`;
 }
 
 /** "3 more models", for one person's models folded together. */

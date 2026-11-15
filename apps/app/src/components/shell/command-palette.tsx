@@ -118,7 +118,7 @@ export function CommandPalette() {
 		{ id: 'pulls', label: 'Pull requests', icon: GitPullRequest, run: () => go(pullsHref(base)) },
 		{ id: 'automations', label: 'Automations', icon: Clock, run: () => go(AUTOMATIONS_HREF) },
 		{ id: 'guidelines', label: 'Guidelines', icon: BookOpen, run: () => go(GUIDELINES_HREF) },
-		...(admin ? [{ id: 'admin', label: 'Admin', icon: ShieldUser, run: () => go(settingsHref('admin')) }] : []),
+		...(admin ? [{ id: 'admin', label: 'Recoder', icon: ShieldUser, run: () => go(settingsHref('admin')) }] : []),
 		{ id: 'settings', label: 'Settings', icon: Settings, shortcut: 'mod+,', run: () => go(settingsHref()) },
 		{ id: 'theme', label: 'Switch theme', icon: SunMoon, run: toggleTheme },
 		{ id: 'palette', label: 'Change palette', icon: Palette, run: () => go(settingsHref('appearance')) },

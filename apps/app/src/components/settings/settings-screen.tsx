@@ -16,6 +16,8 @@ import { ModelsSection } from './models-section';
 import { ProvidersSection } from './providers/providers-section';
 import { ServerSection } from './server-section';
 import { SettingsPage } from './settings-page';
+import { TelemetryRange } from './telemetry/telemetry-range';
+import { TelemetrySection } from './telemetry/telemetry-section';
 import { UsageRange } from './usage/usage-range';
 import { UsageSection } from './usage/usage-section';
 
@@ -28,16 +30,22 @@ const SECTIONS: Record<SettingsSection, () => ReactNode> = {
 	),
 	connections: () => <ConnectionsSection />,
 	limits: () => (
-		<AdminControls>
-			<ServerSection groups={[2, 1, 3]}>
-				<LimitsSection />
-			</ServerSection>
-		</AdminControls>
+		<ServerSection groups={[2, 1, 3]}>
+			<LimitsSection />
+		</ServerSection>
 	),
 	usage: () => <UsageSection />,
+	telemetry: () => <TelemetrySection />,
 	admin: () => <AdminSection />,
 	appearance: () => <AppearanceSection />
 };
+
+function sectionEnd(section: SettingsSection): ReactNode {
+	if (section === 'usage') return <UsageRange />;
+	if (section === 'telemetry') return <TelemetryRange />;
+
+	return undefined;
+}
 
 /**
  * Settings: one page per section, picked in the sidebar, its name over the
@@ -49,11 +57,7 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 	if (!canOpenSection(section, admin)) return <PageMissing />;
 
 	return (
-		<SettingsPage
-			name="Settings"
-			heading={sectionLabel(section)}
-			end={section === 'usage' ? <UsageRange /> : undefined}
-		>
+		<SettingsPage name="Settings" heading={sectionLabel(section)} end={sectionEnd(section)}>
 			{SECTIONS[section]()}
 		</SettingsPage>
 	);

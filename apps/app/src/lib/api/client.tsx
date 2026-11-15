@@ -25,6 +25,7 @@ import type {
 	Review,
 	ReviewChatMessage,
 	ReviewListItem,
+	ReviewMetrics,
 	SendRepoChatInput,
 	StartRepoChatInput
 } from '@recoder/shared';
@@ -44,6 +45,7 @@ import { seg } from './http';
 import { membersApi, type MembersApi } from './members';
 import { pullsApi, type PullListQuery } from './pulls';
 import { reviewsApi, type DecisionInput } from './reviews';
+import { telemetryApi, type TelemetryApi } from './telemetry';
 import { updateApi, type UpdateApi } from './update';
 import { usageApi, type UsageApi } from './usage';
 
@@ -61,6 +63,8 @@ export interface ApiClient {
 	members: MembersApi;
 	/** What each person and model has used, for the admin. */
 	usage: UsageApi;
+	/** Pull request, review and finding telemetry, for the admin. */
+	telemetry: TelemetryApi;
 	/** Updating this Recoder install, for the admin. */
 	update: UpdateApi;
 	/** The signed-in forge login, or null when no forge is signed in. */
@@ -77,6 +81,8 @@ export interface ApiClient {
 	mergePull: (repoId: string, number: number, input: MergePullInput) => Promise<MergePullResult>;
 	reviews: () => Promise<ReviewListItem[]>;
 	review: (id: string) => Promise<Review>;
+	/** Token usage across every model call a review has made, or null before any call is recorded. */
+	reviewMetrics: (id: string, signal?: AbortSignal) => Promise<ReviewMetrics | null>;
 	createReview: (input: CreateReviewInput) => Promise<Review>;
 	startDraft: (id: string) => Promise<Review>;
 	continueReview: (id: string) => Promise<Review>;
@@ -109,6 +115,8 @@ export interface ApiClient {
 	repoChats: (limit: number) => Promise<RepoChatSummary[]>;
 	/** A chat with Recoder about one tracked repository. */
 	repoChat: (chatId: string) => Promise<RepoChat>;
+	/** Token usage across every model call a repository chat has made, or null before any call is recorded. */
+	chatMetrics: (chatId: string, signal?: AbortSignal) => Promise<ReviewMetrics | null>;
 	/** Opens a chat on a tracked repository with its first message; resolves with the chat's id. */
 	startRepoChat: (input: StartRepoChatInput) => Promise<{ id: string }>;
 	/** Sends a message to a chat; the reply arrives on its events. */
@@ -147,6 +155,7 @@ export const liveApi: ApiClient = {
 	auth: accountsApi,
 	members: membersApi,
 	usage: usageApi,
+	telemetry: telemetryApi,
 	update: updateApi,
 	account: signedInLogin,
 	repos: reviewsApi.repos,
@@ -161,6 +170,7 @@ export const liveApi: ApiClient = {
 	mergePull: pullsApi.merge,
 	reviews: reviewsApi.list,
 	review: reviewsApi.review,
+	reviewMetrics: reviewsApi.metrics,
 	createReview: reviewsApi.create,
 	startDraft: reviewsApi.startDraft,
 	continueReview: reviewsApi.continue,
@@ -181,6 +191,7 @@ export const liveApi: ApiClient = {
 	discuss: chatApi.discuss,
 	repoChats: chatsApi.recent,
 	repoChat: chatsApi.chat,
+	chatMetrics: chatsApi.metrics,
 	startRepoChat,
 	sendRepoChat: chatsApi.send,
 	stopRepoChat: async (chatId, messageId) => void (await chatsApi.stop(chatId, messageId)),

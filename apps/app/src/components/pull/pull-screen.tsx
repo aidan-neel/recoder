@@ -23,6 +23,7 @@ import { CommitsTab } from '@/components/commits/commits-tab';
 import { CancelReviewHost } from '@/components/common/cancel-review';
 import { Crumbs } from '@/components/common/crumbs';
 import { Page } from '@/components/common/page';
+import { TokenUsageButton } from '@/components/common/token-usage-modal';
 import { SummaryTab } from '@/components/summary/summary-tab';
 
 import { MergeStrip } from './merge-strip';
@@ -112,14 +113,17 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 					/>
 				}
 				end={
-					forge && page ? (
-						<Button asChild variant="ghost" className="pull-forge-link">
-							<a href={page.pull.url} target="_blank" rel="noreferrer">
-								Open on {forge}
-								<ArrowUpRight aria-hidden className="size-3.5" />
-							</a>
-						</Button>
-					) : null
+					<>
+						{view.reviewId ? <TokenUsageButton kind="review" id={view.reviewId} /> : null}
+						{forge && page ? (
+							<Button asChild variant="ghost" className="pull-forge-link">
+								<a href={page.pull.url} target="_blank" rel="noreferrer">
+									Open on {forge}
+									<ArrowUpRight aria-hidden className="size-3.5" />
+								</a>
+							</Button>
+						) : null}
+					</>
 				}
 			>
 				{view.phase === 'loading' ? <PullPageSkeleton /> : null}

@@ -65,9 +65,10 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   and with ⌘,.
 - **Settings sidebar**: on `/settings/<section>` the account row becomes
   Back to app (to the pull request list), and the places and recent reviews become the sections: Models,
-  Providers, Connections, Review limits, Usage and Admin (the admin's
-  only: updates, people and their models), Appearance, each with its icon, on the same
-  lanes and fill as the app's places. One group, so no label. The search,
+  Providers, Connections and Appearance, each with its icon, on the same
+  lanes and fill as the app's places; the admin's own sit under an Admin
+  label below them: Recoder (the running server, its updates, the global
+  review guidelines and its people), Limits, Telemetry and Usage. The search,
   the hide button and the foot stay. The page bar says Settings. Opening
   Settings lands on Models, never on a bare `/settings`, so a section row is
   always open. Keyboard focus in the part that swaps moves with it: to Back
@@ -117,7 +118,7 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     scrolls above the composer docked at the pane's foot, and a sent message
     and its reply stay in view until the reader scrolls up. A reply's
     Thinking line starts folded (a click opens its steps), and while the
-    answer streams its last few words shimmer; there is no caret.
+    answer streams the entire reply shimmers in white; there is no caret.
   - **Bugs**: one row a bug, the worst first, split by hairlines. Shut, a row
     is the title over its badges: severity (or Suggestion), category, evidence
     class, file and line, and whether an earlier review reported it. Open, it
@@ -148,8 +149,8 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   the name on the left, with a detail line under it only when the line
   passes the subtext rule (see Copy), and the control on the right. A row
   saves on change and shows where the save stands beside the control.
-- **Usage** (admin) is figures and charts, not settings, so it is the one
-  section with no cards: a 920px column of titled blocks (`UsageBlock`)
+- **Usage** (admin) is figures and charts, not settings, so like Telemetry it
+  has no cards: a 920px column of titled blocks (`UsageBlock`)
   grouped by space and hairlines, 48px apart. The range is a select in the
   page bar. The overview puts the window's total (40px) with its sessions
   and cost over one row per person (their line's dot, avatar, name and
@@ -178,6 +179,16 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     then lists its calls, failed calls and typical time (left out when it has
     none) and its tokens by kind of token. Focused, the chart moves between days with Left,
     Right, Home and End, and between lines with Up and Down.
+- **Telemetry** (admin) shares Usage's 920px cardless `UsageBlock` layout,
+  range picker and `?person=<accountId>` drill-down for pull request and
+  finding activity: reviewed pull requests (with reviews and merges) beside
+  the daily pull-requests-reviewed `LineChart`, Pull requests (PRs reviewed,
+  PRs merged with merge rate, Reviews, Auto reviews with share, Avg tokens /
+  review), Findings (Raised, Accepted with rate, Dismissed with rate,
+  Blocking at or above `checkThreshold`, Fixed on re-review), Findings by
+  severity (`StackedBar` in text-ramp greys) and Breakdown (Person,
+  Repository or Day). Chart hues (`--chart-1` to `--chart-6`) mean people in
+  everyone's view and repositories in one person's view.
 
 ## Type
 
@@ -347,21 +358,21 @@ primary alone is medium), and, where it has an edge, a hairline drawn inside
 the box so it lines up with fields. No sheen, bevel, lift or shadow. The side
 an icon sits on gets 2px less padding than a side with text.
 
-| Size | Height | Padding (text / icon side) | Radius | Use |
-| --- | --- | --- | --- | --- |
-| `md` (default) | 28px | 9 / 7px | 5px | Everywhere, including the 44px page bar and list rows. Omit `size`. |
-| `sm` | 24px | 7 / 5px, 12.5px label | 4px | Inside a line of text or a dense group: a retry in a sentence, suggestion chips, actions on collapsed bug lines. |
-| `lg` | 32px | 11 / 9px, 13.5px label | 5px | Not used in the app today. |
-| `icon` | 28px square | none | 5px | Every icon-only action. |
+| Size           | Height      | Padding (text / icon side) | Radius | Use                                                                                                              |
+| -------------- | ----------- | -------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| `md` (default) | 28px        | 9 / 7px                    | 5px    | Everywhere, including the 44px page bar and list rows. Omit `size`.                                              |
+| `sm`           | 24px        | 7 / 5px, 12.5px label      | 4px    | Inside a line of text or a dense group: a retry in a sentence, suggestion chips, actions on collapsed bug lines. |
+| `lg`           | 32px        | 11 / 9px, 13.5px label     | 5px    | Not used in the app today.                                                                                       |
+| `icon`         | 28px square | none                       | 5px    | Every icon-only action.                                                                                          |
 
-| Variant | At rest | Use |
-| --- | --- | --- |
-| `primary` | Flat cream (black in light) | The one next step of a region: Post to pull request, Merge, Save. Never repeated down a list. |
-| `secondary` | A faint wash and a hairline | A standalone action with no primary beside it: Try again in an error notice, Back to pull requests. |
-| `outline` | Hairline only | The action beside a primary, and the action a list row offers (Review, Track, Connect). |
-| `ghost` | Muted text, nothing else | Tertiary actions and row controls: Accept, Dismiss, Disconnect, Cancel, icon buttons. |
-| `quiet` | Full-strength text, nothing else | Triggers that name their value: the filter, the model picker. |
-| `destructive` | Red text on a red tint | A step that deletes, inside its confirmation. |
+| Variant       | At rest                          | Use                                                                                                 |
+| ------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `primary`     | Flat cream (black in light)      | The one next step of a region: Post to pull request, Merge, Save. Never repeated down a list.       |
+| `secondary`   | A faint wash and a hairline      | A standalone action with no primary beside it: Try again in an error notice, Back to pull requests. |
+| `outline`     | Hairline only                    | The action beside a primary, and the action a list row offers (Review, Track, Connect).             |
+| `ghost`       | Muted text, nothing else         | Tertiary actions and row controls: Accept, Dismiss, Disconnect, Cancel, icon buttons.               |
+| `quiet`       | Full-strength text, nothing else | Triggers that name their value: the filter, the model picker.                                       |
+| `destructive` | Red text on a red tint           | A step that deletes, inside its confirmation.                                                       |
 
 - **Hover and press** lay a wash over whatever is behind a see-through
   button, so it still shows inside a hovered row. A press shades the button
@@ -383,12 +394,12 @@ Corners are small and there are four of them, as kit tokens. A surface's
 radius is its inset plus the radius of the rows in it, so a 4px row in a menu
 with a 4px inset sits in an 8px panel. Use the tokens, never a raw radius.
 
-| Token | Radius | On |
-| --- | --- | --- |
-| `--radius-chip` | 4px | Badges, keycaps, checkboxes, menu rows, `sm` buttons, segments |
-| `--radius-control` | 5px | Buttons, fields, select triggers, tabs, tooltips |
-| `--radius-row` | 6px | List rows and their highlight, segmented tracks, textareas, code blocks |
-| `--radius-card` | 8px | Cards, menus, popovers, toasts, dialogs, the palette |
+| Token              | Radius | On                                                                      |
+| ------------------ | ------ | ----------------------------------------------------------------------- |
+| `--radius-chip`    | 4px    | Badges, keycaps, checkboxes, menu rows, `sm` buttons, segments          |
+| `--radius-control` | 5px    | Buttons, fields, select triggers, tabs, tooltips                        |
+| `--radius-row`     | 6px    | List rows and their highlight, segmented tracks, textareas, code blocks |
+| `--radius-card`    | 8px    | Cards, menus, popovers, toasts, dialogs, the palette                    |
 
 - **Tabs** are text, 26px tall. The open tab is brighter on a quiet fill
   (`--bg-hover`) drawn in place. Every tab has the same weight, so nothing

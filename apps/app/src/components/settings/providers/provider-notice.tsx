@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, CodeBlock, StatusNotice } from '@recoder/ui';
+import { Button, CodeBlock, StatusNotice, type ButtonVariant } from '@recoder/ui';
 import { RotateCw } from 'lucide-react';
 
 import { pickNotice } from '@/lib/settings/providers/pick-notice';
@@ -10,16 +10,22 @@ import type { ProviderSource } from '@/lib/settings/providers/use-provider-sourc
 /** Why there is no provider list: the server is down, the check failed, or the agent is not ready. */
 type NoListSource = Exclude<ProviderSource, { state: 'loading' | 'ready' }>;
 
+interface CheckAgainProps {
+	label: string;
+	variant?: ButtonVariant;
+	className?: string;
+}
+
 /**
  * Runs the agent check again. It spins while the check runs, then reads
  * "Checked" for a moment (the notice may look the same as before), or "Try
  * again" when the agent still cannot be reached.
  */
-export function CheckAgain({ label }: { label: string }) {
+export function CheckAgain({ label, variant = 'outline', className }: CheckAgainProps) {
 	const check = useCheckAgain();
 
 	return (
-		<Button variant="outline" status={check.status} successLabel="Checked" onClick={check.run}>
+		<Button variant={variant} status={check.status} successLabel="Checked" className={className} onClick={check.run}>
 			<RotateCw aria-hidden />
 			{label}
 		</Button>

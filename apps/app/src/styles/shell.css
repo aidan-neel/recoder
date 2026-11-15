@@ -236,6 +236,11 @@
 	font-size: var(--font-size-meta);
 	font-variant-numeric: tabular-nums;
 }
+/* A group label in the nav (Settings' Admin) stands clear of the rows above and sits on the icon lane. */
+.nav-group-label {
+	margin-top: 14px;
+	padding: 0 8px 3px;
+}
 
 /* Recent reviews: two lines a row, the state as a glyph and as words. */
 .recent {

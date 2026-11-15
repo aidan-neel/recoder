@@ -151,12 +151,18 @@
 	align-items: center;
 	gap: 10px;
 }
-.settings-number {
-	width: 124px;
+.settings-number-wide {
+	--number-input-width: 82px;
 }
-.settings-number input {
-	font-variant-numeric: tabular-nums;
-	text-align: right;
+.settings-subagents {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+}
+.settings-subagents > * {
+	flex-shrink: 0;
 }
 
 /* Where a save stands, in a slot that is always there so the control never moves. */

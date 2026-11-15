@@ -11,6 +11,7 @@ export { LinkText } from './link-text';
 export { LinkField } from './link-field';
 export type { InlineImage } from './link-image';
 export { NavPill } from './nav-pill';
+export { NumberField, type NumberFieldProps } from './number-field';
 export { RadioGroup } from './radio-group';
 export { SegmentedControl } from './segmented-control';
 export { Switch } from './switch';

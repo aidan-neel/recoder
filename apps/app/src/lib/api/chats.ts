@@ -2,6 +2,7 @@ import type {
 	RepoChat,
 	RepoChatMessage,
 	RepoChatSummary,
+	ReviewMetrics,
 	SendRepoChatInput,
 	StartRepoChatInput
 } from '@recoder/shared';
@@ -28,6 +29,7 @@ export async function startRepoChat(input: StartRepoChatInput): Promise<{ id: st
 export const chatsApi = {
 	recent: (limit: number) => request<RepoChatSummary[]>(`/api/chats?limit=${limit}`),
 	chat: (id: string) => request<RepoChat>(chatPath(id)),
+	metrics: (id: string, signal?: AbortSignal) => request<ReviewMetrics | null>(`${chatPath(id)}/metrics`, { signal }),
 	send: (id: string, message: SendRepoChatInput) => post<RepoChatMessage>(`${chatPath(id)}/messages`, message),
 	stop: (id: string, messageId: string) => post<{ stopped: boolean }>(`${chatPath(id)}/stop`, { messageId }),
 
