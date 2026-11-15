@@ -6,6 +6,9 @@ import { identityLine, printBenchmark, readReport } from '../../src/eval/benchma
 import { benchmarkSummary, summarize } from '../../src/eval/benchmark-score';
 import { writeReport } from '../helpers/identity';
 
+/** A price lookup for reports whose cost the test does not read. */
+const unpriced = () => null;
+
 const dir = mkdtempSync(join(tmpdir(), 'recoder-report-'));
 
 afterAll(() => {
@@ -25,7 +28,7 @@ test('a subset report says in its header that it is no full-set score; a full on
 	const log = spyOn(console, 'log').mockImplementation(() => {});
 
 	const header = (taskSet: string) => {
-		printBenchmark({ ...report, summary: { ...summarize([]), taskSet } });
+		printBenchmark({ ...report, summary: { ...summarize([]), taskSet } }, unpriced);
 
 		return String(log.mock.calls.at(-1)?.[0]).split('\n').slice(1, 3);
 	};
@@ -59,7 +62,7 @@ test('a report whose runs all failed counts them as failed runs and says so abov
 	const log = spyOn(console, 'log').mockImplementation(() => {});
 
 	try {
-		printBenchmark({ ...report, prs, summary });
+		printBenchmark({ ...report, prs, summary }, unpriced);
 
 		expect(summary.failedRuns).toBe(1);
 
@@ -76,20 +79,23 @@ test('the reviewer header prints the verifier model and effort when verifierMode
 	const log = spyOn(console, 'log').mockImplementation(() => {});
 
 	try {
-		printBenchmark({
-			...report,
-			summary: summarize([]),
-			reviewer: {
-				model: 'gpt-lead',
-				effort: 'high',
-				specialistModel: 'gpt-worker',
-				specialistEffort: 'low',
-				verifierModel: 'gpt-judge',
-				verifierEffort: 'medium',
-				subagentCap: 8,
-				reportLowSeverity: false
-			}
-		});
+		printBenchmark(
+			{
+				...report,
+				summary: summarize([]),
+				reviewer: {
+					model: 'gpt-lead',
+					effort: 'high',
+					specialistModel: 'gpt-worker',
+					specialistEffort: 'low',
+					verifierModel: 'gpt-judge',
+					verifierEffort: 'medium',
+					subagentCap: 8,
+					reportLowSeverity: false
+				}
+			},
+			unpriced
+		);
 
 		const printed = String(log.mock.calls.at(-1)?.[0]);
 

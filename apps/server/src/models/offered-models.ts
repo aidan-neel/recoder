@@ -21,6 +21,22 @@ export type ModelListing =
 	| { kind: 'picked' };
 
 /**
+ * Each entry gains `contextWindowSet` when the user set a context window for its id, so the picker can show the
+ * setting against the window the provider reports.
+ */
+function withSetWindows(entries: ModelEntry[]): ModelEntry[] {
+	const windows = getStoredSettings().contextWindows;
+
+	if (!windows) return entries;
+
+	return entries.map((entry) => {
+		const set = windows[entry.id];
+
+		return typeof set === 'number' ? { ...entry, contextWindowSet: set } : entry;
+	});
+}
+
+/**
  * The models the settings offer: the captured vLLM models, then every model the agents run, narrowed as `listing`
  * says. Models on a provider switched off in Settings are always left out, picked ones too, and a hidden model is
  * left out of the pickable list unless it is a saved pick, so the picker can still name it. `waitMs` bounds the wait
@@ -29,7 +45,7 @@ export type ModelListing =
 export async function offeredModels(listing: ModelListing, waitMs?: number): Promise<ModelEntry[]> {
 	const switches = providerSwitches();
 
-	if (listing.kind === 'chooser') return switches.onlySwitchedOn(await listedModels(waitMs));
+	if (listing.kind === 'chooser') return withSetWindows(switches.onlySwitchedOn(await listedModels(waitMs)));
 
 	const { sharedModelId, orchestratorModelId, specialistModelId, verifierModelId } = getStoredSettings();
 	const picked = [sharedModelId, orchestratorModelId, specialistModelId, verifierModelId];
@@ -37,13 +53,17 @@ export async function offeredModels(listing: ModelListing, waitMs?: number): Pro
 	if (listing.kind === 'pickable') {
 		const listed = await listedModels(waitMs);
 
-		return switches.onlySwitchedOn(listed).filter((entry) => !switches.isHidden(entry.id) || picked.includes(entry.id));
+		return withSetWindows(
+			switches.onlySwitchedOn(listed).filter((entry) => !switches.isHidden(entry.id) || picked.includes(entry.id))
+		);
 	}
 
-	return switches.onlySwitchedOn([
-		...vllmEntries().filter((entry) => picked.includes(entry.id)),
-		...(await pickedModels(picked, waitMs))
-	]);
+	return withSetWindows(
+		switches.onlySwitchedOn([
+			...vllmEntries().filter((entry) => picked.includes(entry.id)),
+			...(await pickedModels(picked, waitMs))
+		])
+	);
 }
 
 /** Every model the server lists, whatever the switches say: the captured vLLM models and every agent's. */

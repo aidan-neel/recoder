@@ -43,15 +43,13 @@ function untilAborted(action: string, work: Promise<ToolResult>, signal: AbortSi
 	});
 }
 
-function fitRoundBudget(result: ToolResult, used: number): ToolResult {
-	if (used + result.content.length <= REVIEW_POLICY.maxToolRoundChars) return result;
-
-	const room = Math.max(0, REVIEW_POLICY.maxToolRoundChars - used);
+function fitRoundBudget(result: ToolResult, room: number): ToolResult {
+	if (result.content.length <= room) return result;
 
 	return {
 		...result,
-		content: result.content.slice(0, room),
-		hunkIds: room === 0 ? [] : result.hunkIds?.slice(0, -1),
+		content: result.content.slice(0, Math.max(0, room)),
+		hunkIds: room <= 0 ? [] : result.hunkIds?.slice(0, -1),
 		truncated: true,
 		continuation: result.continuation ?? 'round-budget'
 	};
@@ -122,7 +120,7 @@ export class EvidenceStore {
 	 * Runs up to `maxActions` retrievals whose combined content stays within one
 	 * round's character budget. `owner` names the agent, so its runs see only
 	 * the scratch files it wrote. `spent` is what the round already used, when
-	 * its actions arrive one call at a time.
+	 * its actions arrive one call at a time. `roundChars` is the round's character budget.
 	 */
 	async executeRound(
 		rawActions: unknown,
@@ -130,7 +128,8 @@ export class EvidenceStore {
 		onTool?: (tool: ToolCallReport) => void,
 		maxActions: number = REVIEW_POLICY.maxRetrievalsPerTurn,
 		owner?: string,
-		spent = 0
+		spent = 0,
+		roundChars: number = REVIEW_POLICY.maxToolRoundChars
 	): Promise<ToolResult[]> {
 		const actions = normalizeActions(rawActions).slice(0, maxActions);
 		const results: ToolResult[] = [];
@@ -153,7 +152,7 @@ export class EvidenceStore {
 
 			const result = await untilAborted(
 				action.action,
-				this.executeReported(action, used, signal, onTool, owner),
+				this.executeReported(action, roundChars - used, signal, onTool, owner),
 				signal
 			);
 
@@ -205,7 +204,7 @@ export class EvidenceStore {
 	/** Runs one action between a `running` and a finished dashboard report of its budget-bounded result. */
 	private async executeReported(
 		action: RetrievalAction,
-		used: number,
+		room: number,
 		signal: AbortSignal | undefined,
 		onTool: ((tool: ToolCallReport) => void) | undefined,
 		owner: string | undefined
@@ -238,7 +237,7 @@ export class EvidenceStore {
 			throw error;
 		}
 
-		const bounded = fitRoundBudget(result, used);
+		const bounded = fitRoundBudget(result, room);
 
 		notify(onTool, finishedReport(started, startedMs, bounded));
 

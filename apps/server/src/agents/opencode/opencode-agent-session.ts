@@ -1,10 +1,12 @@
 import { z } from 'zod';
+import { OpenCodeWarmStart } from './opencode-warm-start';
 import type { ImageUpload } from '@recoder/shared';
 import { LlmError, cancelledError } from '../../models/llm/errors';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
+import { promptPrefix } from '../../models/prompt-prefix';
 import { emptyDirectory } from '../cli-process';
 import type { AgentPromptOptions, AgentReply, AgentRun, AgentRunOptions } from '../contract';
-import type { ToolLease } from '../tools/mcp-host';
+import type { SessionToolLease } from '../tools/mcp-host';
 import { OPENCODE_EMPTY_DIR, isEmptyObject, variantFor, type OpenCodeChatHost } from './opencode-chat';
 import type { OpenCodeApi } from './api/types';
 import { OpenCodeError, providerError } from './opencode-error';
@@ -41,6 +43,10 @@ function asLlmError(error: unknown, aborted: boolean): LlmError {
  */
 export class OpenCodeAgentRun implements AgentRun {
 	private readonly events = new AbortController();
+	private turn = 0;
+	private opening?: string;
+	private setAnswerOnly: (value: boolean) => void = () => {};
+	private stopped = new AbortController();
 	/** The brief's images, until the first prompt sends them; the session holds them after that. */
 	private unsentImages: readonly ImageUpload[];
 
@@ -49,9 +55,10 @@ export class OpenCodeAgentRun implements AgentRun {
 		private readonly scope: SessionScope,
 		private readonly options: AgentRunOptions,
 		private readonly api: OpenCodeApi,
-		private readonly lease: ToolLease | null,
+		private readonly lease: SessionToolLease | null,
 		private readonly id: string,
-		private readonly variant: string | undefined
+		private readonly variant: string | undefined,
+		private readonly warmStart: OpenCodeWarmStart
 	) {
 		this.unsentImages = options.images ?? [];
 	}
@@ -60,23 +67,51 @@ export class OpenCodeAgentRun implements AgentRun {
 		const scope = { server: host.server, directory: await emptyDirectory(OPENCODE_EMPTY_DIR) };
 		const api = await host.server.api();
 		const variant = await variantFor(host, options);
-		const lease = options.tools.length ? await leaseOpenCodeTools(scope, options) : null;
+		let answerOnly = false;
+
+		const lease = options.tools.length
+			? await leaseOpenCodeTools(scope, {
+					...options,
+					runTool: (name, args) =>
+						answerOnly
+							? Promise.resolve({
+									text: 'This is your final turn. Give your final result without tools.',
+									isError: true
+								})
+							: options.runTool(name, args)
+				})
+			: null;
 
 		let session: OpenCodeAgentRun | null = null;
+		let root: string | undefined;
 
 		try {
 			const id = await createSession(
 				{ ...scope, model: options.model, system: options.system, variant, signal: options.signal },
-				lease ? [`${lease.name}_*`] : []
+				lease ? [`${lease.name}_*`] : [],
+				(id) => {
+					root = id;
+				}
 			);
 
-			session = new OpenCodeAgentRun(host, scope, options, api, lease, id, variant);
+			lease?.bindSession(id);
+
+			const warmStart = new OpenCodeWarmStart(root, lease?.name, options.system);
+
+			session = new OpenCodeAgentRun(host, scope, options, api, lease, id, variant, warmStart);
+
+			session.setAnswerOnly = (value) => {
+				answerOnly = value;
+			};
 
 			await followSession(
 				host.server,
 				scope.directory,
 				() => id,
-				eventHandlers(options.onEvent),
+				{
+					...eventHandlers(options.onEvent),
+					onStepEnd: () => warmStart.release()
+				},
 				session.events.signal
 			);
 
@@ -89,16 +124,36 @@ export class OpenCodeAgentRun implements AgentRun {
 		}
 	}
 
-	private toolNames(tools: boolean): string[] {
-		return tools && this.lease ? this.options.tools.map((name) => `${this.lease!.name}_${name}`) : [];
+	private toolNames(): string[] {
+		return this.lease ? this.options.tools.map((name) => `${this.lease!.name}_${name}`) : [];
+	}
+
+	/** The tool part of the cached prefix: the catalog, and the answer format OpenCode adds as a tool. */
+	private toolsFingerprint(prompt: AgentPromptOptions, structured: boolean): string {
+		const format = structured && prompt.schema ? JSON.stringify(prompt.schema) : '';
+
+		return `${this.lease?.name ?? ''}\n${format}`;
 	}
 
 	private async send(text: string, prompt: AgentPromptOptions, structured: boolean): Promise<AgentReply> {
-		const images = this.unsentImages;
-
-		this.unsentImages = [];
+		const signal = AbortSignal.any([this.options.signal, this.stopped.signal, this.events.signal]);
 
 		try {
+			this.setAnswerOnly(!prompt.tools);
+			await this.warmStart.wait(signal);
+
+			const images = this.unsentImages;
+
+			this.unsentImages = [];
+			this.opening ??= text;
+
+			this.options.onEvent({
+				type: 'prompt-start',
+				session: this.id,
+				turn: ++this.turn,
+				prefix: promptPrefix(this.toolsFingerprint(prompt, structured), this.options.system, this.opening)
+			});
+
 			const reply = await this.api.prompt({
 				session: this.id,
 				directory: this.scope.directory,
@@ -107,10 +162,10 @@ export class OpenCodeAgentRun implements AgentRun {
 				model: this.options.model,
 				system: this.options.system,
 				variant: this.variant,
-				tools: this.toolNames(prompt.tools),
+				tools: this.toolNames(),
 				schema: structured ? prompt.schema : undefined,
 				timeoutMs: prompt.timeoutMs,
-				signal: this.options.signal
+				signal
 			});
 
 			const answer = reply.texts.at(-1) ?? '';
@@ -124,7 +179,9 @@ export class OpenCodeAgentRun implements AgentRun {
 
 			return { structured: structured ? reply.structured : undefined, text: answer, tokens };
 		} catch (error) {
-			return { text: '', error: asLlmError(error, this.options.signal.aborted) };
+			return { text: '', error: asLlmError(error, signal.aborted) };
+		} finally {
+			this.warmStart.release();
 		}
 	}
 
@@ -148,13 +205,18 @@ export class OpenCodeAgentRun implements AgentRun {
 
 	/** Stops the run in progress; its prompt then settles with a cancelled error. */
 	async abort(): Promise<void> {
+		const stopped = this.stopped;
+
+		this.stopped = new AbortController();
+		stopped.abort();
+		this.warmStart.release();
 		await abortSession(this.scope, this.id, true);
 	}
 
 	async close(): Promise<void> {
 		this.events.abort();
+		this.lease?.release();
 		await this.abort();
 		await deleteSession(this.scope, this.id);
-		this.lease?.release();
 	}
 }

@@ -1,10 +1,9 @@
 import {
 	MODEL_CALL_KINDS,
-	type AccountRole,
 	type ModelCallRow,
 	type ModelCost,
 	type ModelProvider,
-	type SignInForge,
+	type ReportPerson,
 	type UsageDay,
 	type UsageKind,
 	type UsageModel,
@@ -14,20 +13,11 @@ import {
 	type UsageDays
 } from '@recoder/shared';
 import { ADMIN_ACCOUNT_ID } from '../accounts/account-records';
-import type { PriceLookup } from '../models/model-prices';
-
-const TOKENS_PER_PRICE_UNIT = 1_000_000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+import { TOKENS_PER_PRICE_UNIT, tokenCost, type PriceLookup } from '../models/model-prices';
+import { allReportPeople, groupBy, shareOf, utcDay, windowDayKeys } from './report-shared';
 
 /** Who an account is in the report; the account's own record, or what its id says when the record is gone. */
-export interface UsageIdentity {
-	accountId: string;
-	role: AccountRole;
-	provider: SignInForge;
-	host: string | null;
-	login: string;
-	avatarUrl?: string;
-}
+export type UsageIdentity = ReportPerson;
 
 export interface UsageInput {
 	days: UsageDays;
@@ -94,22 +84,15 @@ export function buildUsageReport(input: UsageInput): UsageReport {
 
 /** The window's UTC days, oldest first, each starting at no tokens. */
 function windowDays(now: Date, count: number): Map<string, UsageDay> {
-	const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-	const days = new Map<string, UsageDay>();
-
-	for (let back = count - 1; back >= 0; back--) {
-		const day = new Date(today - back * DAY_MS).toISOString().slice(0, 10);
-
-		days.set(day, { day, tokens: 0, byPerson: {}, byModel: {}, byPersonModel: {} });
-	}
-
-	return days;
+	return new Map(
+		windowDayKeys(now, count).map((day) => [day, { day, tokens: 0, byPerson: {}, byModel: {}, byPersonModel: {} }])
+	);
 }
 
 function callUsage(row: ModelCallRow, priceOf: PriceLookup): CallUsage[] {
-	const startedAt = Date.parse(row.at);
+	const day = utcDay(row.at);
 
-	if (Number.isNaN(startedAt)) return [];
+	if (!day) return [];
 
 	const input = row.usage.inputTokens ?? 0;
 	const cacheRead = row.usage.cachedInputTokens ?? 0;
@@ -121,7 +104,7 @@ function callUsage(row: ModelCallRow, priceOf: PriceLookup): CallUsage[] {
 		{
 			sessionId: row.ownerId,
 			kind: row.kind,
-			day: new Date(startedAt).toISOString().slice(0, 10),
+			day,
 			account: row.person ?? ADMIN_ACCOUNT_ID,
 			model: row.model,
 			provider: row.provider,
@@ -131,32 +114,10 @@ function callUsage(row: ModelCallRow, priceOf: PriceLookup): CallUsage[] {
 			cacheRead,
 			cacheWrite,
 			output,
-			costUsd: callCost({ input, cacheRead, cacheWrite, output }, price),
+			costUsd: tokenCost({ input, cacheRead, cacheWrite, output }, price),
 			savingsUsd: cacheSavingsOf(cacheRead, price)
 		}
 	];
-}
-
-/** The cost of one call's tokens, or null when a kind of token it used has no price. */
-function callCost(tokens: Pick<CallUsage, 'input' | 'cacheRead' | 'cacheWrite' | 'output'>, price: ModelCost | null) {
-	const uncachedInput = Math.max(0, tokens.input - tokens.cacheRead - tokens.cacheWrite);
-
-	const parts: [count: number, perMillion: number | null | undefined][] = [
-		[uncachedInput, price?.input],
-		[tokens.cacheRead, price?.cacheRead],
-		[tokens.cacheWrite, price?.cacheWrite],
-		[tokens.output, price?.output]
-	];
-
-	let cost = 0;
-
-	for (const [count, perMillion] of parts) {
-		if (count === 0) continue;
-		if (perMillion === null || perMillion === undefined) return null;
-		cost += (count * perMillion) / TOKENS_PER_PRICE_UNIT;
-	}
-
-	return cost;
 }
 
 function cacheSavingsOf(cacheRead: number, price: ModelCost | null): number | null {
@@ -208,31 +169,10 @@ function totalsOf(calls: readonly CallUsage[]): UsageTotals {
 	};
 }
 
-function groupBy<T>(items: readonly T[], keyOf: (item: T) => string): Map<string, T[]> {
-	const groups = new Map<string, T[]>();
-
-	for (const item of items) {
-		const key = keyOf(item);
-
-		groups.set(key, [...(groups.get(key) ?? []), item]);
-	}
-
-	return groups;
-}
-
-function shareOf(tokens: number, allTokens: number): number {
-	return allTokens === 0 ? 0 : tokens / allTokens;
-}
-
 function peopleOf(calls: readonly CallUsage[], known: readonly UsageIdentity[], allTokens: number): UsagePerson[] {
 	const byAccount = groupBy(calls, (call) => call.account);
-	const identities = new Map(known.map((person) => [person.accountId, person]));
 
-	for (const accountId of byAccount.keys()) {
-		if (!identities.has(accountId)) identities.set(accountId, removedAccount(accountId));
-	}
-
-	return [...identities.values()]
+	return allReportPeople(known, byAccount.keys())
 		.map((identity) => {
 			const personCalls = byAccount.get(identity.accountId) ?? [];
 			const totals = totalsOf(personCalls);
@@ -245,22 +185,6 @@ function peopleOf(calls: readonly CallUsage[], known: readonly UsageIdentity[], 
 			};
 		})
 		.sort((a, b) => b.tokens - a.tokens || a.login.localeCompare(b.login));
-}
-
-/**
- * Who an account that no longer exists was, from its id (`member:<provider>:<host>:<login>`), so a removed member's
- * calls still show under their name. An id that does not read that way is shown as it is.
- */
-function removedAccount(accountId: string): UsageIdentity {
-	const [, provider, ...rest] = accountId.split(':');
-	const login = rest.pop();
-	const isForge = provider === 'github' || provider === 'gitlab';
-
-	if (!accountId.startsWith('member:') || !isForge || !login) {
-		return { accountId, role: 'member', provider: 'github', host: null, login: accountId };
-	}
-
-	return { accountId, role: 'member', provider, host: rest.join(':') || null, login };
 }
 
 function modelsOf(calls: readonly CallUsage[], allTokens: number): UsageModel[] {

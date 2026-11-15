@@ -116,6 +116,11 @@ export interface Review {
 	};
 	/** False runs every baseline check again instead of reusing an earlier review's result; for a suspected flaky suite. */
 	baselineCache?: false;
+	/**
+	 * False keeps the findings this review raised and nothing else: none are carried from, or matched against, an
+	 * earlier review of the pull request. An evaluation scores each review alone.
+	 */
+	findingHistory?: false;
 	/** Present once someone asked Recoder to comment on the pull request. */
 	pullComment?: ReviewPullComment;
 	/** Findings posted to the pull request, by finding id, so posting again edits them. */
@@ -142,6 +147,8 @@ export interface CreateReviewInput {
 	start?: boolean;
 	/** False skips the baseline check cache for this review. */
 	baselineCache?: false;
+	/** False keeps the review's own findings without carrying earlier reviews' (`Review.findingHistory`). */
+	findingHistory?: false;
 	/** Display metadata from the selected open PR. Refetched before analysis. */
 	prTitle?: string;
 	/** True posts a summary comment on the pull request and keeps it current as the review runs. */

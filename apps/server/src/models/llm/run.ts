@@ -1,4 +1,5 @@
 import type { TokenUsage } from '@recoder/shared';
+import { promptPrefix } from '../prompt-prefix';
 import { trackTokenCall } from '../metrics';
 import { isRateLimitError, OutOfTimeError, TimedOutError } from './errors';
 import { acquireLlmSlot, llmEndpoint, recordLlmRateLimit, recordLlmSuccess, releaseLlmSlot } from './limiter';
@@ -107,7 +108,17 @@ export async function runChat(opts: ChatOptions, onToken?: (text: string) => voi
 		const deadline = Math.min(Date.now() + budget, settleBy);
 
 		progress.running();
-		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible', opts.reasoningEffort);
+
+		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible', opts.reasoningEffort, {
+			prefix: promptPrefix(
+				'',
+				opts.messages
+					.filter((message) => message.role === 'system')
+					.map((message) => message.content)
+					.join('\n\n'),
+				opts.messages.find((message) => message.role === 'user')?.content ?? ''
+			)
+		});
 
 		const rate = rateReporter(opts.onRate);
 		const call = scopedOptions(opts, scope, tracking, rate, deadline);

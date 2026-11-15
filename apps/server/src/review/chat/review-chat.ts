@@ -60,7 +60,7 @@ function rerunInstructions(): string {
 
 	const subagents = cap
 		? `The Subagents setting allows ${allowed} per review, and reviewers request them when the brief asks.`
-		: 'The Subagents setting is off, so a new run cannot use subagents. If the developer wants them, tell them to turn on Subagents under Settings › Harness and ask again, and do not start the run.';
+		: 'The Subagents setting is off, so a new run cannot use subagents. If the developer wants them, tell them to turn on Subagents under Settings › Limits and ask again, and do not start the run.';
 
 	return `When the developer asks you to review again, run another review, or rerun it with a different focus or with subagents, Recoder can do that: say in one short sentence that you're starting a new review, and put this block at the very end of your message:\n\`\`\`recoder-review\n{}\n\`\`\`\nThe new run starts from the beginning in this session, with this conversation as its brief, and replaces the current findings. ${subagents} Never add this block unprompted.`;
 }

@@ -116,6 +116,8 @@ export interface ReviewRun {
 	repairs: number;
 	/** Dependency setup and baseline check results, shared with every reviewer and verifier. */
 	setupNotes: string;
+	/** Stable setup context shared by reviewer pools and verifier sessions. */
+	sharedSetupNotes?: string;
 	task: TaskFn;
 }
 
@@ -127,7 +129,7 @@ const UNCAPPED_REQUESTS = 4;
 
 /** What the review is sized for: its reviewers, its brief calls and the subagents its cap allows. */
 function reviewShape(inventory: ReviewInventory, limits: ReviewLimits, input: AdaptiveReviewInput): ReviewShape {
-	const cap: SubagentCap | number = input.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+	const cap: SubagentCap = input.subagentCap ?? DEFAULT_SUBAGENT_CAP;
 
 	return {
 		reviewers: partitionReviewers(inventory, limits, input.lenses).length,
@@ -383,6 +385,7 @@ export function poolContext(run: ReviewRun): PoolContext {
 		recommended: run.recommended,
 		exec: Boolean(run.workspace),
 		images: input.images ?? [],
+		sharedSetupNotes: (run.sharedSetupNotes ??= run.setupNotes),
 		setupNotes: () => run.setupNotes,
 		directive: run.directive,
 		subagentRequests: requestsPerReviewer(run),

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach } from 'bun:test';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import { useTempStore } from './temp-store';
 
 /** A chat request whose key and prompt must never reach stored metrics or telemetry. */
@@ -6,6 +7,7 @@ export const CHAT_OPTIONS = {
 	baseUrl: 'https://model.test/v1',
 	apiKey: 'secret-not-for-metrics',
 	model: 'model-a',
+	contextWindow: DEFAULT_CONTEXT_WINDOW,
 	messages: [{ role: 'user' as const, content: 'private prompt' }]
 };
 

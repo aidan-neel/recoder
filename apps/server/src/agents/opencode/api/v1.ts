@@ -102,9 +102,13 @@ function sessionRouter(handlers: SessionHandlers): (event: unknown, session: str
 		if (part.type === 'step-start') {
 			steps.add(part.id);
 			handlers.onStepStart?.(part.messageID);
-		} else if (part.type === 'step-finish' && part.tokens) {
-			steps.add(part.id);
-			handlers.onStepFinish?.(usage(part.tokens), part.messageID);
+		} else if (part.type === 'step-finish') {
+			handlers.onStepEnd?.();
+
+			if (part.tokens) {
+				steps.add(part.id);
+				handlers.onStepFinish?.(usage(part.tokens), part.messageID);
+			}
 		}
 	};
 
@@ -210,11 +214,12 @@ export class V1Api implements OpenCodeApi {
 	}
 
 	/** A session that may use nothing of OpenCode's own; `allow` names the patterns it may call. */
-	async createSession({ directory, allow, signal }: NewSession): Promise<string> {
+	async createSession({ parentID, directory, allow, signal }: NewSession): Promise<string> {
 		const created = await this.server.request(`/session?directory=${encodeURIComponent(directory)}`, {
 			method: 'POST',
 			body: {
 				title: 'Recoder',
+				...(parentID && { parentID }),
 				permission: [DENY_ALL, ...allow.map((permission) => ({ permission, pattern: '*', action: 'allow' }))]
 			},
 			signal

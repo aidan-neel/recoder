@@ -5,7 +5,7 @@ import { getReviewMetrics, withUsageMetrics } from '../../../../src/models/metri
 import { ModelBudget } from '../../../../src/review/pipeline/agent-loop/budget';
 import type { JsonAgentOptions } from '../../../../src/review/pipeline/agent-loop/options';
 import { StepRelay } from '../../../../src/review/pipeline/agent-loop/step-relay';
-import { db, reviewMetrics } from '../../../../src/store';
+import { db, modelCalls, reviewMetrics } from '../../../../src/store';
 import { testReview } from '../../../helpers/review';
 import { useTempStore } from '../../../helpers/temp-store';
 
@@ -109,4 +109,24 @@ test('a single step without a usage event takes the prompt’s tokens, but sever
 	});
 
 	expect(await calls(two.reviewId)).toEqual([110, null]);
+});
+
+test('telemetry preserves prompt positions for steps and failures before any step', async () => {
+	const { reviewId, run } = await relay();
+
+	await run(async (target) => {
+		target.onEvent({ type: 'prompt-start', session: 'ses_review', turn: 1 });
+		target.onEvent({ type: 'step-start', step: 'one' });
+		target.onEvent({ type: 'usage', step: 'one', usage: usage(100, 10) });
+		await target.finishPrompt(undefined);
+		target.onEvent({ type: 'prompt-start', session: 'ses_review', turn: 2 });
+		await target.finishPrompt(undefined, new LlmError(403, 'denied'));
+	});
+
+	const rows = (await modelCalls.list()).filter((row) => row.ownerId === reviewId);
+
+	expect(rows.map(({ session, turn, outcome }) => ({ session, turn, outcome }))).toEqual([
+		{ session: 'ses_review', turn: 1, outcome: 'ok' },
+		{ session: 'ses_review', turn: 2, outcome: 'failed' }
+	]);
 });

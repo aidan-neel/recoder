@@ -55,14 +55,26 @@ export function parseThoughts(reasoning: string): ParsedThought[] {
 	return thoughts;
 }
 
+/** What a tool call showed of itself. Events carry the name; the runner supplies the arguments. */
+export interface ToolStepDetail {
+	path?: string;
+	query?: string;
+	scope?: string;
+	files?: string[];
+	command?: string;
+	startLine?: number;
+	endLine?: number;
+}
+
 /**
  * Writes what a reply reports about its work into the reply's trail: the
- * files it read and the reasoning its model discloses. It adds nothing a
- * source did not report. Each change calls `changed` so the reply can save.
+ * files it read, the tools it called, and the reasoning its model discloses.
+ * It adds nothing a source did not report. Each change calls `changed` so the reply can save.
  */
 export class TrailRecorder {
 	private reasoning = '';
 	private readId: string | null = null;
+	private toolStepId: string | null = null;
 
 	constructor(
 		private readonly reply: RepoChatMessage,
@@ -125,6 +137,69 @@ export class TrailRecorder {
 		if (last) this.put({ ...last, endedAt: now() });
 	}
 
+	/** Opens a trail step for a tool call. A step still open from an earlier call is closed as an error. */
+	noteToolCall(name: string): void {
+		if (this.toolStepId) this.noteToolResult(true);
+
+		this.toolStepId = crypto.randomUUID();
+		this.put(this.renderedToolStep(this.toolStepId, name, {}, 'running', now()));
+	}
+
+	/** Fills the open tool step from the call's arguments, opening one when the call event has not arrived yet. */
+	noteToolArgs(name: string, detail: ToolStepDetail): void {
+		const id = this.toolStepId ?? crypto.randomUUID();
+
+		this.toolStepId = id;
+
+		const open = this.reply.trail?.find((step) => step.id === id);
+
+		this.put(this.renderedToolStep(id, name, detail, 'running', open?.startedAt ?? now()));
+	}
+
+	/**
+	 * Closes the open tool step. A second result for the same call does nothing,
+	 * so the runner and the run's `tool-result` event can both report it.
+	 */
+	noteToolResult(isError: boolean): void {
+		const id = this.toolStepId;
+
+		if (!id) return;
+
+		this.toolStepId = null;
+
+		const open = this.reply.trail?.find((step) => step.id === id);
+
+		if (!open || open.kind === 'thought') return;
+
+		this.put({ ...open, status: isError ? 'error' : 'done', endedAt: now() });
+	}
+
+	private renderedToolStep(
+		id: string,
+		name: string,
+		detail: ToolStepDetail,
+		status: 'running' | 'done' | 'error',
+		startedAt: string
+	): ChatTrailStep {
+		if (name === 'search') {
+			return {
+				id,
+				kind: 'search',
+				query: detail.query ?? '',
+				...(detail.scope ? { scope: detail.scope } : {}),
+				status,
+				files: stepFiles(detail),
+				startedAt
+			};
+		}
+
+		if (name === 'read_file' || name === 'list_files') {
+			return { id, kind: 'read', status, files: stepFiles(detail), startedAt };
+		}
+
+		return { id, kind: 'run', command: detail.command ?? name, status, startedAt };
+	}
+
 	private put(step: ChatTrailStep): void {
 		this.reply.trail = withTrailStep(this.reply.trail ?? [], step);
 		this.changed();
@@ -159,6 +234,16 @@ async function citation(repo: Repo, file: ChatTrailFile, signal: AbortSignal): P
 		.slice(0, MAX_SNIPPET_CHARS);
 
 	return { ...file, snippet };
+}
+
+function stepFiles(detail: ToolStepDetail): ChatTrailFile[] {
+	const paths = detail.files ?? (detail.path ? [detail.path] : []);
+
+	return paths.slice(0, MAX_STEP_FILES).map((path, index) => ({
+		path,
+		...(index === 0 && detail.startLine !== undefined ? { startLine: detail.startLine } : {}),
+		...(index === 0 && detail.endLine !== undefined ? { endLine: detail.endLine } : {})
+	}));
 }
 
 function now(): string {

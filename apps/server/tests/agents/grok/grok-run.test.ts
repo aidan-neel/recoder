@@ -251,5 +251,5 @@ test('a review agent on a Grok model completes through the shared engine, readin
 	const { error, read } = await fixtureReview(new GrokAgent(await fakeGrok({ FAKE_GROK_MODE: 'answer' })), 'grok-4.7');
 
 	expect(error).toBeUndefined();
-	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+new') });
+	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+1|new') });
 });

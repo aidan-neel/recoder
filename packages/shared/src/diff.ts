@@ -69,7 +69,9 @@ function blankFile(path: string): FileDiff {
 /**
  * Parse a unified diff into files and hunks. Some producers (plain patches, MR
  * raw diffs) omit `diff --git` headers, so the last `---`/`+++` paths are kept
- * to give orphan hunks a file. `\ No newline at end of file` lines are skipped.
+ * to give orphan hunks a file. `\ No newline at end of file` lines are skipped. A hunk holds exactly the lines its
+ * header counts, so a removed `-- comment` or an added `++x` inside it is content, not a file header, and the empty
+ * entry a trailing newline leaves after the last hunk is not a context line.
  */
 export function parseUnifiedDiff(input: string): FileDiff[] {
 	const files: FileDiff[] = [];
@@ -77,6 +79,8 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 	let hunk: DiffHunk | null = null;
 	let oldNo = 0;
 	let newNo = 0;
+	let oldLeft = 0;
+	let newLeft = 0;
 	let pendingOld: string | null = null;
 	let pendingNew: string | null = null;
 
@@ -86,6 +90,29 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 	};
 
 	for (const raw of input.split('\n')) {
+		if (hunk && current && (oldLeft > 0 || newLeft > 0)) {
+			if (raw.startsWith('\\')) continue;
+
+			const marker = raw[0] ?? ' ';
+			const text = raw.slice(1);
+
+			if (marker === '-') {
+				hunk.lines.push({ type: 'del', oldNo: oldNo++, newNo: null, text });
+				current.deletions++;
+				oldLeft--;
+			} else if (marker === '+') {
+				hunk.lines.push({ type: 'add', oldNo: null, newNo: newNo++, text });
+				current.additions++;
+				newLeft--;
+			} else {
+				hunk.lines.push({ type: 'context', oldNo: oldNo++, newNo: newNo++, text: marker === ' ' ? text : raw });
+				oldLeft--;
+				newLeft--;
+			}
+
+			continue;
+		}
+
 		if (raw.startsWith('diff --git ')) {
 			pushHunk();
 
@@ -132,23 +159,8 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 				lines: []
 			};
 
-			continue;
-		}
-
-		if (!hunk || !current) continue;
-		if (raw.startsWith('\\')) continue;
-
-		const marker = raw[0] ?? ' ';
-		const text = raw.slice(1);
-
-		if (marker === '-') {
-			hunk.lines.push({ type: 'del', oldNo: oldNo++, newNo: null, text });
-			current.deletions++;
-		} else if (marker === '+') {
-			hunk.lines.push({ type: 'add', oldNo: null, newNo: newNo++, text });
-			current.additions++;
-		} else {
-			hunk.lines.push({ type: 'context', oldNo: oldNo++, newNo: newNo++, text: marker === ' ' ? text : raw });
+			oldLeft = hunk.oldCount;
+			newLeft = hunk.newCount;
 		}
 	}
 

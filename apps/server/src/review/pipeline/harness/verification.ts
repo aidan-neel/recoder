@@ -74,6 +74,8 @@ const VERIFIER_EXAMPLE =
  * verified join at once. `checks` resolves when the baseline checks finish.
  */
 export function startVerification(run: ReviewRun, checks: () => Promise<void>): void {
+	const sharedSetupNotes = (run.sharedSetupNotes ??= run.setupNotes);
+
 	const ctx: VerifyContext = {
 		evidence: run.evidence,
 		budget: run.budget,
@@ -81,7 +83,7 @@ export function startVerification(run: ReviewRun, checks: () => Promise<void>): 
 		signal: run.controller.signal,
 		events: run.events,
 		task: run.task,
-		notes: () => ({ setupNotes: run.setupNotes, intent: intentBlock(run.intent) }),
+		notes: () => ({ sharedSetupNotes, setupNotes: run.setupNotes, intent: intentBlock(run.intent) }),
 		intent: run.intent,
 		ledger: run.ledger,
 		inventory: run.inventory,

@@ -6,6 +6,7 @@ import { imageBodyLimit, refuseUnreadImages, serveImage } from '../attachments/i
 import { deleteChatImages, withSavedImages } from '../attachments/image-store';
 import { imageProblem, imagesSchema } from '../attachments/image-upload';
 import { withStarterModels } from '../models/model-policy';
+import { getReviewMetrics } from '../models/metrics';
 import { configForOrchestrator } from '../models/models';
 import { requestAccountId } from '../accounts/enforcement';
 import {
@@ -110,6 +111,17 @@ app.get('/:id', async (c) => {
 	const chat = await requireChat(c);
 
 	return chat instanceof Response ? chat : c.json(publicChat(chat));
+});
+
+/** Token usage across every model call the chat has made, or null before any call is recorded. */
+app.get('/:id/metrics', async (c) => {
+	c.header('Cache-Control', 'no-store');
+
+	const chat = await requireChat(c);
+
+	if (chat instanceof Response) return chat;
+
+	return c.json(await getReviewMetrics(chat.id));
 });
 
 /** Sends a message; the reply streams on `/:id/events`. Refused while the last reply is still being written. */

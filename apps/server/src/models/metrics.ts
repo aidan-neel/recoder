@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { withUsageResources } from './usage-resources';
 import {
 	TOKEN_STAGES,
 	aggregateTokenCalls,
@@ -171,7 +172,11 @@ export async function withUsageMetrics<T>(ownerId: string, scope: TokenScope, ru
 	}
 
 	try {
-		return await context.run(owner, () => withLlmLane({ id: ownerId, recordWait: recordQueueDelay }, run));
+		return await context.run(owner, () =>
+			found
+				? withUsageResources(ownerId, () => withLlmLane({ id: ownerId, recordWait: recordQueueDelay }, run))
+				: withLlmLane({ id: ownerId, recordWait: recordQueueDelay }, run)
+		);
 	} finally {
 		await flushReviewMetrics(ownerId);
 	}
@@ -279,7 +284,12 @@ function errorKindOf(err: unknown): string {
 	return 'error';
 }
 
-export function trackTokenCall(model: string, provider: TokenCall['provider'], effort?: ReasoningEffort) {
+export function trackTokenCall(
+	model: string,
+	provider: TokenCall['provider'],
+	effort?: ReasoningEffort,
+	position?: Pick<ModelCallRow, 'session' | 'turn' | 'prefix'>
+) {
 	const owner = context.getStore();
 	const tally = tallies.getStore();
 	const stage = stages.getStore();
@@ -327,6 +337,7 @@ export function trackTokenCall(model: string, provider: TokenCall['provider'], e
 			provider: call.provider,
 			model: call.model,
 			...(effort && { effort }),
+			...position,
 			usage: call.usage,
 			...(durationMs !== undefined && { durationMs }),
 			outcome,

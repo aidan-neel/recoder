@@ -35,6 +35,8 @@ export interface VllmTarget {
 	baseUrl: string;
 	apiKey: string;
 	model: string;
+	/** What the server reported for the model when it was captured; null when it did not say. */
+	contextWindow: number | null;
 	efforts?: ReasoningEffort[];
 	defaultEffort?: ReasoningEffort;
 }
@@ -50,11 +52,19 @@ export function vllmTarget(entryId: string): VllmTarget | { error: string } {
 
 	if (!parsed || !server) return { error: 'That vLLM server isn’t connected. Connect it in Settings → Agent.' };
 
-	if (!server.models.some((model) => model.id === parsed.model && model.served)) {
+	const served = server.models.find((model) => model.id === parsed.model && model.served);
+
+	if (!served) {
 		return {
 			error: `${parsed.model} is no longer served by ${vllmHost(server.baseUrl)}. Pick another model in Settings → Agent.`
 		};
 	}
 
-	return { baseUrl: server.baseUrl, apiKey: server.apiKey ?? '', model: parsed.model, ...effortsFor(parsed.model) };
+	return {
+		baseUrl: server.baseUrl,
+		apiKey: server.apiKey ?? '',
+		model: parsed.model,
+		contextWindow: served.contextWindow,
+		...effortsFor(parsed.model)
+	};
 }

@@ -61,7 +61,7 @@ export type ReviewLever = keyof typeof REVIEW_LEVERS;
 export interface ReviewTuning {
 	budget: TokenBudget;
 	/** Subagents the review may run in all; null is the budget's cap. */
-	subagents: SubagentCap | number | null;
+	subagents: SubagentCap | null;
 	/** Model id for reviewers; null is the saved Review model. */
 	reviewerModel: string | null;
 	/** Model id for subagents only; verifiers follow the Review model unless `verifierModel` is given. Null is the saved pick. */

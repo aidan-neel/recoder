@@ -13,7 +13,7 @@ import { sleep } from '../../../models/llm/retry.js';
 import { isAuthFailure, isUsageLimit, modelFailure } from '../../../models/model-failure.js';
 import { currentReviewControl, reviewNow, reviewPausePoint } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
-import { CHAT_STYLE, NATIVE_REPLY_RULES, forNativeTools } from '../prompts.js';
+import { CHAT_STYLE, NATIVE_REPLY_RULES, TOOLLESS_REPLY_RULES, forNativeTools } from '../prompts.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './budget.js';
 import { agentDeadlines, deadlineError, newAgentId, toolTurns, type AgentLimits } from './limits.js';
 import { StepRelay } from './step-relay.js';
@@ -42,6 +42,12 @@ const PROMPT_BACKSTOP_MS = 5_000;
 
 /** Steps a model may take to answer once its tools are off: the answer, and one retry of it. */
 const ANSWER_STEPS = 2;
+
+/**
+ * Extra answer steps for a run that keeps its tools listed on the final turn so its cached prefix holds: the model
+ * may try a tool there, gets it refused, and must still have room to answer.
+ */
+const REFUSED_TOOL_STEPS = 2;
 
 /** How long to wait before resuming after a provider's transient failure, per attempt so far. */
 const RESUME_BACKOFF_MS = 5_000;
@@ -126,8 +132,13 @@ class NativeRun<T> {
 		opts.onProgress?.('running', 0, `Running ${opts.label}`);
 
 		if (!opts.budget.canSpend(0, this.spendOpts)) this.stop('budget');
-		else if (!this.promptTools && step - this.stepsBefore > ANSWER_STEPS) this.stop('runaway');
+		else if (!this.promptTools && step - this.stepsBefore > this.answerSteps()) this.stop('runaway');
 		else if (this.promptTools && step > Math.max(opts.maxTurns, toolTurns(opts) + ANSWER_STEPS)) this.stop('final');
+	}
+
+	/** Steps the model may take on a prompt that only asks for its answer. */
+	private answerSteps(): number {
+		return toolTurns(this.opts) > 0 ? ANSWER_STEPS + REFUSED_TOOL_STEPS : ANSWER_STEPS;
 	}
 
 	/** A finished step reached the provider, which is what lets a backed-off model limit recover. */
@@ -142,8 +153,8 @@ class NativeRun<T> {
 		return this.agent.openRun({
 			model: opts.config.model,
 			reasoningEffort: opts.config.reasoningEffort,
-			system: forNativeTools(opts.system) + NATIVE_REPLY_RULES + CHAT_STYLE,
-			tools: this.toolsOn ? nativeToolNames({ exec: Boolean(opts.exec), delegate: Boolean(opts.delegate) }) : [],
+			system: forNativeTools(opts.system) + (this.toolsOn ? NATIVE_REPLY_RULES : TOOLLESS_REPLY_RULES) + CHAT_STYLE,
+			tools: toolTurns(opts) > 0 ? nativeToolNames({ exec: true, delegate: true }) : [],
 			runTool: this.gate.run,
 			onEvent: this.relay.onEvent,
 			signal: opts.signal,

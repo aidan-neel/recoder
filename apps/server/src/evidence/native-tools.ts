@@ -28,7 +28,7 @@ const READ_TOOLS: NativeTool[] = [
 	tool(
 		'read_diff',
 		'readDiff',
-		'Read the pull request patch for one file, or for the hunks named.',
+		'Read the pull request patch for one file, or for the hunks named. Hunk lines use +N|added and  N|context with new-side numbers, -N|removed with old-side numbers.',
 		{ path: str, hunkIds: { type: 'array', items: str }, cursor },
 		[]
 	),

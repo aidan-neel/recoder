@@ -41,6 +41,19 @@ test('the first review of a pull request keeps its findings without history', as
 	expect(await withFindingHistory(review.id, [finding], [])).toEqual({ findings: [finding] });
 });
 
+test('a review started without finding history keeps only its own findings after an earlier review', async () => {
+	await firstReview();
+
+	const next = await savedReview('sha-1', '2026-11-02T00:00:00.000Z', FIRST_PUSH, {
+		status: 'running',
+		findingHistory: false
+	});
+
+	const own = cacheFinding('own', STALE_CLAIM, { line: 40 });
+
+	expect(await withFindingHistory(next.id, [own], [])).toEqual({ findings: [own] });
+});
+
 test('history and the dismissal reason carried to a new push are still there after the server restarts', async () => {
 	await firstReview();
 

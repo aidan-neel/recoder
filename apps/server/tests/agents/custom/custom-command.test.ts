@@ -181,5 +181,5 @@ test('a review agent on a custom command completes through the shared engine, re
 	const { error, read } = await fixtureReview(new CustomCommandAgent(await fakeCustomCommand()), 'fast');
 
 	expect(error).toBeUndefined();
-	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+new') });
+	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+1|new') });
 });

@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { ModelBlockedError, ModelBudget, runJsonAgent } from '../../../src/review/pipeline/agent-loop';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import { EvidenceStore } from '../../../src/evidence/evidence';
 import type { JsonAgentOptions } from '../../../src/review/pipeline/agent-loop/options';
 import { buildInventory } from '../../../src/review/pipeline/inventory';
@@ -12,7 +13,7 @@ afterEach(() => {
 	globalThis.fetch = originalFetch;
 });
 
-const config = { model: 'test', baseUrl: 'https://model.test', apiKey: 'test' };
+const config = { model: 'test', baseUrl: 'https://model.test', apiKey: 'test', contextWindow: DEFAULT_CONTEXT_WINDOW };
 
 const diff = Array.from(
 	{ length: 7 },

@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import { chatCompletion } from '../../../src/models/llm';
 import { acquireLlmSlot, releaseLlmSlot } from '../../../src/models/llm/limiter';
 import { lockedModels, runLocked, type LockedModels } from '../../../src/models/llm/locked-models';
@@ -28,7 +29,13 @@ async function storedReview(): Promise<string> {
 
 /** A model config named `model`, for picks set by hand. */
 function picks(models: string[]): LockedModels {
-	const config = (model: string) => ({ baseUrl: 'http://locked-models.test/v1', apiKey: '', model });
+	const config = (model: string) => ({
+		baseUrl: 'http://locked-models.test/v1',
+		apiKey: '',
+		model,
+		contextWindow: DEFAULT_CONTEXT_WINDOW
+	});
+
 	const [orchestrator = 'lead', subagent = orchestrator, verifier = orchestrator] = models;
 
 	return { orchestrator: config(orchestrator), subagent: config(subagent), verifier: config(verifier) };

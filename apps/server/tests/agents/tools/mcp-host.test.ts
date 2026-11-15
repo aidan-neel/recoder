@@ -2,7 +2,9 @@ import { afterEach, expect, test } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 import type { AgentEvent, ToolRunner } from '../../../src/agents/contract';
-import { McpToolHost } from '../../../src/agents/tools/mcp-host';
+import { McpToolHost, withMcpToolCatalog } from '../../../src/agents/tools/mcp-host';
+import { NATIVE_TOOLS } from '../../../src/evidence/native-tools';
+import { chatToolDefinitions } from '../../../src/repo-chat/chat-tools';
 
 const host = new McpToolHost();
 
@@ -28,7 +30,9 @@ const callSchema = z.object({
 });
 
 /** A `tools/list` answer. */
-const listSchema = z.object({ result: z.object({ tools: z.array(z.object({ name: z.string() })) }) });
+const listSchema = z.object({
+	result: z.object({ tools: z.array(z.object({ name: z.string(), description: z.string() })) })
+});
 
 async function text(response: Response): Promise<string> {
 	return callSchema.parse(await response.json()).result.content[0].text;
@@ -110,4 +114,68 @@ test('a tool call runs in the async context of the run that leased its slot, not
 	await call(first.url, 'search');
 
 	expect(seen).toEqual(['second review', 'first review']);
+});
+
+test('a review lease lists only native tools', async () => {
+	const lease = host.lease(
+		NATIVE_TOOLS.map((tool) => tool.name),
+		runner('review'),
+		ignore
+	);
+
+	const listed = listSchema.parse(await (await rpc(lease.url, 'tools/list')).json()).result.tools;
+	const nativeRead = NATIVE_TOOLS.find((tool) => tool.name === 'read_file');
+
+	expect(listed.map((tool) => tool.name)).toEqual(NATIVE_TOOLS.map((tool) => tool.name));
+	expect(listed.find((tool) => tool.name === 'read_file')?.description).toBe(nativeRead?.description);
+	expect(listed.some((tool) => tool.name === 'start_review')).toBe(false);
+});
+
+test('a name lease lists catalog definitions only when every requested name is in the catalog', async () => {
+	const definitions = chatToolDefinitions();
+
+	const covered = await withMcpToolCatalog(definitions, async () => {
+		const lease = host.lease(
+			definitions.map((tool) => tool.name),
+			runner('chat'),
+			ignore
+		);
+
+		return listSchema.parse(await (await rpc(lease.url, 'tools/list')).json()).result.tools;
+	});
+
+	expect(covered.map((tool) => tool.name)).toEqual(definitions.map((tool) => tool.name));
+
+	expect(covered.find((tool) => tool.name === 'read_file')?.description).toBe(
+		definitions.find((tool) => tool.name === 'read_file')?.description
+	);
+
+	const mixed = await withMcpToolCatalog(definitions, async () => {
+		const lease = host.lease(['read_file', 'run'], runner('review'), ignore);
+
+		return listSchema.parse(await (await rpc(lease.url, 'tools/list')).json()).result.tools;
+	});
+
+	expect(mixed.map((tool) => tool.name)).toEqual(['read_file', 'run']);
+	expect(mixed.find((tool) => tool.name === 'read_file')?.description).toContain('revision');
+});
+
+test('a lease can carry its own definitions and still refuses a name it was not given', async () => {
+	const lease = host.lease(
+		[
+			{
+				name: 'start_review',
+				description: 'Start a review of a pull request by its number.',
+				inputSchema: { type: 'object' }
+			}
+		],
+		runner('chat'),
+		ignore
+	);
+
+	const listed = listSchema.parse(await (await rpc(lease.url, 'tools/list')).json()).result.tools;
+	const refused = callSchema.parse(await (await call(lease.url, 'read_file')).json());
+
+	expect(listed).toEqual([{ name: 'start_review', description: 'Start a review of a pull request by its number.' }]);
+	expect(refused.result.isError).toBe(true);
 });

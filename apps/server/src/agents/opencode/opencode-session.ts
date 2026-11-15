@@ -1,3 +1,5 @@
+import { cacheRoot } from './opencode-cache-root';
+import { currentUsageResources } from '../../models/usage-resources';
 import type { ImageUpload } from '@recoder/shared';
 import { addedTurns, promptText, type ChatConversation, type HeldTranscript } from '../../models/llm/conversation';
 import { turnImages } from '../../models/llm/message-images';
@@ -10,6 +12,8 @@ export type SessionScope = Pick<TurnRequest, 'server' | 'directory'>;
 /** The session a conversation keeps between calls, and what OpenCode already holds of it. */
 interface KeptSession extends HeldTranscript {
 	id: string;
+	/** A closed owner deletes its children, so a later call must start a fresh session. */
+	owner?: object;
 	/** The last message of the last good call; a failed call's messages come after it. */
 	lastMessageId: string | null;
 }
@@ -43,18 +47,25 @@ interface TurnRequest {
 /** A session that may use none of OpenCode's own tools; `allow` names the patterns it may call. */
 export async function createSession(
 	request: SessionScope & Pick<TurnRequest, 'model' | 'system' | 'variant'> & { signal: AbortSignal },
-	allow: string[] = []
+	allow: string[] = [],
+	onCacheRoot?: (root: string | undefined) => void
 ): Promise<string> {
 	const api = await request.server.api();
 
-	return api.createSession({
+	const session = {
 		directory: request.directory,
 		model: request.model,
 		system: request.system,
 		variant: request.variant,
 		allow,
 		signal: request.signal
-	});
+	};
+
+	const parentID = await cacheRoot(request.server, api, session);
+
+	onCacheRoot?.(parentID);
+
+	return api.createSession({ ...session, ...(parentID && { parentID }) });
 }
 
 /** Best effort: stop the model when the call was aborted, so nothing keeps running in OpenCode. */
@@ -109,7 +120,8 @@ export async function openTurn(request: TurnRequest): Promise<SessionTurn> {
 	if (!conversation) return throwawayTurn(request);
 
 	const existing = kept.get(conversation);
-	const added = existing ? addedTurns(existing, request) : null;
+	const owner = currentUsageResources();
+	const added = existing && existing.owner === owner ? addedTurns(existing, request) : null;
 
 	if (existing && !added) await deleteSession(request, existing.id);
 	else if (!existing)
@@ -125,6 +137,7 @@ export async function openTurn(request: TurnRequest): Promise<SessionTurn> {
 			? existing
 			: {
 					id: await createSession(request),
+					owner,
 					model: request.model,
 					system: request.system,
 					variant: request.variant,

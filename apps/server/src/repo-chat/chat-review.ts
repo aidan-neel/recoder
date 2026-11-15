@@ -28,7 +28,7 @@ export function requestedReview(text: string): number | null {
 }
 
 /**
- * Starts a review of the pull request, with the message as its brief, the
+ * Starts a review of the pull request, with the message (if any) as its brief, the
  * same way the New review screen does. When one is already queued or
  * running, the reply points to it instead of starting another. A refusal
  * (no reviewer model set up) becomes the reply's failure, in the words the
@@ -37,7 +37,7 @@ export function requestedReview(text: string): number | null {
 export async function reviewFromChat(
 	repo: Repo,
 	prNumber: number,
-	brief: string,
+	brief: string | undefined,
 	startedBy?: string
 ): Promise<Pick<RepoChatMessage, 'text' | 'review' | 'failure'>> {
 	const running = (await db.reviews.list()).find(

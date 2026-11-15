@@ -15,7 +15,8 @@ it through the registry and never names a CLI:
 | ------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
 | Settings, status routes                    | `detect`, `models` (via `agentStatuses`, `agentModels`) | `apps/server/src/agents/registry.ts`                     |
 | Model routing (`<id>:<model>` ids)         | `modelSettings` (via `agentForModel`)                 | `apps/server/src/models/models.ts` (`agentConfig`)         |
-| Single model calls (chat, summaries)       | `complete` (via `agentById`)                          | `apps/server/src/models/llm/transports.ts` (`agentCli`)    |
+| Single model calls (summaries, and repository chat on an OpenAI-compatible model) | `complete` (via `agentById`) | `apps/server/src/models/llm/transports.ts` (`agentCli`) |
+| Repository chat on an agent CLI            | `openRun` (via `agentById`)                           | `apps/server/src/repo-chat/chat-agent.ts`                  |
 | Review agents (reviewers, verifiers)       | `openRun` (via `agentById`)                           | `apps/server/src/review/pipeline/agent-loop.ts`            |
 | Failure messages, usage limits             | `describeFailure`, and the `UsageLimitError`s it raises | `apps/server/src/models/model-failure.ts`                |
 | Retries, the limiter's back-off            | the `UsageLimitError`s it raises                      | `apps/server/src/models/llm/errors.ts`                     |
@@ -69,7 +70,7 @@ interface AgentRunOptions {
 	model: string;
 	reasoningEffort?: ReasoningEffort;
 	system: string; // replaces the CLI's own system prompt
-	tools: readonly string[]; // native tool names the run may call; [] = answer only
+	tools: readonly string[]; // tool names the run may call; [] = answer only. A review lists native tools; repository chat lists its own.
 	runTool: ToolRunner; // the gate; reached only through the MCP host
 	onEvent: (event: AgentEvent) => void;
 	signal: AbortSignal; // aborting kills the process group
@@ -88,6 +89,10 @@ interface AgentReply {
 	tokens?: TokenUsage; // the whole prompt's usage, for a CLI whose steps never reported it
 }
 ```
+
+Repository chat on an agent CLI is one `openRun` (`apps/server/src/repo-chat/chat-agent.ts`). Its tools are
+`read_file`, `search`, `list_files` and `start_review`, and the MCP lease lists those definitions. A review lease
+still lists only the native tools. Repository chat on an OpenAI-compatible model stays on `complete`.
 
 The engine (`apps/server/src/review/pipeline/agent-loop/native-engine.ts`) opens one run per review agent, sends
 prompts until the answer validates, and calls `abort` to stop a prompt on a deadline, a pause, the call budget

@@ -3,6 +3,13 @@ import type { CommitStatus } from './forge';
 
 const SEVERITY_WORD: Record<FindingSeverity, string> = { error: 'error', warning: 'warning', info: 'low' };
 
+/** True when a reportable finding's severity meets or exceeds `threshold`. */
+export function failsCheckThreshold(finding: Pick<Finding, 'severity'>, threshold: CheckThreshold): boolean {
+	if (threshold === 'off') return false;
+
+	return FINDING_SEVERITIES.indexOf(finding.severity) >= FINDING_SEVERITIES.indexOf(threshold);
+}
+
 /**
  * The commit status for the review's head: failed when a reportable finding is
  * at or above the threshold, else passed. Null when the check is off.
@@ -15,8 +22,7 @@ export function checkStatus(
 ): CommitStatus | null {
 	if (threshold === 'off') return null;
 
-	const floor = FINDING_SEVERITIES.indexOf(threshold);
-	const failing = reportable.filter((finding) => FINDING_SEVERITIES.indexOf(finding.severity) >= floor).length;
+	const failing = reportable.filter((finding) => failsCheckThreshold(finding, threshold)).length;
 	const level = `${SEVERITY_WORD[threshold]}${threshold === 'error' ? '' : ' or above'}`;
 
 	const description = failing

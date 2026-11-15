@@ -11,15 +11,17 @@ export const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  *   own credentials, and agent setup jobs (`install`, `sign-in`, job input and cancel), which start CLI processes
  *   on the server machine.
  * - `DELETE /api/auth/token/:provider`: the forge connection pull requests are read with.
+ * - `/api/guidelines/global` writes: the review guidelines every review follows, saved on this machine.
+ *   A repository's own file stays open to members — a change to it becomes a pull request.
  */
-const ADMIN_WRITE_PATHS = /^\/api\/(settings|agent)(\/|$)|^\/api\/auth\/token\/[^/]+$/;
+const ADMIN_WRITE_PATHS = /^\/api\/(settings|agent)(\/|$)|^\/api\/auth\/token\/[^/]+$|^\/api\/guidelines\/global$/;
 
 /**
- * The member list and removals: who may use the server is the admin's call, so even the list is admin-only. So is
- * the usage report, which shows what each person spent, and the update action, which swaps the server out
- * underneath everyone.
+ * The member list and removals: who may use the server is the admin's call, so even the list is admin-only. So are
+ * the usage and telemetry reports, which show per-person activity and spend, and the update action, which swaps the
+ * server out underneath everyone.
  */
-const ADMIN_ONLY_PATHS = /^\/api\/(members|usage|update)(\/|$)/;
+const ADMIN_ONLY_PATHS = /^\/api\/(members|usage|telemetry|update)(\/|$)/;
 
 /** Whether a request changes server configuration or members, and so needs the admin. */
 export function isAdminOnly(method: string, path: string): boolean {

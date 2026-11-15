@@ -36,6 +36,7 @@ const createReviewSchema = z.object({
 	headSha: z.string().min(1).max(100).optional(),
 	start: z.boolean().optional(),
 	baselineCache: z.literal(false).optional(),
+	findingHistory: z.literal(false).optional(),
 	prTitle: z.string().max(500).optional(),
 	postComment: z.boolean().optional(),
 	instructions: z.string().max(4000).optional(),

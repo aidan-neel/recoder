@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import type { ModelSettings, MyModels, UsageReport } from '@recoder/shared';
+import type { ModelSettings, MyModels, TelemetryReport, UsageReport } from '@recoder/shared';
 import type { StoredAccount } from '../../src/accounts/account-records';
 import { createSession } from '../../src/accounts/sessions';
 import { claudeCode } from '../../src/agents/claude-code/claude-code';
@@ -218,5 +218,24 @@ describe('the usage report', () => {
 		expect(((await (await sendAs('/api/usage?days=7', 'GET', admin)).json()) as UsageReport).daily).toHaveLength(7);
 		expect(((await (await sendAs('/api/usage?days=90', 'GET', admin)).json()) as UsageReport).daily).toHaveLength(90);
 		expect((await sendAs('/api/usage?days=5', 'GET', admin)).status).toBe(400);
+	});
+});
+
+describe('/api/telemetry', () => {
+	test('is refused for a member and answered for the admin across 7, 30 and 90 day windows', async () => {
+		const admin = await adminCookie();
+		const member = await memberCookie();
+
+		expect((await sendAs('/api/telemetry', 'GET', member)).status).toBe(403);
+		expect((await sendAs('/api/telemetry?days=14', 'GET', admin)).status).toBe(400);
+
+		const report = (await (await sendAs('/api/telemetry', 'GET', admin)).json()) as TelemetryReport;
+
+		expect(report).toMatchObject({ days: 30, totals: { prsReviewed: 0, prsMerged: 0, avgTokensPerReview: null } });
+		expect(report.daily).toHaveLength(30);
+
+		expect(
+			((await (await sendAs('/api/telemetry?days=7', 'GET', admin)).json()) as TelemetryReport).daily
+		).toHaveLength(7);
 	});
 });

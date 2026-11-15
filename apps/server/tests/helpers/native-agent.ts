@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import { z } from 'zod';
 import type { AgentAdapter, AgentEvent, AgentRun, AgentRunOptions } from '../../src/agents/contract';
 import { LlmError } from '../../src/models/llm/errors';
@@ -33,7 +34,7 @@ function nativeAgentOptions(provider: string, model: string): JsonAgentOptions<F
 		stage: 'reviewer',
 		system: 'Review the change.',
 		user: 'Is the change correct?',
-		config: { provider, model, baseUrl: '', apiKey: '' },
+		config: { provider, model, baseUrl: '', apiKey: '', contextWindow: DEFAULT_CONTEXT_WINDOW },
 		budget: new ModelBudget(),
 		evidence: new EvidenceStore(null, buildInventory(DIFF), 12000),
 		maxTurns: 8,

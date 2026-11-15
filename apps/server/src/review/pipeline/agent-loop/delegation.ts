@@ -1,5 +1,6 @@
 import { failure, type RetrievalAction, type ToolResult } from '../../../evidence/types.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { contextBudget } from './context-budget.js';
 import type { JsonAgentOptions } from './options.js';
 
 /** Added to the request shapes of an agent that can hand tasks to a worker. */
@@ -24,11 +25,20 @@ export async function executeTurn<T>(
 	agentId: string
 ): Promise<ToolResult[]> {
 	const asked = actions.slice(0, REVIEW_POLICY.maxRetrievalsPerTurn);
+	const { toolRoundChars } = contextBudget(opts.config.contextWindow);
 	const reads = asked.filter((action) => action.action !== 'delegate');
 
 	const [readResults, delegated] = await Promise.all([
 		reads.length
-			? opts.evidence.executeRound(reads, opts.signal, opts.onTool, REVIEW_POLICY.maxRetrievalsPerTurn, agentId)
+			? opts.evidence.executeRound(
+					reads,
+					opts.signal,
+					opts.onTool,
+					REVIEW_POLICY.maxRetrievalsPerTurn,
+					agentId,
+					0,
+					toolRoundChars
+				)
 			: Promise.resolve([]),
 		Promise.all(asked.filter((action) => action.action === 'delegate').map((action) => runDelegation(opts, action)))
 	]);

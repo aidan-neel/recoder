@@ -5,9 +5,18 @@ import type { Collection, Table } from './collection';
 
 let handle: Database | null = null;
 
+/**
+ * How long a write waits for another process's write to finish. The server, the CLI and a benchmark can open the
+ * same data directory; without a wait SQLite refuses the second writer at once with "database is locked". A
+ * collection's read-then-write `update` takes the write lock before it reads (`immediate`): SQLite refuses a deferred
+ * transaction's upgrade from read to write at once, without waiting, when another connection wrote in between.
+ */
+const SQLITE_BUSY_TIMEOUT_MS = 5_000;
+
 export function sqlite(): Database {
 	if (!handle) {
 		handle = new Database(join(serverDataDir(), 'recoder.db'));
+		handle.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
 		handle.run('PRAGMA journal_mode = WAL');
 		handle.run('PRAGMA secure_delete = ON');
 
@@ -73,14 +82,16 @@ export function sqliteCollection<T extends { id: string }>(table: Table): Collec
 			sqlite().query(`DELETE FROM ${table}`).run();
 		},
 		update: async (id, mutate) =>
-			sqlite().transaction(() => {
-				const next = mutate(get(id));
+			sqlite()
+				.transaction(() => {
+					const next = mutate(get(id));
 
-				if (next && next.id !== id) throw new Error('A stored record update cannot change its id.');
-				if (next) set(next);
-				else sqlite().query(`DELETE FROM ${table} WHERE id = ?`).run(id);
+					if (next && next.id !== id) throw new Error('A stored record update cannot change its id.');
+					if (next) set(next);
+					else sqlite().query(`DELETE FROM ${table} WHERE id = ?`).run(id);
 
-				return next;
-			})()
+					return next;
+				})
+				.immediate()
 	};
 }

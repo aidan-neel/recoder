@@ -15,6 +15,10 @@ export interface PullStateRecord {
 	state: PullState;
 	/** When the forge last told us the state. */
 	checkedAt: string;
+	/** When Recoder first learned the pull request merged; kept across later reads. */
+	mergedAt?: string;
+	/** The account that merged the pull request through Recoder, when known. */
+	mergedBy?: string;
 }
 
 /** One pull request, keyed `repoId#number` as `latestReviews` keys reviews. */
@@ -31,19 +35,27 @@ export async function pullStateMap(): Promise<Map<string, PullState>> {
 
 /**
  * Record the state the server just learned. `merged` is final: a stale read
- * landing after it must not unsettle the pull request. A storage failure is
- * logged, never thrown — the record is bookkeeping for the list, not worth
- * failing the read that learned the state.
+ * landing after it must not unsettle the pull request, and later reads keep
+ * `mergedAt` and `mergedBy` from when it merged. A storage failure is logged,
+ * never thrown — the record is bookkeeping for the list, not worth failing the
+ * read that learned the state.
  */
-export async function recordPullState(repoId: string, n: number, state: PullState): Promise<void> {
+export async function recordPullState(repoId: string, n: number, state: PullState, mergedBy?: string): Promise<void> {
 	const id = pullStateKey(repoId, n);
 
 	try {
-		await pullStates.update(id, (current) =>
-			current?.state === 'merged' && state !== 'merged'
-				? current
-				: { id, repoId, number: n, state, checkedAt: new Date().toISOString() }
-		);
+		await pullStates.update(id, (current) => {
+			if (current?.state === 'merged' && state !== 'merged') return current;
+
+			const checkedAt = new Date().toISOString();
+
+			if (state !== 'merged') return { id, repoId, number: n, state, checkedAt };
+
+			const mergedAt = current?.state === 'merged' ? (current.mergedAt ?? current.checkedAt) : checkedAt;
+			const who = mergedBy ?? current?.mergedBy;
+
+			return { id, repoId, number: n, state, checkedAt, mergedAt, ...(who ? { mergedBy: who } : {}) };
+		});
 	} catch (error) {
 		console.error(`[pulls] could not record the state of pull request ${n} for repo ${repoId}`, error);
 	}

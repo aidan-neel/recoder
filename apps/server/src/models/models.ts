@@ -16,8 +16,10 @@
 
 import { z } from 'zod';
 import {
+	DEFAULT_CONTEXT_WINDOW,
 	VLLM_MODEL_PREFIX,
 	supportedEffort,
+	type ContextWindowSource,
 	type ModelProvider,
 	type ModelRuntimeProfile,
 	type ProviderRef,
@@ -29,8 +31,13 @@ import { hostedProvider } from './model-providers.js';
 import { providerName, providerSwitches } from './provider-switches.js';
 import { resolveRuntime } from './runtime-profiles.js';
 import { vllmTarget } from './vllm/vllm-models.js';
-import { agentForModel } from '../agents/registry.js';
-import { effectiveReviewEnv, getStoredSettings, type StoredModelEntry } from '../review/session/review-settings.js';
+import { agentForModel, listedModel } from '../agents/registry.js';
+import {
+	effectiveContextWindows,
+	effectiveReviewEnv,
+	getStoredSettings,
+	type StoredModelEntry
+} from '../review/session/review-settings.js';
 
 const configSchema = z.object({
 	baseUrl: z.string().min(1),
@@ -47,9 +54,31 @@ export interface ModelConfig {
 	runtime?: ModelRuntimeProfile;
 	/** Hosted provider id (`opencode-go`…) when the model came from one; for OpenCode, its provider id. */
 	source?: string;
+	/**
+	 * Tokens per request (prompt + output) this model takes: the user's setting for it, else what its provider, agent
+	 * or catalog reports, else `DEFAULT_CONTEXT_WINDOW`. `contextWindowFor` resolves it.
+	 */
+	contextWindow: number;
 	baseUrl: string;
 	apiKey: string;
 	model: string;
+}
+
+/**
+ * The context window a model runs with and where it came from. The user's setting for `modelId` wins, then the
+ * window `reported` by its provider, agent or catalog; a model nobody names and nothing reports takes
+ * `DEFAULT_CONTEXT_WINDOW`. A reported or saved window that is not a positive number counts as unset.
+ */
+export function contextWindowFor(
+	modelId: string | undefined,
+	reported: number | null | undefined
+): { tokens: number; source: ContextWindowSource } {
+	const set = modelId === undefined ? undefined : effectiveContextWindows()[modelId];
+
+	if (set !== undefined) return { tokens: set, source: 'set' };
+	if (typeof reported === 'number' && reported > 0) return { tokens: reported, source: 'reported' };
+
+	return { tokens: DEFAULT_CONTEXT_WINDOW, source: 'default' };
 }
 
 /** No model can serve a request; the message tells the developer what to set. */
@@ -276,13 +305,22 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 
 		const runtime = resolveRuntime(entry.model, entry.runtime);
 		const hosted = hostedProvider(entry.source);
+		const contextWindow = contextWindowFor(entry.id, entry.contextWindow).tokens;
 
 		if (hosted) {
 			const apiKey = stored.connections?.[hosted.id]?.apiKey;
 
 			if (!apiKey) throw new ModelConfigError(`${hosted.name} isn't connected. Connect it in Settings → Agent.`);
 
-			return { source: hosted.id, baseUrl: hosted.baseUrl, apiKey, model: entry.model, reasoningEffort, runtime };
+			return {
+				source: hosted.id,
+				baseUrl: hosted.baseUrl,
+				apiKey,
+				model: entry.model,
+				contextWindow,
+				reasoningEffort,
+				runtime
+			};
 		}
 
 		const baseUrl = entry.baseUrl || eff.baseUrl;
@@ -290,7 +328,7 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 
 		if (!baseUrl) throw new ModelConfigError(`${entry.label} has no endpoint. Pick another model in Settings → Agent.`);
 
-		return { baseUrl, apiKey, model: entry.model, reasoningEffort, runtime };
+		return { baseUrl, apiKey, model: entry.model, contextWindow, reasoningEffort, runtime };
 	}
 
 	const shared = reviewConfig();
@@ -299,6 +337,7 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 		baseUrl: shared.baseUrl,
 		apiKey: shared.apiKey,
 		model: shared.model,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		runtime: resolveRuntime(shared.model),
 		reasoningEffort: requested ?? undefined
 	};
@@ -321,6 +360,7 @@ function vllmConfig(entryId: string, requested: ReasoningEffort | null | undefin
 		baseUrl,
 		apiKey,
 		model,
+		contextWindow: contextWindowFor(entryId, target.contextWindow).tokens,
 		reasoningEffort: supportedEffort(requested ?? undefined, efforts, defaultEffort),
 		runtime: resolveRuntime(model)
 	};
@@ -345,7 +385,14 @@ function agentConfig(id: string, requested: ReasoningEffort | undefined): ModelC
 
 	const { agent, model } = owner;
 
-	return { provider: agent.id, baseUrl: '', apiKey: '', model, ...agent.modelSettings(model, requested) };
+	return {
+		provider: agent.id,
+		baseUrl: '',
+		apiKey: '',
+		model,
+		contextWindow: contextWindowFor(id, listedModel(id)?.contextWindow).tokens,
+		...agent.modelSettings(model, requested)
+	};
 }
 
 /** Caps so one PR can't blow the context window. */

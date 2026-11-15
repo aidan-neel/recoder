@@ -15,7 +15,7 @@ import { outOfUsage } from '../../models/out-of-usage';
 import type { ChatOptions } from '../../models/llm/types';
 import type { AgentAdapter, AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { childEnv } from '../cli-process';
-import { openCodeDataDir } from './limits';
+import { openCodeDataDir } from './opencode-credentials';
 import { OAUTH_TIMEOUT_MS } from './api/types';
 import { OpenCodeAgentRun, refusesStructuredOutput } from './opencode-agent-session';
 import { openCodeChat } from './opencode-chat';

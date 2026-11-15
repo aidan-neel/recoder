@@ -1,5 +1,5 @@
 import { afterEach } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -40,11 +40,7 @@ export function useCommittedRepos(prefix: string): (files: Record<string, string
 		roots.push(root);
 		git(root, ['init', '-q']);
 
-		for (const [path, text] of Object.entries(files)) {
-			await mkdir(dirname(join(root, path)), { recursive: true });
-			await writeFile(join(root, path), text);
-		}
-
+		await writeTree(root, files);
 		commitAll(root, 'files');
 
 		return root;
@@ -55,4 +51,21 @@ export function useCommittedRepos(prefix: string): (files: Record<string, string
 export function commitAll(root: string, message: string): void {
 	git(root, ['add', '-A']);
 	git(root, ['-c', 'commit.gpgsign=false', 'commit', '-q', '-m', message]);
+}
+
+/** Writes `files` under `root`, and `links` as symlinks to their targets, creating folders as needed. */
+export async function writeTree(
+	root: string,
+	files: Record<string, string | Uint8Array>,
+	links: Record<string, string> = {}
+): Promise<void> {
+	for (const [path, content] of Object.entries(files)) {
+		await mkdir(dirname(join(root, path)), { recursive: true });
+		await writeFile(join(root, path), content);
+	}
+
+	for (const [path, target] of Object.entries(links)) {
+		await mkdir(dirname(join(root, path)), { recursive: true });
+		await symlink(target, join(root, path));
+	}
 }
