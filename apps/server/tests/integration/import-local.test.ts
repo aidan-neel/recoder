@@ -137,7 +137,7 @@ integration('import preserves committed WAL reviews, paused recovery, settings, 
 	expect(documents.some((row) => row.name === 'auto-review')).toBe(false);
 
 	expect(documents.find((row) => row.name === 'review-settings')?.value).toMatchObject({
-		subagentCap: 8,
+		subagentCap: 4,
 		models: [{ id: expect.any(String), model: 'test-model' }]
 	});
 
