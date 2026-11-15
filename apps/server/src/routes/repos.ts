@@ -105,9 +105,9 @@ app.get('/:id/pulls', async (c) => {
 });
 
 /**
- * The skills the repository ships (`.claude/skills` and `.agents/skills`), by name. With `?pull=<number>` also
- * those of the pull request's head when this server's git copy holds that commit; the head's version of a skill
- * wins over the default branch's.
+ * The skills the repository ships (`.claude/skills`, `.agents/skills` and `skills`), by name. With `?pull=<number>`
+ * also those of the pull request's head when this server's git copy holds that commit; the head's version of a
+ * skill wins over the default branch's. Answers 503 while the server makes its first copy of the repository.
  */
 app.get('/:id/skills', async (c) => {
 	const repo = await db.repos.get(c.req.param('id'));

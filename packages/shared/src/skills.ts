@@ -1,4 +1,4 @@
-/** A skill a repository ships: a `SKILL.md` under `.claude/skills/<name>/` or `.agents/skills/<name>/`. */
+/** A skill a repository ships: a `SKILL.md` under `.claude/skills/<name>/`, `.agents/skills/<name>/` or `skills/<name>/`. */
 export interface SkillSummary {
 	name: string;
 	description: string;

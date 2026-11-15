@@ -42,10 +42,16 @@ export const filesApi = {
 	file: (repoId: string, path: string, ref: string | undefined) =>
 		readOnceCopied(() => request<RepoFile>(`/api/repos/${seg(repoId)}/file?${filesQuery(path, ref)}`)),
 
-	/** The skills the repository ships on its default branch, and with `pull` the ones its head adds or changes. */
+	/**
+	 * The skills the repository ships on its default branch, and with `pull` the ones its head adds or changes. Waits
+	 * while the server makes its first copy of the repository, as browsing does.
+	 */
 	async skills(repoId: string, pull?: number): Promise<SkillSummary[]> {
 		const query = pull === undefined ? '' : `?pull=${pull}`;
-		const listed = await request<{ skills: SkillSummary[] }>(`/api/repos/${seg(repoId)}/skills${query}`);
+
+		const listed = await readOnceCopied(() =>
+			request<{ skills: SkillSummary[] }>(`/api/repos/${seg(repoId)}/skills${query}`)
+		);
 
 		return listed.skills;
 	}

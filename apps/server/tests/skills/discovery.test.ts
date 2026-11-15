@@ -16,16 +16,20 @@ function head(root: string): SkillRevision {
 	return { root, sha: git(root, ['rev-parse', 'HEAD']) };
 }
 
-test('skills in both folders are listed by name, from their frontmatter or their folder', async () => {
+test('skills in all three folders are listed by name, from their frontmatter or their folder', async () => {
 	const root = await committed({
 		'.claude/skills/review/SKILL.md': skill('review', 'Review a change'),
 		'.agents/skills/deploy/SKILL.md': '# Deploy\n\nShip it.\n',
-		'.agents/skills/not-a-skill/README.md': 'no SKILL.md here'
+		'.agents/skills/not-a-skill/README.md': 'no SKILL.md here',
+		'skills/sivir/SKILL.md': skill('sivir', 'Build with the kit'),
+		'skills/review/SKILL.md': skill('review', 'Shipped to users'),
+		'docs/skills/nested/SKILL.md': skill('nested', 'Not a skills folder')
 	});
 
 	expect(await listSkills([head(root)])).toEqual([
 		{ name: 'deploy', description: '', path: '.agents/skills/deploy/SKILL.md' },
-		{ name: 'review', description: 'Review a change', path: '.claude/skills/review/SKILL.md' }
+		{ name: 'review', description: 'Review a change', path: '.claude/skills/review/SKILL.md' },
+		{ name: 'sivir', description: 'Build with the kit', path: 'skills/sivir/SKILL.md' }
 	]);
 });
 

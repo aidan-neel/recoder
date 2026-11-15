@@ -3,10 +3,13 @@ import { git, readBlobHash, regularBlobs } from '../evidence/git';
 import { TtlCache } from '../util/ttl-cache';
 import { skillIdentity } from './frontmatter';
 
-/** Where a repository keeps its skills, in the order a name found in both is taken from. */
-const SKILL_DIRS = ['.claude/skills', '.agents/skills'] as const;
+/**
+ * Where a repository keeps its skills, in the order a name found in more than one is taken from. A top-level
+ * `skills/` is where a project keeps the skills it ships to its users, such as a library's own skill.
+ */
+const SKILL_DIRS = ['.claude/skills', '.agents/skills', 'skills'] as const;
 
-const SKILL_FILE = /^(?:\.claude|\.agents)\/skills\/([^/]+)\/SKILL\.md$/;
+const SKILL_FILE = /^(?:\.claude\/|\.agents\/)?skills\/([^/]+)\/SKILL\.md$/;
 
 /** The most skills one repository lists. */
 const MAX_LISTED_SKILLS = 50;
@@ -129,7 +132,7 @@ async function indexRevision({ root, sha }: SkillRevision, signal: AbortSignal |
 	return [...named.values()];
 }
 
-/** The `SKILL.md` files in an `ls-tree` listing, `.claude/skills` before `.agents/skills`, each by path. */
+/** The `SKILL.md` files in an `ls-tree` listing, in the order of `SKILL_DIRS`, each by path. */
 function skillFiles(lsTreeOutput: string): { path: string; hash: string; folder: string }[] {
 	const files = [...regularBlobs(lsTreeOutput)].flatMap(([path, hash]) => {
 		const folder = SKILL_FILE.exec(path)?.[1];
