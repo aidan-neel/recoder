@@ -142,12 +142,13 @@ change makes a test obsolete, delete the test.
 
 - **Load the giga-ui skill first.** Every UI task (components, pages,
   layout, styling, motion, interface copy, in any app or `packages/ui`)
-  starts by loading the `giga-ui` skill. This repo's copy,
-  `.claude/skills/giga-ui/SKILL.md`, is the Recoder edition: it keeps the
-  original's craft, motion and QA rules and swaps its monochrome palette,
-  shadows and component recipes for Recoder's tokens, kit and `DESIGN.md`.
-  Agents without skills read that file directly. Where it and `DESIGN.md`
-  disagree, `DESIGN.md` wins.
+  starts by loading the `giga-ui` skill (`.agents/skills/giga-ui/SKILL.md`,
+  symlinked at `.claude/skills/giga-ui/SKILL.md`). This repo's copy is
+  style-adaptive: it keeps the craft, layout, motion, anti-slop and QA
+  rules and defers to the host design system (`DESIGN.md`,
+  `apps/app/DESIGN.md`, tokens and kit) instead of enforcing a monochrome
+  palette or shadow recipe. Agents without skills read that file directly.
+  Where it and `DESIGN.md` disagree, `DESIGN.md` wins.
 - **One kit per framework.** apps/web (Svelte) builds ALL UI with Sivir
   (`@sivir-ui/svelte`). apps/app and apps/site (React) build ALL UI with
   `@recoder/ui` (`packages/ui`: Radix primitives and `motion`, styled with the
