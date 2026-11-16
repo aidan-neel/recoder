@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
+import { EARLY_FETCH_SCRIPT } from '@/lib/api/early-fetch-script';
 import { APPEARANCE_SCRIPT } from '@/lib/appearance/appearance-script';
 import { PANEL_WIDTH_SCRIPT } from '@/lib/shell/panel-width-script';
 
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
 		<html lang="en" className="dark app-skin" suppressHydrationWarning>
 			<head>
+				<script dangerouslySetInnerHTML={{ __html: EARLY_FETCH_SCRIPT }} />
 				<script dangerouslySetInnerHTML={{ __html: APPEARANCE_SCRIPT }} />
 				<script dangerouslySetInnerHTML={{ __html: PANEL_WIDTH_SCRIPT }} />
 			</head>

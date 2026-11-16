@@ -39,7 +39,11 @@ export const useTheme = create<ThemeState>((setState) => ({
 	}
 }));
 
-/** Applies the saved theme and follows the device while the choice is `system`. Returns the cleanup. */
+/**
+ * Applies the saved theme and follows the device while the choice is `system`. Returns the cleanup. The browser's
+ * bar is brought along after the first paint: reading `--bg-chrome` forces the whole page's styles to be worked out,
+ * about 10 ms that would otherwise sit between the app mounting and its first frame.
+ */
 export function followSystemTheme(): () => void {
 	const media = matchMedia('(prefers-color-scheme: light)');
 
@@ -47,8 +51,28 @@ export function followSystemTheme(): () => void {
 		if (useTheme.getState().choice === 'system') show('system');
 	}
 
-	show(useTheme.getState().choice);
+	apply(useTheme.getState().choice);
+
+	const cancelSync = afterPaint(syncChrome);
+
 	media.addEventListener('change', onChange);
 
-	return () => media.removeEventListener('change', onChange);
+	return () => {
+		cancelSync();
+		media.removeEventListener('change', onChange);
+	};
+}
+
+/** Runs `task` once the next frame has painted. Returns the cancel. */
+function afterPaint(task: () => void): () => void {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+
+	const frame = requestAnimationFrame(() => {
+		timer = setTimeout(task);
+	});
+
+	return () => {
+		cancelAnimationFrame(frame);
+		clearTimeout(timer);
+	};
 }
