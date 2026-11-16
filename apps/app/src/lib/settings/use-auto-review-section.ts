@@ -35,8 +35,8 @@ export interface AutoReviewSection {
 	reposError: string | null;
 }
 
-/** Loads the settings and the tracked repositories. */
-function load(): Promise<unknown> {
+/** Loads the settings and the tracked repositories: on mount, and ahead of it when the pointer rests on the page's link. */
+export function loadAutomations(): Promise<unknown> {
 	return Promise.all([useAutoReview.getState().load(), useConnections.getState().loadRepos()]);
 }
 
@@ -76,7 +76,7 @@ export function useAutoReviewSection(): AutoReviewSection {
 	const retry = useAction();
 
 	useEffect(() => {
-		void load();
+		void loadAutomations();
 
 		return whileVisible(REFRESH_MS, () => void useAutoReview.getState().load());
 	}, []);
@@ -85,7 +85,7 @@ export function useAutoReviewSection(): AutoReviewSection {
 		view: sectionView(status, payload),
 		payload,
 		error,
-		retry: { status: retry.status, run: () => retry.run(load) },
+		retry: { status: retry.status, run: () => retry.run(loadAutomations) },
 		repos,
 		reposState: reposStateOf(reposStatus),
 		reposError

@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation';
 import type { ComponentType } from 'react';
 
 import { useApi } from '@/lib/api/client';
+import { useIntent } from '@/lib/shell/intent';
 import { AUTOMATIONS_HREF, GUIDELINES_HREF, newReviewHref, pullsHref } from '@/lib/shell/routes';
 
 type Place = 'new' | 'pulls' | 'automations' | 'guidelines';
@@ -17,6 +18,20 @@ interface NavRow {
 	href: string;
 	icon: ComponentType<{ className?: string }>;
 }
+
+/**
+ * What a place reads first, started once the pointer rests on its row so the
+ * page opens filled rather than on its skeleton. The stores load on demand:
+ * the route's prefetch has already fetched their code.
+ */
+const WARM: Partial<Record<Place, () => void>> = {
+	automations: () => void import('@/lib/settings/use-auto-review-section').then((module) => module.loadAutomations()),
+	guidelines: () =>
+		void import('@/lib/guidelines/guidelines-store').then((module) => module.useGuidelines.getState().load())
+};
+
+/** Nothing to warm. */
+function noop(): void {}
 
 /** The place the address belongs to, or null on a page the sidebar does not list (Settings). */
 function placeOf(pathname: string, base: string): Place | null {
@@ -45,20 +60,30 @@ export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	return (
 		<nav aria-label="Main">
 			<HoverList className="sidebar-nav" itemSelector="[data-nav]">
-				{rows.map(({ id, label, href, icon: Icon }) => (
-					<RowButton key={id} asChild data-nav data-active={active === id || undefined} className="nav-item">
-						<Link href={href} aria-current={active === id ? 'page' : undefined}>
-							<Icon aria-hidden />
-							{label}
-							{id === 'pulls' && openPulls !== null ? (
-								<span className="nav-count" aria-label={`${openPulls} open`}>
-									{openPulls}
-								</span>
-							) : null}
-						</Link>
-					</RowButton>
+				{rows.map((row) => (
+					<NavItem key={row.id} row={row} active={active === row.id} openPulls={openPulls} />
 				))}
 			</HoverList>
 		</nav>
+	);
+}
+
+/** One place: the whole row is its link, and resting on it warms what the place reads first. */
+function NavItem({ row, active, openPulls }: { row: NavRow; active: boolean; openPulls: number | null }) {
+	const { id, label, href, icon: Icon } = row;
+	const intent = useIntent(WARM[id] ?? noop);
+
+	return (
+		<RowButton asChild data-nav data-active={active || undefined} className="nav-item">
+			<Link href={href} aria-current={active ? 'page' : undefined} {...intent}>
+				<Icon aria-hidden />
+				{label}
+				{id === 'pulls' && openPulls !== null ? (
+					<span className="nav-count" aria-label={`${openPulls} open`}>
+						{openPulls}
+					</span>
+				) : null}
+			</Link>
+		</RowButton>
 	);
 }

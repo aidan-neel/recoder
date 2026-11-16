@@ -54,6 +54,8 @@ export const useGuidelines = create<GuidelinesStore>((set, get) => {
 	/** The latest read per repository; an older answer that lands late is dropped. */
 	const latest = new Map<string, number>();
 	let inflight: Promise<void> | null = null;
+	/** A full load in flight, shared by a hover that warms the page and the page that then mounts. */
+	let loadingAll: Promise<void> | null = null;
 
 	function setGlobal(global: GlobalGuidelines): void {
 		const overview = get().overview;
@@ -88,10 +90,15 @@ export const useGuidelines = create<GuidelinesStore>((set, get) => {
 			return inflight;
 		},
 
-		async load() {
-			await get().loadOverview();
+		load() {
+			loadingAll ??= (async () => {
+				await get().loadOverview();
+				await Promise.all((get().overview?.repos ?? []).map((repo) => get().loadRepo(repo.id)));
+			})().finally(() => {
+				loadingAll = null;
+			});
 
-			await Promise.all((get().overview?.repos ?? []).map((repo) => get().loadRepo(repo.id)));
+			return loadingAll;
 		},
 
 		async loadRepo(repoId) {
