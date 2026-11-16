@@ -4,35 +4,13 @@
 	margin-top: auto;
 	padding: 14px 0 12px;
 }
-.settled-head {
-	--row-button-radius: var(--radius-row);
-
-	width: calc(100% - 16px);
-	align-items: center;
-	gap: 6px;
-	margin: 0 8px;
-	padding: 2px 8px;
+.settled .section-head {
 	color: var(--text-faint);
-}
-.settled-head:hover {
-	color: var(--text-secondary);
-}
-.settled-head .section-label {
-	margin-right: auto;
-	color: inherit;
 }
 .settled-count {
 	font-size: var(--font-size-meta);
 	font-variant-numeric: tabular-nums;
 	line-height: 16px;
-}
-.settled-chevron {
-	width: 12px;
-	height: 12px;
-	transition: rotate var(--dur-toggle) var(--ease-menu);
-}
-.settled-head[data-state='closed'] .settled-chevron {
-	rotate: -90deg;
 }
 /* Opened with many rows, it scrolls on its own and leaves the lists above room. */
 .settled-list {

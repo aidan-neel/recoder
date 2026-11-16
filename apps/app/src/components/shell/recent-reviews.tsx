@@ -4,12 +4,14 @@ import { HoverList, SkeletonRows, StatusGlyph, type GlyphKind } from '@recoder/u
 import { usePathname } from 'next/navigation';
 
 import { useSessionCache } from '@/lib/api/client';
+import { useSidebarFolds } from '@/lib/shell/sidebar-folds';
 import type { RecentReview } from '@/lib/shell/types';
 
 import { RepoLabel } from '@/components/common/repo-label';
 
 import { useReviewActions } from './recent-actions';
 import { RecentRow } from './recent-row';
+import { SidebarSection } from './sidebar-section';
 
 /** The glyph for each state of a recent review. */
 const GLYPHS: Record<RecentReview['state'], GlyphKind> = {
@@ -33,18 +35,20 @@ interface RecentReviewsProps {
 
 /**
  * The newest review of each open pull request, so the last few stay one click
- * away. With none, the section is left out.
+ * away. With none, the section is left out. Its title folds it away.
  */
 export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 	const pathname = usePathname();
 	const sessions = useSessionCache();
 	const actionsFor = useReviewActions();
 
+	const open = useSidebarFolds((state) => !state.folded.includes('reviews'));
+	const setOpen = useSidebarFolds((state) => state.setOpen);
+
 	if (!loading && reviews.length === 0) return null;
 
 	return (
-		<section className="recent" aria-label="Recent reviews">
-			<h2 className="section-label recent-label">Recent reviews</h2>
+		<SidebarSection title="Reviews" open={open} onOpenChange={(next) => setOpen('reviews', next)} className="recent">
 			{loading ? (
 				<SkeletonRows
 					count={LOADING_ROWS}
@@ -75,6 +79,6 @@ export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 					))}
 				</HoverList>
 			)}
-		</section>
+		</SidebarSection>
 	);
 }

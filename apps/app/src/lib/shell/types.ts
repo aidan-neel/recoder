@@ -1,6 +1,6 @@
 import type { Provider } from '@recoder/shared';
 
-/** One row of "Recent reviews" in the sidebar. */
+/** One row of "Reviews" in the sidebar. */
 export interface RecentReview {
 	reviewId: string;
 	/** The pull request page, on its Bugs tab. */

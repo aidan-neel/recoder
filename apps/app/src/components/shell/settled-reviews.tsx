@@ -1,6 +1,6 @@
 'use client';
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger, HoverList, RowButton } from '@recoder/ui';
+import { HoverList, RowButton } from '@recoder/ui';
 import { ChevronDown, GitMerge, GitPullRequestClosed } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
@@ -12,6 +12,7 @@ import { useNow } from '@/lib/shell/use-now';
 
 import { useReviewActions } from './recent-actions';
 import { RecentRow } from './recent-row';
+import { SidebarSection } from './sidebar-section';
 
 /** How many settled rows show before "Show more". */
 const PREVIEW = 5;
@@ -39,18 +40,15 @@ export function SettledReviews({ reviews }: { reviews: SettledReview[] }) {
 	const hidden = reviews.length - shown.length;
 
 	return (
-		<Collapsible open={open} onOpenChange={setOpen} className="settled">
-			<RowButton asChild className="settled-head">
-				<CollapsibleTrigger>
-					<span className="section-label">Settled</span>
-					<span className="settled-count">{reviews.length}</span>
-					<ChevronDown aria-hidden className="settled-chevron" />
-				</CollapsibleTrigger>
-			</RowButton>
-			<CollapsibleContent>
-				<SettledRows reviews={shown} hidden={hidden} onShowAll={() => setShowAll(true)} />
-			</CollapsibleContent>
-		</Collapsible>
+		<SidebarSection
+			title="Settled"
+			open={open}
+			onOpenChange={setOpen}
+			className="settled"
+			aside={<span className="settled-count">{reviews.length}</span>}
+		>
+			<SettledRows reviews={shown} hidden={hidden} onShowAll={() => setShowAll(true)} />
+		</SidebarSection>
 	);
 }
 

@@ -250,9 +250,46 @@
 	flex-direction: column;
 	margin-top: 20px;
 }
-.recent-label {
-	padding: 0 16px 2px;
+/* A sidebar section's title: a quiet row that folds the list under it, its chevron turned while folded. */
+.section-head {
+	--row-button-radius: var(--radius-row);
+
+	width: calc(100% - 16px);
+	align-items: center;
+	gap: 6px;
+	margin: 0 8px 2px;
+	padding: 2px 8px;
 	color: var(--text-subtle);
+}
+.section-head:hover {
+	color: var(--text-secondary);
+}
+.section-head .section-label {
+	margin-right: auto;
+	color: inherit;
+}
+.section-chevron {
+	width: 12px;
+	height: 12px;
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.section-head[data-state='closed'] .section-chevron {
+	rotate: -90deg;
+}
+/* Open, the reviews take the room left and their list scrolls inside it; folded, they keep only their title. */
+.recent[data-state='closed'] {
+	flex: none;
+}
+.recent > [data-ui='collapsible-content'] {
+	display: flex;
+	min-height: 0;
+	flex: 0 1 auto;
+	flex-direction: column;
+}
+.recent [data-ui='collapsible-body'] {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
 }
 /* The 2px on top keeps the first row's focus ring inside the scroller, which clips. */
 .recent-list {
