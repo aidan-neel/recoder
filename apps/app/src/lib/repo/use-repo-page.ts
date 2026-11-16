@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useApi, useListStore, useSessionCache } from '../api/client';
+import { useApi, useListStore, useOverviewCache, useSessionCache } from '../api/client';
 import { ApiError, failureText, isOffline } from '../api/http';
 import { useComposeMode, type ComposeMode } from '../compose/compose-mode';
 import type { PullRow } from '../pulls/types';
@@ -23,9 +23,13 @@ type OverviewState =
 	| { phase: 'missing' }
 	| { phase: 'failed'; error: string; offline: boolean };
 
-/** Reads the repository's overview once per visit, and again on `retry`. An answer for another repository reads as loading. */
+/**
+ * The repository's overview. The copy read before (on an earlier visit, or as the pointer rested on the repository's
+ * link) paints at once; the page reads it again once per visit and on `retry`. A read that fails keeps a copy already
+ * on screen, and with none reads as the failure. An answer for another repository reads as loading.
+ */
 function useOverview(repoId: string): { state: OverviewState; retry: () => void } {
-	const client = useApi();
+	const overviews = useOverviewCache();
 	const [answer, setAnswer] = useState<{ repoId: string; state: OverviewState } | null>(null);
 	const [attempt, setAttempt] = useState(0);
 
@@ -38,22 +42,29 @@ function useOverview(repoId: string): { state: OverviewState; retry: () => void 
 		let current = true;
 		const settle = (state: OverviewState) => current && setAnswer({ repoId, state });
 
-		client.repoOverview(repoId).then(
+		overviews.read(repoId).then(
 			(overview) => settle({ phase: 'ready', overview }),
 			(error: unknown) => {
-				if (error instanceof ApiError && error.status === 404) settle({ phase: 'missing' });
-				else settle({ phase: 'failed', error: failureText(error), offline: isOffline(error) });
+				if (error instanceof ApiError && error.status === 404) {
+					overviews.forget(repoId);
+					settle({ phase: 'missing' });
+				} else if (!overviews.peek(repoId)) {
+					settle({ phase: 'failed', error: failureText(error), offline: isOffline(error) });
+				}
 			}
 		);
 
 		return () => {
 			current = false;
 		};
-	}, [client, repoId, attempt]);
+	}, [overviews, repoId, attempt]);
 
-	const state: OverviewState = answer?.repoId === repoId ? answer.state : { phase: 'loading' };
+	return { state: answer?.repoId === repoId ? answer.state : keptState(overviews.peek(repoId)), retry };
+}
 
-	return { state, retry };
+/** What the page shows before this visit's read answers: the copy read before, or loading. */
+function keptState(kept: RepoOverview | null): OverviewState {
+	return kept ? { phase: 'ready', overview: kept } : { phase: 'loading' };
 }
 
 /**

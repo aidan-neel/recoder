@@ -36,6 +36,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 
 import { createChatCache, type ChatCache } from '../chat/chat-cache';
 import { createSessionCache, type SessionCache } from '../pull/session-cache';
+import { createOverviewCache, type OverviewCache } from '../repo/overview-cache';
 import { createListStore, type ListStore } from '../pulls/list-store';
 import { accountsApi, type AuthApi } from './accounts';
 import { chatApi } from './chat';
@@ -217,6 +218,8 @@ interface ApiContext {
 	sessions: SessionCache;
 	/** Chats kept from earlier visits; hovering a chat's row reads it ahead of the click. */
 	chats: ChatCache;
+	/** Repository overviews kept from earlier visits; hovering a repository's link reads it ahead of the click. */
+	overviews: OverviewCache;
 }
 
 const Context = createContext<ApiContext | null>(null);
@@ -229,7 +232,13 @@ export function ApiProvider({ client, children }: { client: ApiClient; children:
 	const [value] = useState(() => {
 		const list = createListStore(client);
 
-		return { client, list, sessions: createSessionCache(client, list), chats: createChatCache(client) };
+		return {
+			client,
+			list,
+			sessions: createSessionCache(client, list),
+			chats: createChatCache(client),
+			overviews: createOverviewCache(client)
+		};
 	});
 
 	return <Context.Provider value={value}>{children}</Context.Provider>;
@@ -261,4 +270,9 @@ export function useSessionCache(): SessionCache {
 /** The chats the screens under the provider have read. */
 export function useChatCache(): ChatCache {
 	return useApiContext().chats;
+}
+
+/** The repository overviews the screens under the provider have read. */
+export function useOverviewCache(): OverviewCache {
+	return useApiContext().overviews;
 }
