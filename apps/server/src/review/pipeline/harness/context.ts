@@ -2,6 +2,7 @@ import {
 	DEFAULT_SUBAGENT_CAP,
 	DEFAULT_TOKEN_BUDGET,
 	ORCHESTRATOR_ID,
+	REVIEW_SPEED_PLANS,
 	type SubagentCap,
 	type BriefQuestion,
 	type Finding,
@@ -145,7 +146,13 @@ const SPARK_READS_ONLY = 'A Spark review reads the code and does not run it.';
 
 /** The input a review of its speed runs with: Spark is one reviewer, the Low budget's, and no subagents. */
 function atSpeed(input: AdaptiveReviewInput): AdaptiveReviewInput {
-	return input.speed === 'spark' ? { ...input, tokenBudget: 'low', subagentCap: 0 } : input;
+	const plan = REVIEW_SPEED_PLANS[input.speed ?? 'standard'];
+
+	return {
+		...input,
+		tokenBudget: plan.tokenBudget ?? input.tokenBudget,
+		subagentCap: plan.subagentCap ?? input.subagentCap
+	};
 }
 
 /** Builds the run's shared state from the input, restoring what a resumed review carries over. */

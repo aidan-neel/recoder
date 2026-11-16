@@ -2,6 +2,7 @@ import {
 	settleAssignments,
 	parseUnifiedDiff,
 	REVIEW_CANCELLED,
+	REVIEW_SPEED_PLANS,
 	type ImageUpload,
 	type Provider,
 	type Repo
@@ -205,7 +206,7 @@ async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal):
 			emitReviewEvent(reviewId, { type: 'log', step: 'review', message: discarded });
 		}
 
-		const tokenBudget = effectiveTokenBudget();
+		const tokenBudget = REVIEW_SPEED_PLANS[review.speed ?? 'standard'].tokenBudget ?? effectiveTokenBudget();
 
 		recordTokenBudget(tokenBudget);
 

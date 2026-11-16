@@ -68,6 +68,19 @@ What the budget leaves alone, on purpose:
 - **`reportLowSeverity`.** It marks a low-severity candidate `belowBar`, which is still verified (queued after publishable ones), so it changes what is shown, not what is spent.
 - **`maxFiles` and `maxDiffChars`.** Enforced by `applyDiffLimits` in `createRun` (`apps/server/src/review/pipeline/harness/diff-limits.ts` and `context.ts`) before units and budgets are sized. Anything over either limit is left out with its reason recorded in `ReviewContext.omitted` (`file-cap` or `diff-cap`) and `CoverageLedger`. They are independent of the token budget.
 
+### Spark reviews
+
+A person can pick a review's speed when starting it: `CreateReviewInput.speed` (`ReviewSpeed` in `packages/shared/src/review-speed.ts`: `standard` or `spark`), stored as `Review.speed` only on a Spark review. The app offers it on the New screen and behind the Review button's menu; the CLI takes `--spark`. Spark is for a fast first look. Standard is unchanged.
+
+| Spark does                                       | Where                                                                                                   |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Low budget limits (one reviewer, 8 turns) and no subagents, whatever the saved budget and cap | `atSpeed` in `createRun` (`context.ts`)                                    |
+| Every model at `low` effort, or the nearest it offers; a model with no reasoning control is still sent none | `withPipelineModels` in `apps/server/src/models/model-policy.ts`, `withLockedModels(run, effort)` in `models.ts` |
+| No code run: no install, no baseline checks, bugs reported unrun | `openWorkspace` in `context.ts` sets `execReason`                                       |
+| No rule-ledger model call: the cached ledger, else the repo's newest, else no rules; it never refreshes one, so a low-effort ledger is never cached for later reviews | `buildRuleLedger` in `apps/server/src/review/guidelines/ledger/ledger.ts` |
+
+`REVIEW_SPEED_PLANS` holds what Spark overrides (effort, budget, subagent cap), and the server, the CLI and `PipelineRun.tokenBudget` read it there, so a Spark review is recorded as Low.
+
 `recordTokenBudget` in `apps/server/src/models/metrics.ts` writes the budget onto the pipeline run segment (`PipelineRun.tokenBudget`) when the harness starts. `ReviewMetrics.tokenBudget` is the latest run's, and Token usage in the app shows it. A Custom setup is recorded under the budget it started from. A benchmark's quality was measured on the old shape (one reviewer per lens and unit) and has to be measured again for these budgets. Benchmark identities carry `tokenBudget` in `limits.settings`, so reports run on different budgets do not compare as equal.
 
 ## Repo guidelines and the rule ledger

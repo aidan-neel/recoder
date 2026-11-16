@@ -101,13 +101,13 @@ function textOrFile(
 function resolveTuning(values: ReviewFlagValues): ReviewTuning {
 	for (const flag of ['budget', 'subagents', 'no-exec']) rejectMoreThanOne(values, ['spark', flag]);
 
-	const spark = values.spark === true;
-	const effort = spark ? REVIEW_SPEED_PLANS.spark.effort : null;
+	const speed = values.spark === true ? 'spark' : 'standard';
+	const { effort, tokenBudget, subagentCap } = REVIEW_SPEED_PLANS[speed];
 
 	return {
-		speed: spark ? 'spark' : 'standard',
-		budget: spark ? 'low' : parseChoice('--budget', values.budget ?? REVIEW_DEFAULTS.budget, TOKEN_BUDGETS),
-		subagents: spark ? 0 : parseSubagents(values.subagents, REVIEW_FLAGS.subagents.bounds),
+		speed,
+		budget: tokenBudget ?? parseChoice('--budget', values.budget ?? REVIEW_DEFAULTS.budget, TOKEN_BUDGETS),
+		subagents: subagentCap ?? parseSubagents(values.subagents, REVIEW_FLAGS.subagents.bounds),
 		reviewerModel: parseText('--reviewer', values.reviewer),
 		workerModel: parseText('--worker', values.worker),
 		verifierModel: parseText('--verifier', values.verifier),
@@ -115,7 +115,7 @@ function resolveTuning(values: ReviewFlagValues): ReviewTuning {
 		workerEffort: parseChoiceOr('--worker-effort', values['worker-effort'], REASONING_EFFORTS, effort),
 		lenses: parseLenses(values),
 		reportLowSeverity: resolveLowSeverity(values),
-		exec: !spark && values['no-exec'] !== true,
+		exec: speed === 'standard' && values['no-exec'] !== true,
 		baselineCache: values['no-baseline-cache'] !== true,
 		maxFileChars: parseMaxFileChars(values['max-file-chars']),
 		levers: parseLevers(values.enable)

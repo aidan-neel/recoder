@@ -84,7 +84,7 @@ function SparkPill() {
 
 	return (
 		<Tooltip content={spark.description}>
-			<span tabIndex={0}>
+			<span tabIndex={0} className="flex">
 				<Pill icon={<Zap aria-hidden />}>{spark.label}</Pill>
 			</span>
 		</Tooltip>
