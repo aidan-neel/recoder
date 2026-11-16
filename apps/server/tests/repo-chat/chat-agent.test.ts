@@ -8,7 +8,8 @@ import type {
 	AgentPromptOptions,
 	AgentReply,
 	AgentRun,
-	AgentRunOptions
+	AgentRunOptions,
+	ToolOutcome
 } from '../../src/agents/contract';
 import { McpToolHost } from '../../src/agents/tools/mcp-host';
 import { LlmError } from '../../src/models/llm';
@@ -20,6 +21,7 @@ import { reviewInstructions } from '../../src/review/chat/review-chat';
 import { getStoredSettings, setReviewOverrides } from '../../src/review/session/review-settings';
 import { db, modelCalls } from '../../src/store';
 import { chatTempDir, chatting, committed, removeChatRepos } from '../helpers/chat-fixture';
+import { localForgeFixture } from '../helpers/local-forge';
 
 const SECRET = 'secret-outside-the-copy-7c1e';
 const MARKER = 'export const MARKER = 1;\n';
@@ -214,6 +216,26 @@ test('read_file is served from the git copy, with line numbers, a trail step and
 	expect(reply.citations?.[0]).toMatchObject({ path: 'src/a.ts', startLine: 1, snippet: 'export const MARKER = 1;' });
 });
 
+test('reads a model makes side by side each end done, and what it said before them becomes a note, not answer', async () => {
+	const repo = await committed({ 'README.md': 'shop\n', 'AGENTS.md': 'rules\n' });
+
+	const { agent } = scriptedAgent(async (run) => {
+		run.options.onEvent({ type: 'text', delta: 'I will read both.', partId: 'a' });
+		await Promise.all(['README.md', 'AGENTS.md'].map((path) => run.options.runTool('read_file', { path })));
+		run.options.onEvent({ type: 'text', delta: 'Both are short.', partId: 'b' });
+
+		return { text: '' };
+	});
+
+	const { job, reply, trail } = chatting(repo, 'Read the docs');
+
+	await answer(job, reply, trail, AbortSignal.timeout(20_000), () => undefined, agent);
+
+	expect(reply.trail?.filter((step) => step.kind === 'read').map((step) => step.status)).toEqual(['done', 'done']);
+	expect(reply.trail?.find((step) => step.kind === 'note')).toMatchObject({ text: 'I will read both.' });
+	expect(reply.text).toBe('Both are short.');
+});
+
 test('a path that escapes the git copy is refused', async () => {
 	const outside = await chatTempDir('recoder-chat-secret-');
 
@@ -277,8 +299,10 @@ test('search finds a literal and list_files lists one directory', async () => {
 	expect(search?.kind === 'search' ? search.status : '').toBe('done');
 });
 
-test('start_review starts a review through the same path as reviewFromChat', async () => {
+/** Runs `body` with a reviewer model set up and the local forge repo stored, then removes its reviews and the repo. */
+async function withReviewer(body: (repo: Repo) => Promise<void>): Promise<void> {
 	const previous = getStoredSettings();
+	const { repo } = await localForgeFixture();
 
 	setReviewOverrides({
 		baseUrl: 'http://127.0.0.1:9/v1',
@@ -287,34 +311,10 @@ test('start_review starts a review through the same path as reviewFromChat', asy
 		orchestratorModelId: 'test-model'
 	});
 
-	const repo = await committed({ 'README.md': 'shop\n' });
-
 	await db.repos.set(repo);
 
-	const { agent } = scriptedAgent(async (run) => {
-		await run.options.runTool('start_review', { pull: 42, focus: 'auth changes' });
-		await run.options.runTool('start_review', { pull: 42 });
-
-		return { text: '' };
-	});
-
-	const { job, reply, trail } = chatting(repo, 'Look at the auth code.');
-
 	try {
-		await answer(job, reply, trail, AbortSignal.timeout(20_000), () => undefined, agent);
-
-		expect(reply.review?.prNumber).toBe(42);
-		expect(reply.text).toContain('Started a review of #42.');
-		expect(reply.text).toContain('already running');
-
-		const review = (await db.reviews.list()).find((item) => item.id === reply.review?.id);
-
-		expect(review?.startedBy).toBe('ada');
-		expect(review ? await reviewInstructions(review.id) : '').toContain('auth changes');
-
-		const run = reply.trail?.find((step) => step.kind === 'run');
-
-		expect(run?.kind === 'run' ? run.command : '').toBe('start_review #42');
+		await body(repo);
 	} finally {
 		setReviewOverrides(previous);
 
@@ -324,6 +324,57 @@ test('start_review starts a review through the same path as reviewFromChat', asy
 
 		await db.repos.delete(repo.id);
 	}
+}
+
+test('a reply starts one review with its focus, and a second start_review beside it is refused', async () => {
+	await withReviewer(async (repo) => {
+		const outcomes: ToolOutcome[] = [];
+
+		const { agent } = scriptedAgent(async (run) => {
+			outcomes.push(
+				...(await Promise.all([
+					run.options.runTool('start_review', { pull: 7, focus: 'auth changes' }),
+					run.options.runTool('start_review', { pull: 3 })
+				]))
+			);
+
+			return { text: '' };
+		});
+
+		const { job, reply, trail } = chatting(repo, 'Look at the auth code.');
+
+		await answer(job, reply, trail, AbortSignal.timeout(20_000), () => undefined, agent);
+
+		const reviews = (await db.reviews.list()).filter((item) => item.repoId === repo.id);
+
+		expect(outcomes.map((outcome) => outcome.isError)).toEqual([false, true]);
+		expect(reviews.map((review) => review.prNumber)).toEqual([7]);
+		expect(reviews[0]?.startedBy).toBe('ada');
+		expect(await reviewInstructions(reviews[0]?.id ?? '')).toContain('auth changes');
+		expect(reply.review?.prNumber).toBe(7);
+		expect(reply.text).toContain('Started a review of #7.');
+	});
+});
+
+test('start_review for a pull request the forge does not have queues nothing and leaves the reply to answer', async () => {
+	await withReviewer(async (repo) => {
+		let outcome: ToolOutcome | undefined;
+
+		const { agent } = scriptedAgent(async (run) => {
+			outcome = await run.options.runTool('start_review', { pull: 99 });
+
+			return { text: 'There is no #99.' };
+		});
+
+		const { job, reply, trail } = chatting(repo, 'What changed lately?');
+
+		await answer(job, reply, trail, AbortSignal.timeout(20_000), () => undefined, agent);
+
+		expect(outcome?.isError).toBe(true);
+		expect((await db.reviews.list()).filter((item) => item.repoId === repo.id)).toEqual([]);
+		expect(reply.failure).toBeUndefined();
+		expect(reply.text).toBe('There is no #99.');
+	});
 });
 
 test('stopping the reply aborts and closes the run', async () => {

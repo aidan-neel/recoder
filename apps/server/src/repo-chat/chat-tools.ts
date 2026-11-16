@@ -37,11 +37,15 @@ const OUTSIDE = 'That path is outside the repository.';
 
 const NO_COPY = 'This repository has no git copy on this server yet.';
 
-/** What a chat tool may use: the repository, the reply's abort, and where a started review is shown. */
+/**
+ * What a chat tool may use: the repository, the reply's abort, and where a started review is shown. `claimReview`
+ * hands out the reply's one review: true for the first call, false after, even while that first one is starting.
+ */
 export interface ChatToolContext {
 	repo: Repo;
 	signal: AbortSignal;
 	startedBy?: string;
+	claimReview(): boolean;
 	showReview(result: Pick<RepoChatMessage, 'text' | 'review' | 'failure'>): void;
 }
 
@@ -96,7 +100,8 @@ export const CHAT_TOOLS: readonly ChatTool[] = [
 	},
 	{
 		name: 'start_review',
-		description: 'Start a review of a pull request by its number.',
+		description:
+			'Start a review of one pull request, only when the person asks for a review and gave its number. Never guess a number. Once per reply.',
 		inputSchema: schema({ pull: int, focus: { type: 'string', description: 'What the review should focus on.' } }, [
 			'pull'
 		]),
@@ -260,6 +265,8 @@ async function startReview(args: Record<string, unknown>, ctx: ChatToolContext):
 	const focus = takeString(args, 'focus');
 
 	if (focus.invalid) return refused('focus must be a string.');
+
+	if (!ctx.claimReview()) return refused('This reply already started a review. Answer the person instead.');
 
 	const brief = focus.value?.slice(0, MAX_FOCUS_CHARS);
 	const instructions = brief && brief.trim() ? brief : undefined;

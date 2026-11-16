@@ -20,6 +20,7 @@ import {
 } from './chat-tools';
 import { chatSkillCatalog } from './chat-skills';
 import { citationsFor, TrailRecorder, type ToolStepDetail } from './chat-trail';
+import { ReplyText } from './reply-text';
 import { recoderSystemPrompt } from './identity';
 import type { ReplyJob } from './chat-reply';
 
@@ -38,7 +39,7 @@ export async function answerWithAgent(
 ): Promise<void> {
 	await withUsageMetrics(job.chat.id, 'discussion', async () => {
 		const usage = new StepUsage(job.config);
-		const { runTool, onEvent } = chatHandlers(job, reply, trail, usage, signal, grew);
+		const { runTool, onEvent, text: replyText } = chatHandlers(job, reply, trail, usage, signal, grew);
 		const { text, images } = await agentConversation(job.chat);
 		const catalog = skillCatalogBlock(await chatSkillCatalog(job.repo, signal));
 
@@ -79,6 +80,9 @@ export async function answerWithAgent(
 				});
 
 				if (result.error) throw result.error;
+
+				replyText.finish();
+
 				if (!reply.text) reply.text = result.text.slice(0, MAX_REPLY_CHARS);
 			} finally {
 				signal.removeEventListener('abort', onAbort);
@@ -106,7 +110,7 @@ function conversationText(repo: Repo, transcript: string, skills: readonly Loade
 	return `Repository: ${repo.name} (${repo.url}), default branch ${repo.defaultBranch}.\n\n${transcript}${attached ? `\n\n${attached}` : ''}`;
 }
 
-/** The tool runner and the event handler for one reply. The runner stops at {@link MAX_CHAT_TOOL_CALLS}. */
+/** The tool runner, the event handler and the text of one reply. The runner stops at {@link MAX_CHAT_TOOL_CALLS}. */
 function chatHandlers(
 	job: ReplyJob,
 	reply: RepoChatMessage,
@@ -114,71 +118,72 @@ function chatHandlers(
 	usage: StepUsage,
 	signal: AbortSignal,
 	grew: () => void
-): { runTool: ToolRunner; onEvent: (event: AgentEvent) => void } {
+): { runTool: ToolRunner; onEvent: (event: AgentEvent) => void; text: ReplyText } {
 	let calls = 0;
+	let reviewClaimed = false;
+	const text = new ReplyText(reply, trail);
 
 	const ctx: ChatToolContext = {
 		repo: job.repo,
 		signal,
 		startedBy: job.chat.startedBy,
-		showReview: (shown) => applyReview(reply, shown, grew)
+		claimReview: () => {
+			if (reviewClaimed) return false;
+
+			reviewClaimed = true;
+
+			return true;
+		},
+		showReview: (shown) => applyReview(reply, text, shown, grew)
 	};
 
 	const runTool: ToolRunner = async (name, args) => {
+		text.toolCalled();
+
+		const step = trail.startToolStep(name, toolDetail(name, args));
+
 		if (calls >= MAX_CHAT_TOOL_CALLS) {
-			trail.noteToolResult(true);
+			trail.finishToolStep(step, true);
 
 			return cappedToolCall();
 		}
 
 		calls += 1;
-		trail.noteToolArgs(name, toolDetail(name, args));
 
 		const outcome = await runChatTool(name, args, ctx).catch((error: unknown) => ({
 			text: error instanceof Error ? error.message : 'The tool failed.',
 			isError: true
 		}));
 
-		trail.noteToolResult(outcome.isError);
+		trail.finishToolStep(step, outcome.isError);
 
 		return outcome;
 	};
 
 	const onEvent = (event: AgentEvent) => {
-		applyEvent(event, reply, trail, usage, grew);
+		applyEvent(event, { text, trail, usage }, grew);
 	};
 
-	return { runTool, onEvent };
+	return { runTool, onEvent, text };
 }
 
-function applyEvent(
-	event: AgentEvent,
-	reply: RepoChatMessage,
-	trail: TrailRecorder,
-	usage: StepUsage,
-	grew: () => void
-): void {
+/** What one reply's events write to: its text, its trail and its usage. */
+interface ReplySinks {
+	text: ReplyText;
+	trail: TrailRecorder;
+	usage: StepUsage;
+}
+
+function applyEvent(event: AgentEvent, { text, trail, usage }: ReplySinks, grew: () => void): void {
 	if (event.type === 'text') {
-		reply.text = (reply.text + event.delta).slice(0, MAX_REPLY_CHARS);
+		text.write(event.delta, event.partId);
 		grew();
 
 		return;
 	}
 
 	if (event.type === 'reasoning') {
-		trail.addReasoning(event.delta);
-
-		return;
-	}
-
-	if (event.type === 'tool-call') {
-		trail.noteToolCall(event.name);
-
-		return;
-	}
-
-	if (event.type === 'tool-result') {
-		trail.noteToolResult(event.isError);
+		trail.addReasoning(event.delta, event.partId);
 
 		return;
 	}
@@ -188,18 +193,18 @@ function applyEvent(
 	else if (event.type === 'usage') usage.stepFinished(event.usage, event.step);
 }
 
-/** Puts a review the tool started onto the reply, the same sentences `reviewFromChat` returns. */
+/**
+ * Puts a review the tool started onto the reply, the same sentences `reviewFromChat` returns. A review that did not
+ * start goes back to the model as the tool's error, so the reply answers with why rather than failing.
+ */
 function applyReview(
 	reply: RepoChatMessage,
+	text: ReplyText,
 	result: Pick<RepoChatMessage, 'text' | 'review' | 'failure'>,
 	grew: () => void
 ): void {
 	if (result.review) reply.review = result.review;
-	if (result.failure) reply.failure = result.failure;
-
-	if (result.text && !reply.text.includes(result.text)) {
-		reply.text = `${reply.text ? `${reply.text}\n\n` : ''}${result.text}`.slice(0, MAX_REPLY_CHARS);
-	}
+	if (result.text) text.add(result.text);
 
 	grew();
 }

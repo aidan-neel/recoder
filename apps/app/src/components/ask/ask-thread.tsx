@@ -7,6 +7,7 @@ import type { AskMessageView, AskView } from '@/lib/ask/types';
 
 import { ChatTrail } from '../chat-trail/chat-trail';
 import { CITATION_LINKS, CitedPassagesContext } from '../chat-trail/citation-chip';
+import { ReviewCard } from './review-card';
 
 /** Who a message is from, as a screen reader names them. */
 const NAMES = { person: 'You', recoder: 'Recoder' } as const;
@@ -30,9 +31,7 @@ function ReplyBody({ message }: { message: AskMessageView }) {
 
 	return (
 		<>
-			{showsTrail(message) ? (
-				<ChatTrail steps={message.trail ?? []} startedAt={message.at} working={writing && message.text === ''} />
-			) : null}
+			{showsTrail(message) ? <ChatTrail steps={message.trail ?? []} startedAt={message.at} working={writing} /> : null}
 			{message.text === '' ? null : (
 				<CitedPassagesContext value={passages}>
 					<Markdown streaming={writing} linkOverride={CITATION_LINKS}>
@@ -40,6 +39,7 @@ function ReplyBody({ message }: { message: AskMessageView }) {
 					</Markdown>
 				</CitedPassagesContext>
 			)}
+			{message.review ? <ReviewCard review={message.review} /> : null}
 		</>
 	);
 }

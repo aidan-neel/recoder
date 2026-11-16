@@ -1,6 +1,8 @@
 import type { ChatCitation, ChatTrailStep, ImageUpload } from '@recoder/shared';
 import type { ComposerCommand, ImageChip } from '@recoder/ui';
 
+import type { PullRowStatus } from '../pulls/types';
+
 /** One message of a conversation with Recoder. */
 export interface AskMessageView {
 	id: string;
@@ -19,6 +21,19 @@ export interface AskMessageView {
 	trail?: ChatTrailStep[];
 	/** The passages of the repository the reply's citation links name. */
 	citations?: ChatCitation[];
+	/** The review a reply started, drawn as a card that opens its pull request. */
+	review?: StartedReview;
+}
+
+/** A review a chat reply started, as its card shows it. */
+export interface StartedReview {
+	href: string;
+	prNumber: number;
+	/** The pull request's title, or `Pull request #12` until it is known. */
+	title: string;
+	/** The repository's short name. */
+	repo: string;
+	status: PullRowStatus;
 }
 
 /** What a conversation is about: the whole pull request, or one finding of its review. */

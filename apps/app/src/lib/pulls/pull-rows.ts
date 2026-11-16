@@ -47,7 +47,7 @@ function isRealReview(review: ReviewListItem | null): review is ReviewListItem {
 }
 
 /** The status of a review that ran or failed, when it decides the row; null to read the forge's state next. */
-function reviewStatus(review: ReviewListItem | null): PullRowStatus | null {
+export function reviewStatus(review: ReviewListItem | null): PullRowStatus | null {
 	if (!review) return null;
 	if (isReviewing(review)) return { kind: 'reviewing' };
 

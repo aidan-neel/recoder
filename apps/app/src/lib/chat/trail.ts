@@ -1,7 +1,13 @@
-import { isStepRunning, type ChatTrailFile, type ChatTrailStep, type ChatTrailThought } from '@recoder/shared';
+import {
+	isStepRunning,
+	type ChatTrailFile,
+	type ChatTrailNote,
+	type ChatTrailStep,
+	type ChatTrailThought
+} from '@recoder/shared';
 
-/** A step that is a tool call: anything that is not reasoning. */
-export type ToolStep = Exclude<ChatTrailStep, ChatTrailThought>;
+/** A step that is a tool call: anything that is not reasoning or what the model said. */
+export type ToolStep = Exclude<ChatTrailStep, ChatTrailThought | ChatTrailNote>;
 
 /** A tool call as one line: what it did, to what, and a short note after it. */
 export interface ToolLine {
@@ -31,9 +37,26 @@ export function workedSeconds(startedAt: string | null, steps: readonly ChatTrai
 	return Math.max(0, Math.round((end - Date.parse(startedAt)) / 1000));
 }
 
-/** The trail's line once the answer starts: `Worked for 13s`, or `Worked` when the time is unknown or under a second. */
+/** The trail's line while the reply works: `Working for 8s`, or `Working` in its first second. */
+export function workingLabel(seconds: number | null): string {
+	return seconds === null || seconds < 1 ? 'Working' : `Working for ${spanLabel(seconds)}`;
+}
+
+/** The trail's line once the reply is done: `Worked for 13s`, or `Worked` when the time is unknown or under a second. */
 export function workedLabel(seconds: number | null): string {
 	return seconds === null || seconds < 1 ? 'Worked' : `Worked for ${spanLabel(seconds)}`;
+}
+
+/**
+ * The line a folded trail shows for a note or a thought while the reply works: a thought's title, else the newest
+ * paragraph of what was said or thought, so a step that says two things shows the second.
+ */
+export function latestLine(step: ChatTrailNote | ChatTrailThought): string {
+	if (step.kind === 'thought' && step.title) return step.title;
+
+	const paragraphs = step.text.split(/\n\s*\n/).map((paragraph) => paragraph.trim());
+
+	return paragraphs.findLast((paragraph) => paragraph !== '') ?? '';
 }
 
 /** A reasoning step's label: the title the provider gave it, else how long the model thought. */
@@ -82,7 +105,7 @@ export function opensDetail(step: ToolStep): boolean {
 }
 
 /** `1s`, `12s`, `1m 5s`: a span as a row shows it. */
-export function spanLabel(seconds: number): string {
+function spanLabel(seconds: number): string {
 	if (seconds < 60) return `${seconds}s`;
 
 	return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;

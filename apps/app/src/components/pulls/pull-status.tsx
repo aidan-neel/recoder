@@ -46,6 +46,21 @@ function statusFace(status: PullRowStatus): StatusFace | null {
 	}
 }
 
+/** A status as its pill, or nothing for the statuses that ask for a review instead. */
+export function StatusPill({ status }: { status: PullRowStatus }) {
+	const face = statusFace(status);
+
+	if (!face) return null;
+
+	const lead = status.kind === 'reviewing' ? <Spinner size={11} /> : <span aria-hidden className="pill-dot" />;
+
+	return (
+		<Pill tone={face.tone} icon={status.kind === 'draft' || status.kind === 'reviewed' ? undefined : lead}>
+			{face.label}
+		</Pill>
+	);
+}
+
 interface PullStatusProps {
 	status: PullRowStatus;
 	/** True while this row's review start is in flight. */
@@ -59,18 +74,9 @@ interface PullStatusProps {
  * commits newer than its review gets the quieter "Review again".
  */
 export function PullStatus({ status, starting, onReview }: PullStatusProps) {
-	const face = statusFace(status);
 	const pending: ButtonStatus = starting ? 'pending' : 'idle';
 
-	if (face) {
-		const lead = status.kind === 'reviewing' ? <Spinner size={11} /> : <span aria-hidden className="pill-dot" />;
-
-		return (
-			<Pill tone={face.tone} icon={status.kind === 'draft' || status.kind === 'reviewed' ? undefined : lead}>
-				{face.label}
-			</Pill>
-		);
-	}
+	if (statusFace(status)) return <StatusPill status={status} />;
 
 	if (status.kind === 'outdated') {
 		return (

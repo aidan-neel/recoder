@@ -11,6 +11,7 @@ import {
 	type RepoChatMessage
 } from '@recoder/shared';
 import { readRepoText } from './repo-context';
+import { appendPart } from './reply-text';
 
 /** A heading a model puts on its own line to title a thought: `**Framing the question**`. */
 const THOUGHT_HEADING = /^\*\*([^*\n]{1,80})\*\*[ \t]*$/;
@@ -55,7 +56,7 @@ export function parseThoughts(reasoning: string): ParsedThought[] {
 	return thoughts;
 }
 
-/** What a tool call showed of itself. Events carry the name; the runner supplies the arguments. */
+/** What a tool call showed of itself, from its arguments. */
 export interface ToolStepDetail {
 	path?: string;
 	query?: string;
@@ -73,8 +74,8 @@ export interface ToolStepDetail {
  */
 export class TrailRecorder {
 	private reasoning = '';
+	private reasoningPart: string | null = null;
 	private readId: string | null = null;
-	private toolStepId: string | null = null;
 
 	constructor(
 		private readonly reply: RepoChatMessage,
@@ -109,9 +110,12 @@ export class TrailRecorder {
 		});
 	}
 
-	/** Adds reasoning text the model disclosed; the thought it belongs to grows. */
-	addReasoning(delta: string): void {
-		this.reasoning = (this.reasoning + delta).slice(0, MAX_THOUGHT_CHARS * 4);
+	/** Adds reasoning text the model disclosed; the thought it belongs to grows. `part` names the part it streams in. */
+	addReasoning(delta: string, part = ''): void {
+		const startsPart = this.reasoningPart !== null && part !== this.reasoningPart;
+
+		this.reasoningPart = part;
+		this.reasoning = appendPart(this.reasoning, delta, startsPart).slice(0, MAX_THOUGHT_CHARS * 4);
 
 		const thoughts = parseThoughts(this.reasoning);
 
@@ -130,6 +134,26 @@ export class TrailRecorder {
 		});
 	}
 
+	/** Shows what the model says it will do next as a note, which grows in place while the words stream. */
+	writeNote(id: string, text: string): void {
+		const known = this.reply.trail?.find((step) => step.id === id);
+
+		this.put({ id, kind: 'note', text: text.slice(0, MAX_THOUGHT_CHARS), startedAt: known?.startedAt ?? now() });
+	}
+
+	/** Ends a note: the model called the tool it spoke of. */
+	endNote(id: string): void {
+		const open = this.reply.trail?.find((step) => step.id === id);
+
+		if (open?.kind === 'note') this.put({ ...open, endedAt: now() });
+	}
+
+	/** Takes a note back out of the trail: its words turned out to be the answer. */
+	dropNote(id: string): void {
+		this.reply.trail = (this.reply.trail ?? []).filter((step) => step.id !== id);
+		this.changed();
+	}
+
 	/** Ends the thought still going, when the model moves on to its answer or the reply ends. */
 	endThinking(): void {
 		const last = this.reply.trail?.filter((step) => step.kind === 'thought' && step.endedAt === undefined).at(-1);
@@ -137,39 +161,23 @@ export class TrailRecorder {
 		if (last) this.put({ ...last, endedAt: now() });
 	}
 
-	/** Opens a trail step for a tool call. A step still open from an earlier call is closed as an error. */
-	noteToolCall(name: string): void {
-		if (this.toolStepId) this.noteToolResult(true);
-
-		this.toolStepId = crypto.randomUUID();
-		this.put(this.renderedToolStep(this.toolStepId, name, {}, 'running', now()));
-	}
-
-	/** Fills the open tool step from the call's arguments, opening one when the call event has not arrived yet. */
-	noteToolArgs(name: string, detail: ToolStepDetail): void {
-		const id = this.toolStepId ?? crypto.randomUUID();
-
-		this.toolStepId = id;
-
-		const open = this.reply.trail?.find((step) => step.id === id);
-
-		this.put(this.renderedToolStep(id, name, detail, 'running', open?.startedAt ?? now()));
-	}
-
 	/**
-	 * Closes the open tool step. A second result for the same call does nothing,
-	 * so the runner and the run's `tool-result` event can both report it.
+	 * Opens a trail step for one tool call and returns its id. Calls a model makes side by side each get their own
+	 * step, so one finishing never closes another.
 	 */
-	noteToolResult(isError: boolean): void {
-		const id = this.toolStepId;
+	startToolStep(name: string, detail: ToolStepDetail): string {
+		const id = crypto.randomUUID();
 
-		if (!id) return;
+		this.put(this.renderedToolStep(id, name, detail, 'running', now()));
 
-		this.toolStepId = null;
+		return id;
+	}
 
+	/** Closes one call's step with how the call went. */
+	finishToolStep(id: string, isError: boolean): void {
 		const open = this.reply.trail?.find((step) => step.id === id);
 
-		if (!open || open.kind === 'thought') return;
+		if (!open || open.kind === 'thought' || open.kind === 'note') return;
 
 		this.put({ ...open, status: isError ? 'error' : 'done', endedAt: now() });
 	}

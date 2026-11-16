@@ -4,7 +4,7 @@ import type { ImageChip } from '@recoder/ui';
 import { API_BASE } from '../api/http';
 
 import { chatText } from '../ask/chat-text';
-import type { AskMessageView } from '../ask/types';
+import type { AskMessageView, StartedReview } from '../ask/types';
 
 /** A message sent from this page, shown at once and kept until the chat's events carry the server's copy. */
 export interface Outgoing {
@@ -43,7 +43,7 @@ const ROW_STATE: Record<RepoChatMessage['status'], AskMessageView['state']> = {
 export function chatRows(
 	messages: readonly RepoChatMessage[],
 	outbox: readonly Outgoing[],
-	pullHref: (prNumber: number) => string
+	reviewCard: (review: { id: string; prNumber: number }) => StartedReview
 ): AskMessageView[] {
 	const claimed = new Set<string>();
 
@@ -65,7 +65,7 @@ export function chatRows(
 	});
 
 	return [
-		...messages.map((message) => serverRow(message, pullHref)),
+		...messages.map((message) => serverRow(message, reviewCard)),
 		...waiting.map((outgoing) => outgoingRow(outgoing))
 	];
 }
@@ -90,7 +90,10 @@ export function questionBefore(rows: readonly AskMessageView[], index: number): 
 	return rows.slice(0, index).findLast((row) => row.from === 'person')?.text ?? null;
 }
 
-function serverRow(message: RepoChatMessage, pullHref: (prNumber: number) => string): AskMessageView {
+function serverRow(
+	message: RepoChatMessage,
+	reviewCard: (review: { id: string; prNumber: number }) => StartedReview
+): AskMessageView {
 	if (message.from === 'user')
 		return {
 			id: message.id,
@@ -107,24 +110,21 @@ function serverRow(message: RepoChatMessage, pullHref: (prNumber: number) => str
 	return {
 		id: message.id,
 		from: 'recoder',
-		text: replyText(message, pullHref),
+		text: replyText(message),
 		state,
 		error: state === 'failed' ? (message.failure?.reason ?? NO_REASON) : null,
 		at: message.at,
 		trail: message.trail ?? [],
-		citations: message.citations
+		citations: message.citations,
+		...(message.review ? { review: reviewCard(message.review) } : {})
 	};
 }
 
-/** A reply as a person reads it: the model's Markdown repaired, a link to a review it started, or that it was stopped. */
-function replyText(message: RepoChatMessage, pullHref: (prNumber: number) => string): string {
+/** A reply as a person reads it: the model's Markdown repaired, or that it was stopped. */
+function replyText(message: RepoChatMessage): string {
 	if (message.stopped && !message.text.trim()) return STOPPED_EMPTY;
 
-	const text = chatText(message.text, message.status !== 'streaming');
-
-	if (!message.review) return text;
-
-	return `${text}\n\n[Open #${message.review.prNumber}](${pullHref(message.review.prNumber)})`;
+	return chatText(message.text, message.status !== 'streaming');
 }
 
 function outgoingRow(outgoing: Outgoing): AskMessageView {

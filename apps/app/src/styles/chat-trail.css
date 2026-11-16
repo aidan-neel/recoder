@@ -1,6 +1,6 @@
 /* ───────── Chat trail: what a reply did before it answered, over the answer ───────── */
 /*
- * One line heads the trail (`Thinking 8s`, then `Worked for 13s`) and folds the steps under it. Every step is an
+ * One line heads the trail (`Working for 8s`, then `Worked for 13s`) and folds the steps under it. Every step is an
  * icon on one thin line, then a label, then what it holds. The whole trail speaks in one size and one icon: labels
  * in the muted ink, a thought's text and a call's files a step stronger, code in the code face at the same optical
  * size. These tokens are the only sizes, inks and gaps below.
@@ -71,15 +71,36 @@
 	box-shadow: var(--focus-ring);
 	outline: none;
 }
-.trail-seconds {
-	color: var(--trail-quiet);
-}
 .trail .trail-chevron {
 	color: var(--trail-quiet);
 	transition: rotate var(--dur-toggle) ease-out;
 }
 [data-state='open'] > .trail-chevron {
 	rotate: 180deg;
+}
+
+/* ───────── What the model said it would do: one line under the trail's line while it works ───────── */
+.trail-now {
+	margin: 2px 0 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* A new line fades in as it takes the old one's place, under the same sweep as the label over it. */
+.trail .trail-now[data-shimmer] {
+	animation:
+		trail-now-in var(--dur-hover) ease-out,
+		trail-sweep var(--dur-shimmer) linear infinite;
+}
+@keyframes trail-now-in {
+	from {
+		opacity: 0;
+	}
+}
+.trail-said {
+	margin: 0;
+	color: var(--trail-body);
+	overflow-wrap: anywhere;
 }
 
 /* ───────── Steps: an icon on the joining line, then the label and its body ───────── */
@@ -179,7 +200,8 @@
 	}
 }
 @media (prefers-reduced-motion: reduce) {
-	.trail [data-shimmer] {
+	.trail [data-shimmer],
+	.trail .trail-now[data-shimmer] {
 		background: none;
 		color: var(--trail-label);
 		animation: none;
