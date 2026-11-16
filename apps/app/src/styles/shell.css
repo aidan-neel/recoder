@@ -354,6 +354,16 @@
 	}
 }
 
+/* The card's tools stay bare: on hover only their ink brightens, so they never sit as a box on the card. */
+.recent-tools :is(.recent-settle, .recent-more) {
+	background: none;
+	color: var(--text-subtle);
+}
+.recent-tools :is(.recent-settle, .recent-more):is(:hover, [data-state='open']) {
+	background: none;
+	color: var(--text-primary);
+}
+
 /* A chat or review as a card: the repository and age, the title, then its state and pull request. The whole card opens it. */
 .recent-card {
 	position: relative;
@@ -370,6 +380,10 @@
 }
 .recent-card[data-active] {
 	background: rgb(var(--wash-rgb) / 0.085);
+}
+/* Chats sit bare until pointed at or open. */
+.recent-chats .recent-card:not(:hover, [data-active]) {
+	background: none;
 }
 .recent-card-head,
 .recent-card-foot {

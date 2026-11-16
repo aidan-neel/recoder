@@ -54,6 +54,13 @@
 .ask-message[data-from='person'] {
 	align-items: flex-end;
 }
+/* A reply stands a step clear of the question above it, and its trail sits tight on the words it led to. */
+.ask-message[data-from='recoder'] {
+	padding-top: 6px;
+}
+.ask-message[data-from='recoder'] > .trail {
+	margin-bottom: -6px;
+}
 /* The person's images under their words, on the same right edge. */
 .ask-images {
 	max-width: 85%;
