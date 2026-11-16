@@ -1,7 +1,15 @@
-import { emptyReviewProgress, reviewStage, STAGE, type Review, type ReviewProgress } from '@recoder/shared';
+import {
+	emptyReviewProgress,
+	reviewStage,
+	STAGE,
+	type Review,
+	type ReviewProgress,
+	type ReviewTaskKind
+} from '@recoder/shared';
 
-import { plural } from '../shell/format';
-import type { RunPhase, RunStage } from './types';
+import { formatDuration, plural } from '../shell/format';
+import { claimLines, partLines, verificationTasks } from './run-lines';
+import type { RunFact, RunPhase, RunStage } from './types';
 
 /** The four steps a person sees, each standing for the pipeline stages up to its `last` (an index of `STAGE`). */
 const STEPS: { id: RunStage['id']; label: string; last: number }[] = [
@@ -34,29 +42,100 @@ function stateOf(step: number, current: number, phase: RunPhase): RunStage['stat
 	return phase === 'running' || phase === 'paused' ? 'active' : 'waiting';
 }
 
-/** The verifications that settled and that were planned. */
-function verifications(progress: ReviewProgress): { settled: number; total: number } {
-	const tasks = Object.values(progress.tasks).filter((task) => task.kind === 'verification');
-	const waiting = new Set(['queued', 'waiting', 'running']);
+/** The tasks that make up each step, by kind; their times give the step's duration. */
+const STEP_KINDS: Record<RunStage['id'], ReviewTaskKind[]> = {
+	read: ['checkout', 'inventory'],
+	plan: ['planning', 'assignment'],
+	check: ['verification'],
+	write: ['consolidation']
+};
 
-	return { settled: tasks.filter((task) => !waiting.has(task.status)).length, total: tasks.length };
+/** How long a step's own tasks ran, from the first start to the last change; null when none says when it began. */
+function took(id: RunStage['id'], progress: ReviewProgress): RunFact | null {
+	const tasks = Object.values(progress.tasks).filter((task) => task.kind && STEP_KINDS[id].includes(task.kind));
+	const starts = tasks.flatMap((task) => (task.startedAt ? [Date.parse(task.startedAt)] : []));
+	const ends = tasks.flatMap((task) => (task.updatedAt ? [Date.parse(task.updatedAt)] : []));
+
+	if (!starts.length || !ends.length) return null;
+
+	return fact(formatDuration(Math.max(...ends) - Math.min(...starts)), 'neutral', 'time');
 }
 
-/** The count and share a step shows while it runs or once it finished. */
-function measure(id: RunStage['id'], progress: ReviewProgress): Pick<RunStage, 'detail' | 'share'> {
-	if (id === 'plan') {
-		const claims = progress.candidateCount ?? 0;
+function fact(text: string, tone: RunFact['tone'] = 'neutral', kind: RunFact['kind'] = 'text'): RunFact {
+	return { text, tone, kind };
+}
 
-		return { detail: claims > 0 ? plural(claims, 'claim') : null, share: null };
-	}
+/** The guidelines the review read: the repository's file by its path, the owner's own as words. */
+function guidelineFacts(progress: ReviewProgress): RunFact[] {
+	return (progress.guidelines?.layers ?? []).map((layer) =>
+		layer.source === 'repo' ? fact(layer.path ?? 'RECODER.md', 'neutral', 'code') : fact('Your guidelines')
+	);
+}
 
-	if (id === 'check') {
-		const { settled, total } = verifications(progress);
+/** Whether a task or a part has finished, however it ended. */
+function finished(status: string): boolean {
+	return !['queued', 'waiting', 'running'].includes(status);
+}
 
-		return total > 0 ? { detail: `${settled} of ${total}`, share: settled / total } : { detail: null, share: null };
-	}
+type StepWork = Pick<RunStage, 'share' | 'facts' | 'lines' | 'rest'>;
 
-	return { detail: null, share: null };
+const NO_WORK: StepWork = { share: null, facts: [], lines: [], rest: null };
+
+/** The plan: the claims its reviewers raised and how many read the change; while it runs, how many parts are done. */
+function planWork(progress: ReviewProgress, active: boolean): StepWork {
+	const parts = progress.assignments ?? [];
+	const claims = progress.candidateCount ?? 0;
+	const done = parts.filter((part) => finished(part.status)).length;
+
+	return {
+		share: active && parts.length ? done / parts.length : null,
+		facts: [
+			...(claims ? [fact(plural(claims, 'claim'), active ? 'progress' : 'neutral')] : []),
+			...(parts.length ? [fact(plural(parts.length, 'reviewer'))] : [])
+		],
+		lines: partLines(progress),
+		rest: null
+	};
+}
+
+/** The check: claims settled of all and verifiers at work while it runs, and what it found; the plan already counts the claims. */
+function checkWork(progress: ReviewProgress, active: boolean): StepWork {
+	const tasks = verificationTasks(progress);
+	const settled = tasks.filter((task) => finished(task.status)).length;
+	const working = tasks.filter((task) => task.status === 'running').length;
+	const { lines, rest, found } = claimLines(progress);
+	const foundFact = found ? [fact(active ? `${found} found so far` : `${found} found`, 'found')] : [];
+
+	if (!active) return { share: null, facts: foundFact, lines, rest };
+
+	return {
+		share: tasks.length ? settled / tasks.length : null,
+		facts: [
+			...(tasks.length ? [fact(`${settled} of ${tasks.length}`, 'progress')] : []),
+			...(working ? [fact(`${working} at work`)] : []),
+			...foundFact
+		],
+		lines,
+		rest
+	};
+}
+
+/** What each step makes or is making, from the progress. */
+const WORK: Record<RunStage['id'], (progress: ReviewProgress, active: boolean) => StepWork> = {
+	read: (progress) => ({ ...NO_WORK, facts: guidelineFacts(progress) }),
+	plan: planWork,
+	check: checkWork,
+	write: () => NO_WORK
+};
+
+/** What a step made or is making. A waiting step has nothing yet; a done one adds how long it took. */
+function workOf(id: RunStage['id'], state: RunStage['state'], progress: ReviewProgress): StepWork {
+	if (state === 'waiting') return NO_WORK;
+
+	const work = WORK[id](progress, state === 'active');
+	const time = state === 'done' ? took(id, progress) : null;
+
+	return time ? { ...work, facts: [...work.facts, time] } : work;
 }
 
 /** The four steps of a review, from the pipeline's stage and the review's phase. Empty before any review. */
@@ -68,8 +147,15 @@ export function runStages(progress: ReviewProgress | null, status: Review['statu
 
 	return STEPS.map((step, index) => {
 		const state = stateOf(index, current, phase);
-		const counted = state === 'waiting' ? { detail: null, share: null } : measure(step.id, live);
+		const work = workOf(step.id, state, live);
+		const paused = phase === 'paused' && state === 'active';
 
-		return { id: step.id, label: step.label, state, ...counted };
+		return {
+			id: step.id,
+			label: step.label,
+			state,
+			...work,
+			facts: paused ? [fact('Paused'), ...work.facts] : work.facts
+		};
 	});
 }

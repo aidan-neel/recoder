@@ -157,6 +157,12 @@ export const REVIEW_FLAGS = {
 		value: 'path',
 		description: 'Read the instructions from a file. Not with --instructions.'
 	},
+	spark: {
+		type: 'boolean',
+		group: 'tuning',
+		description:
+			'Fast review: one reviewer at low effort, no subagents, no code run. Not with --budget, --subagents or --no-exec.'
+	},
 	budget: {
 		type: 'string',
 		group: 'tuning',

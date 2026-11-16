@@ -5,12 +5,12 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 
 import { useRunView } from '@/lib/run/use-run';
 
-/** Opens the question; it comes from the host, which outlives every banner and card that asks. */
+/** Opens the question; it comes from the host, which outlives every control that asks. */
 const AskContext = createContext<(() => void) | null>(null);
 
 /**
  * Holds the "Cancel this review?" dialog for a pull request's page. The
- * review's banner or card that asks is replaced the moment the review stops,
+ * review's tools that ask are replaced the moment the review stops,
  * so the dialog lives here, above them, and plays its exit as usual. A
  * cancelled review keeps no findings and cannot be resumed. When the dialog
  * closes, focus returns to the Cancel button if it is still there, else to

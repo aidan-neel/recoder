@@ -140,8 +140,17 @@ function reviewShape(inventory: ReviewInventory, limits: ReviewLimits, input: Ad
 	};
 }
 
+/** Why a Spark review runs no code: it trades proving bugs for time, so its bugs are reported unrun. */
+const SPARK_READS_ONLY = 'A Spark review reads the code and does not run it.';
+
+/** The input a review of its speed runs with: Spark is one reviewer, the Low budget's, and no subagents. */
+function atSpeed(input: AdaptiveReviewInput): AdaptiveReviewInput {
+	return input.speed === 'spark' ? { ...input, tokenBudget: 'low', subagentCap: 0 } : input;
+}
+
 /** Builds the run's shared state from the input, restoring what a resumed review carries over. */
-export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): ReviewRun {
+export function createRun(given: AdaptiveReviewInput, events?: HarnessEvents): ReviewRun {
+	const input = atSpeed(given);
 	const startedAt = reviewNow();
 	const inventory = buildInventory(input.diff, extraExcludes());
 	const coverage = new CoverageLedger();
@@ -247,7 +256,9 @@ export async function openWorkspace(run: ReviewRun): Promise<void> {
 
 	run.execReason = !revision
 		? 'Running code needs a local checkout of the pull request.'
-		: await execUnavailableReason();
+		: run.input.speed === 'spark'
+			? SPARK_READS_ONLY
+			: await execUnavailableReason();
 
 	const scope = revision ? scopeOfCheckout(revision.checkoutPath) : null;
 

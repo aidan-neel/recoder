@@ -31,7 +31,7 @@ const TYPED_CHARS = 1;
 export function useCompose(): ComposeView {
 	useWatchList();
 
-	const { mode, setMode } = useComposeMode();
+	const { mode, setMode, speed, setSpeed } = useComposeMode();
 	const client = useApi();
 	const chats = useChatCache();
 	const list = useListStore();
@@ -136,14 +136,14 @@ export function useCompose(): ComposeView {
 
 			await list.start(
 				{ repoId: pull.repoId, number: pull.number, ...(pick.title && { title: pick.title }) },
-				{ instructions: instructions || undefined, images }
+				{ instructions: instructions || undefined, images, speed }
 			);
 
 			list.setComposeRepo(pull.repoId);
 
 			return pull.href;
 		},
-		[pick, list, client, text]
+		[pick, list, client, text, speed]
 	);
 
 	const startChat = useCallback(
@@ -172,6 +172,8 @@ export function useCompose(): ComposeView {
 			setMode: chooseMode,
 			text,
 			setText,
+			speed,
+			setSpeed,
 			clear,
 			pick,
 			choose: picking.choose,
@@ -196,6 +198,8 @@ export function useCompose(): ComposeView {
 			chooseMode,
 			text,
 			setText,
+			speed,
+			setSpeed,
 			clear,
 			pick,
 			picking.choose,

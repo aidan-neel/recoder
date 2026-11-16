@@ -7,7 +7,7 @@ import { modelLabel } from '../bugs/bug-lists';
 import { isReviewing } from '../pulls/pull-rows';
 import { useSession, useSessionData } from '../pull/pull-session';
 import { runActivity } from './run-activity';
-import { runPhase } from './run-phase';
+import { isLive, runPhase } from './run-phase';
 import { runStages } from './run-stages';
 import { waitingReason } from './run-waiting';
 import type { RunPhase, RunView } from './types';
@@ -38,7 +38,7 @@ export function useRunView(): RunView {
 
 	return useMemo(() => {
 		const phase = runPhase(review, progress);
-		const live = phase === 'queued' || phase === 'running' || phase === 'paused';
+		const live = isLive(phase);
 		const sha = phase === 'none' ? null : (review?.headSha ?? null);
 
 		return {

@@ -28,7 +28,7 @@ import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
 import type { GatheredContext } from '../review/pipeline/intent/types';
 import { runAdaptiveReview } from '../review/pipeline/harness';
 import { configForOrchestrator, isReviewConfigured, stageConfigs } from '../models/models';
-import { withReviewModels } from '../models/model-policy';
+import { withPipelineModels } from '../models/model-policy';
 import { ModelBlockedError } from '../review/pipeline/agent-loop';
 import { signedOutAgent, signedOutReason } from '../models/agent-sign-in';
 import { reviewInstructions } from '../review/chat/review-chat';
@@ -57,7 +57,7 @@ import { touch } from './review-session';
 export async function runReviewPipeline(reviewId: string, signal?: AbortSignal): Promise<void> {
 	if (reviewStartsHeld()) return;
 
-	return withReviewModels(
+	return withPipelineModels(
 		reviewId,
 		async () => await withUsageMetrics(reviewId, 'pipeline', () => runTrackedReviewPipeline(reviewId, signal))
 	);
@@ -228,6 +228,7 @@ async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal):
 					tokenBudget,
 					reportLowSeverity: effectiveReportLowSeverity(),
 					baselineCache: review.baselineCache,
+					speed: review.speed,
 					resume
 				},
 				harnessCallbacks(reviewId, { headSha, mergeBaseSha })

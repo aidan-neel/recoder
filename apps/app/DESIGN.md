@@ -172,9 +172,24 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     post it on the pull request, copy a fix prompt for the coding agent,
     accept it, or dismiss it with a reason. The tab row carries the review's
     own facts as badges (commit, when, model, duration), posting the review
-    and Review again. While a review runs, a run card shows its steps with
-    Pause and Cancel; a paused, failed, out-of-date, cancelled or missing
-    review gets a banner with its next step (Resume, Try again, Review). Old
+    and Review again. While a review is queued, runs or is paused, there is
+    no box: its four steps are rows in the bugs' row language (the same
+    hairlines, title, badge row and chevron lane), with a 16px glyph lane
+    before the name: a check once done, a spinner while it runs, a ring while
+    it waits or is paused. A done step folds to its badges (claims,
+    reviewers, the guidelines it read, how long its own tasks took) and opens
+    to its lines when it has some (the plan's parts). The active step starts
+    open: its count in the accent tint, verifiers at work, `N found so far`
+    in the high tint, a meter (560px at most), what it does now (a verb and
+    its subject as a code badge), and up to four claims, each with a
+    glyph and a word on the right (Reproduced, Reproducing, Tracing,
+    Cleared), then `N more cleared · N waiting`. A waiting step is its name
+    in faint text, with no chevron. A queued review adds a `Waiting to
+    start` row with the reason as a badge; a paused one puts `Paused` first
+    on the step it holds. The tab row then holds the commit and model badges,
+    Pause (ghost; Resume, primary, once paused) and Cancel (outline); the
+    clock stays in the tab. A failed, out-of-date, cancelled or missing
+    review gets a banner with its next step (Try again, Review). Old
     `?tab=bugs` links open this tab.
   - **Commits**.
     The merge strip under the title shows checks and mergeability and holds the

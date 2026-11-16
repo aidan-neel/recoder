@@ -17,6 +17,7 @@ export {
 	ContextMenuTrigger
 } from './context-menu';
 export { Select, type SelectOption } from './select';
+export { SplitButton } from './split-button';
 export {
 	CommandDialog,
 	CommandEmpty,

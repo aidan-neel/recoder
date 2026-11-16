@@ -5,7 +5,7 @@ import { acquireLlmSlot, releaseLlmSlot } from '../../../src/models/llm/limiter'
 import { lockedModels, runLocked, type LockedModels } from '../../../src/models/llm/locked-models';
 import { withUsageMetrics } from '../../../src/models/metrics';
 import { configForOrchestrator, configForSubagent, withLockedModels } from '../../../src/models/models';
-import { saveReviewSettings } from '../../../src/review/session/review-settings';
+import { saveReviewSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { db, reviewMetrics } from '../../../src/store';
 import { FIRST, pickModels, resetAfterEach, SECOND, storedRuns } from '../../helpers/fake-reviewer';
 import { testReview } from '../../helpers/review';
@@ -139,4 +139,23 @@ test('outside a pipeline the live pick is used, with no run and no miss recorded
 	} finally {
 		warn.mockRestore();
 	}
+});
+
+test('a lock at an effort lowers the models that run with one and sends none to a model without reasoning', () => {
+	setReviewOverrides({
+		baseUrl: 'http://locked-models.test/v1',
+		apiKey: 'test',
+		models: [
+			{ id: 'thinker', label: 'thinker', model: 'thinker', efforts: ['low', 'medium', 'high'] },
+			{ id: 'plain', label: 'plain', model: 'plain' }
+		],
+		orchestratorModelId: 'thinker',
+		orchestratorEffort: 'high',
+		specialistModelId: 'plain'
+	});
+
+	const efforts = () => [configForOrchestrator().reasoningEffort, configForSubagent().reasoningEffort];
+
+	expect(withLockedModels(efforts)).toEqual(['high', undefined]);
+	expect(withLockedModels(efforts, 'low')).toEqual(['low', undefined]);
 });

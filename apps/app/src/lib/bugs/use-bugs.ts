@@ -17,7 +17,8 @@ const NO_LISTS: BugLists = {
 	checked: { claims: 0, cleared: 0, units: null, ruledOut: null },
 	reviewedAt: null,
 	headSha: null,
-	duration: null
+	duration: null,
+	speed: 'standard'
 };
 
 function phaseOf(review: Review | null, load: 'none' | 'loading' | 'ready' | 'failed'): BugsView['phase'] {

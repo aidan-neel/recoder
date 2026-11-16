@@ -152,16 +152,18 @@ function stagePickErrors(): unknown[] {
  * different models can run at once and no review mixes models. Resolved
  * synchronously, before `run` awaits anything. A pick that does not resolve
  * runs unlocked, so the review fails through its own error handling, and
- * each model it resolves is recorded as a lock miss in its metrics.
+ * each model it resolves is recorded as a lock miss in its metrics. With
+ * `effort`, every model that runs with an effort runs at that one instead
+ * (a Spark review's), or the nearest its model offers.
  */
-export function withLockedModels<T>(run: () => T): T {
+export function withLockedModels<T>(run: () => T, effort?: ReasoningEffort): T {
 	let picks: LockedModels;
 
 	try {
 		picks = {
-			orchestrator: resolveConfig('orchestrator'),
-			subagent: resolveConfig('subagent'),
-			verifier: resolveConfig('verifier')
+			orchestrator: resolveConfig('orchestrator', effort),
+			subagent: resolveConfig('subagent', effort),
+			verifier: resolveConfig('verifier', effort)
 		};
 	} catch {
 		return run();
@@ -243,9 +245,11 @@ export function savedReviewModelId(): string | undefined {
  * workers, and the verifier model. An unset second or verifier pick follows
  * the Review model and its effort. A pick whose entry was deleted out-of-band
  * falls back to the first entry, each entry falling back to the global base
- * URL/key. The legacy env trio still works when no entries exist.
+ * URL/key. The legacy env trio still works when no entries exist. `effort`
+ * replaces the saved effort only for a model that runs with one, so a model
+ * with no reasoning control is never sent one.
  */
-function resolveConfig(role: StageRole): ModelConfig {
+function resolveConfig(role: StageRole, effort?: ReasoningEffort): ModelConfig {
 	const stored = getStoredSettings();
 	const entries = stored.models ?? [];
 	const member = starterPicks();
@@ -266,13 +270,18 @@ function resolveConfig(role: StageRole): ModelConfig {
 	const inheritedEffort = followsReview ? reviewEffort : undefined;
 	const requested = role === 'orchestrator' ? ownEffort : (ownEffort ?? inheritedEffort);
 
-	if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, requested);
+	const resolve = (wanted: ReasoningEffort | null | undefined): ModelConfig => {
+		if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, wanted);
 
-	const agentModel = entryId ? agentConfig(entryId, requested ?? undefined) : null;
+		return (
+			(entryId ? agentConfig(entryId, wanted ?? undefined) : null) ??
+			entryConfig(entries.find((e) => e.id === entryId) ?? entries[0], wanted)
+		);
+	};
 
-	if (agentModel) return agentModel;
+	const config = resolve(requested);
 
-	return entryConfig(entries.find((e) => e.id === entryId) ?? entries[0], requested);
+	return effort && config.reasoningEffort ? resolve(effort) : config;
 }
 
 /**

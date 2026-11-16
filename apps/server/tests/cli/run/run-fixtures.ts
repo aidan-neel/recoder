@@ -33,6 +33,7 @@ export function reviewOptions(overrides: Partial<ReviewOptions> = {}): ReviewOpt
 		scope: { include: [], exclude: [] },
 		intent: { title: null, body: null, instructions: null },
 		tuning: {
+			speed: 'standard',
 			budget: 'medium',
 			subagents: null,
 			reviewerModel: null,

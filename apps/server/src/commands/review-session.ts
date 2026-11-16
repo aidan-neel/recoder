@@ -79,6 +79,7 @@ export async function createReviewSession(
 		startedBy,
 		...(trigger ? { trigger } : {}),
 		...(input.baselineCache === false ? { baselineCache: false as const } : {}),
+		...(input.speed === 'spark' ? { speed: 'spark' as const } : {}),
 		...(input.findingHistory === false ? { findingHistory: false as const } : {}),
 		...(input.postComment ? { pullComment: { state: 'posting' as const, updatedAt: now } } : {}),
 		...(input.skills?.length ? { skills: input.skills } : {}),

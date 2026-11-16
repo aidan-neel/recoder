@@ -1,6 +1,15 @@
 'use client';
 
-import { Composer, ComposerSend, SegmentedControl, focusComposerField, type ComposerNote } from '@recoder/ui';
+import { REVIEW_SPEED_PLANS, REVIEW_SPEEDS } from '@recoder/shared';
+import {
+	Composer,
+	ComposerSend,
+	SegmentedControl,
+	Select,
+	focusComposerField,
+	type ComposerNote,
+	type SelectOption
+} from '@recoder/ui';
 import { useRef, useState } from 'react';
 
 import type { ComposeMode } from '@/lib/compose/compose-mode';
@@ -27,6 +36,13 @@ const MODES: { value: ComposeMode; label: string }[] = [
 	{ value: 'review', label: 'Review' },
 	{ value: 'chat', label: 'Chat' }
 ];
+
+/** The review speeds as the bar's select lists them: each one's name over what it trades. */
+const SPEEDS: SelectOption[] = REVIEW_SPEEDS.map((speed) => ({
+	value: speed,
+	label: REVIEW_SPEED_PLANS[speed].label,
+	description: REVIEW_SPEED_PLANS[speed].description
+}));
 
 /**
  * New: one field, a little above the middle of the page. In Review mode the
@@ -155,7 +171,12 @@ export function ComposeScreen() {
 								{chat ? null : <PullChoice compose={compose} />}
 							</>
 						}
-						trailing={<ComposerModels />}
+						trailing={
+							<>
+								{chat ? null : <SpeedChoice compose={compose} />}
+								<ComposerModels />
+							</>
+						}
 						action={
 							<ComposerSend
 								label={chat ? 'Start the chat' : 'Start the review'}
@@ -184,6 +205,31 @@ function PullChoice({ compose }: { compose: ComposeView }) {
 	if (!compose.repoId) return null;
 
 	return <PullPicker rows={compose.pulls} pick={compose.pick} onPick={compose.choose} />;
+}
+
+/**
+ * How fast the review runs, in Review mode: the standard review, or Spark. The
+ * select hands back a string; only a known speed is taken.
+ */
+function SpeedChoice({ compose }: { compose: ComposeView }) {
+	function choose(value: string): void {
+		const speed = REVIEW_SPEEDS.find((candidate) => candidate === value);
+
+		if (speed) compose.setSpeed(speed);
+	}
+
+	return (
+		<Select
+			variant="quiet"
+			align="end"
+			aria-label="Review speed"
+			className="bar-trigger"
+			contentClassName="compose-speed-menu"
+			value={compose.speed}
+			options={SPEEDS}
+			onValueChange={choose}
+		/>
+	);
 }
 
 /** Where "@" reads skills: the chosen pull request in Review mode, else the chosen repository. */

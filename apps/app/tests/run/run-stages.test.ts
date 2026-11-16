@@ -11,6 +11,10 @@ function verification(id: string, status: ReviewTask['status']): ReviewTask {
 	return { id, label: id, status, message: '', updatedAt: '', kind: 'verification' };
 }
 
+function task(id: string, kind: ReviewTask['kind']): ReviewTask {
+	return { id, label: id, status: 'done', message: '', updatedAt: '', kind };
+}
+
 function states(live: ReviewProgress | null, phase: Parameters<typeof runStages>[2]): string[] {
 	return runStages(live, phase === 'passed' ? 'passed' : 'running', phase).map((stage) => `${stage.id}:${stage.state}`);
 }
@@ -81,8 +85,34 @@ describe('runStages', () => {
 
 		const [, plan, check] = runStages(progress('verify', { candidateCount: 4, tasks }), 'running', 'running');
 
-		expect(plan).toMatchObject({ detail: '4 claims', share: null });
-		expect(check).toMatchObject({ detail: '2 of 4', share: 0.5 });
+		expect(plan.facts.map((fact) => fact.text)).toEqual(['4 claims']);
+		expect(check).toMatchObject({ share: 0.5, facts: [{ text: '2 of 4', tone: 'progress' }, { text: '1 at work' }] });
+	});
+
+	test('a done step says how long its own tasks ran, from the first start to the last change', () => {
+		const tasks: Record<string, ReviewTask> = {
+			fetch: {
+				...task('fetch', 'checkout'),
+				startedAt: '2026-01-01T00:00:00.000Z',
+				updatedAt: '2026-01-01T00:00:10.000Z'
+			},
+			inventory: {
+				...task('inventory', 'inventory'),
+				startedAt: '2026-01-01T00:00:10.000Z',
+				updatedAt: '2026-01-01T00:00:48.000Z'
+			},
+			setup: { ...task('setup', 'setup'), startedAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:09:00.000Z' }
+		};
+
+		const [read] = runStages(progress('verify', { tasks }), 'running', 'running');
+
+		expect(read.facts).toEqual([{ text: '48s', tone: 'neutral', kind: 'time' }]);
+	});
+
+	test('a paused review says so on the step it holds', () => {
+		const [, , check] = runStages(progress('verify', { paused: true }), 'running', 'paused');
+
+		expect(check.facts[0]).toMatchObject({ text: 'Paused' });
 	});
 
 	test('a waiting step shows no count', () => {
@@ -92,6 +122,6 @@ describe('runStages', () => {
 			'running'
 		);
 
-		expect(check).toMatchObject({ state: 'waiting', detail: null, share: null });
+		expect(check).toMatchObject({ state: 'waiting', share: null, facts: [], lines: [] });
 	});
 });
