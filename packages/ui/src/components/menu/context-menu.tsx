@@ -1,5 +1,6 @@
 'use client';
 
+import { Check } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { ContextMenu as ContextMenuPrimitive } from 'radix-ui';
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode, type RefObject } from 'react';
@@ -109,6 +110,28 @@ export function ContextMenuItem({ icon, shortcut, destructive, className, childr
 				{children}
 			</MenuItemBody>
 		</ContextMenuPrimitive.Item>
+	);
+}
+
+interface ContextMenuCheckboxItemProps extends Omit<MenuItemProps, 'destructive' | 'shortcut'> {
+	checked: boolean;
+	onCheckedChange: (checked: boolean) => void;
+}
+
+/**
+ * A row that turns something on or off, its check at the row's end as a checked dropdown or select row draws it.
+ * Every row keeps room for the check, so the labels and their ends line up down the list.
+ */
+export function ContextMenuCheckboxItem({ icon, className, children, ...props }: ContextMenuCheckboxItemProps) {
+	return (
+		<ContextMenuPrimitive.CheckboxItem {...menuItemRoot(false, className)} {...props}>
+			<MenuItemBody icon={icon}>{children}</MenuItemBody>
+			<span data-ui="menu-item-check" className="w-3.5">
+				<ContextMenuPrimitive.ItemIndicator>
+					<Check aria-hidden />
+				</ContextMenuPrimitive.ItemIndicator>
+			</span>
+		</ContextMenuPrimitive.CheckboxItem>
 	);
 }
 

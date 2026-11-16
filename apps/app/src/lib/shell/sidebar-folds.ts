@@ -2,36 +2,56 @@ import { create } from 'zustand';
 
 import { readStoredJson, writeStored } from './browser-storage';
 
-/** A sidebar list a person can fold away. */
-export type FoldableSection = 'repos' | 'chats' | 'reviews';
+/** A sidebar list a person can fold away or hide. */
+export type SidebarList = 'repos' | 'chats' | 'reviews';
 
-/** Where the folded sections are kept in this browser. */
+/** Where the folded lists are kept in this browser. */
 const FOLDS_KEY = 'recoder.sidebar-folds.v1';
 
-const SECTIONS: readonly FoldableSection[] = ['repos', 'chats', 'reviews'];
+/** Where the hidden lists are kept in this browser. */
+const HIDDEN_KEY = 'recoder.sidebar-hidden.v1';
 
-interface FoldsState {
-	folded: readonly FoldableSection[];
-	setOpen: (section: FoldableSection, open: boolean) => void;
+const LISTS: readonly SidebarList[] = ['repos', 'chats', 'reviews'];
+
+interface ListsState {
+	/** Lists showing only their title. */
+	folded: readonly SidebarList[];
+	/** Lists left out of the sidebar, title and all. */
+	hidden: readonly SidebarList[];
+	setOpen: (list: SidebarList, open: boolean) => void;
+	setShown: (list: SidebarList, shown: boolean) => void;
 }
 
-/** Which sidebar lists are folded; each stays as the person left it, in this browser. */
-export const useSidebarFolds = create<FoldsState>((set, get) => ({
-	folded: typeof window === 'undefined' ? [] : readFolds(),
-	setOpen(section, open) {
-		const others = get().folded.filter((folded) => folded !== section);
-		const folded = open ? others : [...others, section];
+/** `lists` with `list` in it when `inList`, and out of it otherwise. */
+function withList(lists: readonly SidebarList[], list: SidebarList, inList: boolean): SidebarList[] {
+	const others = lists.filter((other) => other !== list);
+
+	return inList ? [...others, list] : others;
+}
+
+/** Which sidebar lists are folded and which are hidden; each stays as the person left it, in this browser. */
+export const useSidebarFolds = create<ListsState>((set, get) => ({
+	folded: typeof window === 'undefined' ? [] : readLists(FOLDS_KEY),
+	hidden: typeof window === 'undefined' ? [] : readLists(HIDDEN_KEY),
+	setOpen(list, open) {
+		const folded = withList(get().folded, list, !open);
 
 		writeStored(FOLDS_KEY, JSON.stringify(folded));
 		set({ folded });
+	},
+	setShown(list, shown) {
+		const hidden = withList(get().hidden, list, !shown);
+
+		writeStored(HIDDEN_KEY, JSON.stringify(hidden));
+		set({ hidden });
 	}
 }));
 
-/** The saved folds; none when nothing is saved, it does not parse, or storage is blocked. */
-function readFolds(): FoldableSection[] {
-	const saved = readStoredJson(FOLDS_KEY);
+/** The lists saved under `key`; none when nothing is saved, it does not parse, or storage is blocked. Unknown names are dropped. */
+function readLists(key: string): SidebarList[] {
+	const saved = readStoredJson(key);
 
 	if (!Array.isArray(saved)) return [];
 
-	return SECTIONS.filter((section) => saved.includes(section));
+	return LISTS.filter((list) => saved.includes(list));
 }

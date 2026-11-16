@@ -1,7 +1,7 @@
-import { findingTone, type Repo, type RepoOverview, type ReviewListItem } from '@recoder/shared';
+import type { Repo, RepoOverview } from '@recoder/shared';
 
-import { isOpenFinding } from '../api/reviews';
 import { forgeLabel } from '../connections/forges';
+import { highBugs } from '../pulls/high-bugs';
 import { needsReview } from '../pulls/pull-rows';
 import type { PullRow, PullRowStatus } from '../pulls/types';
 import type { RowEntry } from '../pulls/use-rows';
@@ -32,18 +32,6 @@ const URGENCY: Record<PullRowStatus['kind'], number> = {
 
 const monthDay = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
-/** The open findings of a review that are bugs, not suggestions. */
-function openBugs(review: ReviewListItem | null): ReviewListItem['findings'] {
-	return (review?.findings ?? []).filter((finding) => isOpenFinding(finding) && finding.kind !== 'quality');
-}
-
-/** How many of a row's open bugs are high; only a row that shows its bugs counts them. */
-function highBugs({ listed, row }: RowEntry): number {
-	if (row.status.kind !== 'bugs') return 0;
-
-	return openBugs(listed.review).filter((finding) => findingTone(finding.severity) === 'high').length;
-}
-
 /** The rows most urgent first; rows equally urgent keep their order, newest activity first. */
 function byUrgency(entries: readonly RowEntry[]): PullRow[] {
 	const rank = (entry: RowEntry) => (highBugs(entry) > 0 ? 0 : URGENCY[entry.row.status.kind]);
@@ -54,8 +42,11 @@ function byUrgency(entries: readonly RowEntry[]): PullRow[] {
 		.map((entry) => entry.row);
 }
 
-/** The header's facts: the name split from its owner, the forge to open it on, and since when it is tracked. */
-function repoFacts(repo: Repo): RepoFacts {
+/**
+ * The header's facts: the name split from its owner, the forge to open it on, since when it is tracked, and whether
+ * auto review watches it.
+ */
+function repoFacts(repo: Repo, overview: RepoOverview): RepoFacts {
 	const parts = repo.name.split('/');
 	const name = parts.pop() ?? repo.name;
 	const { provider } = repo;
@@ -67,7 +58,8 @@ function repoFacts(repo: Repo): RepoFacts {
 		provider,
 		forge: provider === 'local' ? null : { url: repo.url, label: forgeLabel(provider) },
 		defaultBranch: repo.defaultBranch,
-		tracked: `Tracked since ${monthDay.format(new Date(repo.createdAt))}`
+		tracked: `Tracked since ${monthDay.format(new Date(repo.createdAt))}`,
+		autoReview: overview.autoReview
 	};
 }
 
@@ -172,7 +164,7 @@ export function repoPageData({ repo, entries, more, overview, base }: RepoPageIn
 	const count = `${entries.length}${more ? '+' : ''}`;
 
 	return {
-		repo: repoFacts(repo),
+		repo: repoFacts(repo, overview),
 		figures: figuresOf(entries, more, overview),
 		needsYou: byUrgency(entries),
 		allPullsLabel: entries.length === 1 && !more ? '1 pull request' : `All ${count} pull requests`,

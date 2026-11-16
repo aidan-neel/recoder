@@ -50,6 +50,10 @@ export interface SidebarRepo {
 	/** The repository's short name, or the label that tells it apart from another of the same name. */
 	name: string;
 	href: string;
+	/** Where the repository lives, for the mark on the row. */
+	provider: Provider;
+	/** One of its open pull requests has an open high-severity bug. */
+	alert: boolean;
 }
 
 /** What the sidebar shows around the pages. */

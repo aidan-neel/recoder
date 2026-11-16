@@ -8,12 +8,15 @@ interface RepoLabelProps {
 	className?: string;
 }
 
-/** A repository's name behind the small mark of its forge (GitHub, GitLab, or a folder for a local one). */
+/**
+ * A repository's name behind the small mark of its forge (GitHub, GitLab, or a folder for a local one). A name too long
+ * for its line ends in an ellipsis.
+ */
 export function RepoLabel({ name, forge, className }: RepoLabelProps) {
 	return (
 		<span className={className ? `repo-label ${className}` : 'repo-label'}>
 			{forge ? <ForgeMark provider={forge} className="repo-label-mark" /> : null}
-			{name}
+			<span className="repo-label-name">{name}</span>
 		</span>
 	);
 }

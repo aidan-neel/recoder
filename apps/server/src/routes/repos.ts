@@ -70,11 +70,9 @@ app.get('/:id', async (c) => {
 
 /** What the repository page shows over the last thirty days. Any member who can list the repository may read it. */
 app.get('/:id/overview', async (c) => {
-	const id = c.req.param('id');
+	const repo = await db.repos.get(c.req.param('id'));
 
-	if (!(await db.repos.get(id))) return c.json({ error: 'repo not found' }, 404);
-
-	return c.json(await loadRepoOverview(id));
+	return repo ? c.json(await loadRepoOverview(repo)) : c.json({ error: 'repo not found' }, 404);
 });
 
 app.delete('/:id', async (c) => {

@@ -10,6 +10,7 @@ export {
 } from './dropdown-menu';
 export {
 	ContextMenu,
+	ContextMenuCheckboxItem,
 	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuSeparator,

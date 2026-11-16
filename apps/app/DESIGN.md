@@ -60,16 +60,28 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
 
 - **Sidebar** (248px, `--sidebar-width`): the account menu; New review, Pull
   requests (with the open count), Automations and Guidelines; Repositories,
-  one row a tracked repository on the places' lanes, row height and icon size,
-  the open one filled in place, folding like the lists under it; the recent
-  chats and reviews; and at the foot the model reviews run with, the shortcuts and the
-  theme switch. `[` shows or hides it. Settings open from the account menu
-  and with ⌘,.
+  one row a tracked repository on the places' lanes and row height: its
+  forge's mark (14px, centred in the 16px icon lane), the name ending in an
+  ellipsis, and, while one of its open pull requests has an open high bug, a
+  6px dot in `--sev-high` where Pull requests holds its count (a screen reader
+  hears "Has high-severity bugs"); the open one filled in place, folding like
+  the lists under it; the recent chats and reviews; Settled; and at the foot
+  the model reviews run with, the shortcuts and the theme switch. `[` shows or
+  hides it. Settings open from the account menu and with ⌘,.
+- **Sidebar body**: everything between the head and the foot scrolls as one
+  region, so the head and foot never move and no list is squeezed shut; with
+  room to spare, Settled sits at the bottom. A right click anywhere on it, or
+  the context-menu key, opens a menu of three checks: Repositories, Chats and
+  Reviews. A row with its own menu (a chat, a review, a settled row) keeps
+  its menu. Unchecked, a list is left out whole, title and all, in this
+  browser; hiding is apart from folding. Hiding Chats or Reviews takes its
+  rows out of Settled too, and Settled goes when nothing is left in it.
 - **Settings sidebar**: on `/settings/<section>` the account row becomes
   Back to app (to the pull request list), and the places and recent reviews become the sections: Models,
   Providers, Connections and Appearance, each with its icon, on the same
   lanes and fill as the app's places; the admin's own sit under an Admin
-  label below them: Recoder (the running server, its updates, the global
+  label below them: Recoder (the running server, its updates, the branch a
+  git checkout runs and a switch to another, the global
   review guidelines and its people), Limits, Telemetry and Usage. The search,
   the hide button and the foot stay. The page bar says Settings. Opening
   Settings lands on Models, never on a bare `/settings`, so a section row is
@@ -92,7 +104,9 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   which opens New in Chat on this repository, and New review, the one primary,
   which opens New in Review on it. Under the bar, the forge's mark and
   `owner / name` (20px, the owner faint) over its facts as badges: the default
-  branch and since when it is tracked. Then five figures on one line split by
+  branch, since when it is tracked, and whether auto review watches it
+  ("Auto review on" in the success tone, "Auto review off" neutral, each led
+  by a dot). Then five figures on one line split by
   hairlines, no cards: open pull requests (and how many are not reviewed), open
   bugs (the high ones in the high-severity colour), merged in the window (of
   how many reviewed), findings accepted (of raised) and the typical review time

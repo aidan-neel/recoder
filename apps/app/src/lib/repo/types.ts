@@ -14,6 +14,8 @@ export interface RepoFacts {
 	defaultBranch: string;
 	/** "Tracked since Sep 3". */
 	tracked: string;
+	/** Auto review watches the repository. */
+	autoReview: boolean;
 }
 
 /** One figure in the row under the header: a label over a number, with a quieter fact beside the number. */

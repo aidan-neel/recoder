@@ -12,7 +12,15 @@ function bug(id: string, file: string, overrides: Partial<Finding> = {}): Findin
 
 /** The overview of `repo` over seven days ending on NOW. */
 function overview(input: Partial<RepoOverviewInput>) {
-	return buildRepoOverview({ repoId: 'repo', days: 7, now: NOW, reviews: [], pullStates: [], ...input });
+	return buildRepoOverview({
+		repoId: 'repo',
+		days: 7,
+		now: NOW,
+		reviews: [],
+		pullStates: [],
+		autoReview: false,
+		...input
+	});
 }
 
 test('a review started the day before the window is left out, one on its first day counts', () => {
