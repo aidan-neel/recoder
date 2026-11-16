@@ -1,6 +1,7 @@
 'use client';
 
 import { useApi } from '@/lib/api/client';
+import { useWarmCommits } from '@/lib/pull/pull-session';
 import { PULL_TABS, type PullPageView, type PullTab } from '@/lib/pull/types';
 import { replaceSearch } from '@/lib/shell/navigation';
 import { pullHref } from '@/lib/shell/routes';
@@ -32,6 +33,7 @@ export function PullTabs({ repoId, number, tab, counts }: PullTabsProps) {
 	const { base } = useApi();
 	const hrefOf = (target: PullTab) => pullHref(base, repoId, number, target);
 	const open = (target: PullTab) => replaceSearch(hrefOf(target));
+	const warmCommits = useWarmCommits();
 
 	useKeys({
 		'1': () => open('changes'),
@@ -45,7 +47,8 @@ export function PullTabs({ repoId, number, tab, counts }: PullTabsProps) {
 		label: LABELS[id],
 		href: hrefOf(id),
 		count: countOf(id, counts),
-		tone: id === 'bugs' ? 'bugs' : undefined
+		tone: id === 'bugs' ? 'bugs' : undefined,
+		warm: id === 'commits' ? warmCommits : undefined
 	}));
 
 	return <PageTabs label="Pull request" tabs={tabs} current={tab} />;

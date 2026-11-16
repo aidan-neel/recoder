@@ -30,9 +30,6 @@ const WARM: Partial<Record<Place, () => void>> = {
 		void import('@/lib/guidelines/guidelines-store').then((module) => module.useGuidelines.getState().load())
 };
 
-/** Nothing to warm. */
-function noop(): void {}
-
 /** The place the address belongs to, or null on a page the sidebar does not list (Settings). */
 function placeOf(pathname: string, base: string): Place | null {
 	const path = pathname.slice(base.length) || '/';
@@ -71,7 +68,7 @@ export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 /** One place: the whole row is its link, and resting on it warms what the place reads first. */
 function NavItem({ row, active, openPulls }: { row: NavRow; active: boolean; openPulls: number | null }) {
 	const { id, label, href, icon: Icon } = row;
-	const intent = useIntent(WARM[id] ?? noop);
+	const intent = useIntent(WARM[id]);
 
 	return (
 		<RowButton asChild data-nav data-active={active || undefined} className="nav-item">

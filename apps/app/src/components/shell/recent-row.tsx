@@ -45,9 +45,6 @@ const CONTEXT_PARTS: MenuParts = { Item: ContextMenuItem, Separator: ContextMenu
 /** How often the ages on the rows move on, in ms. */
 export const AGE_TICK = 60_000;
 
-/** The intent a row without one rests on. */
-function noop(): void {}
-
 interface RowShellProps {
 	title: string;
 	actions: RowAction[];
@@ -66,7 +63,7 @@ interface RowShellProps {
  * entries beside the row.
  */
 function RowShell({ title, actions, onIntent, className, active, tools, children }: RowShellProps) {
-	const intent = useIntent(onIntent ?? noop);
+	const intent = useIntent(onIntent);
 
 	return (
 		<ContextMenu>
