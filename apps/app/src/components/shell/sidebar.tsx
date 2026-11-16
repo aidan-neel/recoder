@@ -19,10 +19,11 @@ import { BackToApp, SettingsNav } from './settings-nav';
 import { SettledReviews } from './settled-reviews';
 import { SidebarFoot } from './sidebar-foot';
 import { SidebarNav } from './sidebar-nav';
+import { SidebarRepos } from './sidebar-repos';
 import { SidebarSwap } from './sidebar-swap';
 
 /**
- * The sidebar: the account, the four places, the newest chats and reviews,
+ * The sidebar: the account, the four places, the tracked repositories, the newest chats and reviews,
  * the settled reviews at the bottom, and the model in use. On Settings' pages the account row becomes Back to app and the
  * places and lists become Settings' sections. Hidden, it stays mounted and
  * inert, so bringing it back costs no load and its lists keep their scroll.
@@ -58,6 +59,7 @@ export function Sidebar({ model }: { model: ReactNode }) {
 				app={
 					<>
 						<SidebarNav openPulls={shell.openPulls} />
+						<SidebarRepos repos={shell.repos} />
 						<RecentActionsHost>
 							<RecentChats chats={shell.chats} />
 							<RecentReviews reviews={shell.recent} loading={shell.loading} />

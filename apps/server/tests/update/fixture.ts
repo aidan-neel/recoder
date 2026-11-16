@@ -73,3 +73,10 @@ export async function upstreamCommit(
 
 	commitAll(source, subject);
 }
+
+/** Commits `files` to a new `branch` in the source repo, leaving the source on main. */
+export async function upstreamBranch(source: string, branch: string, files: Record<string, string>): Promise<void> {
+	git(source, ['switch', '-q', '-c', branch]);
+	await upstreamCommit(source, files, `work on ${branch}`);
+	git(source, ['switch', '-q', 'main']);
+}

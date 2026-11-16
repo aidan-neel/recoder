@@ -236,6 +236,21 @@
 	font-size: var(--font-size-meta);
 	font-variant-numeric: tabular-nums;
 }
+/* A label in a nav row that may not fit, such as a repository's name, ends in an ellipsis. */
+.nav-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* The tracked repositories: a folding section on the places' lanes, at its own height above the recent lists. */
+.sidebar-repos {
+	flex: none;
+	margin-top: 20px;
+}
+.sidebar-repos .sidebar-nav {
+	padding-top: 0;
+}
 /* A group label in the nav (Settings' Admin) stands clear of the rows above and sits on the icon lane. */
 .nav-group-label {
 	margin-top: 14px;

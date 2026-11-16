@@ -1,5 +1,5 @@
 import type { PullPage, PullState } from '@recoder/shared';
-import { Pill, type PillTone } from '@recoder/ui';
+import { Collapsible, Pill, type PillTone } from '@recoder/ui';
 import { Clock, GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -30,44 +30,58 @@ function faceOf(page: PullPage): StateFace {
 
 interface PullHeaderProps {
 	page: PullPage;
-	/** What stands under the facts: the merge strip. */
+	/** Beside the title: where the review stands. */
+	status: ReactNode;
+	/** At the end of the title's row: the review and merge buttons. */
+	actions: ReactNode;
+	/** After the facts: the checks and the conflicts. */
+	merge: ReactNode;
+	/** Under the facts: the checks' list, which the checks fact opens. */
 	children: ReactNode;
 }
 
 /**
- * The pull request's title over its facts as badges: its state, who wrote
- * it, the branch it merges into from the branch it came from, the size of the
- * change and when it last moved. Only the state is coloured.
+ * The pull request's title with the review's badge and the buttons that act
+ * on it, over its facts as badges: its state, who wrote it, the branch it
+ * merges into from the branch it came from, the size of the change and when it
+ * last moved, then whether it can merge. Only the state is coloured.
  */
-export function PullHeader({ page, children }: PullHeaderProps) {
+export function PullHeader({ page, status, actions, merge, children }: PullHeaderProps) {
 	const face = faceOf(page);
 	const by = author(page.pull.author);
 	const { base, headRef } = page.pull;
 
 	return (
 		<header className="pull-head">
-			<h1 className="page-title">
-				<span className="page-title-text">{page.pull.title}</span>
-				<span className="pull-title-number">#{page.pull.number}</span>
-			</h1>
-			<div className="pull-facts">
-				<Pill tone={face.tone} icon={<PullMark state={face.mark} />}>
-					{face.label}
-				</Pill>
-				<Pill icon={<Avatar name={by.name} className="pill-avatar" />}>{by.name}</Pill>
-				<Pill face="code" icon={<GitBranch aria-hidden />} title={`${headRef} into ${base}`}>
-					{base} ← {headRef}
-				</Pill>
-				{page.pull.additions + page.pull.deletions > 0 ? (
-					<Pill face="code">
-						<DiffStat additions={page.pull.additions} deletions={page.pull.deletions} />
+			<Collapsible>
+				<div className="pull-title-row">
+					<h1 className="page-title">
+						<span className="page-title-text">{page.pull.title}</span>
+						<span className="pull-title-number">#{page.pull.number}</span>
+					</h1>
+					{status}
+					<div className="pull-actions">{actions}</div>
+				</div>
+				<div className="pull-facts">
+					<Pill tone={face.tone} icon={<PullMark state={face.mark} />}>
+						{face.label}
 					</Pill>
-				) : null}
-				<Pill icon={<Clock aria-hidden />}>
-					<Age at={page.status.updatedAt} form="long" />
-				</Pill>
-			</div>
-			{children}
+					<Pill icon={<Avatar name={by.name} className="pill-avatar" />}>{by.name}</Pill>
+					<Pill face="code" icon={<GitBranch aria-hidden />} title={`${headRef} into ${base}`}>
+						{base} ← {headRef}
+					</Pill>
+					{page.pull.additions + page.pull.deletions > 0 ? (
+						<Pill face="code">
+							<DiffStat additions={page.pull.additions} deletions={page.pull.deletions} />
+						</Pill>
+					) : null}
+					<Pill icon={<Clock aria-hidden />}>
+						<Age at={page.status.updatedAt} form="long" />
+					</Pill>
+					{merge}
+				</div>
+				{children}
+			</Collapsible>
 		</header>
 	);
 }

@@ -38,6 +38,18 @@ export function groupBy<T>(items: readonly T[], keyOf: (item: T) => string): Map
 	return groups;
 }
 
+/** The median of `values`, rounded to a whole number; null when there are none. */
+export function medianOf(values: readonly number[]): number | null {
+	const sorted = [...values].sort((a, b) => a - b);
+
+	if (sorted.length === 0) return null;
+
+	const middle = Math.floor(sorted.length / 2);
+	const median = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+
+	return Math.round(median);
+}
+
 /** `part / whole`, or 0 when `whole` is 0. */
 export function shareOf(part: number, whole: number): number {
 	return whole === 0 ? 0 : part / whole;

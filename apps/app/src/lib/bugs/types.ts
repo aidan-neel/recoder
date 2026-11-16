@@ -77,8 +77,18 @@ export interface BugsView {
 	/** Findings of a topic people keep dismissing; shown collapsed and left out of every count. */
 	quieted: BugView[];
 	unresolved: UnresolvedItem[];
-	/** What the review checked and found sound: claims it investigated, and those it cleared. */
-	checked: { claims: number; cleared: number };
+	/**
+	 * What the review checked and found sound: claims it investigated and those
+	 * it cleared, the changed units its brief read in full out of all of them,
+	 * and the candidates it raised and dropped. `units` and `ruledOut` are null
+	 * on reviews that did not record them.
+	 */
+	checked: {
+		claims: number;
+		cleared: number;
+		units: { read: number; total: number } | null;
+		ruledOut: number | null;
+	};
 	/** The forge review the finished findings went up as, once someone posted them; null before. */
 	findingsReview: { state: 'posting' | 'posted' | 'failed'; url: string | null; error: string | null } | null;
 	/** Facts for the line under the tabs. */

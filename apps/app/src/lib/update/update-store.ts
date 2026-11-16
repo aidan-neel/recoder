@@ -39,6 +39,8 @@ interface UpdateStore {
 	load: (api: UpdateApi) => Promise<void>;
 	check: (api: UpdateApi) => Promise<void>;
 	apply: (api: UpdateApi) => Promise<void>;
+	/** Moves the server to another branch, followed like an update. */
+	switchBranch: (api: UpdateApi, branch: string) => Promise<void>;
 	poll: (api: UpdateApi, now: number) => Promise<void>;
 	/** Follows the update again after the page gave up on the server. */
 	resume: () => void;
@@ -67,67 +69,78 @@ function phaseAfter(status: UpdateStatus): UpdatePhase {
 	return status.state === 'idle' && status.available === null ? 'updated' : 'idle';
 }
 
-export const useUpdate = create<UpdateStore>((set, get) => ({
-	read: 'loading',
-	status: null,
-	phase: 'idle',
-	unreachableSince: null,
-	polls: 0,
-	error: null,
-
-	async load(api) {
-		try {
-			const status = await api.status();
-
-			set({ status, read: 'ready', error: null, phase: isRunning(status) ? 'applying' : 'idle' });
-		} catch (error) {
-			set({ read: 'failed', error: failureText(error, 'Couldn’t read the update status.') });
-		}
-	},
-
-	async check(api) {
-		set({ phase: 'checking', error: null });
-
-		try {
-			set({ status: await api.check(), phase: 'idle' });
-		} catch (error) {
-			set({ phase: 'idle', error: failureText(error, 'Couldn’t check for updates.') });
-		}
-	},
-
-	async apply(api) {
+export const useUpdate = create<UpdateStore>((set, get) => {
+	/** Starts a background apply and follows it, or says why the server refused it. */
+	async function start(begin: () => Promise<UpdateStatus>, fallback: string): Promise<void> {
 		set({ error: null });
 
 		try {
-			set({ status: await api.apply(), phase: 'applying', unreachableSince: null });
+			set({ status: await begin(), phase: 'applying', unreachableSince: null });
 		} catch (error) {
-			set({ phase: 'idle', error: failureText(error, 'Couldn’t start the update.') });
+			set({ phase: 'idle', error: failureText(error, fallback) });
 		}
-	},
+	}
 
-	async poll(api, now) {
-		if (get().phase !== 'applying') return;
+	return {
+		read: 'loading',
+		status: null,
+		phase: 'idle',
+		unreachableSince: null,
+		polls: 0,
+		error: null,
 
-		try {
-			const status = await api.status();
+		async load(api) {
+			try {
+				const status = await api.status();
 
-			set((store) => ({ status, phase: phaseAfter(status), unreachableSince: null, polls: store.polls + 1 }));
-		} catch (error) {
-			if (!isServerAway(error)) {
-				set({ phase: 'idle', error: failureText(error, 'Couldn’t read the update status.') });
-
-				return;
+				set({ status, read: 'ready', error: null, phase: isRunning(status) ? 'applying' : 'idle' });
+			} catch (error) {
+				set({ read: 'failed', error: failureText(error, 'Couldn’t read the update status.') });
 			}
+		},
 
-			const since = get().unreachableSince ?? now;
+		async check(api) {
+			set({ phase: 'checking', error: null });
 
-			set((store) => ({
-				unreachableSince: since,
-				polls: store.polls + 1,
-				phase: now - since > GIVE_UP_MS ? 'lost' : 'applying'
-			}));
-		}
-	},
+			try {
+				set({ status: await api.check(), phase: 'idle' });
+			} catch (error) {
+				set({ phase: 'idle', error: failureText(error, 'Couldn’t check for updates.') });
+			}
+		},
 
-	resume: () => set({ phase: 'applying', unreachableSince: null })
-}));
+		async apply(api) {
+			await start(() => api.apply(), 'Couldn’t start the update.');
+		},
+
+		async switchBranch(api, branch) {
+			await start(() => api.switchBranch(branch), `Couldn’t switch to ${branch}.`);
+		},
+
+		async poll(api, now) {
+			if (get().phase !== 'applying') return;
+
+			try {
+				const status = await api.status();
+
+				set((store) => ({ status, phase: phaseAfter(status), unreachableSince: null, polls: store.polls + 1 }));
+			} catch (error) {
+				if (!isServerAway(error)) {
+					set({ phase: 'idle', error: failureText(error, 'Couldn’t read the update status.') });
+
+					return;
+				}
+
+				const since = get().unreachableSince ?? now;
+
+				set((store) => ({
+					unreachableSince: since,
+					polls: store.polls + 1,
+					phase: now - since > GIVE_UP_MS ? 'lost' : 'applying'
+				}));
+			}
+		},
+
+		resume: () => set({ phase: 'applying', unreachableSince: null })
+	};
+});

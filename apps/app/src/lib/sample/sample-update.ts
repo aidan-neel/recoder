@@ -14,15 +14,22 @@ const SAMPLE_UPDATE: NonNullable<UpdateStatus['available']> = {
 /** The states a sample update walks through, one per status read. */
 const SAMPLE_STEPS: readonly UpdateState[] = ['pausing', 'updating', 'restarting', 'resuming'];
 
-/** An updater that answers from memory: one update is waiting, and applying it steps through the states on each read. */
+/** The branches the sample's remote holds. */
+const SAMPLE_BRANCHES = ['main', 'feat/cost-per-review', 'fix/diff-scroll', 'aidan/branch-switch'];
+
+/**
+ * An updater that answers from memory: one update is waiting, and applying it
+ * (or switching branches) steps through the states on each read.
+ */
 export function createSampleUpdate(): UpdateApi {
 	let available: UpdateStatus['available'] = SAMPLE_UPDATE;
+	let branch = 'main';
 	let step = -1;
 
 	function status(): UpdateStatus {
 		const state = SAMPLE_STEPS[step] ?? 'idle';
 
-		return { mode: 'git', current: { version: '0.2.1', commit: '1f3a9d6e', branch: 'main' }, available, state };
+		return { mode: 'git', current: { version: '0.2.1', commit: '1f3a9d6e', branch }, available, state };
 	}
 
 	return {
@@ -38,6 +45,14 @@ export function createSampleUpdate(): UpdateApi {
 		},
 		check: async () => status(),
 		apply: async () => {
+			step = 0;
+
+			return status();
+		},
+		branches: async () => ({ current: branch, branches: SAMPLE_BRANCHES }),
+		switchBranch: async (next) => {
+			available = { branch: next, commits: [], changes: { server: true, web: true, install: false } };
+			branch = next;
 			step = 0;
 
 			return status();

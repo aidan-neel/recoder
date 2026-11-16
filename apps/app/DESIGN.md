@@ -41,10 +41,10 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
 ## Structure
 
 - **Routes** (`src/app/(live)`): `/` the pull request list, `/new` a new
-  review, `/pulls/[repoId]/[number]` a pull request, `/automations`,
-  `/guidelines`, `/settings/[section]`. `/sample` mirrors the list, the new
-  review page and the pull request page on an in-memory client, with no
-  server.
+  review, `/pulls/[repoId]/[number]` a pull request, `/repos/[repoId]` a
+  repository, `/automations`, `/guidelines`, `/settings/[section]`. `/sample`
+  mirrors the list, the new review page, the pull request page and the
+  repository page on an in-memory client, with no server.
 - **Logic** lives in `src/lib/<feature>/` as view-model hooks and stores. A
   component calls a hook, gets a plain view object (state and actions) and
   renders it. Components hold no fetches, timers or derived data.
@@ -53,14 +53,16 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   memory with the same behaviour. A page under `/sample` and its live twin
   render the same components.
 - **Components** are grouped by feature in `src/components/`: `shell`,
-  `pulls`, `pull`, `changes`, `summary`, `bugs`, `commits`, `ask`, `compose`,
+  `pulls`, `pull`, `repo`, `changes`, `summary`, `bugs`, `commits`, `ask`, `compose`,
   `automations`, `guidelines`, `settings`, `connections`, `setup`, `common`.
 
 ## Layout
 
 - **Sidebar** (248px, `--sidebar-width`): the account menu; New review, Pull
-  requests (with the open count), Automations and Guidelines; the recent
-  reviews; and at the foot the model reviews run with, the shortcuts and the
+  requests (with the open count), Automations and Guidelines; Repositories,
+  one row a tracked repository on the places' lanes, row height and icon size,
+  the open one filled in place, folding like the lists under it; the recent
+  chats and reviews; and at the foot the model reviews run with, the shortcuts and the
   theme switch. `[` shows or hides it. Settings open from the account menu
   and with ⌘,.
 - **Settings sidebar**: on `/settings/<section>` the account row becomes
@@ -85,6 +87,27 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   end of the list nears, with skeleton rows at the end while they do and
   one plain line with Retry when a page fails. Rows append in place, below the
   ones shown, with no entrance.
+- **Repository page**: the bar holds the crumbs (Repositories, then the
+  name) and, on the right, the forge link as an icon button, Ask (outline),
+  which opens New in Chat on this repository, and New review, the one primary,
+  which opens New in Review on it. Under the bar, the forge's mark and
+  `owner / name` (20px, the owner faint) over its facts as badges: the default
+  branch and since when it is tracked. Then five figures on one line split by
+  hairlines, no cards: open pull requests (and how many are not reviewed), open
+  bugs (the high ones in the high-severity colour), merged in the window (of
+  how many reviewed), findings accepted (of raised) and the typical review time
+  ("6m 40s"). Then two columns. The wide one: Needs you, the list's own rows
+  for the open pull requests most urgent first (high bugs, other bugs, no
+  review, conflicts or failing checks, a running review, ready), at most five,
+  with a link to the list set to this repository; then Recently merged, up to
+  three rows with what their reviews fixed ("3 fixed" or "Clean") and when.
+  The narrow one: Reviews over the window as one bar a day, grey for reviews
+  and the high-severity colour for the part that found a bug, a tip naming the
+  day; Where bugs land, the five directories holding the most bugs, each with
+  a share line and a count, paths in the code face; and Set up here, rows to
+  Guidelines and Automations. The page loads behind a skeleton of the same
+  shape and paints once, whole. A part with nothing in it says so in one quiet
+  line; a repository that is not tracked or did not load says so in a banner.
 - **New**: one large composer, its centre near 42% of the page, with no
   heading; the crumb names the screen (New review or New chat). Over its
   left edge sits the repository, a quiet button with the forge's mark that

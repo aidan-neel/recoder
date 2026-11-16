@@ -80,3 +80,10 @@ test('a pull request the forge cannot find lists the default branch only, and a 
 
 	expect((await skillsOf(`/api/repos/${repo.id}/skills?pull=abc`)).status).toBe(400);
 });
+
+test('the overview of a repository that is not tracked is not found', async () => {
+	const response = await app.request('/api/repos/missing/overview');
+
+	expect(response.status).toBe(404);
+	expect(await response.json()).toEqual({ error: 'repo not found' });
+});

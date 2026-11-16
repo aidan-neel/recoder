@@ -1,5 +1,6 @@
 'use client';
 
+import type { PullPage } from '@recoder/shared';
 import { Button } from '@recoder/ui';
 import { ArrowUpRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -13,7 +14,7 @@ import { PullSessionProvider, useMergeView, usePullChecksView, usePullPageView }
 import type { PullTab } from '@/lib/pull/types';
 import { usePullTab } from '@/lib/pull/use-pull-tab';
 import { useRunView } from '@/lib/run/use-run';
-import { pullHref, pullsHref } from '@/lib/shell/routes';
+import { pullHref, pullsHref, repoHref } from '@/lib/shell/routes';
 
 import { BugsTab } from '@/components/bugs/bugs-tab';
 import { BugsTools } from '@/components/bugs/bugs-tools';
@@ -26,11 +27,14 @@ import { Page } from '@/components/common/page';
 import { TokenUsageButton } from '@/components/common/token-usage-modal';
 import { SummaryTab } from '@/components/summary/summary-tab';
 
-import { MergeStrip } from './merge-strip';
+import { ChecksList } from './checks';
+import { MergeActions, MergeFacts } from './merge-facts';
 import { PullHeader } from './pull-header';
 import { PullPageSkeleton } from './pull-skeleton';
 import { PullNotice } from './pull-notice';
 import { PullTabs } from './pull-tabs';
+import { ReviewStatus } from './review-status';
+import { ReviewButton } from './run-banner';
 
 interface PullScreenProps {
 	repoId: string;
@@ -52,26 +56,41 @@ function ChangesTabTools({ mode, onModeChange }: { mode: ChangesMode; onModeChan
 	return <ChangesTools viewed={useViewedFiles()} mode={mode} onModeChange={onModeChange} />;
 }
 
-/** The merge strip; it reads the checks and the review, so the title and facts above never re-render for them. */
-function PullMergeStrip() {
-	const view = usePullPageView();
-	const checks = usePullChecksView();
-	const merge = useMergeView();
+/** The review's badge; it reads the run and the bugs, so the title and facts never re-render for them. */
+function PullReviewStatus({ repoId, number }: PullScreenProps) {
+	const run = useRunView();
 	const bugs = useBugsView();
 
-	if (!view.page) return null;
-
 	return (
-		<MergeStrip
-			page={view.page}
-			checks={checks}
-			merge={merge}
-			bugs={bugs.phase === 'ready' ? bugs.open.length : null}
-		/>
+		<ReviewStatus run={run} repoId={repoId} number={number} bugs={bugs.phase === 'ready' ? bugs.open.length : null} />
 	);
 }
 
-/** The page inside its session: the bar, the header with its merge strip, the tabs and the open tab. */
+/** Review, while there is none or it is out of date, then the menu and the merge button. `r` presses Review. */
+function PullActions({ page }: { page: PullPage }) {
+	const run = useRunView();
+	const merge = useMergeView();
+	const reviewable = run.phase === 'none' || run.phase === 'cancelled' || (run.phase === 'passed' && run.outdated);
+
+	return (
+		<>
+			{reviewable ? <ReviewButton run={run} again={false} shortcut variant="outline" /> : null}
+			<MergeActions page={page} merge={merge} />
+		</>
+	);
+}
+
+/** The checks and the conflicts; they read the checks, so the title and facts never re-render for them. */
+function PullMergeFacts({ page }: { page: PullPage }) {
+	return <MergeFacts page={page} checks={usePullChecksView()} />;
+}
+
+/** The checks' list under the facts. */
+function PullChecksList() {
+	return <ChecksList view={usePullChecksView()} />;
+}
+
+/** The page inside its session: the bar, the header with its badge and merge facts, the tabs and the open tab. */
 function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	const router = useRouter();
 	const { base } = useApi();
@@ -95,7 +114,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 
 	const bodies: Record<PullTab, ReactNode> = {
 		changes: <ChangesTab repoId={repoId} number={number} mode={mode} />,
-		summary: <SummaryTab repoId={repoId} number={number} onOpenGuide={openGuide} />,
+		summary: <SummaryTab repoId={repoId} onOpenGuide={openGuide} />,
 		bugs: <BugsTab repoId={repoId} number={number} />,
 		commits: <CommitsTab />
 	};
@@ -107,7 +126,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 					<Crumbs
 						parts={[
 							{ label: 'Pull requests', href: pullsHref(base) },
-							{ label: view.repoName },
+							{ label: view.repoName, href: repoHref(base, repoId) },
 							{ label: `#${number}` }
 						]}
 					/>
@@ -134,8 +153,13 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 				) : null}
 				{page ? (
 					<>
-						<PullHeader page={page}>
-							<PullMergeStrip />
+						<PullHeader
+							page={page}
+							status={<PullReviewStatus repoId={repoId} number={number} />}
+							actions={<PullActions page={page} />}
+							merge={<PullMergeFacts page={page} />}
+						>
+							<PullChecksList />
 						</PullHeader>
 						<div className="pull-tabs-row">
 							<PullTabs repoId={repoId} number={number} tab={tab} counts={view.counts} />

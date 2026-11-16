@@ -96,10 +96,12 @@ function progressLine(status: UpdateStatus, serverIsAway: boolean): UpdateLine {
 	const at = steps.findIndex((step) => step.state === state);
 	const current = at === -1 ? 0 : at;
 
+	const switching = status.available?.branch;
+
 	return {
 		kind: 'progress',
 		steps: steps.map((step, index) => ({
-			label: step.label,
+			label: switching && step.state === 'updating' ? `Switching to ${switching}` : step.label,
 			stage: stageOf(index, current)
 		}))
 	};

@@ -30,6 +30,8 @@ interface PullRowProps {
 	onReview: (row: PullRowView) => void;
 	/** Runs once the pointer or focus has rested on the row: prefetching its page. */
 	onIntent?: (row: PullRowView) => void;
+	/** False leaves the repository out of the facts, on a page that is about one repository. */
+	showRepo?: boolean;
 }
 
 /** True when the row's menu should offer a review: it has one already, so the row itself shows a state. */
@@ -67,7 +69,7 @@ function RowMenu({ row, onReview }: Pick<PullRowProps, 'row' | 'onReview'>) {
  * One open pull request: the whole row opens it, and the status and the menu
  * stay clickable above that. It re-renders only when its own row changes.
  */
-export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent }: PullRowProps) {
+export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent, showRepo = true }: PullRowProps) {
 	const by = author(row.author);
 	const intent = useIntent(useCallback(() => onIntent?.(row), [onIntent, row]));
 
@@ -85,7 +87,7 @@ export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent
 				</div>
 				<div className="meta pull-row-meta">
 					{by.name}
-					<RepoLabel className="meta-sep" name={row.repoName} forge={row.repoForge} />
+					{showRepo ? <RepoLabel className="meta-sep" name={row.repoName} forge={row.repoForge} /> : null}
 					<Age at={row.activeAt} className="meta-sep" />
 				</div>
 			</div>

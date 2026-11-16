@@ -14,7 +14,7 @@ const NO_LISTS: BugLists = {
 	resolved: [],
 	quieted: [],
 	unresolved: [],
-	checked: { claims: 0, cleared: 0 },
+	checked: { claims: 0, cleared: 0, units: null, ruledOut: null },
 	reviewedAt: null,
 	headSha: null,
 	duration: null

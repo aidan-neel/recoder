@@ -21,6 +21,7 @@ import { createSampleTelemetry } from './sample-telemetry';
 import { createSampleUpdate } from './sample-update';
 import { createSampleUsage } from './sample-usage';
 import { createSampleRepoChats } from './sample-repo-chat';
+import { sampleRepoOverview } from './sample-repo-overview';
 import { createSampleSkills } from './sample-skills';
 import { sampleCommits } from './sample-pulls';
 import { SAMPLE_REVIEW } from './sample-review';
@@ -212,6 +213,7 @@ export function createSampleApi(): ApiClient {
 		update: createSampleUpdate(),
 		account: async () => 'you',
 		repos: async () => world.data().repos,
+		repoOverview: async (repoId) => sampleRepoOverview(world.data(), repoId),
 
 		async addRepo(input): Promise<Repo> {
 			const at = new Date().toISOString();

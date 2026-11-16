@@ -86,7 +86,7 @@ this. Treat a lint error as a bug, not a suggestion.
     `apps/web/src/styles/`.
   - App `apps/app/src/`: routes in `app/` (`(live)` for the real server,
     `sample/` for the built-in sample), components in `components/<feature>/`
-    (`shell`, `pulls`, `pull`, `changes`, `summary`, `bugs`, `commits`, `ask`,
+    (`shell`, `pulls`, `pull`, `repo`, `changes`, `summary`, `bugs`, `commits`, `ask`,
     `compose`, `automations`, `guidelines`, `settings`, `admin`, `connections`,
     `setup`, `common`), logic in `lib/<feature>/` (the same names, plus `review`, `run`
     and `sample`) with server calls in `lib/api/`, and one CSS file per feature

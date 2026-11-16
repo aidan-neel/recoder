@@ -135,13 +135,15 @@ function reviewTokenTotals(calls: readonly ModelCallRow[]): Map<string, number> 
 	return totals;
 }
 
-function reviewTimestamp(review: Review): number {
+/** When a review started, in ms; its creation when it never recorded a start. */
+export function reviewTimestamp(review: Review): number {
 	const primary = Date.parse(review.startedAt ?? review.createdAt);
 
 	return Number.isNaN(primary) ? Date.parse(review.createdAt) : primary;
 }
 
-function reviewDayOf(review: Review): string | null {
+/** The UTC day a review started on, or the day it was created when it never recorded a start. */
+export function reviewDayOf(review: Review): string | null {
 	return utcDay(review.startedAt ?? review.createdAt) ?? utcDay(review.createdAt);
 }
 

@@ -21,6 +21,7 @@ import type {
 	RepoChatMessage,
 	RepoChatSummary,
 	RepoFile,
+	RepoOverview,
 	RepoTree,
 	Review,
 	ReviewChatMessage,
@@ -45,6 +46,7 @@ import { EventStream, type StreamHandlers } from './event-stream';
 import { seg } from './http';
 import { membersApi, type MembersApi } from './members';
 import { pullsApi, type PullListQuery } from './pulls';
+import { reposApi } from './repos';
 import { reviewsApi, type DecisionInput } from './reviews';
 import { telemetryApi, type TelemetryApi } from './telemetry';
 import { updateApi, type UpdateApi } from './update';
@@ -71,6 +73,8 @@ export interface ApiClient {
 	/** The signed-in forge login, or null when no forge is signed in. */
 	account: () => Promise<string | null>;
 	repos: () => Promise<Repo[]>;
+	/** What the repository page shows over the last thirty days; rejects with a 404 for a repository that is not tracked. */
+	repoOverview: (repoId: string) => Promise<RepoOverview>;
 	addRepo: (input: CreateRepoInput) => Promise<Repo>;
 	pulls: (query?: PullListQuery) => Promise<PullList>;
 	pullPage: (repoId: string, number: number) => Promise<PullPage>;
@@ -162,6 +166,7 @@ export const liveApi: ApiClient = {
 	update: updateApi,
 	account: signedInLogin,
 	repos: reviewsApi.repos,
+	repoOverview: reposApi.overview,
 	addRepo: connectionsApi.addRepo,
 	pulls: pullsApi.list,
 	pullPage: pullsApi.page,

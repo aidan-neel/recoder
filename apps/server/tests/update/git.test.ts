@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gitCheckout } from '../../src/update/git';
 import { commitAll, git } from '../helpers/git';
-import { makeCheckout, upstreamCommit } from './fixture';
+import { makeCheckout, upstreamBranch, upstreamCommit } from './fixture';
 
 describe('gitCheckout.inspect', () => {
 	test('reports the branch, upstream and nothing pending on a clean, current checkout', async () => {
@@ -68,5 +68,42 @@ describe('gitCheckout.inspect', () => {
 
 		expect((await repo.inspect()).behind).toBe(0);
 		expect(git(root, ['log', '-1', '--format=%s'])).toBe('upstream change');
+	});
+
+	test('switchTo checks out a remote-only branch, tracking it, at its tip', async () => {
+		const { source, root } = await makeCheckout();
+
+		await upstreamBranch(source, 'feature/x', { 'apps/server/src/feature.ts': 'export {};\n' });
+
+		const repo = gitCheckout(root);
+
+		await repo.fetch();
+		expect(await repo.remoteBranches()).toEqual(['feature/x', 'main']);
+		expect((await repo.compareBranch('feature/x')).paths).toEqual(['apps/server/src/feature.ts']);
+
+		await repo.switchTo('feature/x');
+
+		expect(await repo.inspect()).toMatchObject({ branch: 'feature/x', upstream: 'origin/feature/x', behind: 0 });
+	});
+
+	test('switchTo fast-forwards a stale local branch to the remote tip', async () => {
+		const { source, root } = await makeCheckout();
+
+		await upstreamBranch(source, 'feature', { 'apps/app/a.tsx': 'export {};\n' });
+
+		const repo = gitCheckout(root);
+
+		await repo.fetch();
+		await repo.switchTo('feature');
+		await repo.switchTo('main');
+
+		git(source, ['switch', '-q', 'feature']);
+		await upstreamCommit(source, { 'apps/app/b.tsx': 'export {};\n' }, 'more feature work');
+		git(source, ['switch', '-q', 'main']);
+
+		await repo.fetch();
+		await repo.switchTo('feature');
+
+		expect(git(root, ['log', '-1', '--format=%s'])).toBe('more feature work');
 	});
 });

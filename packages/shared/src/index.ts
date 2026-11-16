@@ -10,6 +10,7 @@ export * from './progress';
 export * from './progress-state';
 export * from './repo';
 export * from './repo-chat';
+export * from './repo-overview';
 export * from './findings';
 export * from './evidence';
 export * from './review';

@@ -26,7 +26,16 @@ export interface GitCheckout {
 	inspect(): Promise<GitInspection>;
 	fetch(): Promise<void>;
 	mergeFfOnly(): Promise<void>;
+	/** The branches on the remote, by name, as of the last fetch. */
+	remoteBranches(): Promise<string[]>;
+	/** What switching to the remote `branch` would bring in, against HEAD. */
+	compareBranch(branch: string): Promise<{ commits: UpdateCommit[]; paths: string[] }>;
+	/** Checks out `branch` (tracking the remote's when there is no local one) and moves it to the remote tip. */
+	switchTo(branch: string): Promise<void>;
 }
+
+/** The remote branches are read from and switched to. */
+const REMOTE = 'origin';
 
 /** The local ref the upstream is compared against. */
 const UPSTREAM = '@{u}';
@@ -71,11 +80,37 @@ export function gitCheckout(root: string, run: RunProcess = spawnProcess, env?: 
 		},
 
 		async fetch() {
-			await git(['fetch', '--quiet'], FETCH_TIMEOUT_MS);
+			await git(['fetch', '--quiet', '--prune'], FETCH_TIMEOUT_MS);
 		},
 
 		async mergeFfOnly() {
 			await git(['merge', '--ff-only', UPSTREAM], FETCH_TIMEOUT_MS);
+		},
+
+		async remoteBranches() {
+			const refs = await git(['for-each-ref', '--format=%(refname:lstrip=3)', `refs/remotes/${REMOTE}`]);
+
+			return lines(refs.stdout).filter((name) => name !== 'HEAD');
+		},
+
+		async compareBranch(branch) {
+			const target = `${REMOTE}/${branch}`;
+
+			const [log, diff] = await Promise.all([
+				git(['log', '--format=%H%x00%s', `HEAD..${target}`]),
+				git(['diff', '--name-only', 'HEAD', target])
+			]);
+
+			return { commits: lines(log.stdout).map(toCommit), paths: lines(diff.stdout) };
+		},
+
+		async switchTo(branch) {
+			const local = await run(['git', '-C', root, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], {
+				env
+			});
+
+			await git(local.exitCode === 0 ? ['switch', branch] : ['switch', '--track', `${REMOTE}/${branch}`]);
+			await git(['merge', '--ff-only', `${REMOTE}/${branch}`], FETCH_TIMEOUT_MS);
 		}
 	};
 }

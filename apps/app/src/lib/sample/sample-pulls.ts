@@ -10,6 +10,7 @@ import {
 } from '@recoder/shared';
 
 import { MANY_CHECKS, MANY_CHECKS_PASSING } from './sample-checks';
+import { cleanReviewChecks } from './sample-clean-review';
 import { sampleTime } from './sample-clock';
 import { SAMPLE_CHECKS, SAMPLE_PULL, SAMPLE_REVIEW } from './sample-review';
 
@@ -31,6 +32,9 @@ export interface SampleSeed {
 
 const AT = sampleTime('2026-10-13T09:00:00.000Z');
 
+/** When the sample's repositories were first tracked, so the repository page has a month of history behind it. */
+const TRACKED_AT = sampleTime('2026-08-04T09:00:00.000Z');
+
 const REPOS: Repo[] = [
 	{
 		id: 'sample-api',
@@ -38,7 +42,7 @@ const REPOS: Repo[] = [
 		url: 'https://github.com/acme/api',
 		provider: 'github',
 		defaultBranch: 'main',
-		createdAt: AT,
+		createdAt: TRACKED_AT,
 		updatedAt: AT
 	},
 	{
@@ -47,7 +51,7 @@ const REPOS: Repo[] = [
 		url: 'https://github.com/acme/web',
 		provider: 'github',
 		defaultBranch: 'main',
-		createdAt: AT,
+		createdAt: TRACKED_AT,
 		updatedAt: AT
 	}
 ];
@@ -314,7 +318,7 @@ export function sampleSeed(): SampleSeed {
 		plainReview(PULLS.webhooks, 'failed'),
 		{ ...plainReview(PULLS.audit, 'failed'), summary: REVIEW_CANCELLED },
 		plainReview(PULLS.datePicker, 'passed', '85bead'),
-		plainReview(PULLS.pagination, 'passed'),
+		{ ...plainReview(PULLS.pagination, 'passed'), ...cleanReviewChecks() },
 		plainReview(PULLS.billing, 'passed'),
 		plainReview(PULLS.cache, 'passed'),
 		plainReview(PULLS.locale, 'passed'),

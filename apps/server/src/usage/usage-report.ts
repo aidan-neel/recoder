@@ -14,7 +14,7 @@ import {
 } from '@recoder/shared';
 import { ADMIN_ACCOUNT_ID } from '../accounts/account-records';
 import { TOKENS_PER_PRICE_UNIT, tokenCost, type PriceLookup } from '../models/model-prices';
-import { allReportPeople, groupBy, shareOf, utcDay, windowDayKeys } from './report-shared';
+import { allReportPeople, groupBy, medianOf, shareOf, utcDay, windowDayKeys } from './report-shared';
 
 /** Who an account is in the report; the account's own record, or what its id says when the record is gone. */
 export type UsageIdentity = ReportPerson;
@@ -134,16 +134,7 @@ function cacheSavings(calls: readonly CallUsage[]): number | null {
 
 /** The median of the durations a group of calls recorded; null when none did. */
 function medianDurationMs(calls: readonly CallUsage[]): number | null {
-	const durations = calls
-		.flatMap((call) => (call.durationMs === undefined ? [] : [call.durationMs]))
-		.sort((a, b) => a - b);
-
-	if (durations.length === 0) return null;
-
-	const middle = Math.floor(durations.length / 2);
-	const median = durations.length % 2 ? durations[middle] : (durations[middle - 1] + durations[middle]) / 2;
-
-	return Math.round(median);
+	return medianOf(calls.flatMap((call) => (call.durationMs === undefined ? [] : [call.durationMs])));
 }
 
 /** The totals of a group of calls. */

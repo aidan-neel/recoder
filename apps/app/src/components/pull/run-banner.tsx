@@ -113,8 +113,16 @@ function KeptSteps({ stages }: { stages: RunStage[] }) {
 	);
 }
 
-/** Starts a review, or one more: the page's one primary action until a review has run. `r` presses it. */
-function ReviewButton({ run, again }: { run: RunView; again: boolean }) {
+interface ReviewButtonProps {
+	run: RunView;
+	again: boolean;
+	/** Binds `r`. Only the header's button does, so one press starts one review. */
+	shortcut?: boolean;
+	variant?: 'primary' | 'outline';
+}
+
+/** Starts a review, or one more. A first review shows its `r` keycap; the header's button binds the key. */
+export function ReviewButton({ run, again, shortcut = false, variant }: ReviewButtonProps) {
 	const action = useAction();
 
 	/** Starts the review; a refusal shows as a toast and the button offers to try again. */
@@ -122,17 +130,17 @@ function ReviewButton({ run, again }: { run: RunView; again: boolean }) {
 		runControl(action, () => run.start(), 'The review did not start.');
 	}
 
-	useKeys({ r: start });
+	useKeys(shortcut ? { r: start } : {});
 
 	return (
 		<Button
-			variant={again ? 'outline' : 'primary'}
+			variant={variant ?? (again ? 'outline' : 'primary')}
 			status={run.starting ? 'pending' : action.status}
 			onClick={start}
 			data-run-primary=""
 		>
 			{again ? 'Review again' : 'Review'}
-			<Keycap k="r" />
+			{again ? null : <Keycap k="r" />}
 		</Button>
 	);
 }
@@ -154,8 +162,9 @@ function foundText(bugs: number | null): string {
 }
 
 /**
- * Where the newest review stands, in a banner above the tab's content: not
- * reviewed, queued, running, paused, failed, cancelled, out of date, or done.
+ * Where the newest review stands, in a banner on the Bugs tab and in the
+ * popover of the header's review badge: not reviewed, queued, running,
+ * paused, failed, cancelled, out of date, or done.
  * Each state offers its one next step at the right. A failure says why, when,
  * and which steps it kept. Every state is the same `Banner`, so the glyph
  * morphs in place when the review moves on.

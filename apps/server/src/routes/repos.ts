@@ -10,6 +10,7 @@ import { fetchPullPreview } from '../forge/pull-preview';
 import { tokenEnv } from '../forge/tokens';
 import { RepoFilesError } from '../repo-files/errors';
 import { listRepoSkills, pullHeadSha } from '../skills/repo-skills';
+import { loadRepoOverview } from '../telemetry/repo-overview';
 import { TtlCache } from '../util/ttl-cache';
 import { db } from '../store';
 import { parseBody } from './parse-body';
@@ -65,6 +66,15 @@ app.get('/:id', async (c) => {
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
 
 	return c.json(repo);
+});
+
+/** What the repository page shows over the last thirty days. Any member who can list the repository may read it. */
+app.get('/:id/overview', async (c) => {
+	const id = c.req.param('id');
+
+	if (!(await db.repos.get(id))) return c.json({ error: 'repo not found' }, 404);
+
+	return c.json(await loadRepoOverview(id));
 });
 
 app.delete('/:id', async (c) => {

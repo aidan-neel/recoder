@@ -44,12 +44,22 @@ export type SettledRow =
 	| { kind: 'review'; row: RecentReview; outcome: SettledReview['outcome'] | null }
 	| { kind: 'chat'; row: RecentChat; outcome: null };
 
+/** A tracked repository in the sidebar, which opens its page. */
+export interface SidebarRepo {
+	id: string;
+	/** The repository's short name, or the label that tells it apart from another of the same name. */
+	name: string;
+	href: string;
+}
+
 /** What the sidebar shows around the pages. */
 export interface ShellView {
 	/** The forge login for the account row; null when no forge is signed in. */
 	account: string | null;
 	/** The count beside "Pull requests"; null until the list answered once. */
 	openPulls: number | null;
+	/** The tracked repositories, by name. */
+	repos: SidebarRepo[];
 	/** The newest review of each open pull request that is not settled, newest first; at most eight. */
 	recent: RecentReview[];
 	/** Reviews of merged or closed pull requests, and the reviews and chats settled by hand or by rest, newest first. */

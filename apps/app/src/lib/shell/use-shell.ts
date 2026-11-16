@@ -5,9 +5,11 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useApi, useListStore } from '../api/client';
+import { shortRepoName } from '../pulls/pull-rows';
 import { useWatchList } from '../pulls/use-rows';
 import { recentChats } from './recent-chats';
 import { recentReviews } from './recent-reviews';
+import { repoHref } from './routes';
 import { sidebarLists, useSettleMarks } from './settle';
 import type { ShellView } from './types';
 import { useNow } from './use-now';
@@ -15,7 +17,7 @@ import { useNow } from './use-now';
 /** How often rows are checked for having rested long enough to settle, in ms. */
 const SETTLE_TICK = 60_000;
 
-/** What the sidebar shows: the account, the open pull request count, the recent reviews and chats, and the settled ones. */
+/** What the sidebar shows: the account, the open pull request count, the tracked repositories, the recent reviews and chats, and the settled ones. */
 export function useShell(): ShellView {
 	useWatchList();
 
@@ -42,6 +44,14 @@ export function useShell(): ShellView {
 		[data.reviews, data.repos, base]
 	);
 
+	const repos = useMemo(
+		() =>
+			(data.repos ?? [])
+				.map((repo) => ({ id: repo.id, name: shortRepoName(data.repos, repo.id), href: repoHref(base, repo.id) }))
+				.sort((a, b) => a.name.localeCompare(b.name)),
+		[data.repos, base]
+	);
+
 	const allChats = useMemo(
 		() => (data.chats ? recentChats(data.chats, data.repos, base) : []),
 		[data.chats, data.repos, base]
@@ -56,11 +66,12 @@ export function useShell(): ShellView {
 		() => ({
 			account: data.account,
 			openPulls: data.openPulls,
+			repos,
 			recent,
 			settled,
 			chats,
 			loading: data.reviews === null && data.phase === 'loading'
 		}),
-		[data.account, data.openPulls, recent, settled, chats, data.reviews, data.phase]
+		[data.account, data.openPulls, repos, recent, settled, chats, data.reviews, data.phase]
 	);
 }

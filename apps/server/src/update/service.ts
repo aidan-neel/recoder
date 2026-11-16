@@ -1,11 +1,11 @@
 import { realpath } from 'node:fs/promises';
-import type { UpdateAvailable, UpdateMode, UpdateStatus, WebRestart } from '@recoder/shared';
+import type { UpdateAvailable, UpdateBranches, UpdateMode, UpdateStatus, WebRestart } from '@recoder/shared';
 import { CliError, EXIT } from '../cli/exit';
 import { githubReleases, type ReleaseSource } from '../cli/upgrade/release-source';
 import { installRelease, planUpgrade, type RunningProgram } from '../cli/upgrade/upgrade';
 import { VERSION } from '../version';
 import { detectUpdateMode, localEnvironment, type UpdateEnvironment } from './environment';
-import { gitCheckout, type GitInspection } from './git';
+import { gitCheckout, type GitCheckout, type GitInspection } from './git';
 import { releaseReviewStarts } from './hold';
 import { pauseReviewsForUpdate, resumeHeldReviews } from './pauses';
 import { UPDATE_RECORD_ID, toStatus, updateRecords, type UpdateRecord } from './record';
@@ -39,6 +39,12 @@ export class UpdateRefusedError extends Error {
 	}
 }
 
+/**
+ * What a git apply moves HEAD to: the checked-out branch's upstream, or
+ * another branch on the remote (an admin trying a feature branch).
+ */
+type GitMove = { kind: 'pull' } | { kind: 'switch'; branch: string };
+
 /** Everything an update needs from the machine; production fills it with the real one. */
 export interface UpdateDeps {
 	environment: UpdateEnvironment;
@@ -54,6 +60,11 @@ export interface UpdateDeps {
 	restart?: () => void;
 	/** How the web app's supervision is read. Defaults to /proc. */
 	detectWeb?: (root: string) => Promise<WebRestart>;
+}
+
+/** HEAD's commit and branch, as the status names the running build. */
+function currentOf(inspection: GitInspection) {
+	return { commit: inspection.commit, ...(inspection.branch ? { branch: inspection.branch } : {}) };
 }
 
 function errorMessage(error: unknown): string {
@@ -122,19 +133,28 @@ export function createUpdateService(deps: UpdateDeps) {
 		};
 	}
 
-	async function gitCurrent() {
-		const inspection = await gitCheckout(environment.root, deps.run, deps.toolEnv).inspect();
+	function checkout(): GitCheckout {
+		return gitCheckout(environment.root, deps.run, deps.toolEnv);
+	}
 
-		return { version: VERSION, commit: inspection.commit, ...(inspection.branch ? { branch: inspection.branch } : {}) };
+	async function gitCurrent() {
+		return { version: VERSION, ...currentOf(await checkout().inspect()) };
+	}
+
+	/** Why uncommitted work refuses moving HEAD, or undefined on a clean tree. */
+	function dirtyReason({ dirtyPaths }: GitInspection): string | undefined {
+		if (!dirtyPaths.length) return undefined;
+
+		return `the working tree has ${dirtyPaths.length} uncommitted ${dirtyPaths.length === 1 ? 'change' : 'changes'}; commit or clean them first.`;
 	}
 
 	/** Why an inspection refuses an update, or undefined when it may apply. */
 	function blockedReason(inspection: GitInspection): string | undefined {
 		if (inspection.upstream === undefined) return 'the checked-out branch has no upstream to update from.';
 
-		if (inspection.dirtyPaths.length) {
-			return `the working tree has ${inspection.dirtyPaths.length} uncommitted ${inspection.dirtyPaths.length === 1 ? 'change' : 'changes'}; commit or clean them first.`;
-		}
+		const dirty = dirtyReason(inspection);
+
+		if (dirty !== undefined) return dirty;
 
 		if (inspection.ahead > 0 && inspection.behind > 0) {
 			return `the branch has diverged from ${inspection.upstream} (${inspection.ahead} ahead, ${inspection.behind} behind); rebase or reset it first.`;
@@ -212,13 +232,13 @@ export function createUpdateService(deps: UpdateDeps) {
 				return status();
 			}
 
-			const repo = gitCheckout(environment.root, deps.run, deps.toolEnv);
+			const repo = checkout();
 
 			await repo.fetch();
 
 			const inspection = await repo.inspect();
 			const available = await gitAvailable(inspection);
-			const current = { commit: inspection.commit, ...(inspection.branch ? { branch: inspection.branch } : {}) };
+			const current = currentOf(inspection);
 
 			await write({
 				state: 'idle',
@@ -263,16 +283,59 @@ export function createUpdateService(deps: UpdateDeps) {
 			);
 		}
 
+		return start(detectionResult.mode, () => runApply(detectionResult.mode));
+	}
+
+	/** `GET /api/update/branches`: fetch, then list what the checkout could switch to. */
+	async function branches(): Promise<UpdateBranches> {
+		if ((await detection()).mode !== 'git') return { branches: [] };
+
+		const repo = checkout();
+
+		await repo.fetch();
+
+		const [inspection, names] = await Promise.all([repo.inspect(), repo.remoteBranches()]);
+
+		return { ...(inspection.branch ? { current: inspection.branch } : {}), branches: names };
+	}
+
+	/**
+	 * `POST /api/update/branch`: move the checkout to another remote branch,
+	 * through the same pause, install, restart and resume an update takes.
+	 * Refused unless it is a git checkout with a clean tree and the branch is
+	 * on the remote, so the background run only fails on a real error.
+	 */
+	async function switchBranch(branch: string): Promise<UpdateStatus> {
+		const saved = await read();
+
+		if (saved && APPLYING.has(saved.state)) throw new UpdateBusyError();
+		if ((await detection()).mode !== 'git') throw new UpdateRefusedError('Only a git checkout can switch branches.');
+
+		const repo = checkout();
+		const [inspection, names] = await Promise.all([repo.inspect(), repo.remoteBranches()]);
+
+		if (!names.includes(branch)) throw new UpdateRefusedError(`${branch} is not a branch on the remote.`);
+		if (inspection.branch === branch) throw new UpdateRefusedError(`Recoder already runs ${branch}.`);
+
+		const dirty = dirtyReason(inspection);
+
+		if (dirty !== undefined) throw new UpdateRefusedError(dirty);
+
+		return start('git', () => applyGit({ kind: 'switch', branch }));
+	}
+
+	/** Marks the record as applying and runs `work` in the background, landing any throw on 'failed'. */
+	async function start(mode: UpdateMode, work: () => Promise<void>): Promise<UpdateStatus> {
 		await write({
 			state: 'checking',
-			mode: detectionResult.mode,
+			mode,
 			error: undefined,
 			blockedReason: undefined,
 			webRestart: undefined,
 			pausedReviewIds: []
 		});
 
-		void runApply(detectionResult.mode).catch(async (error: unknown) => {
+		void work().catch(async (error: unknown) => {
 			await write({ state: 'failed', error: errorMessage(error) });
 		});
 
@@ -281,16 +344,24 @@ export function createUpdateService(deps: UpdateDeps) {
 
 	async function runApply(mode: UpdateMode): Promise<void> {
 		if (mode === 'binary') await applyBinary();
-		else if (mode === 'git') await applyGit();
+		else if (mode === 'git') await applyGit({ kind: 'pull' });
+	}
+
+	/** What switching to `branch` brings: its commits and what its tree changes, even when that is nothing. */
+	async function switchAvailable(repo: GitCheckout, branch: string): Promise<UpdateAvailable> {
+		const { commits, paths } = await repo.compareBranch(branch);
+
+		return { branch, commits, changes: classifyPaths(paths, await readWorkspaceGraph(environment.root)) };
 	}
 
 	/**
-	 * Fetch, re-inspect, then pull. Refusals (a dirty or diverged tree) are
-	 * reported as `blockedReason` without touching reviews; a real failure
-	 * resumes whatever was already paused and lands in 'failed'.
+	 * Fetch, re-inspect, then pull or switch. Refusals (a dirty or diverged
+	 * tree) are reported as `blockedReason` without touching reviews; a real
+	 * failure resumes whatever was already paused and lands in 'failed'.
 	 */
-	async function applyGit(): Promise<void> {
-		const repo = gitCheckout(environment.root, deps.run, deps.toolEnv);
+	async function applyGit(move: GitMove): Promise<void> {
+		const repo = checkout();
+		const advance = () => (move.kind === 'pull' ? repo.mergeFfOnly() : repo.switchTo(move.branch));
 		let pausedIds: string[] = [];
 		let pulled = false;
 
@@ -298,9 +369,12 @@ export function createUpdateService(deps: UpdateDeps) {
 			await repo.fetch();
 
 			const inspection = await repo.inspect();
-			const available = await gitAvailable(inspection);
-			const blocked = blockedReason(inspection);
-			const current = { commit: inspection.commit, ...(inspection.branch ? { branch: inspection.branch } : {}) };
+
+			const available =
+				move.kind === 'pull' ? await gitAvailable(inspection) : await switchAvailable(repo, move.branch);
+
+			const blocked = move.kind === 'pull' ? blockedReason(inspection) : dirtyReason(inspection);
+			const current = currentOf(inspection);
 
 			if (available === null || blocked !== undefined) {
 				await write({ state: 'idle', current, available, blockedReason: blocked });
@@ -310,12 +384,13 @@ export function createUpdateService(deps: UpdateDeps) {
 
 			if (!available.changes.server) {
 				await write({ state: 'updating', available });
-				await repo.mergeFfOnly();
+				await advance();
 				pulled = true;
 				if (available.changes.install) await installDependencies();
 
 				await write({
 					state: 'idle',
+					current: currentOf(await repo.inspect()),
 					available: null,
 					webRestart: available.changes.web ? await detectWeb(environment.root) : undefined
 				});
@@ -326,7 +401,7 @@ export function createUpdateService(deps: UpdateDeps) {
 			await write({ state: 'pausing', available });
 			pausedIds = await pauseReviewsForUpdate();
 			await write({ pausedReviewIds: pausedIds, state: 'updating' });
-			await repo.mergeFfOnly();
+			await advance();
 			pulled = true;
 			if (available.changes.install) await installDependencies();
 
@@ -391,7 +466,7 @@ export function createUpdateService(deps: UpdateDeps) {
 		await write({ state: 'failed', error: message, pausedReviewIds: [] });
 	}
 
-	return { status, check, apply };
+	return { status, check, apply, branches, switchBranch };
 }
 
 export type UpdateService = ReturnType<typeof createUpdateService>;

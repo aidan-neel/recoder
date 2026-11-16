@@ -3,12 +3,12 @@ import { create } from 'zustand';
 import { readStoredJson, writeStored } from './browser-storage';
 
 /** A sidebar list a person can fold away. */
-export type FoldableSection = 'chats' | 'reviews';
+export type FoldableSection = 'repos' | 'chats' | 'reviews';
 
 /** Where the folded sections are kept in this browser. */
 const FOLDS_KEY = 'recoder.sidebar-folds.v1';
 
-const SECTIONS: readonly FoldableSection[] = ['chats', 'reviews'];
+const SECTIONS: readonly FoldableSection[] = ['repos', 'chats', 'reviews'];
 
 interface FoldsState {
 	folded: readonly FoldableSection[];

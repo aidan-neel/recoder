@@ -27,6 +27,11 @@ export function pullHref(base: string, repoId: string, number: number, tab?: Pul
 	return tab && tab !== 'changes' ? `${path}?tab=${tab}` : path;
 }
 
+/** A tracked repository's page: what needs a person there, and how its reviews have gone. */
+export function repoHref(base: string, repoId: string): string {
+	return `${base}/repos/${encodeURIComponent(repoId)}`;
+}
+
 /** The New review screen. */
 export function newReviewHref(base: string): string {
 	return `${base}/new`;

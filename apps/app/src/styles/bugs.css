@@ -464,3 +464,89 @@
 	box-shadow: 0 0 0 3px var(--accent-tint);
 	content: '';
 }
+
+/* ───────── No bugs: the verdict, why to trust it, and the figures behind it ───────── */
+/* The column fills the tab's height so the notice centers in the room under the tabs. */
+.reading-column:has(> .clean-notice) {
+	min-height: 100%;
+}
+.clean-notice {
+	display: flex;
+	min-height: 360px;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 28px;
+	padding: 32px 24px 64px;
+	text-align: center;
+}
+.clean-glyph {
+	display: grid;
+	width: 64px;
+	height: 64px;
+	place-items: center;
+	border-radius: 999px;
+	background: var(--success-tint);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 24%, transparent);
+	color: var(--success);
+}
+.clean-glyph svg {
+	width: 28px;
+	height: 28px;
+}
+.clean-copy {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+}
+.clean-copy h2 {
+	color: var(--text-primary);
+	font-size: 28px;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	line-height: 34px;
+	text-wrap: balance;
+}
+.clean-copy p {
+	max-width: 440px;
+	color: var(--text-muted);
+	font-size: 15px;
+	line-height: 22px;
+	text-wrap: pretty;
+}
+.clean-figures {
+	display: flex;
+	border-radius: var(--radius-card);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+	text-align: start;
+}
+.clean-figure {
+	display: flex;
+	width: 150px;
+	flex-direction: column-reverse;
+	justify-content: flex-end;
+	gap: 4px;
+	padding: 14px 18px;
+}
+.clean-figure + .clean-figure {
+	border-left: 1px solid var(--line-card);
+}
+.clean-figure dt {
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+.clean-figure dd {
+	color: var(--text-primary);
+	font-family: var(--font-code);
+	font-size: 22px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	line-height: 28px;
+}
+.clean-figure-of {
+	color: var(--text-faint);
+}

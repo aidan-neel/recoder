@@ -87,13 +87,34 @@ function unresolvedItems(review: Review): UnresolvedItem[] {
 	return [...openQuestions(review), ...openObligations(review), ...unprovenClaims(review), ...checksNotRun(review)];
 }
 
-/** Questions and risky changes the review investigated, and those it disproved. */
+/** How much of the change the brief read in full, out of every changed unit; null when the review did not record it. */
+function unitsRead(review: Review): BugsView['checked']['units'] {
+	const units = review.funnel?.brief?.units;
+
+	if (!units?.length) return null;
+
+	return { read: units.filter((unit) => unit.status === 'included').length, total: units.length };
+}
+
+/** Candidates the review raised and then dropped at some stage; null when the review did not count them. */
+function leadsRuledOut(review: Review): number | null {
+	const dropped = review.funnel?.dropped;
+
+	return dropped ? Object.values(dropped).reduce((sum, count) => sum + count, 0) : null;
+}
+
+/** Questions and risky changes the review investigated and those it disproved, how much it read, and what it ruled out. */
 function checkedClaims(review: Review): BugsView['checked'] {
 	const questions = review.questions?.questions ?? [];
 	const answers = review.obligations?.answers ?? [];
 	const disproved = [...questions, ...answers].filter((item) => item.result === 'disproved').length;
 
-	return { claims: questions.length + answers.length, cleared: disproved };
+	return {
+		claims: questions.length + answers.length,
+		cleared: disproved,
+		units: unitsRead(review),
+		ruledOut: leadsRuledOut(review)
+	};
 }
 
 /** How long the review took, from its start to its last update. */

@@ -11,12 +11,10 @@ import type { GuidePart } from '@/lib/changes/types';
 import { useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
 import { scrollToFile, useCurrentFile } from '@/lib/changes/use-current-file';
 import { usePullDiffView } from '@/lib/pull/pull-session';
-import { useRunView } from '@/lib/run/use-run';
 import { pullHref } from '@/lib/shell/routes';
 import { useKeys } from '@/lib/shell/use-keys';
 
 import { PanelResizer } from '@/components/common/panel-resizer';
-import { RunBanner } from '@/components/pull/run-banner';
 
 import type { ChangesMode } from './changes-tools';
 import { FileCard } from './file-card';
@@ -71,7 +69,6 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 	const tree = useFileTree();
 	const viewed = useViewedFiles();
 	const guide = useGuide();
-	const run = useRunView();
 	const bugs = useBugsView();
 	const scroller = useRef<HTMLDivElement | null>(null);
 	const files = diff.phase === 'ready' ? diff.value.files : null;
@@ -130,12 +127,6 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 			</aside>
 			<div ref={scroller} className="changes-main">
 				<div className="changes-stack">
-					<RunBanner
-						run={run}
-						repoId={repoId}
-						number={number}
-						bugs={bugs.phase === 'ready' ? bugs.open.length : null}
-					/>
 					{mode === 'guide' && guide.length === 0 ? (
 						<div className="strip" data-tone="neutral" role="status">
 							<span className="strip-text">

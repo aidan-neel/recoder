@@ -9,6 +9,7 @@ import { SectionNotice } from '@/components/settings/section-notice';
 import { SettingsGroup } from '@/components/settings/settings-group';
 import { SettingsSkeleton } from '@/components/settings/settings-skeleton';
 
+import { BranchGroup } from './branch-group';
 import { MembersSection } from './members-section';
 import { MentionGroup } from './mention-group';
 import { UpdateStrip } from './update-strip';
@@ -42,13 +43,14 @@ function Guidelines() {
 }
 
 /**
- * Settings → Recoder: the running Recoder and its updates, the global review
+ * Settings → Recoder: the running Recoder, its updates and branch, the global review
  * guidelines, whether a mention starts a review, who has signed in, and their models.
  */
 export function AdminSection() {
 	return (
 		<div className="settings">
 			<UpdateStrip />
+			<BranchGroup />
 			<Guidelines />
 			<MentionGroup />
 			<MembersSection />
