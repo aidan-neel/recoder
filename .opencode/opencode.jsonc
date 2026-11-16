@@ -1,0 +1,30 @@
+{
+	"$schema": "https://opencode.ai/config.json",
+	// Toolchain-neutral OpenCode framework, ported from the ark monorepo and adapted for
+	// recoder (a Bun + Turborepo JS/TS repo on GitHub). ark's GitLab permissions/MCP/commands,
+	// its mlflow skills, and the Trideum vLLM provider template were left out on purpose.
+	"formatter": true,
+	"snapshots": true,
+	"watcher": {
+		"ignore": [
+			".git/**",
+			"node_modules/**",
+			".turbo/**",
+			"dist/**",
+			"build/**",
+			".svelte-kit/**",
+			".next/**",
+			"data/**",
+			"coverage/**",
+			"**/*.tsbuildinfo"
+		]
+	},
+	"worktree": {
+		"directory": ".worktrees"
+	},
+	"plugins": ["hl@git+https://github.com/Harville-Labs/agents.git"],
+	"instructions": ["https://raw.githubusercontent.com/Harville-Labs/agents/main/AGENTS.md", "AGENTS.md"],
+	"experimental": {
+		"todo": true
+	}
+}
