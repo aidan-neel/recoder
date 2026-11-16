@@ -5,24 +5,19 @@ import { Check, Circle, RotateCcw, X } from 'lucide-react';
 import Link from 'next/link';
 import type { ComponentProps } from 'react';
 
-import { useApi } from '@/lib/api/client';
 import type { RunStage, RunView } from '@/lib/run/types';
-import { runClock } from '@/lib/shell/age';
 import { plural } from '@/lib/shell/format';
 import { errorToast } from '@/lib/shell/notify';
-import { pullHref, settingsHref } from '@/lib/shell/routes';
+import { settingsHref } from '@/lib/shell/routes';
 import { useAction } from '@/lib/shell/use-action';
 import { useKeys } from '@/lib/shell/use-keys';
-import { useNow } from '@/lib/shell/use-now';
 
 import { Age } from '@/components/common/age';
 import { CancelReviewButton } from '@/components/common/cancel-review';
 
 interface RunBannerProps {
 	run: RunView;
-	repoId: string;
-	number: number;
-	/** Open findings of the finished review; null before one. */
+	/** Open findings of the last finished review; null before one. */
 	bugs: number | null;
 }
 
@@ -48,13 +43,6 @@ function stageText(stages: RunStage[]): string | null {
 	if (!active) return null;
 
 	return active.detail ? `${active.label} · ${active.detail}` : active.label;
-}
-
-/** The time a review has run, ticking each second. */
-function Clock({ since }: { since: string }) {
-	const now = useNow(1000);
-
-	return <span className="meta mono tabular">{runClock(now - Date.parse(since))}</span>;
 }
 
 /** When the review ended and the model it ran with: `4 minutes ago · Opus 5.5 · High`. */
@@ -162,42 +150,16 @@ function foundText(bugs: number | null): string {
 }
 
 /**
- * Where the newest review stands, in a banner on the Bugs tab and in the
- * popover of the header's review badge: not reviewed, queued, running,
- * paused, failed, cancelled, out of date, or done.
- * Each state offers its one next step at the right. A failure says why, when,
- * and which steps it kept. Every state is the same `Banner`, so the glyph
- * morphs in place when the review moves on.
+ * Where the newest review stands on the Review tab when no run card shows it
+ * and it is not simply done: paused, failed, out of date, cancelled, or not
+ * reviewed. Each state offers its one next step at the right. A failure says
+ * why, when, and which steps it kept. Every state is the same `Banner`, so
+ * the glyph morphs in place when the review moves on. A queued, running or
+ * done review has no banner.
  */
-export function RunBanner({ run, repoId, number, bugs }: RunBannerProps) {
-	const { base } = useApi();
-	const bugsHref = pullHref(base, repoId, number, 'bugs');
+export function RunBanner({ run, bugs }: RunBannerProps) {
 	const resuming = useAction();
 	const retrying = useAction();
-
-	if (run.phase === 'queued' || run.phase === 'running') {
-		const queued = run.phase === 'queued';
-
-		return (
-			<Banner
-				glyph={<StatusGlyph kind="spinner" />}
-				title={queued ? 'Queued' : 'Reviewing'}
-				meta={queued ? run.waiting : stageText(run.stages)}
-				actions={
-					<>
-						{run.connection === 'reconnecting' ? <span className="meta">Reconnecting…</span> : null}
-						{run.startedAt && !queued ? <Clock since={run.startedAt} /> : null}
-						<Button asChild variant="ghost">
-							<Link href={bugsHref} replace scroll={false}>
-								See progress
-							</Link>
-						</Button>
-						<CancelReviewButton variant="ghost" />
-					</>
-				}
-			/>
-		);
-	}
 
 	if (run.phase === 'paused') {
 		return (
@@ -246,51 +208,18 @@ export function RunBanner({ run, repoId, number, bugs }: RunBannerProps) {
 		);
 	}
 
-	if (run.phase === 'passed' && !run.outdated) {
-		return (
-			<Banner
-				glyph={<StatusGlyph kind={bugs ? 'high' : 'ok'} />}
-				title={foundText(bugs)}
-				meta={
-					<>
-						Reviewed <Age at={run.finishedAt} form="long" />
-					</>
-				}
-				actions={
-					<>
-						{bugs ? (
-							<Button asChild variant="primary">
-								<Link href={bugsHref} replace scroll={false}>
-									{bugs === 1 ? 'See the bug' : 'See the bugs'}
-								</Link>
-							</Button>
-						) : null}
-						<ReviewButton run={run} again />
-					</>
-				}
-			/>
-		);
-	}
-
-	if (run.phase === 'passed') {
+	if (run.phase === 'passed' && run.outdated) {
 		return (
 			<Banner
 				glyph={<StatusGlyph kind="outdated" />}
 				title="This pull request has commits newer than its review."
 				meta={foundText(bugs)}
-				actions={
-					<>
-						<Button asChild variant="ghost">
-							<Link href={bugsHref} replace scroll={false}>
-								See the last review
-							</Link>
-						</Button>
-						<ReviewButton run={run} again={false} />
-					</>
-				}
+				actions={<ReviewButton run={run} again={false} />}
 			/>
 		);
 	}
+
+	if (run.phase !== 'none' && run.phase !== 'cancelled') return null;
 
 	const cancelled = run.phase === 'cancelled';
 

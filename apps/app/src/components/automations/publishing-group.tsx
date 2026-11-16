@@ -135,7 +135,7 @@ export function PublishingGroup() {
 	return (
 		<SettingsGroup
 			title="Publishing"
-			note="These also apply when you post a review's findings yourself from its Bugs tab."
+			note="These also apply when you post a review's findings yourself from its Review tab."
 		>
 			<PostResultsRow />
 			<CheckThresholdRow />

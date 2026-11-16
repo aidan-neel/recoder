@@ -64,7 +64,7 @@ export function pullMessages(rows: ConversationRow[]): AskMessageView[] {
 		.map((row) => (row.kind === 'message' ? serverMessage(row.key, row.message) : outgoingMessage(row.outgoing)));
 }
 
-/** A thread about one finding as the Bugs tab shows it. */
+/** A thread about one finding as the Review tab shows it. */
 export function bugMessages(thread: AskThread): AskMessageView[] {
 	return thread.messages.map((message) => ({
 		id: message.id,

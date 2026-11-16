@@ -86,19 +86,24 @@ function ReviewFacts({ view }: { view: BugsView }) {
 }
 
 /**
- * The Bugs tab's tools in the tab row: the facts of the review being shown,
- * posting it on the pull request, and reviewing again.
+ * The Review tab's tools in the tab row: the facts of the review being shown,
+ * posting it on the pull request, and reviewing again. Reviewing again stays
+ * when the findings did not load, so a done review can always run once more.
  */
 export function BugsTools({ view, run }: BugsToolsProps) {
 	const reviewing = useAction();
 	const busy = run.phase === 'queued' || run.phase === 'running';
 
-	if (view.phase !== 'ready') return null;
+	if (view.phase !== 'ready' && view.phase !== 'failed') return null;
 
 	return (
 		<>
-			<ReviewFacts view={view} />
-			<PostReview view={view} />
+			{view.phase === 'ready' ? (
+				<>
+					<ReviewFacts view={view} />
+					<PostReview view={view} />
+				</>
+			) : null}
 			{!busy ? (
 				<Button
 					variant="outline"

@@ -2,6 +2,7 @@
 
 import { NavPill } from '@recoder/ui';
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
 /** One tab of a page: a link with its own address. */
 export interface PageTab {
@@ -12,6 +13,8 @@ export interface PageTab {
 	count?: number | null;
 	/** `bugs` colors the count as a warning. */
 	tone?: 'bugs';
+	/** Anything else after the label, such as where a running review stands. */
+	adornment?: ReactNode;
 }
 
 interface PageTabsProps {
@@ -29,7 +32,7 @@ interface PageTabsProps {
 export function PageTabs({ label, tabs, current }: PageTabsProps) {
 	return (
 		<nav className="page-tabs" aria-label={label}>
-			{tabs.map(({ id, label: name, href, count, tone }) => (
+			{tabs.map(({ id, label: name, href, count, tone, adornment }) => (
 				<Link
 					key={id}
 					href={href}
@@ -45,6 +48,7 @@ export function PageTabs({ label, tabs, current }: PageTabsProps) {
 							{count}
 						</span>
 					) : null}
+					{adornment}
 				</Link>
 			))}
 		</nav>

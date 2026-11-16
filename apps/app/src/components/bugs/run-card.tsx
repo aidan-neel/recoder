@@ -5,23 +5,15 @@ import { Check } from 'lucide-react';
 
 import type { RunActivity } from '@/lib/run/run-activity';
 import type { RunStage, RunView } from '@/lib/run/types';
-import { runClock } from '@/lib/shell/age';
 import { errorToast } from '@/lib/shell/notify';
 import { useAction } from '@/lib/shell/use-action';
-import { useNow } from '@/lib/shell/use-now';
 
 import { CancelReviewButton } from '@/components/common/cancel-review';
+import { RunClock } from '@/components/common/run-clock';
 
 /** The first seven characters of a commit, as every forge shortens it. */
 function shortSha(sha: string): string {
 	return sha.slice(0, 7);
-}
-
-/** The time the review has run, ticking each second. */
-function Clock({ since }: { since: string }) {
-	const now = useNow(1000);
-
-	return <span className="mono tabular text-fg-secondary">{runClock(now - Date.parse(since))}</span>;
 }
 
 /** The mark before a step: a check once done, a dot while active, a ring while it waits. */
@@ -93,7 +85,7 @@ export function RunCard({ run }: { run: RunView }) {
 				{queued && run.waiting ? <span className="meta">{run.waiting}</span> : null}
 				<div className="run-card-end">
 					{run.connection === 'reconnecting' ? <span className="meta">Reconnecting…</span> : null}
-					{run.startedAt && !queued ? <Clock since={run.startedAt} /> : null}
+					{run.startedAt && !queued ? <RunClock since={run.startedAt} className="text-fg-secondary" /> : null}
 					{!queued ? (
 						<Button variant="secondary" status={pausing.status} onClick={() => control(pausing, run.pause)}>
 							Pause

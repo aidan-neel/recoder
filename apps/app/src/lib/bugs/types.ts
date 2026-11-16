@@ -15,7 +15,7 @@ export interface BugProof {
 	base: string | null;
 }
 
-/** A finding of the newest review as the Bugs tab shows it. `suggestion`: a quality finding with a checked fix. */
+/** A finding of the newest review as the Review tab shows it. `suggestion`: a quality finding with a checked fix. */
 export interface BugView {
 	id: string;
 	kind: 'bug' | 'suggestion';
@@ -63,7 +63,7 @@ export interface UnresolvedItem {
 	detail: string;
 }
 
-/** The Bugs tab: the findings of the newest review, and what a person can do with each. */
+/** The Review tab: the findings of the newest review, and what a person can do with each. */
 export interface BugsView {
 	/** `none`: no finished review yet (the run card shows instead). */
 	phase: 'none' | 'loading' | 'ready' | 'failed';

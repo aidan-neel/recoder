@@ -3,7 +3,7 @@ import type { Provider } from '@recoder/shared';
 /** One row of "Reviews" in the sidebar. */
 export interface RecentReview {
 	reviewId: string;
-	/** The pull request page, on its Bugs tab. */
+	/** The pull request page, on its Review tab. */
 	href: string;
 	/** The repository the pull request is in, for warming its page on hover. */
 	repoId: string;

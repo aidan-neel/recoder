@@ -34,7 +34,7 @@ function outcomeOf(review: ReviewListItem): SettledReview['outcome'] | null {
 function toRow(review: ReviewListItem, repos: Repo[] | null, base: string): RecentReview {
 	return {
 		reviewId: review.id,
-		href: pullHref(base, review.repoId, review.prNumber, 'bugs'),
+		href: pullHref(base, review.repoId, review.prNumber, 'review'),
 		repoId: review.repoId,
 		title: pullTitle(review.prTitle, review.prNumber),
 		repoName: shortRepoName(repos, review.repoId),

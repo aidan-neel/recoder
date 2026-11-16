@@ -6,7 +6,7 @@ import { formatDuration, plural } from '../shell/format';
 import { bugView } from './bug-view';
 import type { BugsView, BugTone, BugView, UnresolvedItem } from './types';
 
-/** What the Bugs tab lists, read from one finished review. */
+/** What the Review tab lists, read from one finished review. */
 export type BugLists = Pick<
 	BugsView,
 	'open' | 'decided' | 'resolved' | 'quieted' | 'unresolved' | 'checked' | 'reviewedAt' | 'headSha' | 'duration'
@@ -129,7 +129,7 @@ export function modelLabel(model: string | undefined): string | null {
 	return model ? prettyModelName(model) : null;
 }
 
-/** The finished review's findings, sorted into the Bugs tab's lists. */
+/** The finished review's findings, sorted into the Review tab's lists. */
 export function bugLists(review: Review, votes: Record<string, Vote>): BugLists {
 	const view = (finding: Review['findings'][number]) => bugView(finding, review, votes[finding.id] ?? null);
 	const shown = review.findings.filter((finding) => !finding.topic?.quieted);

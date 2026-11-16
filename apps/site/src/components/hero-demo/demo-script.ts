@@ -65,7 +65,7 @@ export function createDemo(show: (view: DemoView) => void): Demo {
 
 	after(0, () => change({ shown: true }));
 	after(2600, () => change({ screen: 'changes' }));
-	after(3400, () => change({ screen: 'bugs' }));
+	after(3400, () => change({ screen: 'review' }));
 
 	after(2600, () => {
 		view.api
@@ -85,6 +85,6 @@ export function createDemo(show: (view: DemoView) => void): Demo {
 		beats,
 		length: at + 360,
 		reset,
-		settle: () => change({ shown: true, screen: 'bugs' })
+		settle: () => change({ shown: true, screen: 'review' })
 	};
 }

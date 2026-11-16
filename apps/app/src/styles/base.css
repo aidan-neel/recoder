@@ -111,6 +111,24 @@
 .page-tab-count[data-tone='bugs'] {
 	color: var(--sev-high);
 }
+/* Where a review stands, after a tab's name: a spinner with its clock, or one glyph. */
+.page-tab-mark {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--text-faint);
+	font-size: 12px;
+}
+.page-tab-mark > svg {
+	width: 12px;
+	height: 12px;
+}
+.page-tab-mark[data-tone='danger'] {
+	color: var(--danger);
+}
+.page-tab-mark[data-tone='medium'] {
+	color: var(--sev-medium);
+}
 
 /* A page with no parent names itself in the bar. */
 .page-bar-title {

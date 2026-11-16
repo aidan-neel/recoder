@@ -21,12 +21,13 @@ export interface AskMessageView {
 	trail?: ChatTrailStep[];
 	/** The passages of the repository the reply's citation links name. */
 	citations?: ChatCitation[];
-	/** The review a reply started, drawn as a card that opens its pull request. */
+	/** The review a reply started, drawn as a card that opens its pull request's Review tab. */
 	review?: StartedReview;
 }
 
 /** A review a chat reply started, as its card shows it. */
 export interface StartedReview {
+	/** Its pull request's page on the Review tab. */
 	href: string;
 	prNumber: number;
 	/** The pull request's title, or `Pull request #12` until it is known. */
