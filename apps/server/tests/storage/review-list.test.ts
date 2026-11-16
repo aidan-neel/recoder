@@ -1,0 +1,109 @@
+import { expect, test } from 'bun:test';
+import { Database } from 'bun:sqlite';
+import { join } from 'node:path';
+import { reviewListItem } from '@recoder/shared';
+import { db, closeStore } from '../../src/store';
+import { serverDataDir } from '../../src/util/data-dir';
+import { testReview } from '../helpers/review';
+import { useTempStore } from '../helpers/temp-store';
+
+const { track } = useTempStore('recoder-review-list-');
+
+test('a summary reflects transactional updates and replacement writes', async () => {
+	const review = testReview();
+
+	track(review.id);
+	await db.reviews.set(review);
+	expect(await db.reviews.summaries()).toEqual([reviewListItem(review)]);
+
+	const updated = await db.reviews.update(review.id, (current) => ({ ...current!, summary: 'Decided' }));
+
+	expect(await db.reviews.summaries()).toEqual([reviewListItem(updated!)]);
+	await db.reviews.set({ ...review, status: 'failed' });
+	expect((await db.reviews.summaries())[0].status).toBe('failed');
+});
+
+test('a write from another connection invalidates a persisted summary', async () => {
+	const review = testReview();
+
+	track(review.id);
+	await db.reviews.set(review);
+	await db.reviews.summaries();
+	await closeStore();
+
+	const other = new Database(join(serverDataDir(), 'recoder.db'));
+
+	try {
+		other
+			.query('UPDATE reviews SET value = ? WHERE id = ?')
+			.run(JSON.stringify({ ...review, summary: 'CLI' }), review.id);
+	} finally {
+		other.close();
+	}
+
+	expect((await db.reviews.summaries())[0].summary).toBe('CLI');
+});
+
+test('deleted and cleared reviews leave no summaries when their ids are reused', async () => {
+	const review = testReview();
+
+	track(review.id);
+	await db.reviews.set(review);
+	await db.reviews.summaries();
+	await db.reviews.delete(review.id);
+	expect(await db.reviews.summaries()).toEqual([]);
+	await db.reviews.set({ ...review, summary: 'Reused' });
+	expect((await db.reviews.summaries())[0].summary).toBe('Reused');
+	await db.reviews.clear();
+	expect(await db.reviews.summaries()).toEqual([]);
+});
+
+test('a failed transactional update keeps the current summary', async () => {
+	const review = testReview();
+
+	track(review.id);
+	await db.reviews.set(review);
+	await db.reviews.summaries();
+	await expect(db.reviews.update(review.id, (current) => ({ ...current!, id: 'wrong' }))).rejects.toThrow();
+	expect(await db.reviews.summaries()).toEqual([reviewListItem(review)]);
+});
+
+test('a saved finding decision immediately appears in an already cached summary', async () => {
+	const review = testReview({
+		findings: [
+			{ id: 'finding', fingerprint: 'fingerprint', file: 'a.ts', line: 1, severity: 'warning', message: 'A bug' }
+		]
+	});
+
+	track(review.id);
+	await db.reviews.set(review);
+	expect((await db.reviews.summaries())[0].findings[0].decision).toBeUndefined();
+
+	await db.reviews.update(review.id, (current) => ({
+		...current!,
+		findings: current!.findings.map((finding) => ({
+			...finding,
+			decision: { state: 'accepted', decidedAt: new Date().toISOString() }
+		}))
+	}));
+
+	expect((await db.reviews.summaries())[0].findings[0].decision?.state).toBe('accepted');
+});
+
+test('a warm summary read does not acquire the write lock another connection owns', async () => {
+	const review = testReview();
+
+	track(review.id);
+	await db.reviews.set(review);
+	await db.reviews.summaries();
+
+	const writer = new Database(join(serverDataDir(), 'recoder.db'));
+
+	try {
+		writer.run('BEGIN IMMEDIATE');
+		expect(await db.reviews.summaries()).toEqual([reviewListItem(review)]);
+	} finally {
+		writer.run('ROLLBACK');
+		writer.close();
+	}
+});

@@ -43,6 +43,15 @@ export function sqlite(): Database {
 			handle.run(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 		}
 
+		handle.run('CREATE TABLE IF NOT EXISTS review_list_items (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+
+		for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
+			const record = event === 'INSERT' ? 'new' : 'old';
+
+			handle.run(`CREATE TRIGGER IF NOT EXISTS review_list_${event.toLowerCase()} AFTER ${event} ON reviews
+				BEGIN DELETE FROM review_list_items WHERE id = ${record}.id; END`);
+		}
+
 		handle.run('CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)');
 	}
 

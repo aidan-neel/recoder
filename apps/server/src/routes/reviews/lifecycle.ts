@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import { reviewListItem } from '@recoder/shared';
+import type { Review } from '@recoder/shared';
 import { imageBodyLimit, refuseUnreadImages, serveImage } from '../../attachments/image-http';
 import { deleteReviewImages } from '../../attachments/image-store';
 import { imagesSchema } from '../../attachments/image-upload';
@@ -106,7 +106,8 @@ async function sessionAction(c: Context, start: (id: string) => Promise<unknown>
  * group apart.
  */
 app.get('/', async (c) => {
-	const [reviews, states] = await Promise.all([db.reviews.list(), pullStateMap()]);
+	const summary = c.req.query('view') === 'summary';
+	const [reviews, states] = await Promise.all([summary ? db.reviews.summaries() : db.reviews.list(), pullStateMap()]);
 
 	const withPullState = <T extends { repoId: string; prNumber: number }>(item: T): T => {
 		const pullState = states.get(pullStateKey(item.repoId, item.prNumber));
@@ -114,9 +115,9 @@ app.get('/', async (c) => {
 		return pullState === undefined ? item : { ...item, pullState };
 	};
 
-	if (c.req.query('view') === 'summary') return c.json(reviews.map((review) => withPullState(reviewListItem(review))));
+	if (summary) return c.json(reviews.map(withPullState));
 
-	return c.json(reviews.map(({ context: _context, ...review }) => withPullState(review)));
+	return c.json((reviews as Review[]).map(({ context: _context, ...review }) => withPullState(review)));
 });
 
 /** Task and reviewer counts per review still queued or running, for list rows. */
