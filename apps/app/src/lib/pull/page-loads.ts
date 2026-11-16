@@ -1,4 +1,5 @@
 import type { PrCheck, PullComment, PullCommit, PullDiff, PullPage } from '@recoder/shared';
+import { langForPath, preloadHighlighter } from '@recoder/ui';
 
 import { ApiError, failureText, isOffline, plainly } from '../api/http';
 import { whileVisible } from '../review/while-visible';
@@ -113,8 +114,20 @@ export function createPageLoads(context: SessionContext, events: PageEvents) {
 		if (page.capabilities.checks) void loadChecks();
 	}
 
+	/**
+	 * Reads the diff, with the code highlighter loading beside it and each file's grammar as soon as the files are
+	 * known, so the Changes tab paints its code colored instead of waiting on those chunks after the diff lands.
+	 */
 	function loadDiff(): Promise<void> {
-		return fill(parts.diff, () => client.pullDiff(repoId, number));
+		void preloadHighlighter();
+
+		return fill(parts.diff, async () => {
+			const diff = await client.pullDiff(repoId, number);
+
+			void preloadHighlighter(diff.files.map((file) => langForPath(file.path)));
+
+			return diff;
+		});
 	}
 
 	function loadChecks(): Promise<void> {
