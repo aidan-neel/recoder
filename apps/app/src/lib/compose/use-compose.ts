@@ -5,7 +5,7 @@ import { useCallback, useMemo } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useApi, useListStore } from '../api/client';
+import { useApi, useChatCache, useListStore } from '../api/client';
 import { needsReview } from '../pulls/pull-rows';
 import type { TargetContext } from '../pulls/pull-target';
 import { trackedPull } from '../pulls/use-open-pull';
@@ -33,6 +33,7 @@ export function useCompose(): ComposeView {
 
 	const { mode, setMode } = useComposeMode();
 	const client = useApi();
+	const chats = useChatCache();
 	const list = useListStore();
 	const entries = useRowEntries();
 	const picking = usePullPick(entries);
@@ -149,14 +150,15 @@ export function useCompose(): ComposeView {
 		async (images: ImageUpload[]) => {
 			if (!repoId) throw new Error(CHAT_NEEDS_REPO);
 
-			const { id } = await client.startRepoChat({ repoId, text: text.trim(), ...(images.length && { images }) });
+			const chat = await client.startRepoChat({ repoId, text: text.trim(), ...(images.length && { images }) });
 
+			chats.keep(chat.id, chat);
 			list.setComposeRepo(repoId);
 			list.reload();
 
-			return chatHref(client.base, id);
+			return chatHref(client.base, chat.id);
 		},
-		[repoId, client, text, list]
+		[repoId, client, chats, text, list]
 	);
 
 	const submit = useCallback(
@@ -183,7 +185,8 @@ export function useCompose(): ComposeView {
 			setRepoId,
 			reload: list.reload,
 			suggestions,
-			loading: data.phase === 'loading',
+			reposLoading: repos === null,
+			pullsLoading: data.phase === 'loading',
 			overBy,
 			ready,
 			submit
@@ -206,6 +209,7 @@ export function useCompose(): ComposeView {
 			setRepoId,
 			list,
 			suggestions,
+			repos,
 			data.phase,
 			overBy,
 			ready,

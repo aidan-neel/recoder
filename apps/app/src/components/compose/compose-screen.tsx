@@ -142,24 +142,17 @@ export function ComposeScreen() {
 						tools={
 							<>
 								<AttachImages onAttach={images.add} />
-								{compose.loading ? (
-									<>
-										<PickerSkeleton width={140} />
-										{chat ? null : <PickerSkeleton width={180} />}
-									</>
+								{compose.reposLoading ? (
+									<PickerSkeleton width={140} />
 								) : (
-									<>
-										<RepoPicker
-											repos={compose.repos}
-											repoId={compose.repoId}
-											onPick={compose.setRepoId}
-											onAdd={() => setBrowsing(true)}
-										/>
-										{chat || !compose.repoId ? null : (
-											<PullPicker rows={compose.pulls} pick={compose.pick} onPick={compose.choose} />
-										)}
-									</>
+									<RepoPicker
+										repos={compose.repos}
+										repoId={compose.repoId}
+										onPick={compose.setRepoId}
+										onAdd={() => setBrowsing(true)}
+									/>
 								)}
+								{chat ? null : <PullChoice compose={compose} />}
 							</>
 						}
 						trailing={<ComposerModels />}
@@ -174,7 +167,7 @@ export function ComposeScreen() {
 					/>
 					<Suggestions
 						rows={compose.suggestions}
-						loading={compose.loading}
+						loading={compose.pullsLoading}
 						picked={chat ? null : (compose.pick?.target ?? null)}
 						onPick={pickRow}
 					/>
@@ -183,6 +176,14 @@ export function ComposeScreen() {
 			<RepoBrowser open={browsing} onOpenChange={browse} />
 		</Page>
 	);
+}
+
+/** The pull request picker in Review mode, held as a skeleton until the pull requests answer. */
+function PullChoice({ compose }: { compose: ComposeView }) {
+	if (compose.reposLoading || compose.pullsLoading) return <PickerSkeleton width={180} />;
+	if (!compose.repoId) return null;
+
+	return <PullPicker rows={compose.pulls} pick={compose.pick} onPick={compose.choose} />;
 }
 
 /** Where "@" reads skills: the chosen pull request in Review mode, else the chosen repository. */

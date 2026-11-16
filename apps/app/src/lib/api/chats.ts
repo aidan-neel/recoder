@@ -15,14 +15,12 @@ function chatPath(id: string): string {
 
 /**
  * Opens a chat with Recoder about a tracked repository with its first
- * message, and resolves with the chat's id for `/chats/<id>`. The reply
- * arrives on the chat's events. Rejects with an `ApiError` the composer can
+ * message, and resolves with the chat as the server saved it, for
+ * `/chats/<id>` to paint at once. The reply arrives on the chat's events. Rejects with an `ApiError` the composer can
  * show: the repository is not tracked, or no model is set up.
  */
-export async function startRepoChat(input: StartRepoChatInput): Promise<{ id: string }> {
-	const chat = await post<RepoChat>('/api/chats', input);
-
-	return { id: chat.id };
+export function startRepoChat(input: StartRepoChatInput): Promise<RepoChat> {
+	return post<RepoChat>('/api/chats', input);
 }
 
 /** Chats with Recoder about a repository: the newest ones, and reading, sending, stopping and deleting one. */

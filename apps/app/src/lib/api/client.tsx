@@ -118,8 +118,8 @@ export interface ApiClient {
 	repoChat: (chatId: string) => Promise<RepoChat>;
 	/** Token usage across every model call a repository chat has made, or null before any call is recorded. */
 	chatMetrics: (chatId: string, signal?: AbortSignal) => Promise<ReviewMetrics | null>;
-	/** Opens a chat on a tracked repository with its first message; resolves with the chat's id. */
-	startRepoChat: (input: StartRepoChatInput) => Promise<{ id: string }>;
+	/** Opens a chat on a tracked repository with its first message; resolves with the saved chat. */
+	startRepoChat: (input: StartRepoChatInput) => Promise<RepoChat>;
 	/** Sends a message to a chat; the reply arrives on its events. */
 	sendRepoChat: (chatId: string, message: SendRepoChatInput) => Promise<RepoChatMessage>;
 	/** Stops the reply `messageId` if it is still being written; a reply that already closed stays as it is. */

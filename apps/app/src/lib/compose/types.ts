@@ -54,8 +54,10 @@ export interface ComposeView {
 	reload: () => void;
 	/** Open pull requests with no review at their current head, newest first; at most six. */
 	suggestions: PullRow[];
-	/** True while the suggestions and the repositories load for the first time; they arrive together. */
-	loading: boolean;
+	/** True while the repositories load for the first time. They answer fast, so a chat can start before the pulls. */
+	reposLoading: boolean;
+	/** True while the pull requests, and so the suggestions, load for the first time; a forge can take seconds. */
+	pullsLoading: boolean;
 	/** How many characters a chat's first message runs over the server's limit; 0 or less when it fits. */
 	overBy: number;
 	/** Enter would start the review or the chat now. */

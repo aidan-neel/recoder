@@ -168,7 +168,10 @@ export function createListStore(client: ApiClient): ListStore {
 	let watchers = 0;
 	let stopWatching: (() => void) | null = null;
 
-	/** Reads the list, repositories, reviews and chats together; an answer older than the newest request is dropped. */
+	/**
+	 * Reads the list, repositories, reviews and chats. The last three land as soon as they answer, since the list
+	 * waits on the forges and can take seconds; an answer older than the newest request is dropped.
+	 */
 	async function load(query: PullListQuery): Promise<void> {
 		const mine = ++loadSeq;
 
@@ -176,13 +179,14 @@ export function createListStore(client: ApiClient): ListStore {
 
 		state.setState({ refreshing: state.getState().phase === 'ready' });
 
+		const tracked = Promise.all([client.repos(), client.reviews(), client.repoChats(CHAT_LIMIT)]).then(
+			([repos, reviews, chats]) => {
+				if (mine === loadSeq) state.setState({ repos, reviews, chats });
+			}
+		);
+
 		try {
-			const [list, repos, reviews, chats] = await Promise.all([
-				client.pulls(query),
-				client.repos(),
-				client.reviews(),
-				client.repoChats(CHAT_LIMIT)
-			]);
+			const [list] = await Promise.all([client.pulls(query), tracked]);
 
 			if (mine !== loadSeq) return;
 
@@ -190,9 +194,6 @@ export function createListStore(client: ApiClient): ListStore {
 				phase: 'ready',
 				list,
 				more: afterReload(query.fresh ? NO_MORE_PAGES : current.more, list),
-				repos,
-				reviews,
-				chats,
 				error: null,
 				offline: false,
 				refreshing: false,
