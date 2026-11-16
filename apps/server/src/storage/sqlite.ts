@@ -52,6 +52,7 @@ export function sqlite(): Database {
 				BEGIN DELETE FROM review_list_items WHERE id = ${record}.id; END`);
 		}
 
+		handle.run("CREATE INDEX IF NOT EXISTS model_calls_at ON model_calls (substr(json_extract(value, '$.at'), 1, 10))");
 		handle.run('CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)');
 	}
 

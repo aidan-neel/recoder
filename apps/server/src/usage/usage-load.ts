@@ -1,7 +1,7 @@
 import type { UsageReport, UsageDays } from '@recoder/shared';
 import { loadPriceLookup } from '../models/model-prices';
-import { modelCalls } from '../store';
-import { loadReportPeople } from './report-shared';
+import { modelCallsInWindow } from '../storage/model-call-reads';
+import { loadReportPeople, windowDayKeys } from './report-shared';
 import { buildUsageReport } from './usage-report';
 
 /**
@@ -9,7 +9,13 @@ import { buildUsageReport } from './usage-report';
  * could have made them, and the model prices.
  */
 export async function loadUsageReport(days: UsageDays, now = new Date()): Promise<UsageReport> {
-	const [calls, people, priceOf] = await Promise.all([modelCalls.list(), loadReportPeople(), loadPriceLookup()]);
+	const window = windowDayKeys(now, days);
+
+	const [calls, people, priceOf] = await Promise.all([
+		modelCallsInWindow(window[0], window[window.length - 1]),
+		loadReportPeople(),
+		loadPriceLookup()
+	]);
 
 	return buildUsageReport({ days, now, calls, people, priceOf });
 }
