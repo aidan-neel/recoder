@@ -1,7 +1,7 @@
 'use client';
 
-import type { ConnectedForge, SignInForge, StartDeviceSignIn } from '@recoder/shared';
-import { Button, ForgeMark } from '@recoder/ui';
+import type { SignInForge, StartDeviceSignIn } from '@recoder/shared';
+import { Button, ForgeMark, Pill } from '@recoder/ui';
 
 import type { SignInRow } from '@/lib/account/sign-in-rows';
 import type { AdoptView } from '@/lib/account/use-adopt-connection';
@@ -10,11 +10,6 @@ import { useForgeChoices } from '@/lib/account/use-forge-choices';
 import { forgeLabel } from '@/lib/connections/forges';
 
 import { ForgeChoice } from './forge-choices';
-
-/** The name a connection is offered under: its login, and the host of a self-managed GitLab. */
-function connectionName(connection: ConnectedForge): string {
-	return connection.host ? `@${connection.login} on ${connection.host}` : `@${connection.login}`;
-}
 
 interface SignInChoicesProps {
 	rows: readonly SignInRow[];
@@ -70,7 +65,16 @@ export function SignInChoices({ rows, adoption, start, redirect, signInError, on
 							<ForgeMark provider={row.provider} />
 						</span>
 						{row.mode === 'adopt'
-							? `Continue as ${connectionName(row.connection)}`
+							? (
+								<>
+									Continue as {row.connection.login}
+									{row.connection.host ? (
+										<Pill className="forge-host" title={row.connection.host}>
+											{row.connection.host}
+										</Pill>
+									) : null}
+								</>
+							)
 							: `Continue with ${forgeLabel(row.provider)}`}
 					</Button>
 				);
