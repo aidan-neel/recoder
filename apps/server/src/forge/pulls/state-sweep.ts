@@ -23,7 +23,7 @@ const CLOSED_RECHECK_MS = 60 * 60_000;
  * nothing, so the next round tries it again.
  */
 export async function sweepPullStates(now = Date.now()): Promise<void> {
-	const [repos, reviews, records] = await Promise.all([db.repos.list(), db.reviews.list(), pullStates.list()]);
+	const [repos, reviews, records] = await Promise.all([db.repos.list(), db.reviews.summaries(), pullStates.list()]);
 
 	const connected = new Map(repos.map((repo) => [repo.id, repo]));
 	const known = new Map(records.map((record) => [record.id, record]));

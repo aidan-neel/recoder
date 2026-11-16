@@ -3,7 +3,7 @@ import { env } from './env';
 import { serverDataDir } from './util/data-dir';
 import { opencode } from './agents/opencode/opencode';
 import { deleteChatGptTokens } from './review/session/chatgpt-migration';
-import { registeredAgents } from './agents/registry';
+import { agentModels, registeredAgents } from './agents/registry';
 import { initReviewSettings } from './review/session/review-settings';
 import { initVllmServers } from './models/vllm/vllm-store';
 import { startVllmSync } from './models/vllm/vllm-sync';
@@ -14,9 +14,11 @@ import { forgeAuthStatus } from './forge/auth-status';
 import { initTokenStore } from './forge/tokens';
 import { describeSecretKeySource, secretKey } from './secrets/secret-key';
 import { SharedSettingsConflictError } from './config/shared-settings';
+import { listOpenPulls } from './forge/pulls/list';
+import { openPulls } from './forge/pulls/cached';
 import { startPullSweep } from './forge/pulls/state-sweep';
 import { restartWatcher } from './forge/watch/watcher';
-import { closeStore, exitOnShutdownSignals, recoverStaleReviews } from './store';
+import { closeStore, exitOnShutdownSignals, recoverStaleReviews, db } from './store';
 import { coordinator, initializeStorage, postgres, settingsOperation } from './storage/backend';
 import { resumeAfterUpdate } from './update/pauses';
 import { SUCCESSOR_ENV, waitForPortRelease } from './update/restart';
@@ -25,6 +27,8 @@ import { executeReviewActor } from './review/runtime/actor';
 import { startSharedMaintenance } from './review/runtime/maintenance';
 import { recoverRepoChats } from './repo-chat/chat-turns';
 import { interruptLocalReplies } from './repo-chat/chat-reply';
+import { loadPriceLookup } from './models/model-prices';
+import { updateService } from './update/service';
 import { backfillModelCalls, pruneModelCalls } from './usage/model-calls';
 
 /**
@@ -42,6 +46,13 @@ function warmAgents(): void {
 	for (const agent of registeredAgents()) {
 		if (agent !== opencode) void agent.detect().catch(() => {});
 	}
+}
+
+/** Warm the first pull list with the same bounded forge concurrency its route uses. */
+async function warmPulls(): Promise<void> {
+	const [repos, reviews] = await Promise.all([db.repos.list(), db.reviews.summaries()]);
+
+	await listOpenPulls(repos, reviews, openPulls);
 }
 
 /** Checks the forge connections now, so the first `/api/auth/me` of a fresh install answers from the cache. */
@@ -140,8 +151,13 @@ if (coordinator) {
 	await recoverStaleReviews();
 	await resumeAfterUpdate();
 	await recoverRepoChats();
+	await db.reviews.summaries();
 	warmAgents();
 	warmForgeStatus();
+	void loadPriceLookup().catch(() => {});
+	void updateService.status().catch(() => {});
+	void warmPulls().catch(() => {});
+	await agentModels(1500);
 	startVllmSync();
 	startPullSweep();
 	restartWatcher();

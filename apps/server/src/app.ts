@@ -35,6 +35,7 @@ import { RepoFilesError } from './repo-files/errors';
 import { UnknownSkillError } from './skills/repo-skills';
 import { postgres, settingsOperation } from './storage/backend';
 import { SharedSettingsConflictError } from './config/shared-settings';
+import { jsonCompression } from './util/json-compression';
 import { redacted } from './util/redact';
 
 /**
@@ -70,6 +71,7 @@ export const app = new Hono();
 app.use('*', logger());
 
 app.use('*', cors(corsOptions));
+app.use('/api/*', jsonCompression());
 app.use('/api/*', requireSession);
 app.use('/api/*', async (_c, next) => settingsOperation(next));
 

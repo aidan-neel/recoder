@@ -43,6 +43,26 @@ export function sqlite(): Database {
 			handle.run(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 		}
 
+		handle.run('CREATE TABLE IF NOT EXISTS review_list_items (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+
+		for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
+			const record = event === 'INSERT' ? 'new' : 'old';
+
+			handle.run(`CREATE TRIGGER IF NOT EXISTS review_list_${event.toLowerCase()} AFTER ${event} ON reviews
+				BEGIN DELETE FROM review_list_items WHERE id = ${record}.id; END`);
+		}
+
+		handle.run('CREATE TABLE IF NOT EXISTS review_list_revision (id INTEGER PRIMARY KEY, revision INTEGER NOT NULL)');
+		handle.run('INSERT OR IGNORE INTO review_list_revision (id, revision) VALUES (1, 0)');
+
+		for (const table of ['reviews', 'pull_states']) {
+			for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
+				handle.run(`CREATE TRIGGER IF NOT EXISTS review_response_${table}_${event.toLowerCase()}
+					AFTER ${event} ON ${table} BEGIN UPDATE review_list_revision SET revision = revision + 1 WHERE id = 1; END`);
+			}
+		}
+
+		handle.run("CREATE INDEX IF NOT EXISTS model_calls_at ON model_calls (substr(json_extract(value, '$.at'), 1, 10))");
 		handle.run('CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)');
 	}
 
