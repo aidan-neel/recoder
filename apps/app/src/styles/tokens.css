@@ -1,6 +1,6 @@
 /*
  * The app's palette. The kit's tokens keep their names and get neutral values:
- * near-black surfaces, hairlines of white, one cream primary and one azure
+ * near-black surfaces, hairlines of white, one light-blue primary and one azure
  * accent. Scoped to `.app-skin`, on <html> here and in apps/site.
  */
 .app-skin {
@@ -46,9 +46,9 @@
 	--text-ghost: #555555;
 	--text-brief-body: #8f8f8f;
 
-	--primary: #f2f0eb;
-	--primary-hover: #ffffff;
-	--on-primary: #111111;
+	--primary: #2383e2;
+	--primary-hover: #3b91e6;
+	--on-primary: #ffffff;
 
 	/* The one accent: links, the selected line, the hunk header. */
 	--accent: #5b9dff;
@@ -169,8 +169,8 @@
 	--text-ghost: #a8a8a8;
 	--text-brief-body: #6b6b6b;
 
-	--primary: #171717;
-	--primary-hover: #000000;
+	--primary: #2383e2;
+	--primary-hover: #0077d4;
 	--on-primary: #ffffff;
 
 	--accent: #2563eb;
