@@ -10,6 +10,7 @@ import { useCompose } from '@/lib/compose/use-compose';
 import { useImageDraft } from '@/lib/compose/use-image-draft';
 import { useOpenStarted } from '@/lib/compose/use-open-started';
 import type { PullRow } from '@/lib/pulls/types';
+import { formatCount } from '@/lib/shell/format';
 import { useRepoSkills } from '@/lib/skills/use-repo-skills';
 
 import { ComposerModels } from '@/components/ask/model-menu';
@@ -220,7 +221,7 @@ function noteFor(compose: ComposeView, error: string | null): ComposerNote | nul
 
 /** A chat's line: how far it runs over the limit. With no repository the bar offers to add one instead. */
 function chatNote(compose: ComposeView): ComposerNote | null {
-	if (compose.overBy > 0) return { tone: 'danger', text: `${compose.overBy.toLocaleString('en-US')} over the limit` };
+	if (compose.overBy > 0) return { tone: 'danger', text: `${formatCount(compose.overBy)} over the limit` };
 
 	return null;
 }

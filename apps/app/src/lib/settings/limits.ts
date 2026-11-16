@@ -1,5 +1,7 @@
 import type { ModelSettings } from '@recoder/shared';
 
+import { formatCount } from '../shell/format';
+
 type LimitKey = keyof ModelSettings['limits'];
 
 export interface LimitFieldSpec {
@@ -56,7 +58,7 @@ export function parseWholeNumber(text: string): number | null {
  */
 export function parseLimit(text: string, max: number, min = 1): { value: number } | { error: string } {
 	const value = parseWholeNumber(text);
-	const range = `Enter a whole number from ${min.toLocaleString('en-US')} to ${max.toLocaleString('en-US')}.`;
+	const range = `Enter a whole number from ${formatCount(min)} to ${formatCount(max)}.`;
 
 	if (value === null || value < min || value > max) return { error: range };
 
