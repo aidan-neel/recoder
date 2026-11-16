@@ -16,6 +16,7 @@ import { useKeys } from '@/lib/shell/use-keys';
 import { useNow } from '@/lib/shell/use-now';
 
 import { Age } from '@/components/common/age';
+import { TabLink } from '@/components/common/tab-link';
 import { CancelReviewButton } from '@/components/common/cancel-review';
 
 interface RunBannerProps {
@@ -188,9 +189,7 @@ export function RunBanner({ run, repoId, number, bugs }: RunBannerProps) {
 						{run.connection === 'reconnecting' ? <span className="meta">Reconnecting…</span> : null}
 						{run.startedAt && !queued ? <Clock since={run.startedAt} /> : null}
 						<Button asChild variant="ghost">
-							<Link href={bugsHref} replace scroll={false}>
-								See progress
-							</Link>
+							<TabLink href={bugsHref}>See progress</TabLink>
 						</Button>
 						<CancelReviewButton variant="ghost" />
 					</>
@@ -260,9 +259,7 @@ export function RunBanner({ run, repoId, number, bugs }: RunBannerProps) {
 					<>
 						{bugs ? (
 							<Button asChild variant="primary">
-								<Link href={bugsHref} replace scroll={false}>
-									{bugs === 1 ? 'See the bug' : 'See the bugs'}
-								</Link>
+								<TabLink href={bugsHref}>{bugs === 1 ? 'See the bug' : 'See the bugs'}</TabLink>
 							</Button>
 						) : null}
 						<ReviewButton run={run} again />
@@ -281,9 +278,7 @@ export function RunBanner({ run, repoId, number, bugs }: RunBannerProps) {
 				actions={
 					<>
 						<Button asChild variant="ghost">
-							<Link href={bugsHref} replace scroll={false}>
-								See the last review
-							</Link>
+							<TabLink href={bugsHref}>See the last review</TabLink>
 						</Button>
 						<ReviewButton run={run} again={false} />
 					</>

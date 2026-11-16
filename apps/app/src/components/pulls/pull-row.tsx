@@ -79,7 +79,7 @@ export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent
 			<div className="pull-row-text">
 				<div className="pull-row-title">
 					<RowButton asChild cover>
-						<Link href={row.href} data-row-link>
+						<Link href={row.href} prefetch data-row-link>
 							{row.title}
 						</Link>
 					</RowButton>

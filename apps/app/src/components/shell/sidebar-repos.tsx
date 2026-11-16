@@ -35,7 +35,7 @@ export function SidebarRepos({ repos }: { repos: SidebarRepo[] }) {
 
 						return (
 							<RowButton key={repo.id} asChild data-nav data-active={active || undefined} className="nav-item">
-								<Link href={repo.href} aria-current={active ? 'page' : undefined}>
+								<Link href={repo.href} prefetch aria-current={active ? 'page' : undefined}>
 									<BookMarked aria-hidden />
 									<span className="nav-label">{repo.name}</span>
 								</Link>

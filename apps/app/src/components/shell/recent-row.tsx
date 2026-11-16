@@ -112,7 +112,7 @@ export function RecentRow({ href, active, mark, title, trailing, actions, onInte
 	return (
 		<RowShell title={title} actions={actions} onIntent={onIntent} className="recent-entry" active={active}>
 			<RowButton asChild data-active={active || undefined} className="recent-item">
-				<Link href={href} aria-current={active ? 'page' : undefined}>
+				<Link href={href} prefetch aria-current={active ? 'page' : undefined}>
 					{mark}
 					<span className="recent-title">{title}</span>
 					{trailing}
@@ -162,7 +162,7 @@ export function RecentCard({ href, active, title, repo, age, foot, actions, onIn
 				<span className="recent-age">{age}</span>
 			</span>
 			<RowButton asChild cover className="recent-card-title">
-				<Link href={href} aria-current={active ? 'page' : undefined}>
+				<Link href={href} prefetch aria-current={active ? 'page' : undefined}>
 					{title}
 				</Link>
 			</RowButton>
