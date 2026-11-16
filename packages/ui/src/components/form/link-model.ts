@@ -175,12 +175,12 @@ export function fitInsert(doc: LinkDoc, range: TextRange, insert: string, maxLen
 }
 
 /** True when two ranges share at least one character. */
-function overlaps(a: TextRange, b: TextRange): boolean {
+export function overlaps(a: TextRange, b: TextRange): boolean {
 	return a.start < b.end && b.start < a.end;
 }
 
 /** True when two ranges overlap or meet, so an empty word at a link's edge still keeps it. */
-function touches(a: TextRange, b: TextRange): boolean {
+export function touches(a: TextRange, b: TextRange): boolean {
 	return a.start <= b.end && b.start <= a.end;
 }
 

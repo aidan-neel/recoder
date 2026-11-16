@@ -1,7 +1,15 @@
 'use client';
 
 import { ArrowUp, AtSign, Square, SquareSlash } from 'lucide-react';
-import { useId, useRef, type ComponentProps, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import {
+	useId,
+	useMemo,
+	useRef,
+	type ComponentProps,
+	type KeyboardEvent,
+	type MouseEvent,
+	type ReactNode
+} from 'react';
 
 import { cn } from '../../lib/cn';
 import { Button } from '../button';
@@ -80,7 +88,8 @@ interface ComposerProps {
  * With `commands`, a slash at the start of the field, or the "/" button,
  * opens a list of them; a pick puts its prompt in the field to send. With
  * `mentions`, an `@` anywhere, or the "@" button, opens a list of those; a
- * pick puts `@name` in the text where it was typed. The
+ * pick puts `@name` in the text where it was typed, and every `@name` of one
+ * shows as an embed. The
  * caller owns the text and the images and decides what a submit does; the
  * composer keeps only where in the text each image's chip sits.
  */
@@ -118,6 +127,7 @@ export function Composer({
 	const inline = useInlineImages({ value, onValueChange: menu.edit, images, onRemoveImage, field });
 	const mention = useMentionMenu({ text: inline.text, onTextChange: inline.edit, items: mentions?.items ?? [], field });
 	const listbox = openListbox();
+	const mentionNames = useMemo(() => new Set(mentions?.items.map((item) => item.name)), [mentions]);
 
 	/** The open menu's id and its active row's, for the field's ARIA; the "/" menu wins in the rare case both are open. */
 	function openListbox(): { id: string; active: string | undefined } | null {
@@ -196,6 +206,7 @@ export function Composer({
 				value={inline.text}
 				linkFacts={linkFacts}
 				images={images}
+				mentions={mentionNames}
 				onValueChange={inline.edit}
 				onKeyDown={onKeyDown}
 			/>

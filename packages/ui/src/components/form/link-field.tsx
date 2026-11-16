@@ -19,9 +19,9 @@ import { cn } from '../../lib/cn';
 import { useFieldControl } from './field-context';
 import { LinkCard, openLink, type CardTarget } from './link-card';
 import { describeLink, type LinkDescription, type LinkFacts } from './link-describe';
-import { embedOf, urlOf, type EmbedLook } from './link-dom';
+import { embedOf, isLinkEmbed, urlOf, type EmbedLook } from './link-dom';
 import { LinkEditor, type EditorHost } from './link-editor';
-import { imageIdOf, isImageToken, type InlineImage } from './link-image';
+import { imageIdOf, type InlineImage } from './link-image';
 
 interface LinkFieldProps extends Omit<
 	HTMLAttributes<HTMLDivElement>,
@@ -47,8 +47,12 @@ interface LinkFieldProps extends Omit<
 	linkFacts?: LinkFacts;
 	/** The images whose tokens (`imageToken`) the text holds, each drawn where its token stands. */
 	images?: readonly InlineImage[];
+	/** The names `@name` may take; each mention of one shows as an embed. */
+	mentions?: ReadonlySet<string>;
 	ref?: Ref<HTMLDivElement>;
 }
+
+const NO_MENTIONS: ReadonlySet<string> = new Set();
 
 /** How long the pointer rests on an embed before its card opens, and how long the card waits for the pointer to come back. */
 const HOVER_OPEN_MS = 350;
@@ -111,6 +115,7 @@ export function LinkField({
 	maxLength,
 	linkFacts,
 	images,
+	mentions = NO_MENTIONS,
 	className,
 	style,
 	id,
@@ -131,11 +136,11 @@ export function LinkField({
 	const [card, setCard] = useState<CardTarget | null>(null);
 	const [edits, setEdits] = useState(0);
 	const hover = useRef(0);
-	const latest = useRef({ value, onValueChange, linkFacts, images, maxLength, disabled });
+	const latest = useRef({ value, onValueChange, linkFacts, images, mentions, maxLength, disabled });
 	const looks = useRef(new Map<string, LinkDescription>());
 
 	useLayoutEffect(() => {
-		latest.current = { value, onValueChange, linkFacts, images, maxLength, disabled };
+		latest.current = { value, onValueChange, linkFacts, images, mentions, maxLength, disabled };
 	});
 
 	const look = useCallback((url: string): EmbedLook => {
@@ -156,6 +161,7 @@ export function LinkField({
 			image: (token) => latest.current.images?.find((image) => image.id === imageIdOf(token)),
 			maxLength: () => latest.current.maxLength,
 			disabled: () => latest.current.disabled,
+			mentions: () => latest.current.mentions,
 			onChange: (text) => {
 				latest.current.onValueChange(text);
 				setEdits((count) => count + 1);
@@ -196,7 +202,7 @@ export function LinkField({
 
 	useLayoutEffect(() => {
 		editor?.refresh();
-	}, [editor, linkFacts, images]);
+	}, [editor, linkFacts, images, mentions]);
 
 	useEffect(() => () => window.clearTimeout(hover.current), []);
 
@@ -239,7 +245,7 @@ export function LinkField({
 
 		const url = urlOf(embed) ?? '';
 
-		if ((event.ctrlKey || event.metaKey) && !isImageToken(url)) openLink(url);
+		if ((event.ctrlKey || event.metaKey) && isLinkEmbed(url)) openLink(url);
 		else if (disabled) return;
 		else if (event.detail === 2) editor.selectEmbed(embed);
 		else editor.placeBeside(embed, event.clientX);
@@ -251,7 +257,7 @@ export function LinkField({
 		const embed = embedOf(event.target instanceof Node ? event.target : null);
 		const url = embed ? urlOf(embed) : null;
 
-		if (embed && url && !isImageToken(url) && event.pointerType !== 'touch')
+		if (embed && url && isLinkEmbed(url) && event.pointerType !== 'touch')
 			schedule({ element: embed, look: look(url), via: 'pointer' }, HOVER_OPEN_MS);
 	}
 
@@ -334,7 +340,7 @@ function caretCard(
 	look: (url: string) => EmbedLook
 ): CardTarget | null {
 	const found = editor && !editor.editedLast ? editor.embedBesideCaret() : null;
-	const beside = found && !isImageToken(urlOf(found.element) ?? '') ? found : null;
+	const beside = found && isLinkEmbed(urlOf(found.element) ?? '') ? found : null;
 
 	if (!beside) return open?.via === 'pointer' ? pointerCard(open, look) : null;
 

@@ -3,6 +3,7 @@ import type { TextRange } from './link-find';
 import type { LinkDescription, LinkFact } from './link-describe';
 import type { TextSelection } from './link-edits';
 import { fillImageEmbed, imageKey, isImageToken, type InlineImage } from './link-image';
+import { isMentionText } from './link-mention';
 import { CARET_HOLDER, segmentsOf, type LinkDoc, type Segment } from './link-model';
 
 /** How the field draws one link: what its URL says, and what the host knows about it. */
@@ -227,6 +228,7 @@ function placePart(root: HTMLElement, index: number, part: Part, source: EmbedSo
 	}
 
 	if (isImageToken(part.url)) placeImage(root, current, part.url, source.image(part.url));
+	else if (isMentionText(part.url)) placeMention(root, current, part.url);
 	else placeEmbed(root, current, part.url, source.look);
 }
 
@@ -282,6 +284,26 @@ function placeImage(root: HTMLElement, current: ChildNode | null, token: string,
 	embed.dataset.look = key;
 	fillImageEmbed(embed, image);
 	putEmbed(root, current, embed);
+}
+
+/** A mention's embed at `current`'s place: the one there when it names the same, else a new one with the name. */
+function placeMention(root: HTMLElement, current: ChildNode | null, mention: string): void {
+	if (current instanceof HTMLElement && urlOf(current) === mention) return;
+
+	const embed = embedShell(mention);
+	const label = document.createElement('span');
+
+	embed.dataset.kind = 'mention';
+	embed.setAttribute('aria-label', mention);
+	label.dataset.ui = 'link-embed-label';
+	label.textContent = mention.slice(1);
+	embed.append(label);
+	putEmbed(root, current, embed);
+}
+
+/** True when an embed's text is a web link: not an image's token and not a mention, so it has a card to open. */
+export function isLinkEmbed(text: string): boolean {
+	return !isImageToken(text) && !isMentionText(text);
 }
 
 /** Puts a new embed at `current`'s place, in place of the embed there if there is one. */
