@@ -1,11 +1,11 @@
 'use client';
 
-import { Check } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { ContextMenu as ContextMenuPrimitive } from 'radix-ui';
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { cn } from '../../lib/cn';
+import { CheckboxMark } from '../form/checkbox';
 import { rememberOpener } from '../overlay/return-focus';
 import { MENU_SEPARATOR, MenuItemBody, MenuOpen, MenuPanel, menuItemRoot, type MenuItemProps } from './menu-parts';
 import { useOpened } from './use-opened';
@@ -119,18 +119,27 @@ interface ContextMenuCheckboxItemProps extends Omit<MenuItemProps, 'destructive'
 }
 
 /**
- * A row that turns something on or off, its check at the row's end as a checked dropdown or select row draws it.
- * Every row keeps room for the check, so the labels and their ends line up down the list.
+ * A row that turns something on or off, led by a checkbox drawn like the kit's own. Picking it toggles the box and
+ * keeps the menu open, so several rows can be set in one visit.
  */
-export function ContextMenuCheckboxItem({ icon, className, children, ...props }: ContextMenuCheckboxItemProps) {
+export function ContextMenuCheckboxItem({
+	icon,
+	className,
+	children,
+	checked,
+	...props
+}: ContextMenuCheckboxItemProps) {
 	return (
-		<ContextMenuPrimitive.CheckboxItem {...menuItemRoot(false, className)} {...props}>
-			<MenuItemBody icon={icon}>{children}</MenuItemBody>
-			<span data-ui="menu-item-check" className="w-3.5">
-				<ContextMenuPrimitive.ItemIndicator>
-					<Check aria-hidden />
-				</ContextMenuPrimitive.ItemIndicator>
+		<ContextMenuPrimitive.CheckboxItem
+			{...menuItemRoot(false, className)}
+			{...props}
+			checked={checked}
+			onSelect={(event) => event.preventDefault()}
+		>
+			<span data-ui="checkbox" data-state={checked ? 'checked' : 'unchecked'} aria-hidden>
+				<CheckboxMark checked={checked} />
 			</span>
+			<MenuItemBody icon={icon}>{children}</MenuItemBody>
 		</ContextMenuPrimitive.CheckboxItem>
 	);
 }
