@@ -64,18 +64,18 @@ export function SignInChoices({ rows, adoption, start, redirect, signInError, on
 						<span aria-hidden className="contents">
 							<ForgeMark provider={row.provider} />
 						</span>
-						{row.mode === 'adopt'
-							? (
-								<>
-									Continue as {row.connection.login}
-									{row.connection.host ? (
-										<Pill className="forge-host" title={row.connection.host}>
-											{row.connection.host}
-										</Pill>
-									) : null}
-								</>
-							)
-							: `Continue with ${forgeLabel(row.provider)}`}
+						{row.mode === 'adopt' ? (
+							<>
+								Continue as {row.connection.login}
+								{row.connection.host ? (
+									<Pill className="forge-host" title={row.connection.host}>
+										{row.connection.host}
+									</Pill>
+								) : null}
+							</>
+						) : (
+							`Continue with ${forgeLabel(row.provider)}`
+						)}
 					</Button>
 				);
 			})}

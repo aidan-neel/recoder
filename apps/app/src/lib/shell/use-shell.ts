@@ -8,9 +8,14 @@ import { useApi, useListStore } from '../api/client';
 import { useWatchList } from '../pulls/use-rows';
 import { recentChats } from './recent-chats';
 import { recentReviews } from './recent-reviews';
+import { sidebarLists, useSettleMarks } from './settle';
 import type { ShellView } from './types';
+import { useNow } from './use-now';
 
-/** What the sidebar shows: the account, the open pull request count, the recent reviews and the newest chats. */
+/** How often rows are checked for having rested long enough to settle, in ms. */
+const SETTLE_TICK = 60_000;
+
+/** What the sidebar shows: the account, the open pull request count, the recent reviews and chats, and the settled ones. */
 export function useShell(): ShellView {
 	useWatchList();
 
@@ -29,14 +34,22 @@ export function useShell(): ShellView {
 		}))
 	);
 
-	const { recent, settled } = useMemo(
-		() => (data.reviews ? recentReviews(data.reviews, data.repos, base) : { recent: [], settled: [] }),
+	const marks = useSettleMarks((current) => current.marks);
+	const now = useNow(SETTLE_TICK);
+
+	const reviews = useMemo(
+		() => (data.reviews ? recentReviews(data.reviews, data.repos, base) : { open: [], ended: [] }),
 		[data.reviews, data.repos, base]
 	);
 
-	const chats = useMemo(
+	const allChats = useMemo(
 		() => (data.chats ? recentChats(data.chats, data.repos, base) : []),
 		[data.chats, data.repos, base]
+	);
+
+	const { recent, settled, chats } = useMemo(
+		() => sidebarLists({ ...reviews, chats: allChats }, marks, now),
+		[reviews, allChats, marks, now]
 	);
 
 	return useMemo(

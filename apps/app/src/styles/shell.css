@@ -242,7 +242,7 @@
 	padding: 0 8px 3px;
 }
 
-/* Recent reviews: two lines a row, the state as a glyph and as words. */
+/* Recent chats and reviews: a section of cards under a title that folds it. */
 .recent {
 	display: flex;
 	min-height: 0;
@@ -296,25 +296,21 @@
 	display: flex;
 	min-height: 0;
 	flex-direction: column;
-	gap: 2px;
+	gap: 6px;
 	overflow-y: auto;
 	padding: 2px 8px 12px;
 }
 .recent-item {
 	--row-button-radius: var(--radius-row);
 
-	align-items: flex-start;
+	align-items: center;
 	gap: 8px;
 	padding: 5px 8px;
-}
-.recent-item [data-ui='status-glyph'] {
-	margin-top: 1px;
 }
 .recent-mark {
 	width: 16px;
 	height: 16px;
 	flex-shrink: 0;
-	margin-top: 1px;
 	padding: 1px;
 	color: var(--text-subtle);
 	stroke-width: 1.75;
@@ -324,38 +320,104 @@
 .recent-item[data-active] .recent-mark {
 	color: var(--text-primary);
 }
-/* The row's "more" button waits until the row is pointed at, focused, or its menu is open; the text steps aside for it. */
+/* A row's tools (Settle, the "more" button) wait until the row is pointed at, focused, or its menu is open. */
 .recent-entry {
 	position: relative;
 }
-.recent-more {
+.recent-tools {
 	position: absolute;
+	z-index: 1;
 	top: 50%;
 	right: 4px;
+	display: flex;
+	align-items: center;
+	gap: 2px;
 	opacity: 0;
 	transform: translateY(-50%);
-	transition:
-		opacity var(--dur-hover) ease-out,
-		background-color var(--dur-hover) ease-out,
-		color var(--dur-hover) ease-out;
+	transition: opacity var(--dur-hover) ease-out;
 }
-.recent-entry:hover .recent-more,
-.recent-entry:focus-within .recent-more,
-.recent-more[data-state='open'] {
+:is(.recent-entry, .recent-card):is(:hover, :focus-within, :has([data-state='open'])) .recent-tools {
 	opacity: 1;
 }
-.recent-entry:hover .recent-text,
-.recent-entry:focus-within .recent-text,
-.recent-entry:has([data-state='open']) .recent-text {
+:is(.recent-entry, .recent-card):is(:hover, :focus-within, :has([data-state='open'])) .recent-age {
+	opacity: 0;
+}
+.recent-entry:is(:hover, :focus-within, :has([data-state='open'])) .recent-title {
 	padding-right: 24px;
 }
 @media (hover: none) {
-	.recent-more {
+	.recent-tools {
 		opacity: 1;
 	}
-	.recent-text {
-		padding-right: 24px;
+	.recent-age {
+		display: none;
 	}
+}
+
+/* A chat or review as a card: the repository and age, the title, then its state and pull request. The whole card opens it. */
+.recent-card {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 10px;
+	border-radius: var(--radius-card);
+	background: rgb(var(--wash-rgb) / 0.035);
+	transition: background-color var(--dur-hover) ease-out;
+}
+.recent-card:hover {
+	background: rgb(var(--wash-rgb) / 0.06);
+}
+.recent-card[data-active] {
+	background: rgb(var(--wash-rgb) / 0.085);
+}
+.recent-card-head,
+.recent-card-foot {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	white-space: nowrap;
+}
+.recent-card-head .repo-label {
+	overflow: hidden;
+	margin-right: auto;
+	text-overflow: ellipsis;
+}
+.recent-card .recent-tools {
+	top: 4px;
+	right: 4px;
+	transform: none;
+}
+.recent-card-title {
+	--row-button-radius: var(--radius-card);
+
+	color: var(--text-secondary);
+	font-size: var(--font-size-body);
+	line-height: 20px;
+}
+.recent-card:hover .recent-card-title,
+.recent-card[data-active] .recent-card-title {
+	color: var(--text-primary);
+}
+.recent-state {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	margin-right: auto;
+}
+.recent-pull {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 3px;
+	font-variant-numeric: tabular-nums;
+}
+.recent-pull svg {
+	width: 12px;
+	height: 12px;
+	stroke-width: 1.75;
 }
 /* Chats sit above the reviews at their own height; the reviews take the rest and scroll. */
 .recent-chats {
@@ -365,15 +427,11 @@
 	overflow: visible;
 	padding-bottom: 0;
 }
-/* A placeholder row on the same lanes as the row that replaces it. */
+/* A placeholder card on the same lanes as the card that replaces it. */
 .recent-skeleton {
-	gap: 8px;
-	padding: 0 8px;
-}
-.recent-text {
-	display: flex;
-	min-width: 0;
-	flex-direction: column;
+	padding: 0 10px;
+	border-radius: var(--radius-card);
+	background: rgb(var(--wash-rgb) / 0.035);
 }
 .recent-title {
 	overflow: hidden;
@@ -383,15 +441,6 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	transition: color var(--dur-hover) ease-out;
-}
-.recent-text .meta {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.recent-item:hover .recent-title,
-.recent-item[data-active] .recent-title {
-	color: var(--text-primary);
 }
 
 .sidebar-foot {

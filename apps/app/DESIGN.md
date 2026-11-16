@@ -15,7 +15,7 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   uses it too (`--font-ai`). There is no serif and no Cal Sans. Code, paths,
   hashes and aligned numbers are Geist Mono.
 - **Neutral surfaces.** Near-black panels with white hairlines in dark,
-  white and light grey in light. One light-blue primary button and one azure
+  white and light grey in light. One cream primary button and one light-blue (`#2383e2`)
   accent (links, the selected line, hunk headers).
 - **A pull request is the unit**, not a review session. A review belongs to a
   pull request and shows inside its page.
@@ -348,7 +348,7 @@ Motion explains a change and never makes the person wait.
 - **Every async action shows its state**: idle, pending (same width), then
   success or failure with the server's reason. A change shows at once and
   goes back when the save fails.
-- **One primary button per region**, in light blue. Everything else is quiet at
+- **One primary button per region**, in cream. Everything else is quiet at
   rest: no background until hover.
 
 ## Buttons
@@ -367,7 +367,7 @@ an icon sits on gets 2px less padding than a side with text.
 
 | Variant       | At rest                          | Use                                                                                                 |
 | ------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `primary`     | Flat light blue (`#2383e2`)      | The one next step of a region: Post to pull request, Merge, Save. Never repeated down a list.       |
+| `primary`     | Flat cream (black in light)      | The one next step of a region: Post to pull request, Merge, Save. Never repeated down a list.       |
 | `secondary`   | A faint wash and a hairline      | A standalone action with no primary beside it: Try again in an error notice, Back to pull requests. |
 | `outline`     | Hairline only                    | The action beside a primary, and the action a list row offers (Review, Track, Connect).             |
 | `ghost`       | Muted text, nothing else         | Tertiary actions and row controls: Accept, Dismiss, Disconnect, Cancel, icon buttons.               |

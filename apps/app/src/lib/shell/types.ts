@@ -35,7 +35,14 @@ export interface RecentChat {
 	repoName: string;
 	/** Where the repository lives, for the mark beside its name; null while the repositories load. */
 	repoForge: Provider | null;
+	/** When the chat last changed, as an ISO date. */
+	updatedAt: string;
 }
+
+/** A row of "Settled": a review or a chat, and how its pull request ended when it did. */
+export type SettledRow =
+	| { kind: 'review'; row: RecentReview; outcome: SettledReview['outcome'] | null }
+	| { kind: 'chat'; row: RecentChat; outcome: null };
 
 /** What the sidebar shows around the pages. */
 export interface ShellView {
@@ -43,11 +50,11 @@ export interface ShellView {
 	account: string | null;
 	/** The count beside "Pull requests"; null until the list answered once. */
 	openPulls: number | null;
-	/** The newest review of each open pull request, newest first; at most eight. */
+	/** The newest review of each open pull request that is not settled, newest first; at most eight. */
 	recent: RecentReview[];
-	/** The newest review of each merged or closed pull request, newest first. */
-	settled: SettledReview[];
-	/** The chats most recently active, newest first; at most five. */
+	/** Reviews of merged or closed pull requests, and the reviews and chats settled by hand or by rest, newest first. */
+	settled: SettledRow[];
+	/** The chats most recently active that are not settled, newest first. */
 	chats: RecentChat[];
 	/** True while the recent reviews load for the first time. */
 	loading: boolean;

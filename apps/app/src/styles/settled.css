@@ -17,23 +17,17 @@
 	max-height: 40dvh;
 	padding-bottom: 0;
 }
-/* A one-line row: the mark and the title share a line, the age sits at the right. */
-.recent-item[data-single] {
-	align-items: center;
+.settled-list {
+	gap: 2px;
 }
-.recent-item[data-single] .recent-text {
+.recent-item .recent-title {
 	flex: 1;
-}
-.recent-item[data-single] .recent-title {
+	min-width: 0;
 	color: var(--text-muted);
 }
-.recent-item[data-single]:hover .recent-title,
-.recent-item[data-single][data-active] .recent-title {
+.recent-item:hover .recent-title,
+.recent-item[data-active] .recent-title {
 	color: var(--text-primary);
-}
-.recent-item[data-single] .recent-mark,
-.recent-item[data-single] [data-ui='status-glyph'] {
-	margin-top: 0;
 }
 .recent-age {
 	flex-shrink: 0;
@@ -41,11 +35,6 @@
 	font-size: var(--font-size-meta);
 	font-variant-numeric: tabular-nums;
 	transition: opacity var(--dur-hover) ease-out;
-}
-.recent-entry:hover .recent-age,
-.recent-entry:focus-within .recent-age,
-.recent-entry:has([data-state='open']) .recent-age {
-	opacity: 0;
 }
 .settled-more {
 	--row-button-radius: var(--radius-row);
@@ -56,7 +45,4 @@
 	color: var(--text-muted);
 	font-size: var(--font-size-label);
 	line-height: 18px;
-}
-.settled-more .recent-mark {
-	margin-top: 0;
 }
