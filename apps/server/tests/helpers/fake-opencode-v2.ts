@@ -81,7 +81,12 @@ const server = Bun.serve({ port: 0, hostname: '127.0.0.1', idleTimeout: 0, async
 			cancel() { streams.delete(self); }
 		}), { headers: { 'content-type': 'text/event-stream' } });
 	}
-	if (path === '/api/model') return data([{ providerID: 'openai', modelID: 'm', name: 'M', status: 'active', capabilities: { tools: true }, variants: [{ id: 'high' }], limit: { context: 1000 } }]);
+	// A provider (vllm) whose config key (big) differs from the provider-facing modelID it routes to, as the real OpenCode reports it.
+	if (path === '/api/model')
+		return data([
+			{ providerID: 'openai', modelID: 'm', name: 'M', status: 'active', capabilities: { tools: true }, variants: [{ id: 'high' }], limit: { context: 1000 } },
+			{ providerID: 'vllm', id: 'big', modelID: 'ornith-ai/Ornith-1.5-397B-FP8', name: 'Ornith 1.5', status: 'active', capabilities: { tools: true }, variants: [{ id: 'high' }], limit: { context: 262144 } }
+		]);
 	if (path === '/api/integration') return data([
 		{ id: 'openai', name: 'OpenAI', methods: [{ type: 'key', label: 'API key', form: [{ key: 'resourceName', type: 'string', title: 'Resource Name', placeholder: 'my-models' }] }, { type: 'env', names: ['OPENAI_API_KEY'] }, { id: 'device', type: 'oauth', label: 'ChatGPT' }], connections: [{ type: 'credential', id: 'cred_1', label: 'OAuth' }] }
 	]);

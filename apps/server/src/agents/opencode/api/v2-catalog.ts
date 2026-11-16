@@ -37,6 +37,8 @@ export const modelSchema = z
 	.object({
 		providerID: z.string(),
 		modelID: z.string(),
+		/** The config key OpenCode resolves a model by (`big`); distinct from {@link modelID} when the config aliases it. */
+		id: z.string().optional(),
 		name: z.string().optional(),
 		status: z.string().optional(),
 		limit: z.object({ context: z.number().optional() }).partial().optional(),
@@ -92,9 +94,18 @@ export function authJson(integrations: Integration[]): Record<string, unknown[]>
 	);
 }
 
+/**
+ * The id OpenCode resolves a model by: its config key (`big`), which is what recoder must send back. It differs from
+ * the provider-facing {@link modelID} (`ornith-ai/Ornith-1.5-397B-FP8`) when the config aliases a model; OpenCode has
+ * no model under the modelID and the prompt fails. Falls back to modelID when there is no separate key.
+ */
+function resolveId(model: Model): string {
+	return model.id ?? model.modelID;
+}
+
 function modelJson(model: Model): unknown {
 	return {
-		id: model.modelID,
+		id: resolveId(model),
 		name: model.name,
 		status: model.status,
 		limit: model.limit,
@@ -132,7 +143,7 @@ export function providersJson(integrations: Integration[], models: Model[]): { a
 		all: integrations.map(({ id, name }) => ({
 			id,
 			name,
-			models: Object.fromEntries((grouped.get(id) ?? []).map((model) => [model.modelID, modelJson(model)]))
+			models: Object.fromEntries((grouped.get(id) ?? []).map((model) => [resolveId(model), modelJson(model)]))
 		}))
 	};
 }
@@ -146,7 +157,7 @@ export function connectedJson(integrations: Integration[], models: Model[]): { p
 			id,
 			name: named.get(id)?.name ?? id,
 			source: sourceOf(named.get(id)),
-			models: Object.fromEntries(list.map((model) => [model.modelID, modelJson(model)]))
+			models: Object.fromEntries(list.map((model) => [resolveId(model), modelJson(model)]))
 		}))
 	};
 }
