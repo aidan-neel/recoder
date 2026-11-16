@@ -35,6 +35,7 @@ export const autoReviewPatchSchema = z
 		onPushed: z.boolean(),
 		skipDrafts: z.boolean(),
 		postResults: z.boolean(),
+		ownReposOnly: z.boolean(),
 		excludedRepoIds: z.array(z.string().max(200)).max(500),
 		ignoredPaths: z.array(pathGlobSchema).max(100),
 		maxInlineComments: z.number().int().min(0).max(MAX_INLINE_COMMENTS),

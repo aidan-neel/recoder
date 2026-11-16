@@ -44,6 +44,8 @@ export interface AutoReviewSettings {
 	 * review with inline comments and a commit status.
 	 */
 	postResults: boolean;
+	/** Watch only the tracked repositories the connected GitHub or GitLab account owns, not organizations' or other people's. */
+	ownReposOnly: boolean;
 	/** Tracked repositories the watcher leaves alone. New repositories are watched. */
 	excludedRepoIds: string[];
 	/** Globs of repository paths (`docs/**`, `**\/*.md`) whose findings are never posted and never fail the check. */
@@ -63,6 +65,7 @@ export const DEFAULT_AUTO_REVIEW_SETTINGS: AutoReviewSettings = {
 	onPushed: false,
 	skipDrafts: true,
 	postResults: true,
+	ownReposOnly: false,
 	excludedRepoIds: [],
 	ignoredPaths: [],
 	maxInlineComments: 25,
@@ -86,6 +89,8 @@ export interface AutoReviewStatus {
 	running: boolean;
 	/** Repositories it checks each round. */
 	watching: number;
+	/** The tracked repositories the connected GitHub or GitLab account owns, which `ownReposOnly` keeps. */
+	ownRepoIds: string[];
 	lastCheckAt: string | null;
 	nextCheckAt: string | null;
 	/** The last round's failures, one per repository that failed. */

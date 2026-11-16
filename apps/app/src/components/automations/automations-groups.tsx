@@ -13,7 +13,7 @@ import { WatcherGroup } from './watcher-group';
 import { WebhooksGroup } from './webhooks-group';
 
 /** The groups' row counts while they load: Triggers, Publishing, Watcher, Repositories, Recent, Webhooks. */
-const SKELETON_GROUPS = [5, 4, 3, 2, 1, 2];
+const SKELETON_GROUPS = [3, 4, 3, 3, 1, 2];
 
 /**
  * The page's groups once the settings and the tracked repositories load, so

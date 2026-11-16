@@ -4,6 +4,7 @@ import { hostOfRepoUrl } from '../gitlab-host';
 import { recordPullState } from '../pulls/pull-states';
 import { parseSlug } from '../providers';
 import { decideEvent, readWatchState, writeWatchState, type PullEvent, type WatchedPull } from './cursor';
+import { isWatchedRepo } from './scope';
 import { readAutoReviewSettings } from './settings';
 import { reviewHistory, startAutoReview } from './start';
 import { withWatchState } from './state-queue';
@@ -67,7 +68,7 @@ export async function handlePullHook(hook: PullHook): Promise<HookOutcome> {
 
 	if (!settings.enabled) return skipped('auto-review is off');
 	if (!repo) return skipped('repo not tracked');
-	if (settings.excludedRepoIds.includes(repo.id)) return skipped('repo excluded from auto-review');
+	if (!(await isWatchedRepo(repo, settings))) return skipped('repo not watched');
 	if (hook.event === undefined) return skipped('nothing to review');
 
 	const { event } = hook;
