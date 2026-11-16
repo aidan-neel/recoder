@@ -94,6 +94,17 @@ export async function readLedgerSources(
 	});
 }
 
+/**
+ * The repo's root commits, which every base of the repo shares, so a ledger
+ * distilled at an earlier base can be found again. Null when git can't say.
+ */
+export async function repoLineage(revision: ReviewRevision, signal: AbortSignal): Promise<string | null> {
+	const roots = await git(revision.checkoutPath, ['rev-list', '--max-parents=0', revision.targetSha], signal);
+	const shas = roots.code === 0 ? roots.stdout.split('\n').filter(Boolean).sort() : [];
+
+	return shas.length ? shas.join(',') : null;
+}
+
 /** Hash of the ledger version and every source, the ledger's cache key and `sourcesHash`. */
 export function hashSources(sources: LedgerSource[]): string {
 	const hash = createHash('sha256').update(LEDGER_VERSION);

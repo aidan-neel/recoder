@@ -1,10 +1,15 @@
 import { configForOrchestrator } from '../../../models/models.js';
+import { trackBackgroundWork } from '../../../util/background-work.js';
 import { readCache, writeCache } from '../../../util/json-cache.js';
 import { runJsonAgent } from '../../pipeline/agent-loop.js';
+import { ModelBudget } from '../../pipeline/agent-loop/budget.js';
+import type { JsonAgentOptions } from '../../pipeline/agent-loop/options.js';
 import { orchestratorAgentOptions, type ReviewRun } from '../../pipeline/harness/context.js';
+import { reviewNow } from '../../session/review-control.js';
+import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { ruleAppliesTo } from './glob.js';
 import { LEDGER_FINAL_EXAMPLE, LEDGER_SYSTEM_PROMPT, ledgerUserPrompt } from './prompt.js';
-import { hashSources, readLedgerSources, type LedgerSource } from './sources.js';
+import { hashSources, readLedgerSources, repoLineage, type LedgerSource } from './sources.js';
 import { ruleCitation, ruleSummary, type RepoRule, type RuleLedger } from './types.js';
 import { ledgerReplySchema, toLedger, type LedgerReply } from './validate.js';
 
@@ -12,30 +17,111 @@ export { ruleCitation } from './types.js';
 
 const CACHE_NAMESPACE = 'rule-ledger';
 
-/** One model call that turns the sources into rules; null when it can't run or answer. */
-async function distill(run: ReviewRun, sources: LedgerSource[]): Promise<LedgerReply | null> {
-	const config = configForOrchestrator();
+/** The sources hash of the newest ledger distilled for a repo, keyed by `repoLineage`. */
+const LATEST_NAMESPACE = 'rule-ledger-latest';
 
+/** How long a refresh for the next review may take once the review that started it has moved on. */
+const REFRESH_MS = 10 * 60 * 1000;
+
+/** Distills running for a later review, by sources hash, so reviews of one base ask once between them. */
+const refreshing = new Map<string, Promise<unknown>>();
+
+/** Where one distill call runs: inside the review that waits for it, or detached for the next review. */
+type LedgerCall = Pick<JsonAgentOptions<unknown>, 'config' | 'budget' | 'evidence' | 'signal' | 'deadlineAt'> &
+	Partial<Pick<JsonAgentOptions<unknown>, 'getDiscussion' | 'onMessage' | 'onReasoning' | 'onTool' | 'onLog'>>;
+
+/** A call on the review's own budget, clock and feed, for a review that has no ledger to start from. */
+function reviewCall(run: ReviewRun): LedgerCall {
+	return {
+		...orchestratorAgentOptions(run, configForOrchestrator()),
+		deadlineAt: run.investigationDeadline,
+		onLog: (message) => run.events?.onLog?.(message)
+	};
+}
+
+/**
+ * A call that outlives the review: its own budget of the one call and its
+ * repairs, its own timeout, and nothing written to the review's feed, which
+ * may have closed by the time it answers.
+ */
+function refreshCall(run: ReviewRun): LedgerCall {
+	return {
+		config: configForOrchestrator(),
+		budget: new ModelBudget(1 + REVIEW_POLICY.schemaRepairAttempts, 0),
+		evidence: run.evidence,
+		signal: AbortSignal.timeout(REFRESH_MS),
+		deadlineAt: reviewNow() + REFRESH_MS
+	};
+}
+
+/** One model call that turns the sources into rules; null when it can't run or answer. */
+async function distill(call: LedgerCall, sources: LedgerSource[]): Promise<LedgerReply | null> {
 	const result = await runJsonAgent({
 		stage: 'ledger',
 		label: 'rule ledger',
-		...orchestratorAgentOptions(run, config),
+		...call,
 		system: LEDGER_SYSTEM_PROMPT,
 		user: ledgerUserPrompt(sources),
 		maxTurns: 1,
-		deadlineAt: run.investigationDeadline,
 		finalExample: LEDGER_FINAL_EXAMPLE,
 		parse: (raw) => {
 			const parsed = ledgerReplySchema.safeParse(raw);
 
 			return parsed.success ? parsed.data : null;
-		},
-		onLog: (message) => run.events?.onLog?.(message)
+		}
 	});
 
-	if (result.error) run.events?.onLog?.(`Rule ledger: ${result.error}`);
+	if (result.error) call.onLog?.(`Rule ledger: ${result.error}`);
 
 	return result.value;
+}
+
+/** Distills and caches the ledger of `sources`, and records it as the repo's newest. */
+async function distillLedger(
+	call: LedgerCall,
+	sources: LedgerSource[],
+	sourcesHash: string,
+	lineage: string | null
+): Promise<RuleLedger | null> {
+	const reply = await distill(call, sources);
+
+	if (!reply) return null;
+
+	const ledger = toLedger(reply, sources, sourcesHash);
+
+	writeCache(CACHE_NAMESPACE, sourcesHash, ledger);
+	if (lineage) markLatest(lineage, sourcesHash);
+
+	return ledger;
+}
+
+/** Records the ledger of `sourcesHash` as the one a later review of the repo starts from when its own is not cached. */
+function markLatest(lineage: string, sourcesHash: string): void {
+	writeCache(LATEST_NAMESPACE, lineage, { sourcesHash });
+}
+
+/** Starts distilling `sources` for the next review, unless a review already is. Never rejects. */
+function refreshLater(run: ReviewRun, sources: LedgerSource[], sourcesHash: string, lineage: string): void {
+	if (refreshing.has(sourcesHash)) return;
+
+	const job = distillLedger(refreshCall(run), sources, sourcesHash, lineage).finally(() =>
+		refreshing.delete(sourcesHash)
+	);
+
+	refreshing.set(sourcesHash, job);
+	trackBackgroundWork(job);
+}
+
+/** The newest ledger distilled for the repo at any base, when its entry is still in the cache. */
+function latestLedger(lineage: string): RuleLedger | null {
+	const latest = readCache<{ sourcesHash?: unknown }>(LATEST_NAMESPACE, lineage);
+
+	return typeof latest?.sourcesHash === 'string' ? cachedLedger(latest.sourcesHash) : null;
+}
+
+/** A ledger as a review uses it: null without rules, else with each rule's revision read from `sources`. */
+function usable(ledger: RuleLedger, sources: LedgerSource[]): RuleLedger | null {
+	return ledger.rules.length ? withSourceRevisions(ledger, sources) : null;
 }
 
 /** A cached ledger, when the entry has the shape this version writes. */
@@ -64,29 +150,41 @@ function withSourceRevisions(ledger: RuleLedger, sources: LedgerSource[]): RuleL
 /**
  * The repo's guidelines as numbered rules. Read at the base commit and cached
  * by the sources' hash, so every review of the same base reads the same
- * ledger and only the first one spends a model call. Null when there are no
- * sources, no rules, or the call could not run.
+ * ledger. When the guidelines changed since the repo's last ledger, the review
+ * goes on with that ledger and the new one is distilled behind it for the next
+ * review: a model call here holds every reviewer back for minutes. Only a
+ * repo's first review waits for one. Null when there are no sources, no rules,
+ * or the call could not run.
  */
 export async function buildRuleLedger(run: ReviewRun): Promise<RuleLedger | null> {
-	const sources = await readLedgerSources(run.input.revision, run.controller.signal);
+	const { revision } = run.input;
+	const sources = await readLedgerSources(revision, run.controller.signal);
 
 	if (!sources.length) return null;
 
 	const sourcesHash = hashSources(sources);
+	const lineage = revision ? await repoLineage(revision, run.controller.signal) : null;
 	const cached = cachedLedger(sourcesHash);
 
-	if (cached) return cached.rules.length ? withSourceRevisions(cached, sources) : null;
+	if (cached) {
+		if (lineage) markLatest(lineage, sourcesHash);
+
+		return usable(cached, sources);
+	}
+
+	const previous = lineage ? latestLedger(lineage) : null;
+
+	if (lineage && previous) {
+		refreshLater(run, sources, sourcesHash, lineage);
+
+		return usable(previous, sources);
+	}
+
 	if (!run.budget.canSpend(1)) return null;
 
-	const reply = await distill(run, sources);
+	const ledger = await distillLedger(reviewCall(run), sources, sourcesHash, lineage);
 
-	if (!reply) return null;
-
-	const ledger = toLedger(reply, sources, sourcesHash);
-
-	writeCache(CACHE_NAMESPACE, sourcesHash, ledger);
-
-	return ledger.rules.length ? ledger : null;
+	return ledger?.rules.length ? ledger : null;
 }
 
 function appliesToAny(rule: RepoRule, paths: string[]): boolean {
