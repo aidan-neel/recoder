@@ -4,6 +4,7 @@ import { git, readBlob } from '../../../evidence/git.js';
 import type { ReviewRevision } from '../../../evidence/evidence.js';
 import { INSTRUCTION_PATHS } from '../../pipeline/harness/understand.js';
 import { hasRules, readGlobalGuidelines } from '../guidelines.js';
+import { instructionFilesFor } from '../instruction-scope.js';
 
 /** One text the ledger distills, under the path its rules cite and the base revision it was read from. */
 export interface LedgerSource {
@@ -49,7 +50,10 @@ function orderedPaths(tracked: string[]): string[] {
 	return [...root, ...nested, ...(guidelines ? [guidelines] : [])];
 }
 
-/** Every instruction file at the PR's base commit, read in full, so a PR can't rewrite the rules it is judged by. */
+/**
+ * The repo's guidelines and instruction files at the PR's base commit, read in full, so a PR can't rewrite the rules
+ * it is judged by. With a `RECODER.md`, only the instruction files it names (`instructionFilesFor`).
+ */
 async function repoSources(revision: ReviewRevision, signal: AbortSignal): Promise<LedgerSource[]> {
 	const listed = await git(revision.checkoutPath, ['ls-tree', '-r', '-z', '--name-only', revision.targetSha], signal);
 
@@ -65,7 +69,20 @@ async function repoSources(revision: ReviewRevision, signal: AbortSignal): Promi
 		}
 	}
 
-	return sources;
+	const guidelines = sources.find((source) => isGuidelinesPath(source.path));
+
+	const kept = new Set(
+		instructionFilesFor(
+			guidelines?.text,
+			sources.map((source) => source.path)
+		)
+	);
+
+	return sources.filter((source) => source === guidelines || kept.has(source.path));
+}
+
+function isGuidelinesPath(path: string): boolean {
+	return (GUIDELINES_PATHS as readonly string[]).includes(path);
 }
 
 /** The owner's own guidelines from Settings, once saved; the shipped defaults are about reviewing, not code. */
