@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
-import { reviewListItem } from '@recoder/shared';
+import { reviewListItem, type Review } from '@recoder/shared';
 import { db, closeStore } from '../../src/store';
 import { serverDataDir } from '../../src/util/data-dir';
 import { testReview } from '../helpers/review';
@@ -23,7 +23,8 @@ test('a summary reflects transactional updates and replacement writes', async ()
 	expect((await db.reviews.summaries())[0].status).toBe('failed');
 });
 
-test('a write from another connection invalidates a persisted summary', async () => {
+/** Stores a review with its summary, closes the store, and runs `write` on another connection to the same file. */
+async function writeElsewhere(write: (other: Database, review: Review) => void): Promise<Review> {
 	const review = testReview();
 
 	track(review.id);
@@ -34,12 +35,20 @@ test('a write from another connection invalidates a persisted summary', async ()
 	const other = new Database(join(serverDataDir(), 'recoder.db'));
 
 	try {
-		other
-			.query('UPDATE reviews SET value = ? WHERE id = ?')
-			.run(JSON.stringify({ ...review, summary: 'CLI' }), review.id);
+		write(other, review);
 	} finally {
 		other.close();
 	}
+
+	return review;
+}
+
+test('a write from another connection invalidates a persisted summary', async () => {
+	await writeElsewhere((other, review) =>
+		other
+			.query('UPDATE reviews SET value = ? WHERE id = ?')
+			.run(JSON.stringify({ ...review, summary: 'CLI' }), review.id)
+	);
 
 	expect((await db.reviews.summaries())[0].summary).toBe('CLI');
 });
@@ -106,4 +115,13 @@ test('a warm summary read does not acquire the write lock another connection own
 		writer.run('ROLLBACK');
 		writer.close();
 	}
+});
+
+test('summaries an older version of the list shape stored are rebuilt when the database opens', async () => {
+	const review = await writeElsewhere((other, stored) => {
+		other.query('UPDATE review_list_items SET value = ? WHERE id = ?').run(JSON.stringify({ stale: true }), stored.id);
+		other.query('UPDATE review_list_shape SET shape = ? WHERE id = 1').run('an older shape');
+	});
+
+	expect(await db.reviews.summaries()).toEqual([reviewListItem(review)]);
 });

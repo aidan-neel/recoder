@@ -55,6 +55,26 @@ async function warmPulls(): Promise<void> {
 	await listOpenPulls(repos, reviews, openPulls);
 }
 
+/**
+ * Starts what the app's first page load reads (the review projections, the pull list, the model catalog, prices and
+ * the update check) without holding the server back: it listens at once, and a request that arrives first shares the
+ * read in flight. A failed warm only means the first request reads for itself.
+ */
+function warmPageLoads(): void {
+	const warms: [string, () => Promise<unknown>][] = [
+		['pull list', warmPulls],
+		['models', () => agentModels()],
+		['prices', loadPriceLookup],
+		['update status', () => updateService.status()]
+	];
+
+	for (const [name, warm] of warms) {
+		void warm().catch((error: unknown) =>
+			console.error(`[startup] warming ${name} failed`, error instanceof Error ? error.name : typeof error)
+		);
+	}
+}
+
 /** Checks the forge connections now, so the first `/api/auth/me` of a fresh install answers from the cache. */
 function warmForgeStatus(): void {
 	void forgeAuthStatus().catch((error: unknown) =>
@@ -151,13 +171,9 @@ if (coordinator) {
 	await recoverStaleReviews();
 	await resumeAfterUpdate();
 	await recoverRepoChats();
-	await db.reviews.summaries();
 	warmAgents();
 	warmForgeStatus();
-	void loadPriceLookup().catch(() => {});
-	void updateService.status().catch(() => {});
-	void warmPulls().catch(() => {});
-	await agentModels(1500);
+	warmPageLoads();
 	startVllmSync();
 	startPullSweep();
 	restartWatcher();

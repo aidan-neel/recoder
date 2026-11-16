@@ -10,12 +10,19 @@ interface Version {
 let cached: (Version & { json: string }) | undefined;
 let pending: (Version & { promise: Promise<string> }) | undefined;
 
+/** The review list's revision; `prepareReviewList` creates its one row when the database opens, so it is always there. */
 function revision(database: Database): number {
-	return database.query<{ revision: number }, []>('SELECT revision FROM review_list_revision WHERE id = 1').get()!
-		.revision;
+	return (
+		database.query<{ revision: number }, []>('SELECT revision FROM review_list_revision WHERE id = 1').get()
+			?.revision ?? 0
+	);
 }
 
-function matches(version: Version | undefined, database: Database, current: number): boolean {
+function matches<Held extends Version>(
+	version: Held | undefined,
+	database: Database,
+	current: number
+): version is Held {
 	return version?.database === database && version.revision === current;
 }
 
@@ -30,8 +37,8 @@ export async function reviewListJson(load: () => Promise<string>): Promise<strin
 	const database = sqlite();
 	const current = revision(database);
 
-	if (matches(cached, database, current)) return cached!.json;
-	if (matches(pending, database, current)) return pending!.promise;
+	if (matches(cached, database, current)) return cached.json;
+	if (matches(pending, database, current)) return pending.promise;
 
 	const promise = load()
 		.then((json) => {

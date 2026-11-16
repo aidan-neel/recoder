@@ -58,8 +58,10 @@ export function jsonCompression(): MiddlewareHandler {
 		const bytes = source.byteLength * 2;
 
 		if (bytes <= CACHE_BYTES) {
-			while (cache.size && (retained + bytes > CACHE_BYTES || cache.size >= MAX_ENTRIES)) {
-				remove(cache.keys().next().value!);
+			for (const oldest of cache.keys()) {
+				if (retained + bytes <= CACHE_BYTES && cache.size < MAX_ENTRIES) break;
+
+				remove(oldest);
 			}
 
 			retained += bytes;
