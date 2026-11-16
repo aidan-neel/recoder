@@ -15,9 +15,6 @@ import {
 	type ComposerMenuItem
 } from './composer-commands';
 
-/** Where the menu opens: over the composer when it sits at a pane's foot, under it when it sits high on a page. */
-export type ComposerMenuSide = 'top' | 'bottom';
-
 interface CommandMenuInput {
 	value: string;
 	onValueChange: (value: string) => void;
@@ -143,7 +140,6 @@ interface ComposerMenuProps<Item extends ComposerMenuItem> {
 	menu: MenuRows<Item>;
 	/** The listbox's id, which the field points at. */
 	id: string;
-	side: ComposerMenuSide;
 	/** The list's name for a screen reader: "Commands". */
 	label: string;
 	/** What each row's name starts with, as it is typed: "/" or "@". */
@@ -156,17 +152,11 @@ export function commandOptionId(menuId: string, item: ComposerMenuItem): string 
 }
 
 /**
- * A list of commands or mentions, floating over or under the composer from
- * its left edge, on the menu surface. Focus stays in the field; the pointer
+ * A list of commands or mentions, floating over the composer from its left
+ * edge, on the menu surface. Focus stays in the field; the pointer
  * picks without taking it. Rows show the name in mono, then what it is.
  */
-export function ComposerMenu<Item extends ComposerMenuItem>({
-	menu,
-	id,
-	side,
-	label,
-	prefix
-}: ComposerMenuProps<Item>) {
+export function ComposerMenu<Item extends ComposerMenuItem>({ menu, id, label, prefix }: ComposerMenuProps<Item>) {
 	const variants = useMotionVariants(menuMotion);
 	const activeItem = menu.open ? menu.matches[menu.active] : undefined;
 	const activeId = activeItem ? commandOptionId(id, activeItem) : null;
@@ -184,7 +174,6 @@ export function ComposerMenu<Item extends ComposerMenuItem>({
 					key="menu"
 					variants={variants}
 					data-ui="composer-menu"
-					data-side={side}
 					onMouseDown={(event) => event.preventDefault()}
 				>
 					<div id={id} role="listbox" aria-label={label} data-ui="composer-menu-list">

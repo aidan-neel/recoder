@@ -139,7 +139,6 @@ export function ComposeScreen() {
 						images={images.images}
 						onRemoveImage={images.remove}
 						mentions={skills}
-						menuSide="bottom"
 						tools={
 							<>
 								<AttachImages onAttach={images.add} />

@@ -9,7 +9,7 @@ import { Tooltip } from '../overlay/tooltip';
 import type { ComposerCommand } from './composer-commands';
 import { useComposerFiles } from './composer-files';
 import { useInlineImages } from './composer-images';
-import { commandOptionId, ComposerMenu, focusAtEnd, useCommandMenu, type ComposerMenuSide } from './composer-menu';
+import { commandOptionId, ComposerMenu, focusAtEnd, useCommandMenu } from './composer-menu';
 import { useMentionMenu, type ComposerMentions } from './composer-mentions';
 import type { LinkFacts } from './link-describe';
 import { LinkField } from './link-field';
@@ -51,8 +51,6 @@ interface ComposerProps {
 	commands?: readonly ComposerCommand[];
 	/** What "@" offers anywhere in the text; none leaves out the "@" button and the menu. */
 	mentions?: ComposerMentions;
-	/** Where the "/" and "@" menus open; over the composer by default. */
-	menuSide?: ComposerMenuSide;
 	/** Quiet tools at the bar's start, before the "/" button (`ComposerTool`s). */
 	tools?: ReactNode;
 	/** Controls at the bar's end, before the action: a model menu. */
@@ -103,7 +101,6 @@ export function Composer({
 	linkFacts,
 	commands = [],
 	mentions,
-	menuSide = 'top',
 	tools,
 	trailing,
 	images = NO_IMAGES,
@@ -178,11 +175,9 @@ export function Composer({
 			onMouseDown={focusField}
 			{...fileHandlers}
 		>
-			{commands.length > 0 ? (
-				<ComposerMenu menu={menu} id={menuId} side={menuSide} label="Commands" prefix="/" />
-			) : null}
+			{commands.length > 0 ? <ComposerMenu menu={menu} id={menuId} label="Commands" prefix="/" /> : null}
 			{mentions && hasMentions ? (
-				<ComposerMenu menu={mention} id={mentionId} side={menuSide} label={mentions.label} prefix="@" />
+				<ComposerMenu menu={mention} id={mentionId} label={mentions.label} prefix="@" />
 			) : null}
 			<ImageTiles images={images} onRemove={onRemoveImage ? removeImage : undefined} />
 			<LinkField

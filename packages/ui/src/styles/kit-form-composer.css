@@ -223,10 +223,11 @@
 		display: none;
 	}
 
-	/* ───────── The "/" menu: over or under the composer, from its left edge, at most 440px wide ───────── */
+	/* ───────── The "/" and "@" menus: over the composer, from its left edge, at most 440px wide ───────── */
 	[data-ui='composer-menu'] {
 		position: absolute;
 		z-index: 130;
+		bottom: calc(100% + 6px);
 		left: 0;
 		display: flex;
 		width: min(100%, 440px);
@@ -236,15 +237,8 @@
 		border-radius: var(--radius-card);
 		background-color: var(--bg-menu);
 		box-shadow: var(--shadow-menu);
-		cursor: default;
-	}
-	[data-ui='composer-menu'][data-side='top'] {
-		bottom: calc(100% + 6px);
 		transform-origin: bottom center;
-	}
-	[data-ui='composer-menu'][data-side='bottom'] {
-		top: calc(100% + 6px);
-		transform-origin: top center;
+		cursor: default;
 	}
 	[data-ui='composer-menu-list'] {
 		display: flex;
