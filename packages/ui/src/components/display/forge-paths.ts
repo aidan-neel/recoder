@@ -14,3 +14,9 @@ export const LINK_GLYPH_PATHS = [
 	'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71',
 	'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'
 ] as const;
+
+/** Lucide's at sign (24 by 24, stroked), the glyph of a mention embed. */
+export const MENTION_GLYPH_PATHS = [
+	'M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0',
+	'M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8'
+] as const;

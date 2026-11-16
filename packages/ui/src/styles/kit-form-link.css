@@ -72,7 +72,8 @@
 	[data-ui='link-embed-mark'] {
 		fill: currentColor;
 	}
-	[data-ui='link-embed-mark'][data-glyph='link'] {
+	[data-ui='link-embed-mark'][data-glyph='link'],
+	[data-ui='link-embed-mark'][data-glyph='mention'] {
 		fill: none;
 		stroke: currentColor;
 		stroke-linecap: round;

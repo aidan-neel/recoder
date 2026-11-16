@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { startMention, typedMention, withMention } from '../../src/components/form/composer-mentions';
+import { typedMention, withMention } from '../../src/components/form/composer-mentions';
 
 describe('typedMention', () => {
 	test('finds an at sign and the name typed after it anywhere before the caret', () => {
@@ -26,13 +26,5 @@ describe('withMention', () => {
 
 	test('adds a space at the end of the text', () => {
 		expect(withMention('@gi', 3, { start: 0, query: 'gi' }, 'giga-ui')).toEqual({ text: '@giga-ui ', caret: 9 });
-	});
-});
-
-describe('startMention', () => {
-	test('puts an at sign at the caret, after a space when it would join a word', () => {
-		expect(startMention('', 0)).toEqual({ text: '@', caret: 1 });
-		expect(startMention('use ', 4)).toEqual({ text: 'use @', caret: 5 });
-		expect(startMention('use', 3)).toEqual({ text: 'use @', caret: 5 });
 	});
 });

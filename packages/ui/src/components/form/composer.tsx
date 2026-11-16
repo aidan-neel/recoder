@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUp, AtSign, Square, SquareSlash } from 'lucide-react';
+import { ArrowUp, Square, SquareSlash } from 'lucide-react';
 import {
 	useId,
 	useMemo,
@@ -57,7 +57,7 @@ interface ComposerProps {
 	linkFacts?: LinkFacts;
 	/** The commands "/" offers; none leaves out the "/" button and the menu. */
 	commands?: readonly ComposerCommand[];
-	/** What "@" offers anywhere in the text; none leaves out the "@" button and the menu. */
+	/** What "@" offers anywhere in the text; none leaves out the menu. */
 	mentions?: ComposerMentions;
 	/** Quiet tools at the bar's start, before the "/" button (`ComposerTool`s). */
 	tools?: ReactNode;
@@ -87,7 +87,7 @@ interface ComposerProps {
  * removes the image (`useInlineImages`).
  * With `commands`, a slash at the start of the field, or the "/" button,
  * opens a list of them; a pick puts its prompt in the field to send. With
- * `mentions`, an `@` anywhere, or the "@" button, opens a list of those; a
+ * `mentions`, an `@` anywhere opens a list of those; a
  * pick puts `@name` in the text where it was typed, and every `@name` of one
  * shows as an embed. The
  * caller owns the text and the images and decides what a submit does; the
@@ -171,7 +171,7 @@ export function Composer({
 	}
 
 	const hasMentions = (mentions?.items.length ?? 0) > 0;
-	const hasTools = tools !== undefined || commands.length > 0 || hasMentions;
+	const hasTools = tools !== undefined || commands.length > 0;
 
 	return (
 		<div
@@ -225,19 +225,6 @@ export function Composer({
 								onClick={menu.toggle}
 							>
 								<SquareSlash />
-							</ComposerTool>
-						) : null}
-						{mentions && hasMentions ? (
-							<ComposerTool
-								label={mentions.label}
-								shortcut="@"
-								aria-haspopup="listbox"
-								aria-expanded={mention.open}
-								data-state={mention.open ? 'open' : 'closed'}
-								disabled={disabled}
-								onClick={mention.toggle}
-							>
-								<AtSign />
 							</ComposerTool>
 						) : null}
 					</div>

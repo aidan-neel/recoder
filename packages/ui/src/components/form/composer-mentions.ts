@@ -5,9 +5,9 @@ import { useEffect, useState, type KeyboardEvent, type RefObject } from 'react';
 import { matchItems, type ComposerMenuItem } from './composer-commands';
 import { readSelection, writeSelection } from './link-dom';
 
-/** What the composer's "@" menu offers, and what its button is called. */
+/** What the composer's "@" menu offers, and what the list is called. */
 export interface ComposerMentions {
-	/** The button's tooltip and the list's name for a screen reader: "Skills". */
+	/** The list's name for a screen reader: "Skills". */
 	label: string;
 	items: readonly ComposerMenuItem[];
 }
@@ -55,14 +55,6 @@ export function withMention(text: string, caret: number, mention: TypedMention, 
 	return { text: before + spaced, caret: before.length + 1 };
 }
 
-/** The text with an `@` put in at the caret to start a mention, a space before it when it would join a word. */
-export function startMention(text: string, caret: number): CaretText {
-	const before = text.slice(0, caret);
-	const at = before === '' || /\s$/.test(before) ? '@' : ' @';
-
-	return { text: before + at + text.slice(caret), caret: caret + at.length };
-}
-
 interface MentionMenuInput {
 	/** The field's text, in the offsets the field's selection uses. */
 	text: string;
@@ -81,8 +73,6 @@ export interface MentionMenu {
 	/** Runs on the field's keys; returns true when the menu took the key. */
 	keyDown: (event: KeyboardEvent<HTMLElement>) => boolean;
 	pick: (item: ComposerMenuItem) => void;
-	/** The "@" button: starts a mention at the caret, or shuts the list. */
-	toggle: () => void;
 }
 
 /**
@@ -155,17 +145,12 @@ export function useMentionMenu({ text, onTextChange, items, field }: MentionMenu
 		return true;
 	}
 
-	function toggle(): void {
-		if (shown.open) setDismissedAt(text);
-		else edit(startMention(text, shown.at));
-	}
-
-	return { open: shown.open, matches: shown.matches, active: shown.active, setActive, keyDown, pick, toggle };
+	return { open: shown.open, matches: shown.matches, active: shown.active, setActive, keyDown, pick };
 }
 
 /**
- * The caret's last offset in the field, kept after the field loses focus so a
- * button can still start at it, and a way to read it from the field now.
+ * The caret's last offset in the field, which the list draws from, and a way
+ * to read it from the field now.
  */
 function useFieldCaret(field: RefObject<HTMLElement | null>) {
 	const [offset, setOffset] = useState<number | null>(null);

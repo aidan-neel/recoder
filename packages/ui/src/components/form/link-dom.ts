@@ -1,4 +1,4 @@
-import { FORGE_PATHS, LINK_GLYPH_PATHS } from '../display/forge-paths';
+import { FORGE_PATHS, LINK_GLYPH_PATHS, MENTION_GLYPH_PATHS } from '../display/forge-paths';
 import type { TextRange } from './link-find';
 import type { LinkDescription, LinkFact } from './link-describe';
 import type { TextSelection } from './link-edits';
@@ -286,7 +286,7 @@ function placeImage(root: HTMLElement, current: ChildNode | null, token: string,
 	putEmbed(root, current, embed);
 }
 
-/** A mention's embed at `current`'s place: the one there when it names the same, else a new one with the name. */
+/** A mention's embed at `current`'s place: the one there when it names the same, else a new one with the glyph and name. */
 function placeMention(root: HTMLElement, current: ChildNode | null, mention: string): void {
 	if (current instanceof HTMLElement && urlOf(current) === mention) return;
 
@@ -297,7 +297,7 @@ function placeMention(root: HTMLElement, current: ChildNode | null, mention: str
 	embed.setAttribute('aria-label', mention);
 	label.dataset.ui = 'link-embed-label';
 	label.textContent = mention.slice(1);
-	embed.append(label);
+	embed.append(buildGlyph(MENTION_GLYPH_PATHS, 'mention'), label);
 	putEmbed(root, current, embed);
 }
 
@@ -367,13 +367,19 @@ function applyFact(embed: HTMLElement, { description, fact }: EmbedLook, key: st
 
 /** The forge's mark, or the link glyph for any other site, drawn at the label's size. */
 function buildMark(description: LinkDescription): SVGSVGElement {
+	if (description.forge) return buildGlyph([FORGE_PATHS[description.forge]], description.forge);
+
+	return buildGlyph(LINK_GLYPH_PATHS, 'link');
+}
+
+/** An embed's glyph from its 24px paths, named by `glyph` so the stroked ones draw as lines. */
+function buildGlyph(paths: readonly string[], glyph: string): SVGSVGElement {
 	const svg = document.createElementNS(SVG, 'svg');
-	const paths = description.forge ? [FORGE_PATHS[description.forge]] : LINK_GLYPH_PATHS;
 
 	svg.setAttribute('viewBox', '0 0 24 24');
 	svg.setAttribute('aria-hidden', 'true');
 	svg.dataset.ui = 'link-embed-mark';
-	svg.dataset.glyph = description.forge ?? 'link';
+	svg.dataset.glyph = glyph;
 
 	for (const d of paths) {
 		const path = document.createElementNS(SVG, 'path');
