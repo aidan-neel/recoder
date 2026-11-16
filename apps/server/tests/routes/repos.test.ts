@@ -2,14 +2,16 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { SkillSummary } from '@recoder/shared';
+import type { RepoOverview, SkillSummary } from '@recoder/shared';
 import { app } from '../../src/app';
+import { saveAutoReviewSettings } from '../../src/forge/watch/settings';
 import { db } from '../../src/store';
 import { git } from '../helpers/git';
 import { localForgeFixture } from '../helpers/local-forge';
 
 afterEach(async () => {
 	await db.repos.clear();
+	saveAutoReviewSettings({ enabled: false, excludedRepoIds: [] });
 });
 
 async function writeSkill(dir: string, name: string, description: string): Promise<void> {
@@ -86,4 +88,29 @@ test('the overview of a repository that is not tracked is not found', async () =
 
 	expect(response.status).toBe(404);
 	expect(await response.json()).toEqual({ error: 'repo not found' });
+});
+
+test('the overview says auto review watches a repository until the settings leave it out', async () => {
+	const now = new Date().toISOString();
+
+	const repo = await db.repos.set({
+		id: 'acme-api',
+		name: 'acme/api',
+		url: 'https://github.com/acme/api',
+		provider: 'github',
+		defaultBranch: 'main',
+		createdAt: now,
+		updatedAt: now
+	});
+
+	const autoReview = async () =>
+		((await (await app.request(`/api/repos/${repo.id}/overview`)).json()) as RepoOverview).autoReview;
+
+	expect(await autoReview()).toBe(false);
+
+	saveAutoReviewSettings({ enabled: true });
+	expect(await autoReview()).toBe(true);
+
+	saveAutoReviewSettings({ excludedRepoIds: [repo.id] });
+	expect(await autoReview()).toBe(false);
 });

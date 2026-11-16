@@ -76,7 +76,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 	const byFile = useMemo(() => bugsByFile(bugs.open), [bugs.open]);
 	const ordered = useMemo(() => inOrder(files ?? [], tree.order), [files, tree.order]);
 	const parts = useMemo(() => partsWithRest(guide, files ?? []), [guide, files]);
-	const bugsHref = pullHref(base, repoId, number, 'bugs');
+	const bugsHref = pullHref(base, repoId, number, 'review');
 	const guided = mode === 'guide' && guide.length > 0;
 
 	/** Scrolls the diff to the file `by` places from the one being read. */

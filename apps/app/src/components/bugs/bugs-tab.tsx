@@ -15,11 +15,6 @@ import { BugGroups } from './bug-groups';
 import { CleanNotice } from './clean-notice';
 import { RunCard } from './run-card';
 
-interface BugsTabProps {
-	repoId: string;
-	number: number;
-}
-
 /** The bug the address points at (`#bug-<id>`), when it names one. */
 function bugInAddress(): string | null {
 	const match = /^#bug-(.+)$/.exec(location.hash);
@@ -75,12 +70,13 @@ function useOpenBugs(view: BugsView): [ReadonlySet<string>, (id: string) => void
 }
 
 /**
- * The Bugs tab: the open findings of the newest review as cards, the first
+ * The Review tab: the open findings of the newest review as cards, the first
  * one open, then what else the review reports. While a review runs, its
- * progress shows above them. `j` and `k` step through the cards; Enter opens
- * the one focus rests on.
+ * progress shows above them; a review that is paused, failed, out of date or
+ * not there yet says so in a banner with its next step. `j` and `k` step
+ * through the cards; Enter opens the one focus rests on.
  */
-export function BugsTab({ repoId, number }: BugsTabProps) {
+export function BugsTab() {
 	const view = useBugsView();
 	const run = useRunView();
 	const [open, toggle] = useOpenBugs(view);
@@ -93,15 +89,7 @@ export function BugsTab({ repoId, number }: BugsTabProps) {
 	return (
 		<div className="reading">
 			<div className="reading-column">
-				{busy ? <RunCard run={run} /> : null}
-				{!busy && !settled ? (
-					<RunBanner
-						run={run}
-						repoId={repoId}
-						number={number}
-						bugs={view.phase === 'ready' ? view.open.length : null}
-					/>
-				) : null}
+				{busy ? <RunCard run={run} /> : <RunBanner run={run} bugs={view.phase === 'ready' ? view.open.length : null} />}
 				{view.phase === 'loading' ? <SkeletonRows count={3} height={52} glyph lines={1} /> : null}
 				{view.phase === 'failed' ? (
 					<div className="page-notice">

@@ -51,7 +51,7 @@ function CleanFigures({ checked }: { checked: Checked }) {
 }
 
 /**
- * What the Bugs tab says when a finished review has no open bugs: the
+ * What the Review tab says when a finished review has no open bugs: the
  * verdict, the reason to trust it, and the figures behind it. Posting and
  * reviewing again stay in the tab row above it.
  */

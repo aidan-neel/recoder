@@ -1,5 +1,7 @@
-import { REVIEW_CANCELLED, type Finding, type RepoOverview, type Review } from '@recoder/shared';
+import { REVIEW_CANCELLED, type Finding, type Repo, type RepoOverview, type Review } from '@recoder/shared';
 import { pullStates, type PullStateRecord } from '../forge/pulls/pull-states';
+import { isWatchedRepo } from '../forge/watch/scope';
+import { readAutoReviewSettings } from '../forge/watch/settings';
 import { db } from '../store';
 import { groupBy, medianOf, utcDay, windowDayKeys } from '../usage/report-shared';
 import { reviewDayOf, reviewTimestamp } from './telemetry-report';
@@ -18,6 +20,8 @@ export interface RepoOverviewInput {
 	now: Date;
 	reviews: readonly Review[];
 	pullStates: readonly PullStateRecord[];
+	/** Whether auto review watches the repository now. */
+	autoReview: boolean;
 }
 
 /** A review of the repository with the day it started on. */
@@ -148,6 +152,7 @@ export function buildRepoOverview(input: RepoOverviewInput): RepoOverview {
 	return {
 		repoId: input.repoId,
 		days: input.days,
+		autoReview: input.autoReview,
 		reviewedPulls: reviewedPulls.size,
 		mergedPulls: mergedInWindow.length,
 		findings: {
@@ -172,9 +177,19 @@ export function buildRepoOverview(input: RepoOverviewInput): RepoOverview {
 	};
 }
 
-/** The repository page's figures for `repoId` over the last thirty days, from stored reviews and pull request states. */
-export async function loadRepoOverview(repoId: string, now = new Date()): Promise<RepoOverview> {
-	const [reviews, states] = await Promise.all([db.reviews.list(), pullStates.list()]);
+/** Whether auto review is on and its watcher checks `repo`. */
+async function watchesRepo(repo: Repo): Promise<boolean> {
+	const settings = readAutoReviewSettings();
 
-	return buildRepoOverview({ repoId, days: OVERVIEW_DAYS, now, reviews, pullStates: states });
+	return settings.enabled && isWatchedRepo(repo, settings);
+}
+
+/**
+ * The repository page's figures for `repo` over the last thirty days, from stored reviews and pull request states, and
+ * whether auto review watches it.
+ */
+export async function loadRepoOverview(repo: Repo, now = new Date()): Promise<RepoOverview> {
+	const [reviews, states, autoReview] = await Promise.all([db.reviews.list(), pullStates.list(), watchesRepo(repo)]);
+
+	return buildRepoOverview({ repoId: repo.id, days: OVERVIEW_DAYS, now, reviews, pullStates: states, autoReview });
 }

@@ -41,7 +41,7 @@ const QUESTIONS: BriefQuestionReport['questions'] = [
 /**
  * What the sample's clean review checked: the questions it disproved, the
  * changed units its brief read in full, and the leads it raised and dropped,
- * so the Bugs tab's no-bugs state shows its figures.
+ * so the Review tab's no-bugs state shows its figures.
  */
 export function cleanReviewChecks(): Pick<Review, 'funnel' | 'questions'> {
 	return {

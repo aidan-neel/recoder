@@ -10,7 +10,7 @@ import { PageMissing } from '@/components/common/page-missing';
 
 /**
  * A review's old address. Reviews now live on their pull request's page, so
- * this opens that page on its Bugs tab, and shows the missing page when no
+ * this opens that page on its Review tab, and shows the missing page when no
  * such review can be read.
  */
 export function ReviewRedirect({ id }: { id: string }) {
@@ -23,7 +23,7 @@ export function ReviewRedirect({ id }: { id: string }) {
 
 		client.review(id).then(
 			(review) => {
-				if (current) router.replace(pullHref(client.base, review.repoId, review.prNumber, 'bugs'));
+				if (current) router.replace(pullHref(client.base, review.repoId, review.prNumber, 'review'));
 			},
 			() => {
 				if (current) setMissing(true);

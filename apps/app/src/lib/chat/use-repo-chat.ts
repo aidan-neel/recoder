@@ -49,7 +49,12 @@ export function useRepoChat(chatId: string): RepoChatView {
 		(started: { id: string; prNumber: number }) => {
 			const repoId = chat?.repoId ?? '';
 
-			return startedReview(started, repoId, { reviews, repos }, pullHref(client.base, repoId, started.prNumber));
+			return startedReview(
+				started,
+				repoId,
+				{ reviews, repos },
+				pullHref(client.base, repoId, started.prNumber, 'review')
+			);
 		},
 		[client.base, chat?.repoId, reviews, repos]
 	);

@@ -12,14 +12,9 @@ import { useShell } from '@/lib/shell/use-shell';
 import { PanelResizer } from '@/components/common/panel-resizer';
 
 import { AccountMenu } from './account-menu';
-import { RecentActionsHost } from './recent-actions';
-import { RecentChats } from './recent-chats';
-import { RecentReviews } from './recent-reviews';
 import { BackToApp, SettingsNav } from './settings-nav';
-import { SettledReviews } from './settled-reviews';
+import { SidebarBody } from './sidebar-body';
 import { SidebarFoot } from './sidebar-foot';
-import { SidebarNav } from './sidebar-nav';
-import { SidebarRepos } from './sidebar-repos';
 import { SidebarSwap } from './sidebar-swap';
 
 /**
@@ -56,17 +51,7 @@ export function Sidebar({ model }: { model: ReactNode }) {
 			<SidebarSwap
 				mode={mode}
 				className="sidebar-swap-body"
-				app={
-					<>
-						<SidebarNav openPulls={shell.openPulls} />
-						<SidebarRepos repos={shell.repos} />
-						<RecentActionsHost>
-							<RecentChats chats={shell.chats} />
-							<RecentReviews reviews={shell.recent} loading={shell.loading} />
-							<SettledReviews reviews={shell.settled} />
-						</RecentActionsHost>
-					</>
-				}
+				app={<SidebarBody shell={shell} />}
 				settings={<SettingsNav />}
 			/>
 			<SidebarFoot model={model} />

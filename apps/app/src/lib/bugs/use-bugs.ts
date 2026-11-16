@@ -28,7 +28,7 @@ function phaseOf(review: Review | null, load: 'none' | 'loading' | 'ready' | 'fa
 	return 'none';
 }
 
-/** The Bugs tab: the findings of the newest finished review, and what a person can do with each. */
+/** The Review tab: the findings of the newest finished review, and what a person can do with each. */
 export function useBugsView(): BugsView {
 	const session = useSession();
 	const review = useSessionData((data) => data.review);

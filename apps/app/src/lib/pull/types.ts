@@ -9,7 +9,7 @@ import type {
 } from '@recoder/shared';
 
 /** The tabs of the pull request page, in order. The tab lives in the URL (`?tab=`); `changes` is the default. */
-export const PULL_TABS = ['changes', 'summary', 'bugs', 'commits'] as const;
+export const PULL_TABS = ['changes', 'summary', 'review', 'commits'] as const;
 
 export type PullTab = (typeof PULL_TABS)[number];
 
@@ -31,7 +31,7 @@ export interface PullPageView {
 	reviewId: string | null;
 	/** The repository's short name, for the breadcrumb; known before the page loads when the repository is tracked. */
 	repoName: string;
-	/** The numbers on the tabs; null until known. `bugs` counts open findings of the newest review. */
+	/** The numbers on the tabs; null until known. `bugs` counts open findings of the newest review, for the Review tab. */
 	counts: { files: number | null; bugs: number | null; commits: number | null };
 	/** Reads the page again: after a merge, a new review or a new push. */
 	refresh: () => void;

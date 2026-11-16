@@ -12,13 +12,9 @@
 	font-variant-numeric: tabular-nums;
 	line-height: 16px;
 }
-/* Opened with many rows, it scrolls on its own and leaves the lists above room. */
-.settled-list {
-	max-height: 40dvh;
-	padding-bottom: 0;
-}
 .settled-list {
 	gap: 2px;
+	padding-bottom: 0;
 }
 .recent-item .recent-title {
 	flex: 1;

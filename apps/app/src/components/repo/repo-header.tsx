@@ -3,7 +3,7 @@ import { CalendarDays, GitBranch } from 'lucide-react';
 
 import type { RepoFacts, RepoFigure } from '@/lib/repo/types';
 
-/** The repository's name under its forge's mark, over its facts as badges. */
+/** The repository's name under its forge's mark, over its facts as badges, auto review's among them. */
 function RepoTitle({ repo }: { repo: RepoFacts }) {
 	return (
 		<header className="repo-head">
@@ -19,6 +19,9 @@ function RepoTitle({ repo }: { repo: RepoFacts }) {
 					{repo.defaultBranch}
 				</Pill>
 				<Pill icon={<CalendarDays aria-hidden />}>{repo.tracked}</Pill>
+				<Pill tone={repo.autoReview ? 'ok' : 'neutral'} icon={<span aria-hidden className="pill-dot" />}>
+					{repo.autoReview ? 'Auto review on' : 'Auto review off'}
+				</Pill>
 			</div>
 		</header>
 	);

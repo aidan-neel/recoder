@@ -1,6 +1,7 @@
 'use client';
 
 import { NavPill } from '@recoder/ui';
+import type { ReactNode } from 'react';
 
 import { useIntent } from '@/lib/shell/intent';
 
@@ -15,6 +16,8 @@ export interface PageTab {
 	count?: number | null;
 	/** `bugs` colors the count as a warning. */
 	tone?: 'bugs';
+	/** Anything else after the label, such as where a running review stands. */
+	adornment?: ReactNode;
 	/** Starts reading what the tab shows, once the pointer or focus rests on it. */
 	warm?: () => void;
 }
@@ -54,6 +57,7 @@ function PageTabLink({ tab, current }: { tab: PageTab; current: boolean }) {
 					{tab.count}
 				</span>
 			) : null}
+			{tab.adornment}
 		</TabLink>
 	);
 }

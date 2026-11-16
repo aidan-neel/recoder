@@ -5,6 +5,8 @@
 export interface RepoOverview {
 	repoId: string;
 	days: number;
+	/** Auto review is on and its watcher checks this repository: the settings neither leave it out nor scope it away. */
+	autoReview: boolean;
 	/** Pull requests with a review started in the window, and how many of them merged in it. */
 	reviewedPulls: number;
 	mergedPulls: number;

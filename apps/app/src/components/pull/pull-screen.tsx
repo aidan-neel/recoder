@@ -33,7 +33,6 @@ import { PullHeader } from './pull-header';
 import { PullPageSkeleton } from './pull-skeleton';
 import { PullNotice } from './pull-notice';
 import { PullTabs } from './pull-tabs';
-import { ReviewStatus } from './review-status';
 import { ReviewButton } from './run-banner';
 
 interface PullScreenProps {
@@ -46,24 +45,14 @@ interface PullOnTabProps extends PullScreenProps {
 	tab: PullTab;
 }
 
-/** The Bugs tab's tools; they read the review, so they mount only on that tab. */
-function BugsTabTools() {
+/** The Review tab's tools; they read the review, so they mount only on that tab. */
+function ReviewTabTools() {
 	return <BugsTools view={useBugsView()} run={useRunView()} />;
 }
 
 /** The Changes tab's tools; they read the viewed files, so they mount only on that tab. */
 function ChangesTabTools({ mode, onModeChange }: { mode: ChangesMode; onModeChange: (mode: ChangesMode) => void }) {
 	return <ChangesTools viewed={useViewedFiles()} mode={mode} onModeChange={onModeChange} />;
-}
-
-/** The review's badge; it reads the run and the bugs, so the title and facts never re-render for them. */
-function PullReviewStatus({ repoId, number }: PullScreenProps) {
-	const run = useRunView();
-	const bugs = useBugsView();
-
-	return (
-		<ReviewStatus run={run} repoId={repoId} number={number} bugs={bugs.phase === 'ready' ? bugs.open.length : null} />
-	);
 }
 
 /** Review, while there is none or it is out of date, then the menu and the merge button. `r` presses Review. */
@@ -90,7 +79,7 @@ function PullChecksList() {
 	return <ChecksList view={usePullChecksView()} />;
 }
 
-/** The page inside its session: the bar, the header with its badge and merge facts, the tabs and the open tab. */
+/** The page inside its session: the bar, the header with its merge facts, the tabs and the open tab. */
 function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	const { base } = useApi();
 	const view = usePullPageView();
@@ -107,14 +96,14 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	const tools: Record<PullTab, ReactNode> = {
 		changes: <ChangesTabTools mode={mode} onModeChange={setMode} />,
 		summary: null,
-		bugs: <BugsTabTools />,
+		review: <ReviewTabTools />,
 		commits: null
 	};
 
 	const bodies: Record<PullTab, ReactNode> = {
 		changes: <ChangesTab repoId={repoId} number={number} mode={mode} />,
 		summary: <SummaryTab repoId={repoId} onOpenGuide={openGuide} />,
-		bugs: <BugsTab repoId={repoId} number={number} />,
+		review: <BugsTab />,
 		commits: <CommitsTab />
 	};
 
@@ -152,12 +141,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 				) : null}
 				{page ? (
 					<>
-						<PullHeader
-							page={page}
-							status={<PullReviewStatus repoId={repoId} number={number} />}
-							actions={<PullActions page={page} />}
-							merge={<PullMergeFacts page={page} />}
-						>
+						<PullHeader page={page} actions={<PullActions page={page} />} merge={<PullMergeFacts page={page} />}>
 							<PullChecksList />
 						</PullHeader>
 						<div className="pull-tabs-row">

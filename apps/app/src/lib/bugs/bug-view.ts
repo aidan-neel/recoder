@@ -92,7 +92,7 @@ function firstSentence(text: string): string {
 	return /^[^.!?\n]+[.!?]?/.exec(text.trim())?.[0] ?? text;
 }
 
-/** One finding of the review as the Bugs tab shows it. */
+/** One finding of the review as the Review tab shows it. */
 export function bugView(finding: Finding, review: Pick<Review, 'findingComments'>, vote: Vote | null): BugView {
 	const { tag, body } = splitCategoryTag(finding.message);
 	const evidence = evidenceClass(finding);

@@ -1,4 +1,4 @@
-import type { PullTab } from '../pull/types';
+import { PULL_TABS, type PullTab } from '../pull/types';
 import { SETTINGS_SECTIONS, type SettingsSection } from '../settings/sections';
 
 /**
@@ -25,6 +25,16 @@ export function pullHref(base: string, repoId: string, number: number, tab?: Pul
 	const path = `${base}/pulls/${encodeURIComponent(repoId)}/${number}`;
 
 	return tab && tab !== 'changes' ? `${path}?tab=${tab}` : path;
+}
+
+/** Old names of tabs that still open them: the Review tab was the Bugs tab. */
+const PULL_TAB_ALIASES: ReadonlyMap<string, PullTab> = new Map([['bugs', 'review']]);
+
+/** The tab a pull request address names (`?tab=review`); Changes when it names none or one the page does not have. */
+export function pullTabOf(value: string | null): PullTab {
+	const tab = PULL_TABS.find((candidate) => candidate === value);
+
+	return tab ?? PULL_TAB_ALIASES.get(value ?? '') ?? 'changes';
 }
 
 /** A tracked repository's page: what needs a person there, and how its reviews have gone. */

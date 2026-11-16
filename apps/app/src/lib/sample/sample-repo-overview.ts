@@ -21,6 +21,8 @@ interface MonthSpec {
 	bugsPerReview: number;
 	typicalReviewMs: number;
 	hotspots: readonly string[];
+	/** Whether auto review watches the repository. */
+	autoReview: boolean;
 }
 
 const MONTHS: Record<string, MonthSpec> = {
@@ -29,14 +31,16 @@ const MONTHS: Record<string, MonthSpec> = {
 		bugRate: 0.42,
 		bugsPerReview: 2.4,
 		typicalReviewMs: 400_000,
-		hotspots: ['src/billing/', 'src/webhooks/', 'src/auth/session/', 'src/exports/', 'src/db/migrations/']
+		hotspots: ['src/billing/', 'src/webhooks/', 'src/auth/session/', 'src/exports/', 'src/db/migrations/'],
+		autoReview: true
 	},
 	'sample-web': {
 		peak: 3,
 		bugRate: 0.3,
 		bugsPerReview: 1.6,
 		typicalReviewMs: 251_000,
-		hotspots: ['src/routes/settings/', 'src/lib/charts/', 'src/components/forms/']
+		hotspots: ['src/routes/settings/', 'src/lib/charts/', 'src/components/forms/'],
+		autoReview: false
 	}
 };
 
@@ -76,6 +80,7 @@ function sampleMonth(repoId: string, spec: MonthSpec, now: number): RepoOverview
 	return {
 		repoId,
 		days: DAYS,
+		autoReview: spec.autoReview,
 		reviewedPulls,
 		mergedPulls: Math.round(reviewedPulls * 0.88),
 		findings: { raised, accepted: Math.round(raised * 0.78), dismissed: Math.round(raised * 0.12) },
@@ -117,6 +122,7 @@ function quietMonth(repoId: string, now: number): RepoOverview {
 	return {
 		repoId,
 		days: DAYS,
+		autoReview: false,
 		reviewedPulls: 0,
 		mergedPulls: 0,
 		findings: { raised: 0, accepted: 0, dismissed: 0 },

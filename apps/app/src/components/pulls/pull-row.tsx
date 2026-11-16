@@ -12,10 +12,12 @@ import { ArrowUpRight, Ellipsis, Link2, RotateCw } from 'lucide-react';
 import Link from 'next/link';
 import { memo, useCallback } from 'react';
 
+import { useApi } from '@/lib/api/client';
 import type { PullRow as PullRowView } from '@/lib/pulls/types';
 import { copyLink } from '@/lib/shell/copy-link';
 import { author } from '@/lib/shell/format';
 import { useIntent } from '@/lib/shell/intent';
+import { pullHref } from '@/lib/shell/routes';
 
 import { Age } from '@/components/common/age';
 import { DiffStat } from '@/components/common/diff-stat';
@@ -67,9 +69,11 @@ function RowMenu({ row, onReview }: Pick<PullRowProps, 'row' | 'onReview'>) {
 
 /**
  * One open pull request: the whole row opens it, and the status and the menu
- * stay clickable above that. It re-renders only when its own row changes.
+ * stay clickable above that; a status about the review opens the Review tab.
+ * It re-renders only when its own row changes.
  */
 export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent, showRepo = true }: PullRowProps) {
+	const { base } = useApi();
 	const by = author(row.author);
 	const intent = useIntent(useCallback(() => onIntent?.(row), [onIntent, row]));
 
@@ -92,7 +96,12 @@ export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent
 				</div>
 			</div>
 			<div className="pull-row-status">
-				<PullStatus status={row.status} starting={starting} onReview={() => onReview(row)} />
+				<PullStatus
+					status={row.status}
+					reviewHref={pullHref(base, row.repoId, row.number, 'review')}
+					starting={starting}
+					onReview={() => onReview(row)}
+				/>
 			</div>
 			<DiffStat additions={row.additions} deletions={row.deletions} />
 			<div className="pull-row-menu">

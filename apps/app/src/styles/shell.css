@@ -113,6 +113,15 @@
 	min-height: 0;
 	flex: 1;
 }
+/* The app's lists between the head and the foot scroll as one, so neither ever moves and no list is squeezed shut. */
+.sidebar-body {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
 .sidebar-layer {
 	display: flex;
 	min-width: 0;
@@ -243,6 +252,21 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+/* A forge's mark fills its box where an outline icon leaves a margin, so it draws at 14px centred in the 16px lane. */
+.nav-item .nav-forge {
+	width: 14px;
+	height: 14px;
+	margin: 0 1px;
+}
+/* A repository with an open high-severity bug: a dot where the count sits on Pull requests. */
+.nav-alert {
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	margin: 0 2px 0 auto;
+	border-radius: 999px;
+	background: var(--sev-high);
+}
 /* The tracked repositories: a folding section on the places' lanes, at its own height above the recent lists. */
 .sidebar-repos {
 	flex: none;
@@ -260,8 +284,7 @@
 /* Recent chats and reviews: a section of cards under a title that folds it. */
 .recent {
 	display: flex;
-	min-height: 0;
-	flex: 1;
+	flex: none;
 	flex-direction: column;
 	margin-top: 20px;
 }
@@ -291,28 +314,11 @@
 .section-head[data-state='closed'] .section-chevron {
 	rotate: -90deg;
 }
-/* Open, the reviews take the room left and their list scrolls inside it; folded, they keep only their title. */
-.recent[data-state='closed'] {
-	flex: none;
-}
-.recent > [data-ui='collapsible-content'] {
-	display: flex;
-	min-height: 0;
-	flex: 0 1 auto;
-	flex-direction: column;
-}
-.recent [data-ui='collapsible-body'] {
-	display: flex;
-	min-height: 0;
-	flex-direction: column;
-}
-/* The 2px on top keeps the first row's focus ring inside the scroller, which clips. */
+/* The 2px on top keeps the first row's focus ring clear of the title above it. */
 .recent-list {
 	display: flex;
-	min-height: 0;
 	flex-direction: column;
 	gap: 6px;
-	overflow-y: auto;
 	padding: 2px 8px 12px;
 }
 .recent-item {
@@ -409,9 +415,7 @@
 	white-space: nowrap;
 }
 .recent-card-head .repo-label {
-	overflow: hidden;
 	margin-right: auto;
-	text-overflow: ellipsis;
 }
 .recent-card .recent-tools {
 	top: 4px;
@@ -448,12 +452,8 @@
 	height: 12px;
 	stroke-width: 1.75;
 }
-/* Chats sit above the reviews at their own height; the reviews take the rest and scroll. */
-.recent-chats {
-	flex: none;
-}
+/* Chats sit close over the reviews under them. */
 .recent-chats .recent-list {
-	overflow: visible;
 	padding-bottom: 0;
 }
 /* A placeholder card on the same lanes as the card that replaces it. */

@@ -60,16 +60,28 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
 
 - **Sidebar** (248px, `--sidebar-width`): the account menu; New review, Pull
   requests (with the open count), Automations and Guidelines; Repositories,
-  one row a tracked repository on the places' lanes, row height and icon size,
-  the open one filled in place, folding like the lists under it; the recent
-  chats and reviews; and at the foot the model reviews run with, the shortcuts and the
-  theme switch. `[` shows or hides it. Settings open from the account menu
-  and with ⌘,.
+  one row a tracked repository on the places' lanes and row height: its
+  forge's mark (14px, centred in the 16px icon lane), the name ending in an
+  ellipsis, and, while one of its open pull requests has an open high bug, a
+  6px dot in `--sev-high` where Pull requests holds its count (a screen reader
+  hears "Has high-severity bugs"); the open one filled in place, folding like
+  the lists under it; the recent chats and reviews; Settled; and at the foot
+  the model reviews run with, the shortcuts and the theme switch. `[` shows or
+  hides it. Settings open from the account menu and with ⌘,.
+- **Sidebar body**: everything between the head and the foot scrolls as one
+  region, so the head and foot never move and no list is squeezed shut; with
+  room to spare, Settled sits at the bottom. A right click anywhere on it, or
+  the context-menu key, opens a menu of three checks: Repositories, Chats and
+  Reviews. A row with its own menu (a chat, a review, a settled row) keeps
+  its menu. Unchecked, a list is left out whole, title and all, in this
+  browser; hiding is apart from folding. Hiding Chats or Reviews takes its
+  rows out of Settled too, and Settled goes when nothing is left in it.
 - **Settings sidebar**: on `/settings/<section>` the account row becomes
   Back to app (to the pull request list), and the places and recent reviews become the sections: Models,
   Providers, Connections and Appearance, each with its icon, on the same
   lanes and fill as the app's places; the admin's own sit under an Admin
-  label below them: Recoder (the running server, its updates, the global
+  label below them: Recoder (the running server, its updates, the branch a
+  git checkout runs and a switch to another, the global
   review guidelines and its people), Limits, Telemetry and Usage. The search,
   the hide button and the foot stay. The page bar says Settings. Opening
   Settings lands on Models, never on a bare `/settings`, so a section row is
@@ -83,7 +95,10 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   review found, that a review is running, or that there is none. Filters:
   all, needs review, has bugs, ready, and one repository when more than one
   is tracked. A repository that failed to load says so in a strip above the
-  rows. Each repository loads one page of 30 first; the next pages load as the
+  rows. A fact about the review (reviewing, its bugs, or that it failed) is a
+  link: the pill deepens on hover and opens the pull request on its Review
+  tab. It sits beside the row's own link, never inside it, so the row stays
+  one link and the pill another. Each repository loads one page of 30 first; the next pages load as the
   end of the list nears, with skeleton rows at the end while they do and
   one plain line with Retry when a page fails. Rows append in place, below the
   ones shown, with no entrance.
@@ -92,7 +107,9 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   which opens New in Chat on this repository, and New review, the one primary,
   which opens New in Review on it. Under the bar, the forge's mark and
   `owner / name` (20px, the owner faint) over its facts as badges: the default
-  branch and since when it is tracked. Then five figures on one line split by
+  branch, since when it is tracked, and whether auto review watches it
+  ("Auto review on" in the success tone, "Auto review off" neutral, each led
+  by a dot). Then five figures on one line split by
   hairlines, no cards: open pull requests (and how many are not reviewed), open
   bugs (the high ones in the high-severity colour), merged in the window (of
   how many reviewed), findings accepted (of raised) and the typical review time
@@ -127,9 +144,13 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   empty otherwise. The models sit in the bar. The open pull requests with no
   review yet sit below, one click each, and never move the field.
 - **Pull request page**: the header (the title over a row of badges: state,
-  author, base and head branch, change size, last activity), a banner for the
-  newest review (running, failed, stopped, or done) with the one next step,
-  then four tabs:
+  author, base and head branch, change size, last activity), then four tabs.
+  The header holds no review status: the Review tab says where the newest
+  review stands after its name. While a review runs, a spinner and the time it
+  has run (`5:01`, tabular figures, so the tab keeps its width); a queued,
+  paused, failed or out-of-date review shows one glyph with its word as a
+  tooltip (failed in the danger tone, out of date in medium); a done review
+  shows its open bugs as the count. The tabs:
   - **Changes**: the file tree beside the diff. Bugs sit under the line they
     name. A file can be marked viewed. The guide gives the order to read the
     files in.
@@ -142,7 +163,7 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     and its reply stay in view until the reader scrolls up. A reply's
     Thinking line starts folded (a click opens its steps), and while the
     answer streams the entire reply shimmers in white; there is no caret.
-  - **Bugs**: one row a bug, the worst first, split by hairlines. Shut, a row
+  - **Review**: one row a bug, the worst first, split by hairlines. Shut, a row
     is the title over its badges: severity (or Suggestion), category, evidence
     class, file and line, and whether an earlier review reported it. Open, it
     adds the explanation (clamped), the proof (a command and its output in a
@@ -150,8 +171,11 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     badges), the suggested fix behind a disclosure line, and its actions:
     post it on the pull request, copy a fix prompt for the coding agent,
     accept it, or dismiss it with a reason. The tab row carries the review's
-    own facts as badges (commit, when, model, duration). While a review runs,
-    a run card shows its steps.
+    own facts as badges (commit, when, model, duration), posting the review
+    and Review again. While a review runs, a run card shows its steps with
+    Pause and Cancel; a paused, failed, out-of-date, cancelled or missing
+    review gets a banner with its next step (Resume, Try again, Review). Old
+    `?tab=bugs` links open this tab.
   - **Commits**.
     The merge strip under the title shows checks and mergeability and holds the
     merge button. It merges at the head commit the page shows, and never with

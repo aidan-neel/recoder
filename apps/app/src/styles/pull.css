@@ -96,42 +96,6 @@
 	margin-top: 12px;
 }
 
-/* ───────── The review's badge, and its banner in a popover ───────── */
-.review-badge {
-	height: auto;
-	padding: 0;
-	border-radius: var(--radius-chip);
-	background: transparent;
-}
-.review-badge:hover,
-.review-badge[data-state='open'] {
-	background: transparent;
-}
-.review-badge [data-ui='pill'] {
-	height: 22px;
-	gap: 6px;
-	padding: 0 8px;
-	font-size: var(--font-size-label);
-}
-.review-badge:hover [data-ui='pill'],
-.review-badge[data-state='open'] [data-ui='pill'] {
-	background-color: color-mix(in srgb, var(--pill-fg) 22%, transparent);
-}
-.review-badge-clock {
-	padding-left: 6px;
-	font-size: var(--font-size-meta);
-	font-weight: 400;
-	opacity: 0.75;
-}
-.review-popover {
-	width: 600px;
-	padding: 0;
-}
-.review-popover [data-ui='status-notice'][data-variant='banner'] {
-	background: none;
-	box-shadow: none;
-}
-
 /* ───────── Merge facts: the checks and the conflicts after the facts, as quiet text past a hairline ───────── */
 .merge-facts {
 	display: flex;
