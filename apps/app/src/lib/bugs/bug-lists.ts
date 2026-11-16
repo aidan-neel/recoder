@@ -9,7 +9,16 @@ import type { BugsView, BugTone, BugView, UnresolvedItem } from './types';
 /** What the Review tab lists, read from one finished review. */
 export type BugLists = Pick<
 	BugsView,
-	'open' | 'decided' | 'resolved' | 'quieted' | 'unresolved' | 'checked' | 'reviewedAt' | 'headSha' | 'duration'
+	| 'open'
+	| 'decided'
+	| 'resolved'
+	| 'quieted'
+	| 'unresolved'
+	| 'checked'
+	| 'reviewedAt'
+	| 'headSha'
+	| 'duration'
+	| 'speed'
 >;
 
 const TONE_ORDER: Record<BugTone, number> = { high: 0, medium: 1, low: 2 };
@@ -146,6 +155,7 @@ export function bugLists(review: Review, votes: Record<string, Vote>): BugLists 
 		checked: checkedClaims(review),
 		reviewedAt: review.updatedAt,
 		headSha: review.headSha,
-		duration: durationOf(review)
+		duration: durationOf(review),
+		speed: review.speed ?? 'standard'
 	};
 }

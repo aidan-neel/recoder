@@ -14,6 +14,7 @@ export * from './repo-overview';
 export * from './findings';
 export * from './evidence';
 export * from './review';
+export * from './review-speed';
 export * from './review-list';
 export * from './models';
 export * from './token-budget';

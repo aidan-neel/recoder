@@ -4,7 +4,8 @@ import {
 	type CreateReviewInput,
 	type ProgressMessage,
 	type Review,
-	type ReviewListItem
+	type ReviewListItem,
+	type ReviewSpeed
 } from '@recoder/shared';
 
 import { failureText, plainly } from '../api/http';
@@ -105,7 +106,7 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 	}
 
 	/** The review that starts on the pull request's head as the page shows it. */
-	function reviewInput(input: Pick<CreateReviewInput, 'start' | 'instructions'>): CreateReviewInput {
+	function reviewInput(input: Pick<CreateReviewInput, 'start' | 'speed'>): CreateReviewInput {
 		const pull = state.getState().page.value?.pull;
 
 		return {
@@ -125,13 +126,13 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 		return plainly(() => call(id));
 	}
 
-	/** Runs a draft session's review, or queues a fresh one of the current head with the person's brief. */
-	async function startReview(brief?: string): Promise<Review> {
+	/** Runs a draft session's review, or queues a fresh one of the current head. A draft only runs the standard review. */
+	async function startReview(speed: ReviewSpeed): Promise<Review> {
 		const { review } = state.getState();
 
-		if (review?.status === 'draft' && !brief) return client.startDraft(review.id);
+		if (review?.status === 'draft' && speed === 'standard') return client.startDraft(review.id);
 
-		return client.createReview(reviewInput(brief ? { instructions: brief } : {}));
+		return client.createReview(reviewInput({ speed }));
 	}
 
 	/** Shows a pause or resume at once; the next event confirms it. */
@@ -163,11 +164,11 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 			followed = null;
 		},
 
-		async start(brief?: string): Promise<void> {
+		async start(speed: ReviewSpeed = 'standard'): Promise<void> {
 			state.setState({ starting: true });
 
 			try {
-				const review = await plainly(() => startReview(brief));
+				const review = await plainly(() => startReview(speed));
 
 				follow(review, review);
 				list.reload();

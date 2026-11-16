@@ -5,6 +5,7 @@ import type { Finding } from './findings';
 import type { ObligationReport } from './obligations';
 import type { BriefQuestionReport } from './questions';
 import type { Provider } from './repo';
+import type { ReviewSpeed } from './review-speed';
 
 export type ReviewStatus = 'draft' | 'queued' | 'running' | 'passed' | 'failed';
 
@@ -116,6 +117,8 @@ export interface Review {
 	};
 	/** False runs every baseline check again instead of reusing an earlier review's result; for a suspected flaky suite. */
 	baselineCache?: false;
+	/** `spark` for a fast review (`REVIEW_SPEED_PLANS`); absent is the standard one. */
+	speed?: ReviewSpeed;
 	/**
 	 * False keeps the findings this review raised and nothing else: none are carried from, or matched against, an
 	 * earlier review of the pull request. An evaluation scores each review alone.
@@ -149,6 +152,8 @@ export interface CreateReviewInput {
 	start?: boolean;
 	/** False skips the baseline check cache for this review. */
 	baselineCache?: false;
+	/** `spark` runs the fast review (`REVIEW_SPEED_PLANS`); omitted or `standard` runs the full one. */
+	speed?: ReviewSpeed;
 	/** False keeps the review's own findings without carrying earlier reviews' (`Review.findingHistory`). */
 	findingHistory?: false;
 	/** Display metadata from the selected open PR. Refetched before analysis. */

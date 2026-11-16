@@ -153,8 +153,10 @@ function withSourceRevisions(ledger: RuleLedger, sources: LedgerSource[]): RuleL
  * ledger. When the guidelines changed since the repo's last ledger, the review
  * goes on with that ledger and the new one is distilled behind it for the next
  * review: a model call here holds every reviewer back for minutes. Only a
- * repo's first review waits for one. Null when there are no sources, no rules,
- * or the call could not run.
+ * repo's first standard review waits for one. A Spark review never distills:
+ * it runs its models at low effort, and a ledger is cached for every review of
+ * its sources, so it takes the newest ledger there is, or goes on without
+ * rules. Null when there are no sources, no rules, or the call could not run.
  */
 export async function buildRuleLedger(run: ReviewRun): Promise<RuleLedger | null> {
 	const { revision } = run.input;
@@ -174,13 +176,11 @@ export async function buildRuleLedger(run: ReviewRun): Promise<RuleLedger | null
 
 	const previous = lineage ? latestLedger(lineage) : null;
 
-	if (lineage && previous) {
-		refreshLater(run, sources, sourcesHash, lineage);
+	const spark = run.input.speed === 'spark';
 
-		return usable(previous, sources);
-	}
-
-	if (!run.budget.canSpend(1)) return null;
+	if (lineage && previous && !spark) refreshLater(run, sources, sourcesHash, lineage);
+	if (previous) return usable(previous, sources);
+	if (spark || !run.budget.canSpend(1)) return null;
 
 	const ledger = await distillLedger(reviewCall(run), sources, sourcesHash, lineage);
 

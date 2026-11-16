@@ -4,14 +4,11 @@ import type { PullMergeMethod } from '@recoder/shared';
 import {
 	Button,
 	ConfirmDialog,
-	DropdownMenu,
-	DropdownMenuContent,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
-	DropdownMenuTrigger,
+	SplitButton,
 	Tooltip
 } from '@recoder/ui';
-import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import type { MergeBlock, MergeView } from '@/lib/pull/types';
@@ -88,42 +85,27 @@ export function MergeButton({ view, pull, base }: MergeButtonProps) {
 
 	return (
 		<>
-			<div className="merge-split">
-				<Button
-					variant="primary"
-					className="merge-split-main"
-					disabled={view.phase === 'merging'}
-					status={view.phase === 'merging' ? 'pending' : 'idle'}
-					onClick={() => setConfirming(true)}
-				>
-					{label}
-				</Button>
-				<DropdownMenu>
-					<DropdownMenuTrigger>
-						<Button
-							variant="primary"
-							size="icon"
-							className="merge-split-menu"
-							aria-label="Choose how to merge"
-							disabled={view.phase === 'merging'}
-						>
-							<ChevronDown />
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="w-[300px]">
-						<DropdownMenuRadioGroup value={view.method} onValueChange={chooseMethod}>
-							{view.methods.map((method) => (
-								<DropdownMenuRadioItem key={method} value={method} className="merge-method">
-									<span className="flex flex-col gap-0.5">
-										{METHOD_LABELS[method].action}
-										<span className="merge-method-detail">{METHOD_LABELS[method].detail}</span>
-									</span>
-								</DropdownMenuRadioItem>
-							))}
-						</DropdownMenuRadioGroup>
-					</DropdownMenuContent>
-				</DropdownMenu>
-			</div>
+			<SplitButton
+				disabled={view.phase === 'merging'}
+				status={view.phase === 'merging' ? 'pending' : 'idle'}
+				onClick={() => setConfirming(true)}
+				menuLabel="Choose how to merge"
+				menuClassName="w-[300px]"
+				menu={
+					<DropdownMenuRadioGroup value={view.method} onValueChange={chooseMethod}>
+						{view.methods.map((method) => (
+							<DropdownMenuRadioItem key={method} value={method} className="split-option">
+								<span className="flex flex-col gap-0.5">
+									{METHOD_LABELS[method].action}
+									<span className="split-option-detail">{METHOD_LABELS[method].detail}</span>
+								</span>
+							</DropdownMenuRadioItem>
+						))}
+					</DropdownMenuRadioGroup>
+				}
+			>
+				{label}
+			</SplitButton>
 			<ConfirmDialog
 				open={confirming}
 				onOpenChange={setConfirming}

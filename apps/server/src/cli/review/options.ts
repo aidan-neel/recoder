@@ -1,4 +1,4 @@
-import type { FindingSeverity, ReasoningEffort, SubagentCap, TokenBudget } from '@recoder/shared';
+import type { FindingSeverity, ReasoningEffort, ReviewSpeed, SubagentCap, TokenBudget } from '@recoder/shared';
 import type { LensId } from '../../review/pipeline/lenses/types.js';
 import type { Audience } from '../audience.js';
 
@@ -59,6 +59,8 @@ export type ReviewLever = keyof typeof REVIEW_LEVERS;
 
 /** How hard the review works. A null field takes the budget's value, or the saved setting where the budget has none. */
 export interface ReviewTuning {
+	/** `spark` is the fast review; the flags it sets are already applied to the fields below. */
+	speed: ReviewSpeed;
 	budget: TokenBudget;
 	/** Subagents the review may run in all; null is the budget's cap. */
 	subagents: SubagentCap | null;

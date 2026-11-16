@@ -1,4 +1,4 @@
-import type { ImageUpload, Provider } from '@recoder/shared';
+import type { ImageUpload, Provider, ReviewSpeed } from '@recoder/shared';
 import type { LinkFacts } from '@recoder/ui/form';
 
 import type { PullRow, PullTarget, RepoOption } from '../pulls/types';
@@ -30,6 +30,9 @@ export interface ComposeView {
 	 */
 	text: string;
 	setText: (text: string) => void;
+	/** How fast the review Enter starts runs: the standard review, or Spark. It holds for the visit. */
+	speed: ReviewSpeed;
+	setSpeed: (speed: ReviewSpeed) => void;
 	/** Empties the field and lets go of the pick: once the page it started has opened. */
 	clear: () => void;
 	/** The pull request the review starts on; null until one is chosen. Chat mode does not use it. */

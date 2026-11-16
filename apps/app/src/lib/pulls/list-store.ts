@@ -54,8 +54,8 @@ interface StartTarget {
 	headSha?: string;
 }
 
-/** What the person asked a review to look at: the words after the pull request, and any images. */
-type ReviewBrief = Pick<CreateReviewInput, 'instructions' | 'images'>;
+/** What the person asked of a review: the words after the pull request, any images, and how fast it runs. */
+type ReviewBrief = Pick<CreateReviewInput, 'instructions' | 'images' | 'speed'>;
 
 export interface ListStore {
 	state: StoreApi<ListData>;
@@ -71,7 +71,7 @@ export interface ListStore {
 	 */
 	loadMore: (repoId: string | null) => Promise<void>;
 	/**
-	 * Queues a review, with the person's brief (what to look at, and images) when there is one; the row shows it
+	 * Queues a review, with the person's brief (what to look at, images, its speed) when there is one; the row shows it
 	 * at once and goes back when the start fails, which rejects with a sentence.
 	 */
 	start: (target: StartTarget, brief?: ReviewBrief) => Promise<Review>;
@@ -296,7 +296,8 @@ export function createListStore(client: ApiClient): ListStore {
 					...(target.headSha && { headSha: target.headSha }),
 					...(target.title && { prTitle: target.title }),
 					...(brief.instructions && { instructions: brief.instructions }),
-					...(brief.images?.length && { images: brief.images })
+					...(brief.images?.length && { images: brief.images }),
+					...(brief.speed && { speed: brief.speed })
 				})
 			);
 

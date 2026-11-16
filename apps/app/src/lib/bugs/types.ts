@@ -1,4 +1,4 @@
-import type { DismissalReason, EvidenceClass, FindingDecision, FindingRule } from '@recoder/shared';
+import type { DismissalReason, EvidenceClass, FindingDecision, FindingRule, ReviewSpeed } from '@recoder/shared';
 
 /** How strongly a finding asks for attention. */
 export type BugTone = 'high' | 'medium' | 'low';
@@ -97,6 +97,8 @@ export interface BugsView {
 	/** `6m 40s`. */
 	duration: string | null;
 	modelLabel: string | null;
+	/** How fast the review ran: `spark` says why it may have found less. */
+	speed: ReviewSpeed;
 	/** True when the forge takes comments and a token with write access is connected. */
 	canPost: boolean;
 	/** Ids of the findings with a write in flight. */

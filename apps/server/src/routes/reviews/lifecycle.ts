@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import type { Review } from '@recoder/shared';
+import { REVIEW_SPEEDS, type Review } from '@recoder/shared';
 import { reviewListJson } from '../../storage/review-list-response';
 import { imageBodyLimit, refuseUnreadImages, serveImage } from '../../attachments/image-http';
 import { deleteReviewImages } from '../../attachments/image-store';
@@ -39,6 +39,7 @@ const createReviewSchema = z.object({
 	headSha: z.string().min(1).max(100).optional(),
 	start: z.boolean().optional(),
 	baselineCache: z.literal(false).optional(),
+	speed: z.enum(REVIEW_SPEEDS).optional(),
 	findingHistory: z.literal(false).optional(),
 	prTitle: z.string().max(500).optional(),
 	postComment: z.boolean().optional(),

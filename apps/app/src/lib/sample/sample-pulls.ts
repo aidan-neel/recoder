@@ -6,10 +6,12 @@ import {
 	type PullRequest,
 	type PullStatus,
 	type Repo,
-	type Review
+	type Review,
+	type ReviewProgress
 } from '@recoder/shared';
 
 import { MANY_CHECKS, MANY_CHECKS_PASSING } from './sample-checks';
+import { exportsProgress } from './sample-claims';
 import { cleanReviewChecks } from './sample-clean-review';
 import { sampleTime } from './sample-clock';
 import { SAMPLE_CHECKS, SAMPLE_PULL, SAMPLE_REVIEW } from './sample-review';
@@ -27,6 +29,8 @@ export interface SampleSeed {
 	repos: Repo[];
 	pulls: SamplePull[];
 	reviews: Review[];
+	/** The live progress of the reviews that are running when the sample loads, by review id. */
+	progress: Record<string, ReviewProgress>;
 	comments: Record<string, PullComment[]>;
 }
 
@@ -312,9 +316,11 @@ export function sampleCommits(pull: SamplePull): PullCommit[] {
 
 /** A fresh copy of the sample's repositories, pull requests, reviews and conversations. */
 export function sampleSeed(): SampleSeed {
+	const exports = plainReview(PULLS.exports, 'running');
+
 	const reviews: Review[] = [
 		structuredClone(SAMPLE_REVIEW),
-		plainReview(PULLS.exports, 'running'),
+		exports,
 		plainReview(PULLS.webhooks, 'failed'),
 		{ ...plainReview(PULLS.audit, 'failed'), summary: REVIEW_CANCELLED },
 		plainReview(PULLS.datePicker, 'passed', '85bead'),
@@ -333,6 +339,7 @@ export function sampleSeed(): SampleSeed {
 		repos: structuredClone(REPOS),
 		pulls: structuredClone(Object.values(PULLS)),
 		reviews,
+		progress: { [exports.id]: exportsProgress(exports) },
 		comments: { [`sample-api#${SAMPLE_PULL.number}`]: structuredClone(CONVERSATION) }
 	};
 }
