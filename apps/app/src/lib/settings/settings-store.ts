@@ -88,18 +88,23 @@ export const useSettings = create<SettingsStore>((set, get) => {
 	}
 
 	/**
-	 * Fetches the models and the agents side by side. A failed refresh keeps
-	 * what is on screen; only a first load that fails turns the page offline.
+	 * Fetches the models and the agents side by side. The models show as soon
+	 * as they land, since the agents wait on their providers, which can take a
+	 * few hundred ms; the status turns ready once both have answered. Setting
+	 * the models only when they land keeps a save made in between. A failed
+	 * refresh keeps what is on screen; only a first load that fails turns the
+	 * page offline.
 	 */
 	async function fetchAll(refresh: boolean): Promise<void> {
 		if (get().status === 'idle') set({ status: 'loading' });
 
-		const [models, agents] = await Promise.allSettled([queued(settingsApi.models), loadAgents(refresh)]);
+		const shown = queued(settingsApi.models).then((models) => set({ models }));
+		const [models, agents] = await Promise.allSettled([shown, loadAgents(refresh)]);
 
 		if (agents.status === 'fulfilled') set(agents.value);
 		else set({ agentError: OFFLINE_TEXT });
 
-		if (models.status === 'fulfilled') return set({ models: models.value, status: 'ready', error: null });
+		if (models.status === 'fulfilled') return set({ status: 'ready', error: null });
 
 		if (get().models) return;
 
