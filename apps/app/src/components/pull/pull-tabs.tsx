@@ -1,9 +1,8 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-
 import { useApi } from '@/lib/api/client';
 import { PULL_TABS, type PullPageView, type PullTab } from '@/lib/pull/types';
+import { replaceSearch } from '@/lib/shell/navigation';
 import { pullHref } from '@/lib/shell/routes';
 import { useKeys } from '@/lib/shell/use-keys';
 
@@ -30,10 +29,9 @@ function countOf(tab: PullTab, counts: PullPageView['counts']): number | null {
 
 /** The pull request page's tabs. `1` to `4` switch between them. */
 export function PullTabs({ repoId, number, tab, counts }: PullTabsProps) {
-	const router = useRouter();
 	const { base } = useApi();
 	const hrefOf = (target: PullTab) => pullHref(base, repoId, number, target);
-	const open = (target: PullTab) => router.replace(hrefOf(target), { scroll: false });
+	const open = (target: PullTab) => replaceSearch(hrefOf(target));
 
 	useKeys({
 		'1': () => open('changes'),

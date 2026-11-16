@@ -3,7 +3,6 @@
 import type { PullPage } from '@recoder/shared';
 import { Button } from '@recoder/ui';
 import { ArrowUpRight } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -14,6 +13,7 @@ import { PullSessionProvider, useMergeView, usePullChecksView, usePullPageView }
 import type { PullTab } from '@/lib/pull/types';
 import { usePullTab } from '@/lib/pull/use-pull-tab';
 import { useRunView } from '@/lib/run/use-run';
+import { replaceSearch } from '@/lib/shell/navigation';
 import { pullHref, pullsHref, repoHref } from '@/lib/shell/routes';
 
 import { BugsTab } from '@/components/bugs/bugs-tab';
@@ -92,7 +92,6 @@ function PullChecksList() {
 
 /** The page inside its session: the bar, the header with its badge and merge facts, the tabs and the open tab. */
 function PullFrame({ repoId, number, tab }: PullOnTabProps) {
-	const router = useRouter();
 	const { base } = useApi();
 	const view = usePullPageView();
 	const [mode, setMode] = useState<ChangesMode>('files');
@@ -102,7 +101,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	/** Opens the Changes tab in the guide's reading order. */
 	function openGuide(): void {
 		setMode('guide');
-		router.replace(pullHref(base, repoId, number, 'changes'), { scroll: false });
+		replaceSearch(pullHref(base, repoId, number, 'changes'));
 	}
 
 	const tools: Record<PullTab, ReactNode> = {
