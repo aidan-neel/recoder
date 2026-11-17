@@ -1,5 +1,6 @@
 import type { FindingClaim } from '@recoder/shared';
 import type { EvidenceStore } from '../../../evidence/evidence.js';
+import { SANDBOX_NETWORK } from '../../../sandbox/exec-sandbox.js';
 import type { CandidateFinding } from '../consolidate.js';
 
 /** The JSON a bug verifier ends with. */
@@ -22,7 +23,7 @@ export function verifierSystemPrompt(mutation = false): string {
 - If a stated non-goal (N#) or the stacked parent or child pull request (#123) in the change intent already covers the problem, answer "refuted", set "coveredBy" to that id, and say so in the reason.`;
 
 	if (mutation) {
-		return `You verify one code review finding, that a test is too weak, by mutation. You have a sandboxed shell on the PR checkout: no network, no secrets, only the checkout is writable, dependencies already installed.
+		return `You verify one code review finding, that a test is too weak, by mutation. You have a sandboxed shell on the PR checkout: ${SANDBOX_NETWORK}, no secrets, only the checkout is writable, dependencies already installed.
 ${shared}
 - Work in this order: read the test, read the code under test, then plant the bug and run the test in one command. Answer as soon as that run is done; you have few turns, so do not explore further.
 - The finding says the test would still pass with a bug it should catch. Plant that bug: make one small edit to the code under test that introduces exactly the wrong behavior the finding says the test accepts, and run that one test. For a test that accepts a broad error class, throw a different error of that class that carries the fields the test reads (a sibling subclass defined in the same edit), not only the bare parent; for a bound, return a value past the exact one; for a step the test never takes, break only that step.
@@ -34,7 +35,7 @@ ${EXPECTED_RULE}
 ${VERDICT_JSON}`;
 	}
 
-	return `You verify one code review finding by running code. You have a sandboxed shell on the PR checkout: no network, no secrets, only the checkout is writable, dependencies already installed.
+	return `You verify one code review finding by running code. You have a sandboxed shell on the PR checkout: ${SANDBOX_NETWORK}, no secrets, only the checkout is writable, dependencies already installed.
 ${shared}
 - Always run something. Write the smallest repro that would fail if the finding is true: a scratch test next to the code, or a script that imports the changed code and calls it with the triggering input. Run it. Existing tests, type checks and linters also count when their output shows the problem.
 - If the first repro does not run (an import path, a missing fixture), fix the script and run it again; read the code to find the right entry point.

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execUnavailableReason, runSandboxed, sandboxLayout, type SandboxLayout } from '../../src/sandbox/exec-sandbox';
 
@@ -54,10 +54,80 @@ test.skipIf(!available)('the checkout .git directory is read-only inside the san
 	expect(existsSync(join(base, 'work/repos/pr-1/.git/HEAD.lock'))).toBe(false);
 });
 
-test.skipIf(!available)('a sandboxed command has no network', async () => {
-	const result = await run('(exec 3<>/dev/tcp/1.1.1.1/53) 2>/dev/null && echo open || echo closed');
+test.skipIf(!available || process.platform === 'darwin')(
+	'a reviewer command under bubblewrap has no network',
+	async () => {
+		const result = await run('(exec 3<>/dev/tcp/1.1.1.1/53) 2>/dev/null && echo open || echo closed');
 
-	expect(result.output.trim()).toBe('closed');
+		expect(result.output.trim()).toBe('closed');
+	}
+);
+
+test.skipIf(!available)('a sandboxed command cannot reach a server on this machine', async () => {
+	const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('host') });
+
+	try {
+		const result = await run(`(exec 3<>/dev/tcp/127.0.0.1/${server.port}) 2>/dev/null && echo open || echo closed`);
+
+		expect(result.output.trim()).toBe('closed');
+	} finally {
+		await server.stop(true);
+	}
+});
+
+test.skipIf(!available || process.platform !== 'darwin' || !Bun.which('curl'))(
+	'a command under Seatbelt cannot connect to a unix socket on this machine',
+	async () => {
+		const socket = join(base, 'host.sock');
+		const server = Bun.serve({ unix: socket, fetch: () => new Response('host') });
+
+		try {
+			const result = await run(`curl -s --max-time 3 --unix-socket ${socket} http://host/ || echo blocked`);
+
+			expect(result.output.trim()).toBe('blocked');
+		} finally {
+			await server.stop(true);
+		}
+	}
+);
+
+/** A checkout whose host PATH is only `bin`, holding `tools` as scripts that print their name. */
+async function checkoutWithPath(name: string, tools: Record<string, string>): Promise<SandboxLayout> {
+	const bin = join(base, `${name}-bin`);
+
+	await mkdir(bin, { recursive: true });
+	await mkdir(join(base, 'work/repos', name), { recursive: true });
+
+	for (const [path, label] of Object.entries(tools)) {
+		const file = path.includes('/') ? join(base, 'work/repos', name, path) : join(bin, path);
+
+		await mkdir(join(file, '..'), { recursive: true });
+		await writeFile(file, `#!/bin/sh\necho ${label}\n`);
+		await chmod(file, 0o755);
+	}
+
+	return sandboxLayout(join(base, 'work/repos', name), {
+		home: join(base, 'home'),
+		dataDir: join(base, 'data'),
+		workDir: join(base, 'work'),
+		path: bin
+	});
+}
+
+test.skipIf(!available)('python runs python3 when the host has no python', async () => {
+	const pythonLayout = await checkoutWithPath('pr-python3', { python3: 'host python3' });
+
+	const result = await runSandboxed(pythonLayout, 'python', { timeoutMs: 10_000 });
+
+	expect(result.output.trim()).toBe('host python3');
+});
+
+test.skipIf(!available)("python runs the checkout's virtualenv before the host's", async () => {
+	const venvLayout = await checkoutWithPath('pr-venv', { python3: 'host python3', '.venv/bin/python': 'venv python' });
+
+	const result = await runSandboxed(venvLayout, 'python', { timeoutMs: 10_000 });
+
+	expect(result.output.trim()).toBe('venv python');
 });
 
 test.skipIf(!available || !existsSync('/etc/resolv.conf'))(

@@ -126,6 +126,7 @@ Two functions share the name `prepareSandbox`. The first checks out the code bef
 
 - `runReviewPipeline` fetches the pull request, calls that `prepareSandbox`, then `sandboxRevisionDiff`. The result is a `ReviewRevision` and the diff. `ReviewRevision` is defined in `apps/server/src/evidence/types.ts`.
 - `openWorkspace` in `apps/server/src/review/pipeline/harness/context.ts` opens the exec workspace. `execUnavailableReason` explains when commands cannot run; `RECODER_EXEC=off` turns execution off.
+- What a command can reach is `SANDBOX_NETWORK` in `apps/server/src/sandbox/exec-sandbox.ts`. On macOS every command has the internet, with this machine's own addresses and unix sockets blocked, because the server has no sign-in. Under bubblewrap only the dependency install is online, since bubblewrap can only share the host's network. The checkout's `.venv/bin` leads the sandbox PATH, and `python` falls back to `python3` (`linkPython` in `sandbox-layout.ts`).
 
 The second `prepareSandbox` installs packages and runs baseline checks. It is in `apps/server/src/review/pipeline/harness/sandbox-setup.ts`, with `startSetup` returning a `PendingSetup`.
 
