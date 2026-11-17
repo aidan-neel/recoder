@@ -77,6 +77,8 @@ export interface ApiClient {
 	/** What the repository page shows over the last thirty days; rejects with a 404 for a repository that is not tracked. */
 	repoOverview: (repoId: string) => Promise<RepoOverview>;
 	addRepo: (input: CreateRepoInput) => Promise<Repo>;
+	/** Stops tracking a repository; its reviews stay on the server. */
+	removeRepo: (repoId: string) => Promise<void>;
 	pulls: (query?: PullListQuery) => Promise<PullList>;
 	pullPage: (repoId: string, number: number) => Promise<PullPage>;
 	pullDiff: (repoId: string, number: number) => Promise<PullDiff>;
@@ -169,6 +171,7 @@ export const liveApi: ApiClient = {
 	repos: reviewsApi.repos,
 	repoOverview: reposApi.overview,
 	addRepo: connectionsApi.addRepo,
+	removeRepo: async (repoId) => void (await connectionsApi.removeRepo(repoId)),
 	pulls: pullsApi.list,
 	pullPage: pullsApi.page,
 	pullDiff: pullsApi.diff,

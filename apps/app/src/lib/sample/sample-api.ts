@@ -238,6 +238,13 @@ export function createSampleApi(): ApiClient {
 			return repo;
 		},
 
+		async removeRepo(repoId) {
+			const data = world.data();
+
+			data.repos = data.repos.filter((repo) => repo.id !== repoId);
+			data.pulls = data.pulls.filter((item) => item.repoId !== repoId);
+		},
+
 		async pulls(query = {}) {
 			const items = world
 				.data()

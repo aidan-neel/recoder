@@ -369,3 +369,41 @@
 		flex-basis: 33%;
 	}
 }
+
+/* ───────── Repositories: every tracked repository, a row each ───────── */
+/* A row folds in and out of the list; the hairline goes between folds, since each row sits in its own. */
+.repo-fold {
+	overflow: hidden;
+}
+.repo-fold + .repo-fold {
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+}
+.repos-name {
+	display: inline-flex;
+	max-width: 100%;
+	align-items: center;
+	white-space: pre;
+	border-radius: var(--radius-chip);
+	color: var(--text-primary);
+	transition: color var(--dur-hover) ease-out;
+}
+.repos-name:hover {
+	text-decoration: underline;
+	text-decoration-color: var(--line-control);
+	text-underline-offset: 3px;
+}
+.repos-name:focus-visible {
+	box-shadow: var(--focus-ring);
+	outline: none;
+}
+.repos-owner {
+	color: var(--text-faint);
+}
+.repos-alert {
+	margin-left: 6px;
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: var(--sev-high);
+}

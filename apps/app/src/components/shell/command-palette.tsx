@@ -14,6 +14,7 @@ import {
 	BookOpen,
 	Clock,
 	CornerDownLeft,
+	FolderGit2,
 	GitPullRequest,
 	Keyboard,
 	Palette,
@@ -32,7 +33,7 @@ import { useOpenPull } from '@/lib/pulls/use-open-pull';
 import { useRowEntries } from '@/lib/pulls/use-rows';
 import { useChrome } from '@/lib/shell/chrome';
 import { errorToast } from '@/lib/shell/notify';
-import { AUTOMATIONS_HREF, GUIDELINES_HREF, newReviewHref, pullsHref } from '@/lib/shell/routes';
+import { AUTOMATIONS_HREF, GUIDELINES_HREF, newReviewHref, pullsHref, reposHref } from '@/lib/shell/routes';
 import { useTheme } from '@/lib/shell/theme';
 
 import { PullMark } from '@/components/common/pull-mark';
@@ -117,6 +118,7 @@ export function CommandPalette() {
 	const actions: Action[] = [
 		{ id: 'new', label: 'New review', icon: Plus, shortcut: 'c', run: () => go(newReviewHref(base)) },
 		{ id: 'pulls', label: 'Pull requests', icon: GitPullRequest, run: () => go(pullsHref(base)) },
+		{ id: 'repos', label: 'Repositories', icon: FolderGit2, run: () => go(reposHref(base)) },
 		{ id: 'automations', label: 'Automations', icon: Clock, run: () => go(AUTOMATIONS_HREF) },
 		{ id: 'guidelines', label: 'Guidelines', icon: BookOpen, run: () => go(GUIDELINES_HREF) },
 		...(admin ? [{ id: 'admin', label: 'Recoder', icon: ShieldUser, run: () => openSettings('admin') }] : []),

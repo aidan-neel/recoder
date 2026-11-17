@@ -12,7 +12,7 @@ import type { PullRow } from '../pulls/types';
 import { useRowEntries, useWatchList } from '../pulls/use-rows';
 import { errorToast } from '../shell/notify';
 import { repoName } from '../shell/format';
-import { newReviewHref, pullsHref } from '../shell/routes';
+import { newReviewHref, pullsHref, reposHref } from '../shell/routes';
 import { repoPageData } from './repo-page';
 import type { RepoPageView } from './types';
 
@@ -150,6 +150,7 @@ export function useRepoPage(repoId: string): RepoPageView {
 		pullsHref: pullsHref(base),
 		showPulls: () => list.state.setState({ repoId, filter: 'all', query: '' }),
 		newHref: newReviewHref(base),
+		reposHref: reposHref(base),
 		prepareReview: () => prepare('review'),
 		prepareAsk: () => prepare('chat')
 	};

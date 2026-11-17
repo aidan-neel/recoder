@@ -81,6 +81,12 @@ export interface ListStore {
 	deleteChat: (id: string) => Promise<void>;
 	/** Tracks a repository and reads the list again; rejects with a sentence. */
 	track: (repo: RepoTarget) => Promise<Repo>;
+	/** Takes a repository out of every list while its Undo is on offer; the server still tracks it. */
+	hideRepo: (repoId: string) => void;
+	/** Puts a hidden repository back. */
+	restoreRepo: (repoId: string) => void;
+	/** Stops tracking a hidden repository on the server and reads the list again; on failure it comes back and this rejects with a sentence. */
+	untrack: (repoId: string) => Promise<void>;
 	setComposeRepo: (repoId: string) => void;
 }
 
@@ -167,6 +173,14 @@ export function createListStore(client: ApiClient): ListStore {
 	let moreEpoch = 0;
 	let watchers = 0;
 	let stopWatching: (() => void) | null = null;
+	/** The repositories the server tracks, and those of them hidden while their Undo is on offer. */
+	let trackedRepos: Repo[] | null = null;
+	const hidden = new Set<string>();
+
+	/** Shows the tracked repositories less the hidden ones. */
+	function showRepos(): void {
+		state.setState({ repos: trackedRepos?.filter((repo) => !hidden.has(repo.id)) ?? null });
+	}
 
 	/**
 	 * Reads the list, repositories, reviews and chats. The last three land as soon as they answer, since the list
@@ -181,7 +195,11 @@ export function createListStore(client: ApiClient): ListStore {
 
 		const tracked = Promise.all([client.repos(), client.reviews(), client.repoChats(CHAT_LIMIT)]).then(
 			([repos, reviews, chats]) => {
-				if (mine === loadSeq) state.setState({ repos, reviews, chats });
+				if (mine !== loadSeq) return;
+
+				trackedRepos = repos;
+				state.setState({ reviews, chats });
+				showRepos();
 			}
 		);
 
@@ -332,11 +350,23 @@ export function createListStore(client: ApiClient): ListStore {
 	}
 
 	async function track(repo: RepoTarget): Promise<Repo> {
-		const tracked = await plainly(() => client.addRepo(repo));
+		const added = await plainly(() => client.addRepo(repo));
 
 		await load({});
 
-		return tracked;
+		return added;
+	}
+
+	async function untrack(repoId: string): Promise<void> {
+		try {
+			await plainly(() => client.removeRepo(repoId));
+			trackedRepos = trackedRepos?.filter((repo) => repo.id !== repoId) ?? null;
+		} finally {
+			hidden.delete(repoId);
+			showRepos();
+		}
+
+		await load({ fresh: true });
 	}
 
 	return {
@@ -345,6 +375,15 @@ export function createListStore(client: ApiClient): ListStore {
 		deleteReview,
 		deleteChat,
 		track,
+		untrack,
+		hideRepo(repoId) {
+			hidden.add(repoId);
+			showRepos();
+		},
+		restoreRepo(repoId) {
+			hidden.delete(repoId);
+			showRepos();
+		},
 		reload,
 		loadMore,
 

@@ -1,16 +1,16 @@
 'use client';
 
 import { HoverList, RowButton } from '@recoder/ui';
-import { BookOpen, Clock, GitPullRequest, Plus } from 'lucide-react';
+import { BookOpen, Clock, FolderGit2, GitPullRequest, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ComponentType } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import { useIntent } from '@/lib/shell/intent';
-import { AUTOMATIONS_HREF, GUIDELINES_HREF, newReviewHref, pullsHref } from '@/lib/shell/routes';
+import { AUTOMATIONS_HREF, GUIDELINES_HREF, newReviewHref, pullsHref, reposHref } from '@/lib/shell/routes';
 
-type Place = 'new' | 'pulls' | 'automations' | 'guidelines';
+type Place = 'new' | 'pulls' | 'repos' | 'automations' | 'guidelines';
 
 interface NavRow {
 	id: Place;
@@ -36,6 +36,7 @@ function placeOf(pathname: string, base: string): Place | null {
 
 	if (path === '/' || path.startsWith('/pulls')) return 'pulls';
 	if (path.startsWith('/new')) return 'new';
+	if (path === '/repos') return 'repos';
 	if (pathname.startsWith(AUTOMATIONS_HREF)) return 'automations';
 	if (pathname.startsWith(GUIDELINES_HREF)) return 'guidelines';
 
@@ -50,6 +51,7 @@ export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	const rows: NavRow[] = [
 		{ id: 'new', label: 'New review', href: newReviewHref(base), icon: Plus },
 		{ id: 'pulls', label: 'Pull requests', href: pullsHref(base), icon: GitPullRequest },
+		{ id: 'repos', label: 'Repositories', href: reposHref(base), icon: FolderGit2 },
 		{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: Clock },
 		{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpen }
 	];

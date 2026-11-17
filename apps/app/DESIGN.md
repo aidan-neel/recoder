@@ -41,11 +41,11 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
 ## Structure
 
 - **Routes** (`src/app/(live)`): `/` the pull request list, `/new` a new
-  review, `/pulls/[repoId]/[number]` a pull request, `/repos/[repoId]` a
-  repository, `/automations`, `/guidelines`. Settings has no route: it is a
+  review, `/pulls/[repoId]/[number]` a pull request, `/repos` the tracked
+  repositories, `/repos/[repoId]` a repository, `/automations`, `/guidelines`. Settings has no route: it is a
   dialog over the page (see Settings dialog). `/sample`
-  mirrors the list, the new review page, the pull request page and the
-  repository page on an in-memory client, with no server.
+  mirrors the list, the new review page, the pull request page, the
+  Repositories page and the repository page on an in-memory client, with no server.
 - **Logic** lives in `src/lib/<feature>/` as view-model hooks and stores. A
   component calls a hook, gets a plain view object (state and actions) and
   renders it. Components hold no fetches, timers or derived data.
@@ -60,7 +60,7 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
 ## Layout
 
 - **Sidebar** (248px, `--sidebar-width`): the account menu; New review, Pull
-  requests (with the open count), Automations and Guidelines; Repositories,
+  requests (with the open count), Repositories, Automations and Guidelines; Repositories,
   one row a tracked repository on the places' lanes and row height: its
   forge's mark (14px, centred in the 16px icon lane), the name ending in an
   ellipsis, and, while one of its open pull requests has an open high bug, a
@@ -110,7 +110,18 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   end of the list nears, with skeleton rows at the end while they do and
   one plain line with Retry when a page fails. Rows append in place, below the
   ones shown, with no entrance.
-- **Repository page**: the bar holds the crumbs (Repositories, then the
+- **Repositories page**: the settings column on the page, with Add
+  repository (primary) in the bar, which opens the repository dialog: the
+  repositories the signed-in forges can see, searchable, and Add by URL.
+  Under it, one card with a row a tracked repository, by name: its forge on
+  a tile, `owner / name` (the owner faint) as the link to its page with the
+  high-severity dot after it, over where it lives, its default branch and its
+  open pull requests; Stop tracking (ghost) at the end. Stopping folds the
+  row away and takes it out of the sidebar at once; the server forgets it
+  when the toast's Undo is gone. With none tracked, one quiet row says so.
+  It loads behind skeleton rows of the same height.
+- **Repository page**: the bar holds the crumbs (Repositories, linking to the
+  Repositories page, then the
   name) and, on the right, the forge link as an icon button, Ask (outline),
   which opens New in Chat on this repository, and New review, the one primary,
   which opens New in Review on it. Under the bar, the forge's mark and

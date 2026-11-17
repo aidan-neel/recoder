@@ -36,6 +36,11 @@ export function pullTabOf(value: string | null): PullTab {
 	return tab ?? PULL_TAB_ALIASES.get(value ?? '') ?? 'changes';
 }
 
+/** The tracked repositories, with a way to add more. */
+export function reposHref(base: string): string {
+	return `${base}/repos`;
+}
+
 /** A tracked repository's page: what needs a person there, and how its reviews have gone. */
 export function repoHref(base: string, repoId: string): string {
 	return `${base}/repos/${encodeURIComponent(repoId)}`;
