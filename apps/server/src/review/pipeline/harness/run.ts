@@ -35,8 +35,8 @@ import { drainVerification, finishVerification, startVerification } from './veri
  * - the model is instructed (and the output schema enforces) review-only
  *   findings — no patches, pushes or comments;
  * - when the OS sandbox is available, agents may run commands and write scratch
- *   files, but only inside an isolated, offline copy of the checkout
- *   (`exec-sandbox.ts`); tracked files are restored after every command.
+ *   files, but only inside an isolated copy of the checkout, cut
+ *   off from this machine's services (`exec-sandbox.ts`); tracked files are restored after every command.
  *
  * Stages: understand → cut the reviewers' slices → repo inventory, change model, intent (and obligations,
  * with `RECODER_OBLIGATIONS=1`) and rule ledger, while the sandbox installs → the experiment variant's
