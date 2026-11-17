@@ -11,6 +11,7 @@ import { initializePostgresEvents } from '../../src/storage/postgres-events';
 import { initializePublication } from '../../src/storage/postgres-publication';
 import { importLocalData } from '../../src/storage/import-local';
 import { testReview } from '../helpers/review';
+import { SHARED_SECRET_KEY } from '../helpers/shared-secret-key';
 
 const testUrl = process.env.TEST_DATABASE_URL;
 const schema = `recoder_import_${crypto.randomUUID().replaceAll('-', '')}`;
@@ -209,7 +210,12 @@ integration('the explicit import command initializes an empty database and repor
 	try {
 		const command = Bun.spawn([process.execPath, 'apps/server/src/storage/import-local.ts', '--source', directory], {
 			cwd: resolve(import.meta.dir, '../../../..'),
-			env: { ...process.env, RECODER_DATABASE_URL: destination.href, RECODER_DATA_DIR: directory },
+			env: {
+				...process.env,
+				RECODER_DATABASE_URL: destination.href,
+				RECODER_DATA_DIR: directory,
+				RECODER_SECRET_KEY: SHARED_SECRET_KEY
+			},
 			stdout: 'pipe',
 			stderr: 'pipe'
 		});

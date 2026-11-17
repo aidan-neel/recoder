@@ -12,6 +12,7 @@ import {
 } from '../../src/storage/postgres-publication';
 import { PostgresCoordinator } from '../../src/review/runtime/coordinator';
 import { assertOwnership, OwnershipLostError, withLease } from '../../src/review/runtime/ownership';
+import { SHARED_SECRET_KEY } from '../helpers/shared-secret-key';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const schema = `publication_${crypto.randomUUID().replaceAll('-', '')}`;
@@ -242,6 +243,7 @@ describe.skipIf(!databaseUrl)('Postgres publication (requires TEST_DATABASE_URL)
 				GITHUB_TOKEN: '',
 				GITLAB_TOKEN: '',
 				RECODER_DATABASE_URL: isolatedUrl.href,
+				RECODER_SECRET_KEY: SHARED_SECRET_KEY,
 				RECODER_DATA_DIR: directory,
 				RECODER_OPENCODE_BIN: '',
 				RECODER_CLAUDE_BIN: ''
