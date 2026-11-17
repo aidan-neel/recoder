@@ -3,30 +3,21 @@ import type { ReactNode } from 'react';
 import { Page } from '@/components/common/page';
 
 interface SettingsPageProps {
-	/** The page's name in the bar: "Settings", "Automations". */
+	/** The page's name in the bar: "Automations". */
 	name: string;
-	/** The title over the column, when the bar's name is not the page's own: a Settings section's name. */
-	heading?: string;
-	/** The right of the bar: a control for the whole page, such as a range. */
-	end?: ReactNode;
 	children: ReactNode;
 }
 
 /**
- * A page of titled setting groups (Settings, Automations, Guidelines): its
- * name in the bar, then one column centred on the page that scrolls. With a
- * heading, the heading is the page's title and the bar's name is not.
+ * A page of titled setting groups (Automations, Guidelines): its name in the
+ * bar, then one column centred on the page that scrolls. Settings' sections
+ * use the same column inside the Settings dialog.
  */
-export function SettingsPage({ name, heading, end, children }: SettingsPageProps) {
-	const bar = heading ? <span className="page-bar-title">{name}</span> : <h1 className="page-bar-title">{name}</h1>;
-
+export function SettingsPage({ name, children }: SettingsPageProps) {
 	return (
-		<Page start={bar} end={end}>
+		<Page start={<h1 className="page-bar-title">{name}</h1>}>
 			<div className="page-scroll">
-				<div className="settings-page">
-					{heading ? <h1 className="page-title">{heading}</h1> : null}
-					{children}
-				</div>
+				<div className="settings-page">{children}</div>
 			</div>
 		</Page>
 	);

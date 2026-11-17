@@ -58,7 +58,7 @@ export async function listRepoSkills(
 
 /**
  * The skills a message asks for: the ones attached by name, which the repository must have, then the ones its text
- * mentions with `@name`, which are skipped when it has none of that name, since `@` also names people. At most
+ * mentions with `/name`, which are skipped when it has none of that name, since `/` also starts a path. At most
  * `MAX_MESSAGE_SKILLS` in all, attached ones first.
  */
 export interface SkillRequest {

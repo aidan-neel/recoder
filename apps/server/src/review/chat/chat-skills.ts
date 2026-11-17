@@ -12,7 +12,7 @@ const SKILLS_TIMEOUT_MS = 10_000;
  * The skills a message in a review's chat asks for, with their text, read at the review's head and, for a skill
  * the head lacks, at the repository's default branch. Refuses the message when the repository has no attached
  * skill of a name (400) or its copy cannot be read now (409). A message that only mentions names sends without
- * them when they cannot be read: an `@` may name a person.
+ * them when they cannot be read: a `/` may start a path.
  */
 export async function attachedReviewSkills(
 	review: Pick<Review, 'repoId' | 'headSha'>,

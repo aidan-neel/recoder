@@ -137,7 +137,7 @@ export interface ApiClient {
 	repoTree: (repoId: string, path: string, ref?: string) => Promise<RepoTree>;
 	/** One file of a repository at `ref` (the default branch when omitted). */
 	repoFile: (repoId: string, path: string, ref?: string) => Promise<RepoFile>;
-	/** The skills a repository ships for agents, which "@" offers; with `pull`, its head's as well. */
+	/** The skills a repository ships for agents, which "/" offers; with `pull`, its head's as well. */
 	repoSkills: (repoId: string, pull?: number) => Promise<SkillSummary[]>;
 }
 

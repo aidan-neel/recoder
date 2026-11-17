@@ -48,8 +48,14 @@ const BASE = [
 	'data-[status=error]:[--button-shadow:inset_0_0_0_1px_color-mix(in_oklab,var(--danger)_30%,transparent)]'
 ].join(' ');
 
-/** The wash a see-through button takes on hover and when open, and the deeper one while pressed. */
-const WASH = 'hover:bg-[rgb(var(--wash-rgb)/6%)] active:bg-[rgb(var(--wash-rgb)/10%)]';
+/**
+ * The wash a see-through button takes on hover, while a list it closed holds its hover (`holdHover`) and when open,
+ * and the deeper one while pressed.
+ */
+const WASH = [
+	'hover:bg-[rgb(var(--wash-rgb)/6%)] data-hover-hold:bg-[rgb(var(--wash-rgb)/6%)]',
+	'active:bg-[rgb(var(--wash-rgb)/10%)]'
+].join(' ');
 
 /** The hairline edge of the secondary and outline buttons, the same line a field draws. */
 const EDGE = '[--button-shadow:inset_0_0_0_1px_var(--line-control)]';

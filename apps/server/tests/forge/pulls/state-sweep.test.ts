@@ -127,3 +127,25 @@ test('a forge error skips the pull request and records nothing for it', async ()
 	expect(await pullStates.get(pullStateKey(repo.id, 7))).toBeUndefined();
 	expect((await pullStates.get(pullStateKey(repo.id, 8)))?.state).toBe('merged');
 });
+
+test('a pull request the forge has no record of is re-checked hourly, not every round', async () => {
+	const repo = await githubRepo();
+
+	const gh = await fakeGh({
+		'pr-view': [{ err: 'GraphQL: Could not resolve to a PullRequest with the number of 7.' }, viewedPull(7, 'OPEN')]
+	});
+
+	process.env.PATH = gh.path;
+
+	const first = Date.parse('2026-11-10T00:00:00Z');
+
+	await db.reviews.set(testReview({ repoId: repo.id, prNumber: 7 }));
+
+	await sweepPullStates(first);
+	await sweepPullStates(first + 10 * 60_000);
+	expect(await gh.calls()).toHaveLength(1);
+
+	await sweepPullStates(first + 2 * 60 * 60_000);
+	expect(await gh.calls()).toHaveLength(2);
+	expect((await pullStates.get(pullStateKey(repo.id, 7)))?.state).toBe('open');
+});

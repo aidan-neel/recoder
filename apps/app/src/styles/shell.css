@@ -90,29 +90,6 @@
 	padding: 0 8px 2px;
 }
 
-/*
- * Settings swaps two spots of the sidebar: the account row for Back to app, the places and reviews for its sections.
- * Each spot stacks both layers in one grid cell. The old one fades out on the hover clock, then the new one fades in
- * over the rest of --dur-swap: a cross-fade would put two labels on one lane at half strength. The search, the
- * toggle and the foot stay still. Settings opened or reloaded paints at once: only a change of page runs the fade.
- * The arriving layer turns visible at once, still at opacity 0, so keyboard focus can land in it on the first frame.
- */
-.sidebar-swap {
-	--swap-out: var(--dur-hover);
-	--swap-in: calc(var(--dur-swap) - var(--dur-hover));
-
-	display: grid;
-	min-width: 0;
-	grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-}
-.sidebar-swap-head {
-	flex: 0 1 auto;
-	margin-right: auto;
-}
-.sidebar-swap-body {
-	min-height: 0;
-	flex: 1;
-}
 /* The app's lists between the head and the foot scroll as one, so neither ever moves and no list is squeezed shut. */
 .sidebar-body {
 	display: flex;
@@ -121,41 +98,6 @@
 	flex-direction: column;
 	overflow-y: auto;
 	overscroll-behavior: contain;
-}
-.sidebar-layer {
-	display: flex;
-	min-width: 0;
-	min-height: 0;
-	flex-direction: column;
-	grid-area: 1 / 1;
-	transition: opacity var(--swap-in) ease-out var(--swap-out);
-}
-.sidebar-layer[data-shown='false'] {
-	visibility: hidden;
-	opacity: 0;
-	transition:
-		opacity var(--swap-out) ease-out,
-		visibility 0s linear var(--swap-out);
-}
-.sidebar-swap-head .sidebar-layer {
-	flex-direction: row;
-	align-items: center;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.sidebar-layer,
-	.sidebar-layer[data-shown='false'] {
-		transition: none;
-	}
-}
-
-/* Back to app holds the account row's place and the nav rows' lanes: its arrow in the icon lane, its words on the text lane. */
-.sidebar-back {
-	width: auto;
-	transition: background-color var(--dur-hover) ease-out;
-}
-.sidebar-back:hover {
-	background: var(--bg-hover);
 }
 
 /* The account row is a quiet menu trigger: square initial, login, chevron. The initial sits in the icon lane. */
@@ -275,7 +217,7 @@
 .sidebar-repos .sidebar-nav {
 	padding-top: 0;
 }
-/* A group label in the nav (Settings' Admin) stands clear of the rows above and sits on the icon lane. */
+/* A group label in a nav (Settings' Admin) stands clear of the rows above and sits on the icon lane. */
 .nav-group-label {
 	margin-top: 14px;
 	padding: 0 8px 3px;

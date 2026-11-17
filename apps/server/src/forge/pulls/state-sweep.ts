@@ -1,5 +1,6 @@
 import { latestReviews, type Repo } from '@recoder/shared';
 import { db } from '../../store';
+import { GhError } from '../cli';
 import { pullEntry } from './cached';
 import { logForgeFailure } from './failure';
 import { pullStates } from './pull-states';
@@ -20,7 +21,9 @@ const CLOSED_RECHECK_MS = 60 * 60_000;
  * `merged` is final and never re-checked; `closed` is re-checked on the
  * slower clock since it can reopen. A forge failure — a rate limit, an
  * unreachable forge, a missing login — skips that pull request and records
- * nothing, so the next round tries it again.
+ * nothing, so the next round tries it again. A pull request the forge has
+ * no record of waits on the closed clock, so one never opened (or deleted)
+ * is not asked about every round.
  */
 export async function sweepPullStates(now = Date.now()): Promise<void> {
 	const [repos, reviews, records] = await Promise.all([db.repos.list(), db.reviews.summaries(), pullStates.list()]);
@@ -47,15 +50,44 @@ export async function sweepPullStates(now = Date.now()): Promise<void> {
 		if (record?.state === 'merged') continue;
 		if (record && now - Date.parse(record.checkedAt) < (record.state === 'closed' ? CLOSED_RECHECK_MS : RECHECK_MS))
 			continue;
+		if (recentlyMissing(key, now)) continue;
 
 		checked++;
 
 		try {
 			await pullEntry(repo, n);
+			missingSince.delete(key);
 		} catch (error) {
-			logForgeFailure(`the pull state sweep checking pull request ${n} for repo ${repo.id}`, error);
+			handleSweepFailure({ key, repo, n, now }, error);
 		}
 	}
+}
+
+/**
+ * When the forge last said it has no such pull request, by key. Kept in
+ * memory: after a restart each is asked once more, which is cheap.
+ */
+const missingSince = new Map<string, number>();
+
+function recentlyMissing(key: string, now: number): boolean {
+	const since = missingSince.get(key);
+
+	return since !== undefined && now - since < CLOSED_RECHECK_MS;
+}
+
+/** Remembers a pull request the forge has no record of and logs it once; logs any other failure every time. */
+function handleSweepFailure(check: { key: string; repo: Repo; n: number; now: number }, error: unknown): void {
+	const context = `the pull state sweep checking pull request ${check.n} for repo ${check.repo.id}`;
+
+	if (!(error instanceof GhError) || error.kind !== 'not-found') {
+		logForgeFailure(context, error);
+
+		return;
+	}
+
+	if (!missingSince.has(check.key)) logForgeFailure(`${context} (re-checked hourly)`, error);
+
+	missingSince.set(check.key, check.now);
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;

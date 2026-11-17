@@ -2,11 +2,10 @@ import type { Repo, RepoOverview } from '@recoder/shared';
 
 import { forgeLabel } from '../connections/forges';
 import { highBugs } from '../pulls/high-bugs';
-import { needsReview } from '../pulls/pull-rows';
 import type { PullRow, PullRowStatus } from '../pulls/types';
 import type { RowEntry } from '../pulls/use-rows';
 import { formatReportDay } from '../usage/report-shared';
-import { formatDuration, plural, pullTitle } from '../shell/format';
+import { formatDuration, plural, pullTitle, shortCount } from '../shell/format';
 import { pullHref } from '../shell/routes';
 import type { HotspotRow, MergedRow, RepoFacts, RepoFigure, RepoPageData, ReviewChart } from './types';
 
@@ -68,9 +67,18 @@ function percentOf(accepted: number, raised: number): string {
 	return raised === 0 ? '—' : `${Math.round((accepted / raised) * 100)}%`;
 }
 
+/**
+ * How many pull requests are open: the forge's own count when it gives one, shortened as GitHub does; otherwise the
+ * ones read so far, with a `+` while the forge has more.
+ */
+function openCountOf(entries: readonly RowEntry[], more: boolean, total: number | null): string {
+	if (total !== null) return shortCount(total);
+
+	return `${shortCount(entries.length)}${more ? '+' : ''}`;
+}
+
 /** The five figures: open pull requests and bugs from the list, the rest from the overview. */
-function figuresOf(entries: readonly RowEntry[], more: boolean, overview: RepoOverview): RepoFigure[] {
-	const notReviewed = entries.filter((entry) => needsReview(entry.listed)).length;
+function figuresOf(entries: readonly RowEntry[], openCount: string, overview: RepoOverview): RepoFigure[] {
 	const bugs = entries.reduce((sum, { row }) => sum + (row.status.kind === 'bugs' ? row.status.bugs : 0), 0);
 	const high = entries.reduce((sum, entry) => sum + highBugs(entry), 0);
 	const { raised, accepted } = overview.findings;
@@ -79,8 +87,8 @@ function figuresOf(entries: readonly RowEntry[], more: boolean, overview: RepoOv
 		{
 			id: 'open',
 			label: 'Open pull requests',
-			value: `${entries.length}${more ? '+' : ''}`,
-			detail: notReviewed > 0 ? `${notReviewed} not reviewed` : null,
+			value: openCount,
+			detail: null,
 			tone: null
 		},
 		{ id: 'bugs', label: 'Open bugs', value: String(bugs), detail: high > 0 ? `${high} high` : null, tone: 'high' },
@@ -88,14 +96,14 @@ function figuresOf(entries: readonly RowEntry[], more: boolean, overview: RepoOv
 			id: 'merged',
 			label: `Merged, ${overview.days} days`,
 			value: String(overview.mergedPulls),
-			detail: overview.reviewedPulls > 0 ? `of ${overview.reviewedPulls} reviewed` : null,
+			detail: null,
 			tone: null
 		},
 		{
 			id: 'accepted',
 			label: 'Findings accepted',
 			value: percentOf(accepted, raised),
-			detail: raised > 0 ? `${accepted} of ${raised}` : null,
+			detail: null,
 			tone: null
 		},
 		{
@@ -155,19 +163,21 @@ interface RepoPageInput {
 	entries: readonly RowEntry[];
 	/** True when the repository has more open pull requests than `entries` holds. */
 	more: boolean;
+	/** Every open pull request the repository has, when its forge counts them. */
+	openTotal: number | null;
 	overview: RepoOverview;
 	base: string;
 }
 
 /** What the page shows, from the repository, its open pull requests and its overview. */
-export function repoPageData({ repo, entries, more, overview, base }: RepoPageInput): RepoPageData {
-	const count = `${entries.length}${more ? '+' : ''}`;
+export function repoPageData({ repo, entries, more, openTotal, overview, base }: RepoPageInput): RepoPageData {
+	const count = openCountOf(entries, more, openTotal);
 
 	return {
 		repo: repoFacts(repo, overview),
-		figures: figuresOf(entries, more, overview),
+		figures: figuresOf(entries, count, overview),
 		needsYou: byUrgency(entries),
-		allPullsLabel: entries.length === 1 && !more ? '1 pull request' : `All ${count} pull requests`,
+		allPullsLabel: count === '1' ? '1 pull request' : `All ${count} pull requests`,
 		merged: mergedOf(overview, base),
 		chart: chartOf(overview),
 		window: `${overview.days} days`,

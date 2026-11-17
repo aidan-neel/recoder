@@ -52,7 +52,7 @@ const createReviewSchema = z.object({
 const SKILLS_TIMEOUT_MS = 10_000;
 
 /**
- * The skills the review loads: the attached ones and the ones its brief mentions with `@name`, looked up where the
+ * The skills the review loads: the attached ones and the ones its brief mentions with `/name`, looked up where the
  * review will read them, the pull request's head when this server holds it, else the default branch. Refuses
  * attached skills the repository lacks. A repository that is not tracked is left to the review's own refusal.
  */

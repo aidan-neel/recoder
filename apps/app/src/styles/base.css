@@ -8,13 +8,16 @@
 }
 
 /*
- * A page: a 44px bar, then a column that scrolls. Every text, icon and box on it starts and ends on
- * --page-gutter from the page's sides; quiet controls and row fills reach past it so their text lands on it.
- * The page is a size container, so a column can centre on the page's 100cqw.
+ * A page, and the Settings dialog's pane: a 44px bar, then a column that scrolls. Every text, icon and box on it
+ * starts and ends on --page-gutter from its sides; quiet controls and row fills reach past it so their text lands on it.
  */
-.page {
+.page,
+.settings-modal-main {
 	--page-gutter: 20px;
+}
 
+/* The page is a size container, so a column can centre on the page's 100cqw. */
+.page {
 	display: flex;
 	min-width: 0;
 	height: 100dvh;

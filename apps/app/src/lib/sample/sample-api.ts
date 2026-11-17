@@ -244,7 +244,7 @@ export function createSampleApi(): ApiClient {
 				.pulls.filter((item) => item.status.state === 'open' && (!query.repoId || item.repoId === query.repoId))
 				.map(({ repoId, pull, status }) => ({ repoId, pull, status, review: world.newestReview(repoId, pull.number) }));
 
-			return { items, failures: [], nextCursors: {}, fetchedAt: new Date().toISOString() };
+			return { items, failures: [], nextCursors: {}, openCounts: {}, fetchedAt: new Date().toISOString() };
 		},
 
 		pullPage: async (repoId, number) => world.page(repoId, number),

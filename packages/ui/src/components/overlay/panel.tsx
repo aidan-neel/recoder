@@ -7,8 +7,11 @@ import { cn } from '../../lib/cn';
 import { modalMotion, scrimMotion } from '../../motion/presets';
 import { useMotionVariants } from '../../motion/reduced';
 
-/** Widths of a modal panel: 24, 28, 36 and 42rem (Sivir's sm, md, lg and xl). */
-export type ModalSize = 'sm' | 'md' | 'lg' | 'xl';
+/**
+ * Widths of a modal panel: 24, 28, 36 and 42rem (Sivir's sm, md, lg and xl), and `screen`, a workspace such as
+ * Settings that fills the window but for a 1.5rem margin, up to 80 by 60rem, and lays out and scrolls its own panes.
+ */
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'screen';
 
 /** Variant names every overlay animates through: in from `closed`, out back to it. */
 export const PRESENCE = { initial: 'closed', animate: 'open', exit: 'closed' } as const;
@@ -27,7 +30,8 @@ const SIZES: Record<ModalSize, string> = {
 	sm: 'max-w-[24rem]',
 	md: 'max-w-[28rem]',
 	lg: 'max-w-[36rem]',
-	xl: 'max-w-[42rem]'
+	xl: 'max-w-[42rem]',
+	screen: 'w-[calc(100%-3rem)] max-w-[80rem] h-[calc(100dvh-3rem)] max-h-[60rem] gap-0 p-0 overflow-hidden'
 };
 
 /**

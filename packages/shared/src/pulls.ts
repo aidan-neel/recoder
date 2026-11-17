@@ -73,6 +73,8 @@ export interface PullList {
 	 * repository with no more is absent.
 	 */
 	nextCursors: Record<string, string>;
+	/** Every open pull request each repository has, for a repository whose forge counts them. */
+	openCounts: Record<string, number>;
 	fetchedAt: string;
 }
 

@@ -1,15 +1,6 @@
 'use client';
 
-import { REVIEW_SPEED_PLANS, REVIEW_SPEEDS } from '@recoder/shared';
-import {
-	Composer,
-	ComposerSend,
-	SegmentedControl,
-	Select,
-	focusComposerField,
-	type ComposerNote,
-	type SelectOption
-} from '@recoder/ui';
+import { Composer, ComposerSend, SegmentedControl, focusComposerField, type ComposerNote } from '@recoder/ui';
 import { useRef, useState } from 'react';
 
 import type { ComposeMode } from '@/lib/compose/compose-mode';
@@ -38,13 +29,6 @@ const MODES: { value: ComposeMode; label: string }[] = [
 	{ value: 'chat', label: 'Chat' }
 ];
 
-/** The review speeds as the bar's select lists them: each one's name over what it trades. */
-const SPEEDS: SelectOption[] = REVIEW_SPEEDS.map((speed) => ({
-	value: speed,
-	label: REVIEW_SPEED_PLANS[speed].label,
-	description: REVIEW_SPEED_PLANS[speed].description
-}));
-
 /**
  * New: one field, a little above the middle of the page. In Review mode the
  * pull request is a choice, made in the composer's bar or from the list
@@ -53,8 +37,9 @@ const SPEEDS: SelectOption[] = REVIEW_SPEEDS.map((speed) => ({
  * starts the review of the choice with the brief, which may be empty, and
  * opens the pull request. In Chat mode the field takes anything about the
  * repository; Enter opens the chat. The title and the mode sit over the
- * field; the repository, the pull request, images and models sit in its bar.
- * Images go with the brief or the chat's first message, and "@" offers the
+ * field; the repository, the pull request, images and models sit in its bar,
+ * and in Review mode the model menu also holds the review's speed. Images go
+ * with the brief or the chat's first message, and "/" offers the
  * repository's skills, a chosen pull request's head included. The pull requests
  * with no review yet sit below; a click chooses one and puts the caret in
  * the field.
@@ -155,10 +140,10 @@ export function ComposeScreen() {
 						onFiles={images.add}
 						images={images.images}
 						onRemoveImage={images.remove}
-						mentions={skills}
-						tools={
+						skills={skills}
+						tools={<AttachImages onAttach={images.add} />}
+						targets={
 							<>
-								<AttachImages onAttach={images.add} />
 								{compose.reposLoading ? (
 									<PickerSkeleton width={140} />
 								) : (
@@ -173,10 +158,7 @@ export function ComposeScreen() {
 							</>
 						}
 						trailing={
-							<>
-								{chat ? null : <SpeedChoice compose={compose} />}
-								<ComposerModels />
-							</>
+							<ComposerModels speed={chat ? undefined : { speed: compose.speed, onSpeedChange: compose.setSpeed }} />
 						}
 						action={
 							<ComposerSend
@@ -208,32 +190,7 @@ function PullChoice({ compose }: { compose: ComposeView }) {
 	return <PullPicker rows={compose.pulls} pick={compose.pick} onPick={compose.choose} />;
 }
 
-/**
- * How fast the review runs, in Review mode: the standard review, or Spark. The
- * select hands back a string; only a known speed is taken.
- */
-function SpeedChoice({ compose }: { compose: ComposeView }) {
-	function choose(value: string): void {
-		const speed = REVIEW_SPEEDS.find((candidate) => candidate === value);
-
-		if (speed) compose.setSpeed(speed);
-	}
-
-	return (
-		<Select
-			variant="quiet"
-			align="end"
-			aria-label="Review speed"
-			className="bar-trigger"
-			contentClassName="compose-speed-menu"
-			value={compose.speed}
-			options={SPEEDS}
-			onValueChange={choose}
-		/>
-	);
-}
-
-/** Where "@" reads skills: the chosen pull request in Review mode, else the chosen repository. */
+/** Where "/" reads skills: the chosen pull request in Review mode, else the chosen repository. */
 function skillSource(compose: ComposeView): { repoId: string | null; pull?: number } {
 	const target = compose.mode === 'review' ? compose.pick?.target : undefined;
 

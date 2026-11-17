@@ -89,7 +89,8 @@ export function useRepoPage(repoId: string): RepoPageView {
 			error: state.error,
 			offline: state.offline,
 			starting: state.starting,
-			more: state.more.cursors[repoId] !== undefined
+			more: state.more.cursors[repoId] !== undefined,
+			openTotal: state.list?.openCounts[repoId] ?? null
 		}))
 	);
 
@@ -100,9 +101,9 @@ export function useRepoPage(repoId: string): RepoPageView {
 	const data = useMemo(
 		() =>
 			repo && ready && shared.phase === 'ready'
-				? repoPageData({ repo, entries, more: shared.more, overview: ready, base })
+				? repoPageData({ repo, entries, more: shared.more, openTotal: shared.openTotal, overview: ready, base })
 				: null,
-		[repo, ready, shared.phase, entries, shared.more, base]
+		[repo, ready, shared.phase, entries, shared.more, shared.openTotal, base]
 	);
 
 	const missing = overview.state.phase === 'missing' || (shared.repos !== null && repo === null);

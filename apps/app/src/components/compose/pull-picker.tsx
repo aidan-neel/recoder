@@ -35,15 +35,15 @@ interface PullPickerProps {
 
 /**
  * The pull request a review starts on, in the composer's bar beside the
- * repository: a quiet trigger with the pull mark and the pick, or "Choose a
- * pull request", opening a searchable dialog of the repository's open pull
+ * repository: a quiet trigger with the pull mark and the pick, or "None",
+ * opening a searchable dialog of the repository's open pull
  * requests with the current one checked. A pick puts the caret in the field,
  * where the brief goes next.
  */
 export function PullPicker({ rows, pick, onPick }: PullPickerProps) {
 	const [open, setOpen] = useState(false);
 	const trigger = useRef<HTMLButtonElement>(null);
-	const label = pick ? pickLabel(pick) : 'Choose a pull request';
+	const label = pick ? pickLabel(pick) : 'None';
 	const pickedNumber = pick?.target.kind === 'pull' ? pick.target.number : null;
 
 	/** Picks the pull request and closes the dialog. */
@@ -60,7 +60,7 @@ export function PullPicker({ rows, pick, onPick }: PullPickerProps) {
 				className="bar-trigger pull-trigger"
 				aria-haspopup="dialog"
 				aria-expanded={open}
-				aria-label={pick ? `Pull request: ${label}` : label}
+				aria-label={`Pull request: ${label}`}
 				title={label}
 				data-empty={pick ? undefined : ''}
 				onClick={() => setOpen(true)}

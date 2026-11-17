@@ -17,6 +17,7 @@ const OPEN_PULLS_QUERY = `
 query($owner: String!, $name: String!, $first: Int!, $after: String) {
 	repository(owner: $owner, name: $name) {
 		pullRequests(states: OPEN, first: $first, after: $after, orderBy: { field: UPDATED_AT, direction: DESC }) {
+			totalCount
 			pageInfo { hasNextPage endCursor }
 			nodes {${PULL_FIELDS}
 			}
@@ -45,7 +46,7 @@ export async function listGithubPulls(
 	return parsePullPage(extractJson(await gh(args, env)));
 }
 
-/** A GraphQL `pullRequests` answer as entries and the cursor of the next page, null on the last. */
+/** A GraphQL `pullRequests` answer as entries, the cursor of the next page (null on the last) and the open total. */
 function parsePullPage(response: unknown): OpenPulls {
 	const body = record(response);
 	const connection = record(record(record(body.data).repository).pullRequests);
@@ -62,7 +63,8 @@ function parsePullPage(response: unknown): OpenPulls {
 
 	return {
 		entries: records(connection.nodes).map(pullEntry),
-		nextCursor: pageInfo.hasNextPage === true && endCursor ? endCursor : null
+		nextCursor: pageInfo.hasNextPage === true && endCursor ? endCursor : null,
+		total: typeof connection.totalCount === 'number' ? connection.totalCount : null
 	};
 }
 

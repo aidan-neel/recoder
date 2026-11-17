@@ -224,14 +224,16 @@ test('an attached skill is kept on the message and its text reaches the model', 
 	expect(model.bodies[0]).toContain('Skill marker 8841.');
 });
 
-test('a skill a follow-up names with @ is loaded, and an @ that names no skill is left as text', async () => {
+test('a skill a follow-up names with / is loaded, and a / that names no skill is left as text', async () => {
 	const repo = await trackedRepo({ '.agents/skills/lint/SKILL.md': '---\nname: lint\n---\nSkill marker 5512.\n' });
 	const model = streamingModel(['Done.']);
 	const chat = await startChat(repo.id, 'Hello');
 
 	await replySettled(chat.id);
 
-	const sent = await post(`/api/chats/${chat.id}/messages`, { text: 'Ask @maya, then check with @lint.' });
+	const sent = await post(`/api/chats/${chat.id}/messages`, {
+		text: 'Open /src/app.ts and /maya, then check with /lint.'
+	});
 
 	expect(sent.status).toBe(202);
 	expect(((await sent.json()) as RepoChatMessage).skills).toEqual(['lint']);

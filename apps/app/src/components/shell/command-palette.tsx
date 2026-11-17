@@ -32,7 +32,7 @@ import { useOpenPull } from '@/lib/pulls/use-open-pull';
 import { useRowEntries } from '@/lib/pulls/use-rows';
 import { useChrome } from '@/lib/shell/chrome';
 import { errorToast } from '@/lib/shell/notify';
-import { AUTOMATIONS_HREF, GUIDELINES_HREF, newReviewHref, pullsHref, settingsHref } from '@/lib/shell/routes';
+import { AUTOMATIONS_HREF, GUIDELINES_HREF, newReviewHref, pullsHref } from '@/lib/shell/routes';
 import { useTheme } from '@/lib/shell/theme';
 
 import { PullMark } from '@/components/common/pull-mark';
@@ -88,6 +88,7 @@ export function CommandPalette() {
 	const open = useChrome((state) => state.paletteOpen);
 	const setOpen = useChrome((state) => state.setPaletteOpen);
 	const setShortcutsOpen = useChrome((state) => state.setShortcutsOpen);
+	const openSettings = useChrome((state) => state.openSettings);
 	const toggleTheme = useTheme((state) => state.toggle);
 	const admin = useIsAdmin();
 	const entries = useRowEntries();
@@ -118,10 +119,10 @@ export function CommandPalette() {
 		{ id: 'pulls', label: 'Pull requests', icon: GitPullRequest, run: () => go(pullsHref(base)) },
 		{ id: 'automations', label: 'Automations', icon: Clock, run: () => go(AUTOMATIONS_HREF) },
 		{ id: 'guidelines', label: 'Guidelines', icon: BookOpen, run: () => go(GUIDELINES_HREF) },
-		...(admin ? [{ id: 'admin', label: 'Recoder', icon: ShieldUser, run: () => go(settingsHref('admin')) }] : []),
-		{ id: 'settings', label: 'Settings', icon: Settings, shortcut: 'mod+,', run: () => go(settingsHref()) },
+		...(admin ? [{ id: 'admin', label: 'Recoder', icon: ShieldUser, run: () => openSettings('admin') }] : []),
+		{ id: 'settings', label: 'Settings', icon: Settings, shortcut: 'mod+,', run: () => openSettings() },
 		{ id: 'theme', label: 'Switch theme', icon: SunMoon, run: toggleTheme },
-		{ id: 'palette', label: 'Change palette', icon: Palette, run: () => go(settingsHref('appearance')) },
+		{ id: 'palette', label: 'Change palette', icon: Palette, run: () => openSettings('appearance') },
 		{ id: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, shortcut: '?', run: () => setShortcutsOpen(true) }
 	];
 

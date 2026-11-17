@@ -1,12 +1,11 @@
 'use client';
 
 import { SwapText } from '@recoder/ui';
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import type { EditorNote as Note } from '@/lib/guidelines/editor-note';
 import { formatCount } from '@/lib/shell/format';
-import { settingsHref } from '@/lib/shell/routes';
+import { useChrome } from '@/lib/shell/chrome';
 
 interface EditorNoteProps {
 	/** What the line says, or null when there is nothing to say. */
@@ -24,9 +23,9 @@ function noteWords(note: Note): ReactNode {
 	return (
 		<>
 			Connect a token with write access in{' '}
-			<Link href={settingsHref('connections')} className="text-link">
+			<button type="button" className="text-link" onClick={() => useChrome.getState().openSettings('connections')}>
 				Connections
-			</Link>{' '}
+			</button>{' '}
 			to open a pull request.
 		</>
 	);

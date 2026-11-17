@@ -42,7 +42,8 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
 
 - **Routes** (`src/app/(live)`): `/` the pull request list, `/new` a new
   review, `/pulls/[repoId]/[number]` a pull request, `/repos/[repoId]` a
-  repository, `/automations`, `/guidelines`, `/settings/[section]`. `/sample`
+  repository, `/automations`, `/guidelines`. Settings has no route: it is a
+  dialog over the page (see Settings dialog). `/sample`
   mirrors the list, the new review page, the pull request page and the
   repository page on an in-memory client, with no server.
 - **Logic** lives in `src/lib/<feature>/` as view-model hooks and stores. A
@@ -76,17 +77,24 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   its menu. Unchecked, a list is left out whole, title and all, in this
   browser; hiding is apart from folding. Hiding Chats or Reviews takes its
   rows out of Settled too, and Settled goes when nothing is left in it.
-- **Settings sidebar**: on `/settings/<section>` the account row becomes
-  Back to app (to the pull request list), and the places and recent reviews become the sections: Models,
-  Providers, Connections and Appearance, each with its icon, on the same
-  lanes and fill as the app's places; the admin's own sit under an Admin
-  label below them: Recoder (the running server, its updates, the branch a
-  git checkout runs and a switch to another, the global
-  review guidelines and its people), Limits, Telemetry and Usage. The search,
-  the hide button and the foot stay. The page bar says Settings. Opening
-  Settings lands on Models, never on a bare `/settings`, so a section row is
-  always open. Keyboard focus in the part that swaps moves with it: to Back
-  to app or the open section, and back to the account row.
+- **Settings dialog**: Settings opens over whatever page is open, from the
+  account menu, the palette, the model chip, a link that names a section, or
+  ⌘, (which also closes it). It fills the window but for a 24px margin, up to
+  1280 by 960px (the kit's `screen` modal). On the left, a 220px nav on the
+  sidebar's surface, lanes and rows, under a search field that keeps the
+  sections whose name or keywords (their groups and rows) hold every word
+  typed; Enter opens the first, and with none left it says so. The rows:
+  Models, Providers, Connections and
+  Appearance, each with its icon, and the admin's own under an Admin label:
+  Recoder (the running server, its updates, the branch a git checkout runs and
+  a switch to another, the global review guidelines and its people), Limits,
+  Telemetry and Usage. The open section sits on a still fill. On the right, a
+  44px bar holds the crumbs (Settings › the section), the section's own
+  control (the range on Usage and Telemetry) and the close button; under it
+  the section scrolls in the settings column. Opening puts focus on the
+  dialog, not a row; Esc closes the top layer first, so a menu inside closes
+  before Settings does. A member asked for an admin section gets Models.
+  Nothing about Settings lives in the address, so a reload closes it.
 - **Page bar** (44px, `--bar-height`): breadcrumbs on the left, the page's own
   actions on the right. Every page's content starts under it, so borders line
   up across pages.
@@ -126,12 +134,13 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   shape and paints once, whole. A part with nothing in it says so in one quiet
   line; a repository that is not tracked or did not load says so in a banner.
 - **New**: one large composer, its centre near 42% of the page, with no
-  heading; the crumb names the screen (New review or New chat). Over its
-  left edge sits the repository, a quiet button with the forge's mark that
-  opens a searchable command dialog of every tracked repository, the current
-  one checked. Over its right edge sits a Review | Chat switch. In Review the
+  heading; the crumb names the screen (New review or New chat). In its bar,
+  after attach and "/", sits the repository, a quiet button with the forge's
+  mark that opens a searchable command dialog of every tracked repository,
+  the current one checked. Over its right edge sits a Review | Chat switch. In Review the
   pull request is a pick, not text: a second bar button beside the repository
-  opens a searchable dialog of its open pull requests, and the field holds only
+  (it reads None until one is chosen) opens a searchable dialog of its open
+  pull requests, and the field holds only
   the brief, what the review should look at (it may be empty). A pasted link or
   a typed `#214 ` moves into the pick and leaves the text; a row under "Not
   reviewed yet" picks its pull request and puts the caret in the field rather
@@ -199,11 +208,11 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     rows: failed first, then running, then passed, with skipped checks folded
     into one "N skipped" row.
 - **Automations**, **Guidelines** and **Settings** are one 704px column of
-  titled cards (`SettingsPage`, `SettingsGroup`), centred on the page, 32px
-  under the bar.
+  titled cards (`SettingsPage`, `SettingsGroup`), centred on the page (or the
+  Settings dialog's pane), 32px under the bar.
   The width is the widest row on one line: a model with its effort, the
-  ignored paths. A Settings section's name tops its column at the page
-  title's size; Automations and Guidelines have none, as the bar names them.
+  ignored paths. No column has a title of its own: the bar names the page,
+  and the dialog's crumbs name the section.
   Group titles, cards and notes share the column's edges; inside a card a
   row's text starts 12px in and its control ends 8px from the right, where
   the group's own action ends too, and so do a row's editor (the guidelines
@@ -351,21 +360,27 @@ comment field. There is no second implementation.
 - **Sizes.** `lg` is a page's main field (New): 15px text, three rows.
   `md` is everything else, two rows. The `row` layout puts the field and the
   action on one line for the comment field; an empty note takes no room.
-- **"/" commands.** A slash at the start of the field, or the "/" tool,
-  opens a list of commands over the composer (under it when it sits high),
-  from its left edge and at most 440px wide. Arrows move, Enter or Tab picks,
-  Escape shuts it until the text changes; a pick puts the command's question
-  in the field to send. A chat offers only what it can do now: `/review`
-  only when a new run can start. New has none, because the pull request has
-  to lead its text.
+- **"/" menu.** A slash typed at the start of the field or after a space,
+  or the "/" tool beside attach, opens one list over the composer, across its
+  width at its radius: the commands under "Commands", a hairline, then the
+  repository's skills under "Skills". A row is a glyph, the name at medium
+  weight and what it does, muted, on one line. Arrows move, Enter or Tab
+  picks, Escape shuts it until the text changes. A command puts its question
+  in the field to send; a skill puts `/name`, which shows as an embed with
+  the puzzle mark, and the message loads that skill. A chat offers only what
+  it can do now: `/review` only when a new run can start. New has no
+  commands, only skills, because the pull request has to lead its text.
 - **"+".** In the Ask pane and a bug's Ask, "+" opens a searchable dialog of
   the pull request's changed files and adds the chosen path to the text; the
   chat takes text only. Focus comes back to the field, caret at the end.
-- **Models.** A quiet trigger in the bar names the Review model and opens a
-  menu: the Review and Subagent models (each opens the Settings model
-  dialog) and the Review effort. No route takes a model per message, so a
-  pick saves to Settings at once; the menu only adds a line when the admin
-  sets the member's models. The comment field and the sample have no models.
+- **Models.** A quiet trigger in the bar shows the mark of the agent that
+  serves the Reviewer model and names the model; it opens a menu: the
+  Reviewer and Subagent models (each opens the Settings model dialog) and the
+  Reviewer effort. On New in Review mode the menu also holds the review's
+  speed, Standard or Spark, and Spark's bolt follows the name on the trigger.
+  No route takes a model per message, so a pick saves to Settings at once;
+  the menu only adds a line when the admin sets the member's models. The
+  comment field has no models; the sample shows only the speed.
 - **Keys.** Enter sends, Shift+Enter starts a line. Text over the server's
   limit says by how much and cannot send; a refused send says why and keeps
   the text.
@@ -379,11 +394,9 @@ Motion explains a change and never makes the person wait.
   Menus, selects, the palette, dialogs, tooltips and the link card fade in
   from a 0.97 scale, with no blur: menus in 120ms and out in 80ms, dialogs in
   150ms and out in 100ms. A link that becomes an embed settles in place: its
-  tint fades in over `--dur-swap`, with no change of size. Entering or
-  leaving Settings, the parts of the sidebar that change fade through on
-  `--dur-swap`: the old ones out in 50ms, then the new ones in over 90ms,
-  never both at once, and nothing slides. Opened or reloaded on Settings,
-  it paints at once.
+  tint fades in over `--dur-swap`, with no change of size. Settings enters
+  and leaves as every dialog does; changing its section swaps the pane at
+  once, scrolled to the top.
 - Things that do not move: the open tab, the chosen segment and the active
   nav row are filled in place, never slid there. Keyboard moves (j/k, tabs 1
   to 4) swap content at once. A pressed button shades and never shrinks.

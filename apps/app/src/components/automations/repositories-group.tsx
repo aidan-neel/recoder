@@ -2,14 +2,13 @@
 
 import type { Repo } from '@recoder/shared';
 import { Button } from '@recoder/ui';
-import Link from 'next/link';
 
 import { ForgeTile } from '@/components/common/forge-tile';
 import { OFFLINE_TEXT } from '@/lib/api/http';
 import type { AutoReviewSection } from '@/lib/settings/use-auto-review-section';
 import { useAutoReviewSwitch } from '@/lib/settings/use-auto-review-switch';
 import { useWatchRepo, type WatchRepoView } from '@/lib/settings/use-watch-repo';
-import { settingsHref } from '@/lib/shell/routes';
+import { useChrome } from '@/lib/shell/chrome';
 
 import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
 
@@ -63,8 +62,8 @@ function OwnReposRow() {
 function NoRepositories() {
 	return (
 		<SettingsRow name="No repositories yet" detail="The watcher checks the repositories you track">
-			<Button asChild variant="outline">
-				<Link href={settingsHref('connections')}>Open Connections</Link>
+			<Button variant="outline" onClick={() => useChrome.getState().openSettings('connections')}>
+				Open Connections
 			</Button>
 		</SettingsRow>
 	);
