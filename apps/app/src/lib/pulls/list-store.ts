@@ -88,7 +88,7 @@ export interface ListStore {
 const REFRESH_MS = 60_000;
 
 /** How many of the newest chats the list reads, for the sidebar. */
-const CHAT_LIMIT = 5;
+export const CHAT_LIMIT = 5;
 
 /** Where the New review screen's last repository is kept. */
 const COMPOSE_REPO_KEY = 'recoder.compose.repo.v1';

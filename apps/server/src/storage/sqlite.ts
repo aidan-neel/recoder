@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { serverDataDir } from '../util/data-dir';
 import type { Collection, Table } from './collection';
+import { prepareReviewList } from './review-list-schema';
 
 let handle: Database | null = null;
 
@@ -43,6 +44,8 @@ export function sqlite(): Database {
 			handle.run(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 		}
 
+		prepareReviewList(handle);
+		handle.run("CREATE INDEX IF NOT EXISTS model_calls_at ON model_calls (substr(json_extract(value, '$.at'), 1, 10))");
 		handle.run('CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)');
 	}
 

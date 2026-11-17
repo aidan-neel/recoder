@@ -5,6 +5,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import type { EditorNote as Note } from '@/lib/guidelines/editor-note';
+import { formatCount } from '@/lib/shell/format';
 import { settingsHref } from '@/lib/shell/routes';
 
 interface EditorNoteProps {
@@ -14,11 +15,6 @@ interface EditorNoteProps {
 	length: number;
 	/** The character limit. */
 	max: number;
-}
-
-/** A count as people read it: `8,000`. */
-function count(value: number): string {
-	return value.toLocaleString('en-US');
 }
 
 /** A note's words. A blocked save has none of its own: it points at the page that unblocks it. */
@@ -52,7 +48,7 @@ export function EditorNote({ note, length, max }: EditorNoteProps) {
 				) : null}
 			</SwapText>
 			<span className="guidelines-count" data-over={length > max || undefined}>
-				{count(length)} / {count(max)}
+				{formatCount(length)} / {formatCount(max)}
 			</span>
 		</div>
 	);

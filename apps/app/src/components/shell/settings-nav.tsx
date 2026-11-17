@@ -46,7 +46,7 @@ export function SettingsNav() {
 
 		return (
 			<RowButton key={id} asChild data-nav data-active={active === id || undefined} className="nav-item">
-				<Link href={settingsHref(id)} aria-current={active === id ? 'page' : undefined}>
+				<Link href={settingsHref(id)} prefetch aria-current={active === id ? 'page' : undefined}>
 					<Icon aria-hidden />
 					{label}
 				</Link>

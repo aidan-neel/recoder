@@ -20,7 +20,7 @@ function Merged({ rows }: { rows: MergedRow[] }) {
 			{rows.map((row) => (
 				<li key={row.key} data-repo-row className="repo-row">
 					<RowButton asChild cover>
-						<Link href={row.href} className="repo-row-link">
+						<Link href={row.href} prefetch className="repo-row-link">
 							<PullMark state="merged" />
 							<span className="repo-row-title">{row.title}</span>
 							<span className="repo-row-number">#{row.number}</span>

@@ -1,4 +1,5 @@
 import { realpath } from 'node:fs/promises';
+import { TtlCache } from '../util/ttl-cache';
 import type { UpdateAvailable, UpdateBranches, UpdateMode, UpdateStatus, WebRestart } from '@recoder/shared';
 import { CliError, EXIT } from '../cli/exit';
 import { githubReleases, type ReleaseSource } from '../cli/upgrade/release-source';
@@ -81,13 +82,12 @@ export function createUpdateService(deps: UpdateDeps) {
 	const restart = deps.restart ?? restartThroughSuccessor;
 	const detectWeb = deps.detectWeb ?? detectWebRestart;
 
-	let detected: { mode: UpdateMode; managedNote?: string } | undefined;
+	const detected = new TtlCache<{ mode: UpdateMode; managedNote?: string }>(Number.POSITIVE_INFINITY, 1);
+	const current = new TtlCache<Awaited<ReturnType<typeof gitCurrent>>>(5_000, 1);
 
 	/** How this install runs, asked once — it cannot change under a live process. */
 	async function detection(): Promise<{ mode: UpdateMode; managedNote?: string }> {
-		detected ??= await detectUpdateMode(environment, deps.run);
-
-		return detected;
+		return detected.get('mode', () => detectUpdateMode(environment, deps.run));
 	}
 
 	async function read(): Promise<UpdateRecord | undefined> {
@@ -126,7 +126,7 @@ export function createUpdateService(deps: UpdateDeps) {
 
 		return {
 			mode: detectionResult.mode,
-			current: detectionResult.mode === 'git' ? await gitCurrent() : { version: VERSION },
+			current: detectionResult.mode === 'git' ? await current.get('head', gitCurrent) : { version: VERSION },
 			available: null,
 			state: 'idle',
 			...(detectionResult.managedNote !== undefined ? { managedNote: detectionResult.managedNote } : {})
@@ -138,7 +138,7 @@ export function createUpdateService(deps: UpdateDeps) {
 	}
 
 	async function gitCurrent() {
-		return { version: VERSION, ...currentOf(await checkout().inspect()) };
+		return { version: VERSION, ...(await checkout().current()) };
 	}
 
 	/** Why uncommitted work refuses moving HEAD, or undefined on a clean tree. */

@@ -23,6 +23,7 @@ export interface GitInspection {
 
 /** A git checkout the update pulls into. All commands run with `-C root` and never through a shell. */
 export interface GitCheckout {
+	current(): Promise<{ commit: string; branch?: string }>;
 	inspect(): Promise<GitInspection>;
 	fetch(): Promise<void>;
 	mergeFfOnly(): Promise<void>;
@@ -54,6 +55,12 @@ export function gitCheckout(root: string, run: RunProcess = spawnProcess, env?: 
 	const lines = (text: string) => text.split('\n').filter((line) => line !== '');
 
 	return {
+		async current() {
+			const result = await git(['rev-parse', 'HEAD', '--abbrev-ref', 'HEAD']);
+			const [commit, branch] = result.stdout.trim().split('\n');
+
+			return { commit, ...(branch && branch !== 'HEAD' ? { branch } : {}) };
+		},
 		async inspect() {
 			const [commit, branch, upstream, dirty, counts, log, diff] = await Promise.all([
 				git(['rev-parse', 'HEAD']),

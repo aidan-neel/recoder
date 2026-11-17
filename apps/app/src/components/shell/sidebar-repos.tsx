@@ -3,7 +3,10 @@
 import { ForgeMark, HoverList, RowButton } from '@recoder/ui';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useCallback } from 'react';
 
+import { useOverviewCache } from '@/lib/api/client';
+import { useIntent } from '@/lib/shell/intent';
 import { useSidebarFolds } from '@/lib/shell/sidebar-folds';
 import type { SidebarRepo } from '@/lib/shell/types';
 
@@ -30,21 +33,27 @@ export function SidebarRepos({ repos }: { repos: SidebarRepo[] }) {
 		>
 			<nav aria-label="Repositories">
 				<HoverList className="sidebar-nav" itemSelector="[data-nav]">
-					{repos.map((repo) => {
-						const active = pathname === repo.href;
-
-						return (
-							<RowButton key={repo.id} asChild data-nav data-active={active || undefined} className="nav-item">
-								<Link href={repo.href} aria-current={active ? 'page' : undefined}>
-									<ForgeMark provider={repo.provider} className="nav-forge" />
-									<span className="nav-label">{repo.name}</span>
-									{repo.alert ? <span className="nav-alert" role="img" aria-label="Has high-severity bugs" /> : null}
-								</Link>
-							</RowButton>
-						);
-					})}
+					{repos.map((repo) => (
+						<RepoItem key={repo.id} repo={repo} active={pathname === repo.href} />
+					))}
 				</HoverList>
 			</nav>
 		</SidebarSection>
+	);
+}
+
+/** One repository: resting on it reads its overview, so its page opens filled. */
+function RepoItem({ repo, active }: { repo: SidebarRepo; active: boolean }) {
+	const overviews = useOverviewCache();
+	const intent = useIntent(useCallback(() => overviews.warm(repo.id), [overviews, repo.id]));
+
+	return (
+		<RowButton asChild data-nav data-active={active || undefined} className="nav-item">
+			<Link href={repo.href} prefetch aria-current={active ? 'page' : undefined} {...intent}>
+				<ForgeMark provider={repo.provider} className="nav-forge" />
+				<span className="nav-label">{repo.name}</span>
+				{repo.alert ? <span className="nav-alert" role="img" aria-label="Has high-severity bugs" /> : null}
+			</Link>
+		</RowButton>
 	);
 }

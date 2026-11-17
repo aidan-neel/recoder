@@ -1,8 +1,11 @@
 'use client';
 
 import { NavPill } from '@recoder/ui';
-import Link from 'next/link';
 import type { ReactNode } from 'react';
+
+import { useIntent } from '@/lib/shell/intent';
+
+import { TabLink } from './tab-link';
 
 /** One tab of a page: a link with its own address. */
 export interface PageTab {
@@ -15,6 +18,8 @@ export interface PageTab {
 	tone?: 'bugs';
 	/** Anything else after the label, such as where a running review stands. */
 	adornment?: ReactNode;
+	/** Starts reading what the tab shows, once the pointer or focus rests on it. */
+	warm?: () => void;
 }
 
 interface PageTabsProps {
@@ -32,25 +37,27 @@ interface PageTabsProps {
 export function PageTabs({ label, tabs, current }: PageTabsProps) {
 	return (
 		<nav className="page-tabs" aria-label={label}>
-			{tabs.map(({ id, label: name, href, count, tone, adornment }) => (
-				<Link
-					key={id}
-					href={href}
-					replace
-					scroll={false}
-					className="page-tab"
-					aria-current={id === current ? 'page' : undefined}
-				>
-					{id === current ? <NavPill /> : null}
-					{name}
-					{count ? (
-						<span className="page-tab-count" data-tone={tone}>
-							{count}
-						</span>
-					) : null}
-					{adornment}
-				</Link>
+			{tabs.map((tab) => (
+				<PageTabLink key={tab.id} tab={tab} current={tab.id === current} />
 			))}
 		</nav>
+	);
+}
+
+/** One tab: its link, its count, and the fill when it is open. */
+function PageTabLink({ tab, current }: { tab: PageTab; current: boolean }) {
+	const intent = useIntent(tab.warm);
+
+	return (
+		<TabLink href={tab.href} className="page-tab" aria-current={current ? 'page' : undefined} {...intent}>
+			{current ? <NavPill /> : null}
+			{tab.label}
+			{tab.count ? (
+				<span className="page-tab-count" data-tone={tab.tone}>
+					{tab.count}
+				</span>
+			) : null}
+			{tab.adornment}
+		</TabLink>
 	);
 }

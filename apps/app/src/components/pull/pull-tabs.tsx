@@ -1,10 +1,10 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-
 import { useApi } from '@/lib/api/client';
+import { useWarmCommits } from '@/lib/pull/pull-session';
 import { PULL_TABS, type PullPageView, type PullTab } from '@/lib/pull/types';
 import { useRunView } from '@/lib/run/use-run';
+import { replaceSearch } from '@/lib/shell/navigation';
 import { pullHref } from '@/lib/shell/routes';
 import { useKeys } from '@/lib/shell/use-keys';
 
@@ -36,11 +36,11 @@ function countOf(tab: PullTab, counts: PullPageView['counts']): number | null {
  * tab says where the newest review stands, and its open bugs once it is done.
  */
 export function PullTabs({ repoId, number, tab, counts }: PullTabsProps) {
-	const router = useRouter();
 	const { base } = useApi();
 	const review = reviewTabMark(useRunView());
 	const hrefOf = (target: PullTab) => pullHref(base, repoId, number, target);
-	const open = (target: PullTab) => router.replace(hrefOf(target), { scroll: false });
+	const open = (target: PullTab) => replaceSearch(hrefOf(target));
+	const warmCommits = useWarmCommits();
 
 	useKeys({
 		'1': () => open('changes'),
@@ -58,7 +58,8 @@ export function PullTabs({ repoId, number, tab, counts }: PullTabsProps) {
 			href: hrefOf(id),
 			count: marked ? null : countOf(id, counts),
 			tone: id === 'review' ? 'bugs' : undefined,
-			adornment: marked ? review : undefined
+			adornment: marked ? review : undefined,
+			warm: id === 'commits' ? warmCommits : undefined
 		};
 	});
 
