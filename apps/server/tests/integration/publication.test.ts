@@ -3,7 +3,6 @@ import { SQL } from 'bun';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { SHARED_SECRET_KEY } from './shared-secret-key';
 import {
 	closePublicationStorage,
 	initializePublication,
