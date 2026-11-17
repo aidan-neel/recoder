@@ -72,7 +72,8 @@
 	[data-ui='link-embed-mark'] {
 		fill: currentColor;
 	}
-	[data-ui='link-embed-mark'][data-glyph='link'] {
+	[data-ui='link-embed-mark'][data-glyph='link'],
+	[data-ui='link-embed-mark'][data-glyph='mention'] {
 		fill: none;
 		stroke: currentColor;
 		stroke-linecap: round;
@@ -94,12 +95,13 @@
 		color: var(--accent-text);
 		font-weight: 400;
 	}
+	/* 2px in from the 18px embed's top, bottom and left, so its corners are the embed's less 2px. */
 	[data-ui='link-embed-thumb'] {
 		width: 14px;
 		height: 14px;
 		flex-shrink: 0;
 		align-self: center;
-		border-radius: 3px;
+		border-radius: calc(var(--radius-chip) - 2px);
 		object-fit: cover;
 		box-shadow: 0 0 0 1px var(--line-subtle);
 	}

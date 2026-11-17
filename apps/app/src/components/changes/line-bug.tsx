@@ -7,11 +7,11 @@ import { EvidencePill } from '@/components/bugs/bug-facts';
 
 interface LineBugProps {
 	bug: BugView;
-	/** The Bugs tab, where the card opens this bug. */
+	/** The Review tab, where the card opens this bug. */
 	href: string;
 }
 
-/** A bug where it happens in the diff: its title and how it was shown. It opens the bug on the Bugs tab. */
+/** A bug where it happens in the diff: its title and how it was shown. It opens the bug on the Review tab. */
 export function LineBug({ bug, href }: LineBugProps) {
 	return (
 		<Link href={`${href}#bug-${bug.id}`} replace scroll={false} className="line-bug">

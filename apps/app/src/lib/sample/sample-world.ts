@@ -29,8 +29,13 @@ export function createSampleWorld() {
 	const progress = new Map<string, ReviewProgress>();
 	const followers = new Map<string, Set<StreamHandlers<ProgressMessage>>>();
 
+	/** The seed, built on first use; the reviews running when the sample loads bring their progress. */
 	function data(): SampleSeed {
-		seed ??= sampleSeed();
+		if (!seed) {
+			seed = sampleSeed();
+
+			for (const [id, value] of Object.entries(seed.progress)) progress.set(id, value);
+		}
 
 		return seed;
 	}
@@ -65,6 +70,8 @@ export function createSampleWorld() {
 	}
 
 	function progressOf(id: string): ReviewProgress {
+		data();
+
 		return progress.get(id) ?? emptyReviewProgress(id);
 	}
 

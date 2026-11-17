@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 interface TrailStepProps {
 	/** The mark on the trail's line: the step's icon, a spinner, or the failure mark. */
 	icon: ReactNode;
-	kind: 'thought' | 'tool';
+	kind: 'thought' | 'note' | 'tool';
 	failed?: boolean;
 	/** The step's label, then what it holds: a thought's text, a call's files or output. */
 	children: ReactNode;

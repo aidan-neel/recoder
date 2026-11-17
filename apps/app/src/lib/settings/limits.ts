@@ -1,25 +1,86 @@
 import type { ModelSettings } from '@recoder/shared';
 
-export type LimitKey = keyof ModelSettings['limits'];
+import { formatCount } from '../shell/format';
 
-/** The review limits, with the server's caps. */
-export const LIMIT_FIELDS: readonly { key: LimitKey; name: string; hint: string; max: number }[] = [
-	{ key: 'maxFiles', name: 'Files per review', hint: 'Larger pull requests are reviewed in part', max: 200 },
-	{ key: 'maxDiffChars', name: 'Diff characters', hint: 'Total diff sent to reviewers', max: 1_000_000 },
-	{ key: 'maxFileChars', name: 'Characters per file', hint: 'Longer files are truncated', max: 200_000 }
+type LimitKey = keyof ModelSettings['limits'];
+
+export interface LimitFieldSpec {
+	key: LimitKey;
+	name: string;
+	hint: string;
+	max: number;
+	step: number;
+	shiftStep: number;
+}
+
+/** The review limits, with the server's caps and stepper increments. */
+export const LIMIT_FIELDS: readonly LimitFieldSpec[] = [
+	{
+		key: 'maxFiles',
+		name: 'Files per review',
+		hint: 'Larger pull requests are reviewed in part',
+		max: 200,
+		step: 10,
+		shiftStep: 50
+	},
+	{
+		key: 'maxDiffChars',
+		name: 'Diff characters',
+		hint: 'Total diff sent to reviewers',
+		max: 1_000_000,
+		step: 50_000,
+		shiftStep: 100_000
+	},
+	{
+		key: 'maxFileChars',
+		name: 'Characters per file',
+		hint: 'Longer files are truncated',
+		max: 200_000,
+		step: 1_000,
+		shiftStep: 10_000
+	}
 ];
+
+/** The non-negative whole number `text` writes (allowing commas, spaces and underscores), or null. */
+export function parseWholeNumber(text: string): number | null {
+	const digits = text.replace(/[\s,_]/g, '');
+
+	if (!/^\d+$/.test(digits)) return null;
+
+	const value = Number(digits);
+
+	return Number.isSafeInteger(value) ? value : null;
+}
 
 /**
  * A typed limit as a whole number from `min` to `max`, or the reason it isn't one.
  * Thousands separators and spaces are fine ("60,000").
  */
 export function parseLimit(text: string, max: number, min = 1): { value: number } | { error: string } {
-	const digits = text.replace(/[\s,_]/g, '');
-	const range = `Enter a whole number from ${min.toLocaleString('en-US')} to ${max.toLocaleString('en-US')}.`;
+	const value = parseWholeNumber(text);
+	const range = `Enter a whole number from ${formatCount(min)} to ${formatCount(max)}.`;
 
-	if (!/^\d+$/.test(digits)) return { error: range };
+	if (value === null || value < min || value > max) return { error: range };
 
-	const value = Number(digits);
+	return { value };
+}
 
-	return value >= min && value <= max ? { value } : { error: range };
+/**
+ * Steps `value` to the next or previous multiple of `step` inside `[min, max]`.
+ * A value outside the range clamps back to the nearest bound first.
+ */
+export function stepLimit(value: number, direction: -1 | 1, step: number, max: number, min = 1): number {
+	if (direction > 0) {
+		if (value < min) return min;
+
+		const next = Math.floor(value / step) * step + step;
+
+		return Math.min(max, Math.max(min, next));
+	}
+
+	if (value > max) return max;
+
+	const next = Math.ceil(value / step) * step - step;
+
+	return Math.max(min, Math.min(max, next));
 }

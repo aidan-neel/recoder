@@ -5,6 +5,7 @@ import { ContextMenu as ContextMenuPrimitive } from 'radix-ui';
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode, type RefObject } from 'react';
 
 import { cn } from '../../lib/cn';
+import { CheckboxMark } from '../form/checkbox';
 import { rememberOpener } from '../overlay/return-focus';
 import { MENU_SEPARATOR, MenuItemBody, MenuOpen, MenuPanel, menuItemRoot, type MenuItemProps } from './menu-parts';
 import { useOpened } from './use-opened';
@@ -109,6 +110,37 @@ export function ContextMenuItem({ icon, shortcut, destructive, className, childr
 				{children}
 			</MenuItemBody>
 		</ContextMenuPrimitive.Item>
+	);
+}
+
+interface ContextMenuCheckboxItemProps extends Omit<MenuItemProps, 'destructive' | 'shortcut'> {
+	checked: boolean;
+	onCheckedChange: (checked: boolean) => void;
+}
+
+/**
+ * A row that turns something on or off, led by a checkbox drawn like the kit's own. Picking it toggles the box and
+ * keeps the menu open, so several rows can be set in one visit.
+ */
+export function ContextMenuCheckboxItem({
+	icon,
+	className,
+	children,
+	checked,
+	...props
+}: ContextMenuCheckboxItemProps) {
+	return (
+		<ContextMenuPrimitive.CheckboxItem
+			{...menuItemRoot(false, className)}
+			{...props}
+			checked={checked}
+			onSelect={(event) => event.preventDefault()}
+		>
+			<span data-ui="checkbox" data-state={checked ? 'checked' : 'unchecked'} aria-hidden>
+				<CheckboxMark checked={checked} />
+			</span>
+			<MenuItemBody icon={icon}>{children}</MenuItemBody>
+		</ContextMenuPrimitive.CheckboxItem>
 	);
 }
 

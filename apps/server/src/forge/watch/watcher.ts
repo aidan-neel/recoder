@@ -8,7 +8,8 @@ import {
 	type WatchedNote,
 	type WatchedPull
 } from './cursor';
-import { pullFeed, watchable, type PullFeed } from './feed';
+import { pullFeed, type PullFeed } from './feed';
+import { ownRepoIds, watchedRepos } from './scope';
 import { readAutoReviewSettings } from './settings';
 import { reviewHistory, startAutoReview } from './start';
 import { postgres } from '../../storage/backend';
@@ -33,11 +34,6 @@ const runtime: {
 
 function message(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
-}
-
-/** Tracked GitHub and GitLab repositories the settings don't exclude. */
-async function watchedRepos(settings: AutoReviewSettings): Promise<Repo[]> {
-	return (await db.repos.list()).filter((repo) => watchable(repo) && !settings.excludedRepoIds.includes(repo.id));
 }
 
 /** Pull requests updated since a little before the last check, each with its comments. */
@@ -193,6 +189,7 @@ export async function autoReviewStatus(
 	return {
 		running: postgres ? settings.enabled : runtime.timer !== null || runtime.round !== null,
 		watching: (await watchedRepos(settings)).length,
+		ownRepoIds: await ownRepoIds(await db.repos.list()),
 		lastCheckAt: postgres ? (state.status?.lastCheckAt ?? null) : runtime.lastCheckAt,
 		nextCheckAt: postgres ? (state.status?.nextCheckAt ?? null) : runtime.nextCheckAt,
 		errors: postgres ? (state.status?.errors ?? []) : runtime.errors,

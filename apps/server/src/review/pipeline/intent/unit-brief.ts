@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import type { ModelConfig } from '../../../models/models.js';
 import type { ReviewRun } from '../harness/context.js';
+import { inventorySummary } from '../inventory.js';
+import { UNTRUSTED_PREFIX } from '../prompts.js';
 import type { ReviewUnit } from '../units.js';
 import { askBrief, type BriefStage } from './ask.js';
 import { isFiller, unitClaims, unitInput, type ClaimSource, type PinnedClaim } from './brief.js';
@@ -33,7 +35,7 @@ Reply with ONLY one JSON object:
 
 Each list item names a file of this unit and a numbered line of its diff, copied from the numbers shown; for removed code, cite the nearest numbered line. Most important first, at most 12 per list, each one short sentence.
 - observedChanges: one per changed function, method or type that alters behavior. Say what it did before and what it does now ("returned null for a missing key; now throws"), or what a new one does and for which inputs. Only what the diff shows. Every unit has at least one: for a change with no behavior (docs, tests, config), say what it changes.
-- openQuestions: specific things a reviewer must check and you could not settle from the diff: a caller listed under "referenced at" that relied on the old behavior, a boundary value, an error path, an ordering or concurrency assumption, a test that no longer covers what changed. Name the function and the input or caller. No general advice ("check error handling"), and no question the diff already answers.`;
+- openQuestions: specific things a reviewer must check and you could not settle from the diff: a caller listed under "referenced at" that relied on the old behavior, a boundary value, an error path, an ordering or concurrency assumption, a test that no longer covers what changed. Always ask what each removed check, guard or validation guaranteed and whether something else still does; whether a key, prefix or path built from strings can match a neighbor it should not; and whether each changed test's body exercises what its name claims. Name the function and the input or caller. No general advice ("check error handling"), and no question the diff already answers.`;
 
 /**
  * A unit's code always says something, so a reply with no statement the
@@ -79,7 +81,7 @@ export async function briefUnit(
 		...stage,
 		label: unit.id,
 		system: SYSTEM,
-		user: `Files: ${paths.join(', ')}\n\n${input.text}`,
+		user: `${UNTRUSTED_PREFIX}PR title: ${run.input.prTitle ?? '(none)'}\nPR description:\n${run.input.prBody ?? '(none)'}\n\nWhole change:\n${inventorySummary(run.inventory)}\n\nFiles: ${paths.join(', ')}\n\n${input.text}`,
 		schema: unitSchema,
 		placeholder: (reply) => placeholder(reply, source)
 	});

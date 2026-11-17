@@ -3,6 +3,7 @@ import { SQL } from 'bun';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { SHARED_SECRET_KEY } from './shared-secret-key';
 import {
 	closePublicationStorage,
 	initializePublication,
@@ -12,7 +13,7 @@ import {
 } from '../../src/storage/postgres-publication';
 import { PostgresCoordinator } from '../../src/review/runtime/coordinator';
 import { assertOwnership, OwnershipLostError, withLease } from '../../src/review/runtime/ownership';
-import { SHARED_SECRET_KEY } from '../helpers/shared-secret-key';
+import { SHARED_SECRET_KEY } from './shared-secret-key';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const schema = `publication_${crypto.randomUUID().replaceAll('-', '')}`;

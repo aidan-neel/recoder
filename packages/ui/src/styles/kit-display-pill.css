@@ -22,9 +22,15 @@
 		font-weight: 500;
 		line-height: 16px;
 		white-space: nowrap;
+		user-select: none;
 		transition:
 			color var(--dur-toggle) ease-out,
 			background-color var(--dur-toggle) ease-out;
+	}
+	@media (hover: hover) {
+		[data-ui='pill']:hover {
+			background-color: color-mix(in oklab, var(--pill-bg), var(--pill-fg) 3%);
+		}
 	}
 	[data-ui='pill-text'] {
 		min-width: 0;

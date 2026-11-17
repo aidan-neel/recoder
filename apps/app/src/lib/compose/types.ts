@@ -1,4 +1,4 @@
-import type { ImageUpload, Provider } from '@recoder/shared';
+import type { ImageUpload, Provider, ReviewSpeed } from '@recoder/shared';
 import type { LinkFacts } from '@recoder/ui/form';
 
 import type { PullRow, PullTarget, RepoOption } from '../pulls/types';
@@ -30,6 +30,9 @@ export interface ComposeView {
 	 */
 	text: string;
 	setText: (text: string) => void;
+	/** How fast the review Enter starts runs: the standard review, or Spark. It holds for the visit. */
+	speed: ReviewSpeed;
+	setSpeed: (speed: ReviewSpeed) => void;
 	/** Empties the field and lets go of the pick: once the page it started has opened. */
 	clear: () => void;
 	/** The pull request the review starts on; null until one is chosen. Chat mode does not use it. */
@@ -54,8 +57,10 @@ export interface ComposeView {
 	reload: () => void;
 	/** Open pull requests with no review at their current head, newest first; at most six. */
 	suggestions: PullRow[];
-	/** True while the suggestions and the repositories load for the first time; they arrive together. */
-	loading: boolean;
+	/** True while the repositories load for the first time. They answer fast, so a chat can start before the pulls. */
+	reposLoading: boolean;
+	/** True while the pull requests, and so the suggestions, load for the first time; a forge can take seconds. */
+	pullsLoading: boolean;
 	/** How many characters a chat's first message runs over the server's limit; 0 or less when it fits. */
 	overBy: number;
 	/** Enter would start the review or the chat now. */

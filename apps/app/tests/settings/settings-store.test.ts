@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import type { AgentProvider, AgentStatus, ModelSettings } from '@recoder/shared';
 
 import { useSettings } from '../../src/lib/settings/settings-store';
-import { openCodeStatus } from '../fixtures';
+import { modelSettings, openCodeStatus } from '../fixtures';
 
 /** What the fake review server answers; each test changes it. */
 interface Server {
@@ -14,6 +14,8 @@ interface Server {
 	models: 'ok' | 'down' | string;
 	/** While set, GET /api/settings/models waits for it, so a test can hold a load in flight. */
 	hold: Promise<void> | null;
+	/** While set, GET /api/agent/providers waits for it, so a test can hold the agents behind the models. */
+	holdProviders: Promise<void> | null;
 	/** Each request as `METHOD /path?query`, in the order they arrived. */
 	calls: string[];
 }
@@ -21,21 +23,7 @@ interface Server {
 let server: Server;
 
 function settings(subagentCap: ModelSettings['subagentCap']): ModelSettings {
-	return {
-		configured: true,
-		baseUrl: '',
-		model: '',
-		apiKeySet: false,
-		sharedModelId: null,
-		models: [],
-		subagentCap,
-		tokenBudget: 'medium',
-		reportLowSeverity: true,
-		disabledProviders: [],
-		hiddenModels: [],
-		modelPolicy: { kind: 'choose' },
-		limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 }
-	};
+	return modelSettings({ subagentCap });
 }
 
 const anthropic: AgentProvider = {
@@ -62,7 +50,11 @@ async function answer(url: URL, init?: RequestInit): Promise<Response> {
 		return server.agentCheck === 'ok' ? json({ agents: server.agents }) : json({ error: server.agentCheck }, 500);
 	}
 
-	if (url.pathname === '/api/agent/providers') return json({ providers: [anthropic] });
+	if (url.pathname === '/api/agent/providers') {
+		await server.holdProviders;
+
+		return json({ providers: [anthropic] });
+	}
 
 	if (url.pathname === '/api/settings/models' && method === 'PUT') {
 		const patch = JSON.parse(String(init?.body)) as Partial<ModelSettings>;
@@ -86,8 +78,30 @@ async function answer(url: URL, init?: RequestInit): Promise<Response> {
 
 const modelReads = () => server.calls.filter((call) => call === 'GET /api/settings/models').length;
 
+/** Holds the providers' answer until the returned release runs. */
+function holdProviders(): () => void {
+	let release = () => {};
+
+	server.holdProviders = new Promise((resolve) => (release = resolve));
+
+	return release;
+}
+
+/** Waits until the store has the models. */
+async function modelsShown(): Promise<void> {
+	while (!useSettings.getState().models) await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 beforeEach(() => {
-	server = { settings: settings(8), agents: [openCode], agentCheck: 'ok', models: 'ok', hold: null, calls: [] };
+	server = {
+		settings: settings(8),
+		agents: [openCode],
+		agentCheck: 'ok',
+		models: 'ok',
+		hold: null,
+		holdProviders: null,
+		calls: []
+	};
 
 	Object.assign(globalThis, {
 		fetch: (input: string | URL, init?: RequestInit) => answer(new URL(String(input)), init)
@@ -117,6 +131,32 @@ describe('settings store', () => {
 
 		expect(server.calls.filter((call) => call.startsWith('GET /api/agent?'))).toEqual(['GET /api/agent?refresh=1']);
 		expect(modelReads()).toBe(2);
+	});
+
+	test('the models show while the agents still wait on their providers, and the load is ready once both answer', async () => {
+		const release = holdProviders();
+		const load = useSettings.getState().load();
+
+		await modelsShown();
+
+		expect(useSettings.getState()).toMatchObject({ status: 'loading', providers: [] });
+
+		release();
+		await load;
+
+		expect(useSettings.getState()).toMatchObject({ status: 'ready', providers: [anthropic] });
+	});
+
+	test('a save that lands while the agents still load is not undone when the load finishes', async () => {
+		const release = holdProviders();
+		const load = useSettings.getState().load();
+
+		await modelsShown();
+		await useSettings.getState().saveModels({ subagentCap: 12 });
+		release();
+		await load;
+
+		expect(useSettings.getState().models?.subagentCap).toBe(12);
 	});
 
 	test('a first load the server never answers shows the page offline with no server reason', async () => {

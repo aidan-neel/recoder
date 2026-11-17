@@ -1,12 +1,11 @@
-import { createElement, type ReactElement, type ReactNode } from 'react';
-import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
+import { createElement, type ReactElement, type ReactNode, type Ref } from 'react';
+import ReactMarkdown, { type Components, type ExtraProps, type Options } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { cn } from '../../lib/cn';
 import { whenIdle } from './idle';
 import { cachedMarkdown } from './markdown-cache';
 import { MARKDOWN_PARTS, partsWithLinkOverride, STATIC_MARKDOWN_PARTS, type LinkOverride } from './markdown-parts';
-import { rehypeStreamingTail } from './rehype-tail';
 
 type MarkdownVariant = 'ui' | 'ai';
 
@@ -21,17 +20,13 @@ interface StaticMarkdownProps {
 
 /** A client Markdown's props: text that may still be arriving. */
 export interface MarkdownProps extends StaticMarkdownProps {
-	/** The text is still arriving: its last few words shimmer. */
+	/** The text is still arriving: it goes out a few words at a time, each fading in as it comes. */
 	streaming?: boolean;
 	/** Draws the links with this target prefix through a component of the caller's, keeping every other link as is. */
 	linkOverride?: LinkOverride;
 }
 
 const REMARK = [remarkGfm];
-
-const WITH_TAIL = [rehypeStreamingTail];
-
-const WITHOUT_TAIL: [] = [];
 
 const VOICE: Record<MarkdownVariant, string> = {
 	ui: 'font-sans text-[13.5px] leading-[1.6] text-fg',
@@ -116,9 +111,13 @@ function plainTree(paragraphs: string[], parts: Components): ReactElement {
 	);
 }
 
+/** Rehype plugins for streaming text, such as the one that times each word for its fade. */
+type StreamPlugins = Options['rehypePlugins'];
+
 /**
  * The React tree for a source. Complete text is parsed once and kept, so a
- * remount reuses it; streaming text is parsed on every render, its last words shimmering.
+ * remount reuses it; streaming text is parsed on every render, through
+ * `plugins`.
  * Complete text with no Markdown in it but code spans (a summary that names
  * a status code or a function, often) skips the parser and builds the same
  * paragraphs itself, unless `parts` draws them: the parser's first run, its
@@ -126,16 +125,16 @@ function plainTree(paragraphs: string[], parts: Components): ReactElement {
  * `tests/content/markdown-render.test.tsx` holds the shortcut to the
  * parser's markup.
  */
-function markdownTree(source: string, streaming: boolean, parts: Components): ReactElement {
-	const render = () =>
+function markdownTree(source: string, streaming: boolean, parts: Components, plugins?: StreamPlugins): ReactElement {
+	const render = (rehypePlugins?: StreamPlugins) =>
 		ReactMarkdown({
 			children: source,
 			remarkPlugins: REMARK,
-			rehypePlugins: streaming ? WITH_TAIL : WITHOUT_TAIL,
+			rehypePlugins,
 			components: parts
 		});
 
-	if (streaming) return render();
+	if (streaming) return render(plugins);
 
 	return cachedMarkdown(parts, source, () => {
 		const paragraphs = parts.p ? null : plainParagraphs(source);
@@ -193,17 +192,20 @@ export function MarkdownProse({
 	streaming = false,
 	className,
 	linkOverride,
-	parts = linkOverride ? partsWithLinkOverride(linkOverride) : MARKDOWN_PARTS
-}: MarkdownProps & { parts?: Components }) {
+	parts = linkOverride ? partsWithLinkOverride(linkOverride) : MARKDOWN_PARTS,
+	plugins,
+	ref
+}: MarkdownProps & { parts?: Components; plugins?: StreamPlugins; ref?: Ref<HTMLDivElement> }) {
 	return (
 		<div
+			ref={ref}
 			data-ui="markdown"
 			data-variant={variant}
 			data-state={streaming ? 'streaming' : 'complete'}
 			aria-busy={streaming || undefined}
 			className={cn('min-w-0 [overflow-wrap:break-word]', VOICE[variant], className)}
 		>
-			{markdownTree(children, streaming, parts)}
+			{markdownTree(children, streaming, parts, plugins)}
 		</div>
 	);
 }

@@ -1,6 +1,7 @@
 import { formatCompact, formatShare } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
+import type { RowLead as RowLeadValue } from '@/lib/usage/report-shared';
 import { formatSessions } from '@/lib/usage/usage-model';
 import type { UsageRow } from '@/lib/usage/usage-rows';
 
@@ -23,30 +24,76 @@ interface RailRowProps {
  * focusing it brings its line forward; a person's row opens their view.
  */
 export function RailRow({ row, linked, onHighlight, onSelectPerson }: RailRowProps) {
-	const personId = row.personId && onSelectPerson ? row.personId : null;
+	return (
+		<ReportRailRow
+			rowKey={row.key}
+			color={row.color}
+			lead={row.lead}
+			name={row.name}
+			value={formatCompact(row.tokens)}
+			share={row.share}
+			personId={row.personId}
+			linked={linked}
+			onHighlight={onHighlight}
+			onSelectPerson={onSelectPerson}
+		>
+			{row.sessions === null ? null : <span className="meta-sep">{formatSessions(row.sessions)}</span>}
+			{row.cost ? (
+				<span className="meta-sep">
+					<CostText cost={row.cost} />
+				</span>
+			) : null}
+		</ReportRailRow>
+	);
+}
+
+interface ReportRailRowProps {
+	rowKey: string;
+	color: string | null;
+	lead: RowLeadValue;
+	name: string;
+	value: string;
+	share: number;
+	personId: string | null;
+	linked: boolean;
+	onHighlight: (id: string | null) => void;
+	onSelectPerson?: (accountId: string) => void;
+	children?: ReactNode;
+}
+
+/** Shared chart-rail row used by Usage and Telemetry overviews. */
+export function ReportRailRow({
+	rowKey,
+	color,
+	lead,
+	name,
+	value,
+	share,
+	personId,
+	linked,
+	onHighlight,
+	onSelectPerson,
+	children
+}: ReportRailRowProps) {
+	const openId = personId && onSelectPerson ? personId : null;
 
 	return (
 		<RailItem
-			personId={personId}
+			personId={openId}
 			linked={linked}
 			onOpen={onSelectPerson}
-			onEnter={() => onHighlight(row.key)}
+			onEnter={() => onHighlight(rowKey)}
 			onLeave={() => onHighlight(null)}
 		>
-			<span className="usage-rail-dot" style={{ background: row.color ?? undefined }} aria-hidden />
+			<span className="usage-rail-dot" style={{ background: color ?? undefined }} aria-hidden />
 			<span className="usage-rail-mark">
-				<RowLead lead={row.lead} />
+				<RowLead lead={lead} />
 			</span>
-			<span className="usage-rail-name">{row.name}</span>
-			<span className="usage-rail-tokens">{formatCompact(row.tokens)}</span>
+			<span className="usage-rail-name">{name}</span>
+			<span className="usage-rail-tokens">{value}</span>
 			<span className="usage-rail-meta">
-				{formatShare(row.share)}
-				{row.sessions === null ? null : <span className="meta-sep">{formatSessions(row.sessions)}</span>}
-				{row.cost ? (
-					<span className="meta-sep">
-						<CostText cost={row.cost} />
-					</span>
-				) : null}
+				{formatShare(share)}
+				{children}
 			</span>
 		</RailItem>
 	);

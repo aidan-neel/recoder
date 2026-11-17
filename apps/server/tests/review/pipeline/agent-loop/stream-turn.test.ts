@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import { runJsonAgent } from '../../../../src/review/pipeline/agent-loop';
 import { doneAgentOptions, type DoneAnswer } from '../../../helpers/done-agent';
 import { settleOnClock, useFakeClock } from '../../../helpers/fake-clock';
@@ -15,7 +16,7 @@ afterEach(() => {
 const ANSWER = '{"message":"Done.","done":true}';
 
 /** A model behind an OpenAI-compatible endpoint, which Recoder runs turn by turn. */
-const CONFIG = { model: 'test', baseUrl: 'https://model.test', apiKey: 'test' };
+const CONFIG = { model: 'test', baseUrl: 'https://model.test', apiKey: 'test', contextWindow: DEFAULT_CONTEXT_WINDOW };
 
 /** How often a live stream sends a reasoning chunk: well inside the stream's idle limit. */
 const BEAT_MS = 10_000;

@@ -34,8 +34,17 @@ export interface UpdateChanges {
 export interface UpdateAvailable {
 	/** Binary mode: the release it would install. Git mode leaves this unset; the commits say what is coming. */
 	version?: string;
+	/** Git mode, switching branches: the remote branch HEAD moves to. Unset for an update of the current branch. */
+	branch?: string;
 	commits: UpdateCommit[];
 	changes: UpdateChanges;
+}
+
+/** `GET /api/update/branches`: the remote branches a git install can switch to, freshly fetched. */
+export interface UpdateBranches {
+	/** The checked-out branch; undefined on a detached HEAD. */
+	current?: string;
+	branches: string[];
 }
 
 /** How the running build identifies itself. */

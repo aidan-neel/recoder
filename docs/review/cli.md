@@ -146,6 +146,8 @@ With no saved models, `--reviewer`, `--worker` and `--verifier` accept the model
 
 A blank `--title`, `--body` or `--instructions`, inline or from a file, counts as not given.
 
+`--spark` runs a Spark review ([pipeline.md](pipeline.md#spark-reviews)): the `low` budget, `--subagents 0`, `--no-exec` and `low` for each effort not given, plus no wait for the rule ledger. It refuses `--budget`, `--subagents` and `--no-exec`, which it already sets.
+
 `--no-exec` runs no code, so bugs are reported with `verification.status: "unverified"`. A machine with no sandbox, and a `--diff` target, run no code either; the report's `settings.execReason` says which.
 
 ## Where runs are stored

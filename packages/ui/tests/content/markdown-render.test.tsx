@@ -114,6 +114,18 @@ describe('MarkdownProse', () => {
 			expect([source, viaKit(source)]).toEqual([source, viaParser(source)]);
 		}
 	});
+
+	test('marks the whole block as streaming without splitting a tail span', () => {
+		const source =
+			"I'll inspect the repo so I can answer what I can actually help with here, not a generic assistant pitch.";
+
+		const html = renderToStaticMarkup(<MarkdownProse streaming>{source}</MarkdownProse>);
+
+		expect(html).toContain('data-state="streaming"');
+		expect(html).toContain('aria-busy="true"');
+		expect(html).not.toContain('markdown-tail');
+		expect(html).toContain(`<p>${source.replace("'", '&#x27;')}</p>`);
+	});
 });
 
 /** Runs idle callbacks at once while `run` runs, so a prepare happens before the test reads the cache. */

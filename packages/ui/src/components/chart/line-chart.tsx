@@ -36,6 +36,8 @@ interface LineChartProps {
 	days: readonly string[];
 	/** How the tooltip writes a value. Axis labels are always compact. */
 	formatValue?: (value: number) => string;
+	/** What a day with nothing in it says where its total would be. */
+	emptyLabel?: string;
 	height?: number;
 	/** The series brought forward, as when its row beside the chart is hovered; the others step back. */
 	highlight?: string | null;
@@ -56,8 +58,7 @@ const TIP_FLIP_SIDE = 0.6;
 /** How near, in px, the pointer must come to a line's mark for that line to count as hovered. */
 const LINE_REACH = 18;
 
-/** What a day with nothing in it says where its total would be. */
-const NO_USAGE = 'No usage';
+const DEFAULT_EMPTY_LABEL = 'No usage';
 
 const axisDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
@@ -148,6 +149,7 @@ export function LineChart({
 	series,
 	days,
 	formatValue = formatCompact,
+	emptyLabel = DEFAULT_EMPTY_LABEL,
 	height = 240,
 	highlight = null,
 	onHighlight,
@@ -294,7 +296,16 @@ export function LineChart({
 							{formatAxisDay(days[index])}
 						</text>
 					))}
-					{active === null ? null : <line data-part="guide" x1={activeX} x2={activeX} y1={plot.top} y2={plot.bottom} />}
+					{active === null ? null : (
+						<line
+							data-part="guide"
+							x1={0}
+							x2={0}
+							y1={plot.top}
+							y2={plot.bottom}
+							style={{ transform: `translateX(${activeX}px)` }}
+						/>
+					)}
 					{series.map((line, index) => {
 						const points = pointsOf(line);
 
@@ -314,10 +325,11 @@ export function LineChart({
 										key={line.id}
 										data-part="dot"
 										data-highlight={highlight === line.id ? true : undefined}
-										cx={activeX}
-										cy={yAt(line.values[active] ?? 0)}
 										r={highlight === line.id ? 4.5 : 3.5}
-										style={{ fill: line.color }}
+										style={{
+											fill: line.color,
+											transform: `translate(${activeX}px, ${yAt(line.values[active] ?? 0)}px)`
+										}}
 									/>
 								))}
 				</svg>
@@ -337,12 +349,12 @@ export function LineChart({
 					>
 						<ChartTip
 							heading={formatTipDay(days[active])}
-							value={tip.total > 0 ? formatValue(tip.total) : NO_USAGE}
+							value={tip.total > 0 ? formatValue(tip.total) : emptyLabel}
 							rows={tipRows(tip, highlight, formatValue)}
 						/>
 					</div>
 					<span className="sr-only" aria-live="polite">
-						{formatTipDay(days[active])}: {tip.total > 0 ? formatValue(tip.total) : NO_USAGE}
+						{formatTipDay(days[active])}: {tip.total > 0 ? formatValue(tip.total) : emptyLabel}
 						{tip.rows.map((row) => `, ${row.label} ${formatValue(row.value)}`).join('')}
 					</span>
 				</>

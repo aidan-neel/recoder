@@ -153,6 +153,8 @@ export interface ReviewToolCall {
 		timeoutSec?: number;
 		/** `delegate`: the narrow task a reviewer handed to a worker on the specialist model. */
 		task?: string;
+		/** `loadSkill`: the name of the repository skill read. */
+		skill?: string;
 	};
 	/** Bounded preview of the evidence returned to the agent. */
 	result?: {
@@ -217,6 +219,8 @@ export interface ReviewChatMessage {
 	/** Reviewer conversation mirrored into the orchestrator transcript. */
 	forwardedFrom?: string;
 	codeContext?: ReviewCodeContext;
+	/** The names of the repository skills the person attached to this message. */
+	skills?: string[];
 	/** Set on a reply the model could not finish. */
 	failure?: ModelFailure;
 	/** Why a reply stopped partway when the agent carried on after it ("It thought too long…"). */

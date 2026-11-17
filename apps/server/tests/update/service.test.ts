@@ -8,7 +8,7 @@ import type { Review } from '@recoder/shared';
 import { assetFor } from '../../src/cli/upgrade/install-binary';
 import { parseReleaseTag } from '../../src/cli/upgrade/release-tag';
 import type { ReleaseSource } from '../../src/cli/upgrade/release-source';
-import { commitAll } from '../helpers/git';
+import { commitAll, git } from '../helpers/git';
 import { fakeBin } from '../helpers/fake-bin';
 import { restoreEnvAfterEach } from '../helpers/env';
 import { useTempStore } from '../helpers/temp-store';
@@ -19,7 +19,7 @@ import { resumeAfterUpdate } from '../../src/update/pauses';
 import { UPDATE_RECORD_ID, updateRecords, type UpdateRecord } from '../../src/update/record';
 import { spawnProcess } from '../../src/update/run';
 import { createUpdateService, UpdateRefusedError, type UpdateDeps, type UpdateService } from '../../src/update/service';
-import { makeCheckout, upstreamCommit } from './fixture';
+import { makeCheckout, upstreamBranch, upstreamCommit } from './fixture';
 
 useTempStore('recoder-update-');
 
@@ -302,5 +302,57 @@ describe('apply', () => {
 		expect(control.paused).toBe(true);
 		expect(restarts).toHaveLength(1);
 		expect(await readFile(executable, 'utf8')).toBe('#!/bin/sh\necho 9.9.9\n');
+	});
+});
+
+describe('switchBranch', () => {
+	test('lists the remote branches and switches to one through the pause and restart a server update takes', async () => {
+		const { source, root } = await makeCheckout();
+		const { control } = await seedRunningReview();
+		const { service, restarts } = serviceFor({ environment: { root, managed: false, compiledBinary: false } });
+
+		await upstreamBranch(source, 'feature', { 'apps/server/src/feature.ts': 'export {};\n' });
+
+		expect(await service.branches()).toEqual({ current: 'main', branches: ['feature', 'main'] });
+
+		await service.switchBranch('feature');
+
+		const record = await waitForRecord(['restarting', 'failed']);
+
+		expect(record.state).toBe('restarting');
+		expect(record.available?.branch).toBe('feature');
+		expect(control.paused).toBe(true);
+		expect(restarts).toHaveLength(1);
+		expect(git(root, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('feature');
+	});
+
+	test('a web-only switch reports the new branch without restarting', async () => {
+		const { source, root } = await makeCheckout();
+		const { service, restarts } = serviceFor({ environment: { root, managed: false, compiledBinary: false } });
+
+		await upstreamBranch(source, 'feature', { 'apps/app/feature.tsx': 'export {};\n' });
+		await service.branches();
+		await service.switchBranch('feature');
+
+		const record = await waitForRecord(['idle', 'failed']);
+
+		expect(record).toMatchObject({ state: 'idle', available: null, current: { branch: 'feature' } });
+		expect(restarts).toHaveLength(0);
+	});
+
+	test('refuses a branch the remote lacks, the running branch, and a dirty tree, without touching git', async () => {
+		const { source, root } = await makeCheckout();
+		const { service } = serviceFor({ environment: { root, managed: false, compiledBinary: false } });
+
+		await upstreamBranch(source, 'feature', { 'apps/app/feature.tsx': 'export {};\n' });
+		await service.branches();
+
+		await expect(service.switchBranch('--orphan=x')).rejects.toBeInstanceOf(UpdateRefusedError);
+		await expect(service.switchBranch('main')).rejects.toBeInstanceOf(UpdateRefusedError);
+
+		await writeFile(join(root, 'apps/server/src/index.ts'), 'dirty\n');
+
+		await expect(service.switchBranch('feature')).rejects.toThrow('uncommitted');
+		expect(git(root, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('main');
 	});
 });

@@ -1,31 +1,27 @@
 'use client';
 
-import { SegmentedControl, Switch } from '@recoder/ui';
+import { SUBAGENT_OPTIONS } from '@recoder/shared';
+import { NumberField, SegmentedControl, Switch } from '@recoder/ui';
 
-import type { LimitKey } from '@/lib/settings/limits';
-import { SUBAGENT_OPTIONS, useHarness, type HarnessReady } from '@/lib/settings/use-harness';
+import type { LimitFieldSpec } from '@/lib/settings/limits';
+import { useHarness, type HarnessReady } from '@/lib/settings/use-harness';
 import { useLimitField } from '@/lib/settings/use-limit-field';
 
 import { NumberRow } from './number-row';
 import { SettingsGroup, SettingsRow } from './settings-group';
 import { SettingsSkeleton } from './settings-skeleton';
 
-interface LimitRowProps {
-	field: LimitKey;
-	name: string;
-	hint: string;
-	max: number;
-}
+/** One review limit as a stepper row. */
+function LimitRow({ limit }: { limit: LimitFieldSpec }) {
+	const view = useLimitField(limit);
 
-/** One review limit as a number row. */
-function LimitRow({ field, name, hint, max }: LimitRowProps) {
-	const view = useLimitField(field, max);
-
-	return <NumberRow name={name} detail={hint} view={view} />;
+	return <NumberRow name={limit.name} detail={limit.hint} view={view} wide />;
 }
 
 /** How much a review may spend: the token budget and how many subagents go deeper. */
 function Effort({ budget, subagents }: Pick<HarnessReady, 'budget' | 'subagents'>) {
+	const custom = subagents.custom;
+
 	return (
 		<SettingsGroup title="Effort">
 			<SettingsRow name="Token budget" detail={budget.control.description} state={budget.state} stacked>
@@ -36,20 +32,38 @@ function Effort({ budget, subagents }: Pick<HarnessReady, 'budget' | 'subagents'
 					options={budget.control.options}
 				/>
 			</SettingsRow>
-			<SettingsRow name="Subagents" detail={subagents.text} state={subagents.state} stacked>
-				<SegmentedControl
-					aria-label="Subagents"
-					value={String(subagents.value)}
-					onValueChange={subagents.change}
-					options={SUBAGENT_OPTIONS}
-				/>
+			<SettingsRow name="Subagents" detail={subagents.text} error={custom?.error} state={subagents.state} stacked>
+				<div className="settings-subagents">
+					<SegmentedControl
+						aria-label="Subagents"
+						value={subagents.value}
+						onValueChange={subagents.change}
+						options={SUBAGENT_OPTIONS}
+					/>
+					{custom ? (
+						<NumberField
+							aria-label="Subagent count"
+							aria-valuemin={custom.min}
+							aria-valuemax={custom.max}
+							aria-valuenow={custom.valueNow ?? undefined}
+							canDecrement={custom.canDecrement}
+							canIncrement={custom.canIncrement}
+							invalid={custom.error !== null}
+							value={custom.text}
+							onStep={custom.step}
+							onChange={(event) => custom.edit(event.target.value)}
+							onBlur={custom.blur}
+							onKeyDown={custom.onKeyDown}
+						/>
+					) : null}
+				</div>
 			</SettingsRow>
 		</SettingsGroup>
 	);
 }
 
 /**
- * Settings → Review limits: how much a review may spend, what it reports and
+ * Settings → Limits: how much a review may spend, what it reports and
  * how much of a pull request it reads. Each control saves the moment it changes.
  */
 export function LimitsSection() {
@@ -80,7 +94,7 @@ export function LimitsSection() {
 				}
 			>
 				{view.limits.map((limit) => (
-					<LimitRow key={limit.key} field={limit.key} name={limit.name} hint={limit.hint} max={limit.max} />
+					<LimitRow key={limit.key} limit={limit} />
 				))}
 			</SettingsGroup>
 		</div>

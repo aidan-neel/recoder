@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { ChatTrailStep } from '@recoder/shared';
 
-import { thoughtLabel, toolLine, workedLabel, workedSeconds, type ToolStep } from '../../src/lib/chat/trail';
+import {
+	latestLine,
+	thoughtLabel,
+	toolLine,
+	workedLabel,
+	workedSeconds,
+	type ToolStep
+} from '../../src/lib/chat/trail';
 
 const REPLY_START = '2026-11-13T09:59:58.000Z';
 const START = '2026-11-13T10:00:00.000Z';
@@ -54,5 +61,21 @@ describe('thoughtLabel', () => {
 
 	test('uses the title the provider gave', () => {
 		expect(thoughtLabel({ ...thought('a', END), title: 'Framing the question' })).toBe('Framing the question');
+	});
+});
+
+describe('latestLine', () => {
+	test('a note that says two things shows only the newer one', () => {
+		const note = { id: 'n', kind: 'note', text: "I'll read the PR.\n\nI'll check the tests.", startedAt: '' } as const;
+
+		expect(latestLine(note)).toBe("I'll check the tests.");
+	});
+
+	test('a titled thought shows its title, and an untitled one its newest paragraph', () => {
+		const titled = { id: 't', kind: 'thought', title: 'Checking caps', text: 'It clamps.', startedAt: '' } as const;
+		const untitled = { ...titled, title: '', text: 'First idea.\n\nSecond idea.' };
+
+		expect(latestLine(titled)).toBe('Checking caps');
+		expect(latestLine(untitled)).toBe('Second idea.');
 	});
 });

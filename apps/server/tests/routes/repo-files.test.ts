@@ -1,12 +1,12 @@
 import { afterEach, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { REPO_FILE_TEXT_BYTES, type RepoFile, type RepoTree } from '@recoder/shared';
 import { reviewCheckoutPath } from '../../src/review/session/review-checkout';
 import { db } from '../../src/store';
-import { commitAll, git } from '../helpers/git';
+import { commitAll, git, writeTree } from '../helpers/git';
 import { testReview } from '../helpers/review';
 import { send } from './reviews/finding-requests';
 
@@ -34,16 +34,7 @@ async function makeRepo(
 	dirs.push(root);
 	git(root, ['init', '-q', '-b', 'main']);
 
-	for (const [path, content] of Object.entries(files)) {
-		await mkdir(dirname(join(root, path)), { recursive: true });
-		await writeFile(join(root, path), content);
-	}
-
-	for (const [path, target] of Object.entries(links)) {
-		await mkdir(dirname(join(root, path)), { recursive: true });
-		await symlink(target, join(root, path));
-	}
-
+	await writeTree(root, files, links);
 	commitAll(root, 'files');
 
 	return root;

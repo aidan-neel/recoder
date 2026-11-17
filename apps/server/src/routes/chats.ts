@@ -6,17 +6,22 @@ import { imageBodyLimit, refuseUnreadImages, serveImage } from '../attachments/i
 import { deleteChatImages, withSavedImages } from '../attachments/image-store';
 import { imageProblem, imagesSchema } from '../attachments/image-upload';
 import { withStarterModels } from '../models/model-policy';
+import { getReviewMetrics } from '../models/metrics';
 import { configForOrchestrator } from '../models/models';
 import { requestAccountId } from '../accounts/enforcement';
+import { skillProblem, skillsSchema } from '../skills/names';
 import {
 	chatTitle,
 	newChat,
 	newTurn,
 	publicChat,
 	withImages,
+	withSkills,
 	WRITER_STALE_MS,
 	type StoredRepoChat
 } from '../repo-chat/chat-record';
+import { chatSkills } from '../repo-chat/chat-skills';
+import { skillNames, skillRequest } from '../skills/repo-skills';
 import { startReply, stopLocalReply } from '../repo-chat/chat-reply';
 import {
 	addTurn,
@@ -40,8 +45,8 @@ const POLL_MS = postgres ? 250 : EVENT_HEARTBEAT_MS;
 
 const idSchema = z.string().min(1).max(200);
 const textSchema = z.string().trim().min(1).max(MAX_CHAT_MESSAGE_CHARS);
-const startSchema = z.object({ repoId: idSchema, text: textSchema, images: imagesSchema });
-const sendSchema = z.object({ text: textSchema, images: imagesSchema });
+const startSchema = z.object({ repoId: idSchema, text: textSchema, images: imagesSchema, skills: skillsSchema });
+const sendSchema = z.object({ text: textSchema, images: imagesSchema, skills: skillsSchema });
 const stopSchema = z.object({ messageId: idSchema });
 
 const listSchema = z.object({
@@ -57,7 +62,9 @@ const app = new Hono();
 async function parseMessage<S extends z.ZodType>(c: Context, schema: S): Promise<z.infer<S> | Response> {
 	const parsed = schema.safeParse(await c.req.json().catch(() => null));
 
-	return parsed.success ? parsed.data : c.json({ error: imageProblem(parsed.error) ?? MESSAGE_RULE }, 400);
+	return parsed.success
+		? parsed.data
+		: c.json({ error: imageProblem(parsed.error) ?? skillProblem(parsed.error) ?? MESSAGE_RULE }, 400);
 }
 
 /** The `:id` chat, or the 404 that ends the request. */
@@ -93,14 +100,15 @@ app.post('/', imageBodyLimit, async (c) => {
 
 	if (refused) return refused;
 
+	const skills = await chatSkills(repo, skillRequest(body.skills, body.text), c.req.raw.signal);
 	const at = new Date().toISOString();
 	const opened = newChat(repo.id, chatTitle(body.text), at, startedBy);
 
 	return withSavedImages({ kind: 'chat', id: opened.id }, body.images, async (images) => {
-		const turn = withImages(newTurn(body.text, config.model, at), images);
+		const turn = withSkills(withImages(newTurn(body.text, config.model, at), images), skillNames(skills));
 		const chat = await openChat(opened, turn);
 
-		startReply({ chat, repo, turn, config });
+		startReply({ chat, repo, turn, config, skills });
 
 		return c.json(publicChat(chat), 201);
 	});
@@ -110,6 +118,17 @@ app.get('/:id', async (c) => {
 	const chat = await requireChat(c);
 
 	return chat instanceof Response ? chat : c.json(publicChat(chat));
+});
+
+/** Token usage across every model call the chat has made, or null before any call is recorded. */
+app.get('/:id/metrics', async (c) => {
+	c.header('Cache-Control', 'no-store');
+
+	const chat = await requireChat(c);
+
+	if (chat instanceof Response) return chat;
+
+	return c.json(await getReviewMetrics(chat.id));
 });
 
 /** Sends a message; the reply streams on `/:id/events`. Refused while the last reply is still being written. */
@@ -132,10 +151,15 @@ app.post('/:id/messages', imageBodyLimit, async (c) => {
 	if (refused) return refused;
 
 	try {
-		const turn = await withSavedImages({ kind: 'chat', id: chat.id }, body.images, async (images) => {
-			const added = withImages(newTurn(body.text, config.model, new Date().toISOString()), images);
+		const skills = await chatSkills(repo, skillRequest(body.skills, body.text), c.req.raw.signal);
 
-			startReply({ chat: await addTurn(chat.id, added), repo, turn: added, config });
+		const turn = await withSavedImages({ kind: 'chat', id: chat.id }, body.images, async (images) => {
+			const added = withSkills(
+				withImages(newTurn(body.text, config.model, new Date().toISOString()), images),
+				skillNames(skills)
+			);
+
+			startReply({ chat: await addTurn(chat.id, added), repo, turn: added, config, skills });
 
 			return added;
 		});

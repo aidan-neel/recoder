@@ -1,8 +1,8 @@
 'use client';
 
+import type { PullPage } from '@recoder/shared';
 import { Button } from '@recoder/ui';
 import { ArrowUpRight } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -13,7 +13,8 @@ import { PullSessionProvider, useMergeView, usePullChecksView, usePullPageView }
 import type { PullTab } from '@/lib/pull/types';
 import { usePullTab } from '@/lib/pull/use-pull-tab';
 import { useRunView } from '@/lib/run/use-run';
-import { pullHref, pullsHref } from '@/lib/shell/routes';
+import { replaceSearch } from '@/lib/shell/navigation';
+import { pullHref, pullsHref, repoHref } from '@/lib/shell/routes';
 
 import { BugsTab } from '@/components/bugs/bugs-tab';
 import { BugsTools } from '@/components/bugs/bugs-tools';
@@ -23,13 +24,16 @@ import { CommitsTab } from '@/components/commits/commits-tab';
 import { CancelReviewHost } from '@/components/common/cancel-review';
 import { Crumbs } from '@/components/common/crumbs';
 import { Page } from '@/components/common/page';
+import { TokenUsageButton } from '@/components/common/token-usage-modal';
 import { SummaryTab } from '@/components/summary/summary-tab';
 
-import { MergeStrip } from './merge-strip';
+import { ChecksList } from './checks';
+import { MergeActions, MergeFacts } from './merge-facts';
 import { PullHeader } from './pull-header';
 import { PullPageSkeleton } from './pull-skeleton';
 import { PullNotice } from './pull-notice';
 import { PullTabs } from './pull-tabs';
+import { ReviewButton } from './run-banner';
 
 interface PullScreenProps {
 	repoId: string;
@@ -41,8 +45,8 @@ interface PullOnTabProps extends PullScreenProps {
 	tab: PullTab;
 }
 
-/** The Bugs tab's tools; they read the review, so they mount only on that tab. */
-function BugsTabTools() {
+/** The Review tab's tools; they read the review, so they mount only on that tab. */
+function ReviewTabTools() {
 	return <BugsTools view={useBugsView()} run={useRunView()} />;
 }
 
@@ -51,28 +55,32 @@ function ChangesTabTools({ mode, onModeChange }: { mode: ChangesMode; onModeChan
 	return <ChangesTools viewed={useViewedFiles()} mode={mode} onModeChange={onModeChange} />;
 }
 
-/** The merge strip; it reads the checks and the review, so the title and facts above never re-render for them. */
-function PullMergeStrip() {
-	const view = usePullPageView();
-	const checks = usePullChecksView();
+/** Review, while there is none or it is out of date, then the menu and the merge button. `r` presses Review. */
+function PullActions({ page }: { page: PullPage }) {
+	const run = useRunView();
 	const merge = useMergeView();
-	const bugs = useBugsView();
-
-	if (!view.page) return null;
+	const reviewable = run.phase === 'none' || run.phase === 'cancelled' || (run.phase === 'passed' && run.outdated);
 
 	return (
-		<MergeStrip
-			page={view.page}
-			checks={checks}
-			merge={merge}
-			bugs={bugs.phase === 'ready' ? bugs.open.length : null}
-		/>
+		<>
+			{reviewable ? <ReviewButton run={run} again={false} shortcut variant="outline" /> : null}
+			<MergeActions page={page} merge={merge} />
+		</>
 	);
 }
 
-/** The page inside its session: the bar, the header with its merge strip, the tabs and the open tab. */
+/** The checks and the conflicts; they read the checks, so the title and facts never re-render for them. */
+function PullMergeFacts({ page }: { page: PullPage }) {
+	return <MergeFacts page={page} checks={usePullChecksView()} />;
+}
+
+/** The checks' list under the facts. */
+function PullChecksList() {
+	return <ChecksList view={usePullChecksView()} />;
+}
+
+/** The page inside its session: the bar, the header with its merge facts, the tabs and the open tab. */
 function PullFrame({ repoId, number, tab }: PullOnTabProps) {
-	const router = useRouter();
 	const { base } = useApi();
 	const view = usePullPageView();
 	const [mode, setMode] = useState<ChangesMode>('files');
@@ -82,20 +90,20 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	/** Opens the Changes tab in the guide's reading order. */
 	function openGuide(): void {
 		setMode('guide');
-		router.replace(pullHref(base, repoId, number, 'changes'), { scroll: false });
+		replaceSearch(pullHref(base, repoId, number, 'changes'));
 	}
 
 	const tools: Record<PullTab, ReactNode> = {
 		changes: <ChangesTabTools mode={mode} onModeChange={setMode} />,
 		summary: null,
-		bugs: <BugsTabTools />,
+		review: <ReviewTabTools />,
 		commits: null
 	};
 
 	const bodies: Record<PullTab, ReactNode> = {
 		changes: <ChangesTab repoId={repoId} number={number} mode={mode} />,
-		summary: <SummaryTab repoId={repoId} number={number} onOpenGuide={openGuide} />,
-		bugs: <BugsTab repoId={repoId} number={number} />,
+		summary: <SummaryTab repoId={repoId} onOpenGuide={openGuide} />,
+		review: <BugsTab />,
 		commits: <CommitsTab />
 	};
 
@@ -106,20 +114,23 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 					<Crumbs
 						parts={[
 							{ label: 'Pull requests', href: pullsHref(base) },
-							{ label: view.repoName },
+							{ label: view.repoName, href: repoHref(base, repoId) },
 							{ label: `#${number}` }
 						]}
 					/>
 				}
 				end={
-					forge && page ? (
-						<Button asChild variant="ghost" className="pull-forge-link">
-							<a href={page.pull.url} target="_blank" rel="noreferrer">
-								Open on {forge}
-								<ArrowUpRight aria-hidden className="size-3.5" />
-							</a>
-						</Button>
-					) : null
+					<>
+						{view.reviewId ? <TokenUsageButton kind="review" id={view.reviewId} /> : null}
+						{forge && page ? (
+							<Button asChild variant="ghost" className="pull-forge-link">
+								<a href={page.pull.url} target="_blank" rel="noreferrer">
+									Open on {forge}
+									<ArrowUpRight aria-hidden className="size-3.5" />
+								</a>
+							</Button>
+						) : null}
+					</>
 				}
 			>
 				{view.phase === 'loading' ? <PullPageSkeleton /> : null}
@@ -130,8 +141,8 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 				) : null}
 				{page ? (
 					<>
-						<PullHeader page={page}>
-							<PullMergeStrip />
+						<PullHeader page={page} actions={<PullActions page={page} />} merge={<PullMergeFacts page={page} />}>
+							<PullChecksList />
 						</PullHeader>
 						<div className="pull-tabs-row">
 							<PullTabs repoId={repoId} number={number} tab={tab} counts={view.counts} />

@@ -17,7 +17,13 @@ async function listedPull(repoId: string, number: number): Promise<PullListItem>
 async function answer(repoId: string, numbers: number[], next?: string): Promise<PullList> {
 	const items = await Promise.all(numbers.map((number) => listedPull(repoId, number)));
 
-	return { items, failures: [], nextCursors: next ? { [repoId]: next } : {}, fetchedAt: '2026-11-13T00:00:00Z' };
+	return {
+		items,
+		failures: [],
+		nextCursors: next ? { [repoId]: next } : {},
+		openCounts: {},
+		fetchedAt: '2026-11-13T00:00:00Z'
+	};
 }
 
 /** A store whose repository `big` lists pull requests 3 and 2 first, then 1; `readPage` answers the cursors. */

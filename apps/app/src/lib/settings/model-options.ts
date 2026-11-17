@@ -17,6 +17,8 @@ export interface ModelOption {
 	name: string;
 	/** The group it lists under: the provider, after the agent when several agents run models ("OpenCode · OpenRouter"). */
 	group: string;
+	/** The agent CLI's id that serves it, whose mark stands for the model; empty for a plain endpoint. */
+	agent: string;
 	/** Null when the model has no reasoning control. */
 	efforts: ReasoningEffort[] | null;
 	defaultEffort: ReasoningEffort | null;
@@ -72,6 +74,11 @@ function providerName(entry: ModelEntry): string {
 	return appName(entry.provider) || entry.source || entry.agent || 'Custom';
 }
 
+/** The agent CLI that serves the entry; empty for an endpoint Recoder calls directly. */
+function agentOf(entry: ModelEntry): string {
+	return entry.provider && entry.provider !== 'openai-compatible' ? entry.provider : '';
+}
+
 function toModelOption(entry: ModelEntry, multiAgent: boolean): ModelOption {
 	const efforts = entry.efforts?.length ? entry.efforts : null;
 	const provider = providerName(entry);
@@ -82,6 +89,7 @@ function toModelOption(entry: ModelEntry, multiAgent: boolean): ModelOption {
 		id: entry.id,
 		name,
 		group,
+		agent: agentOf(entry),
 		efforts,
 		defaultEffort: defaultEffort(entry),
 		contextWindow: entry.contextWindow ?? null,

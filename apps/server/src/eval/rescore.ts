@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { REASONING_EFFORTS, agentCli, type ReasoningEffort } from '@recoder/shared';
+import { loadPriceLookup } from '../models/model-prices';
 import { JUDGE_VERSION } from './benchmark-judge';
 import { adjudicationPath, labelRun, readAdjudications, type Adjudications } from './benchmark-labels';
 import {
@@ -286,7 +287,7 @@ if (import.meta.main) {
 	try {
 		const { report, notes } = await rescoreFile(input, output, options);
 
-		printBenchmark(report);
+		printBenchmark(report, await loadPriceLookup());
 		console.log(['', ...notes, `Report: ${resolve(output)}`].join('\n'));
 		process.exit(0);
 	} catch (error) {

@@ -21,11 +21,14 @@ import type {
 	RepoChatMessage,
 	RepoChatSummary,
 	RepoFile,
+	RepoOverview,
 	RepoTree,
 	Review,
 	ReviewChatMessage,
 	ReviewListItem,
+	ReviewMetrics,
 	SendRepoChatInput,
+	SkillSummary,
 	StartRepoChatInput
 } from '@recoder/shared';
 import { ORCHESTRATOR_ID } from '@recoder/shared';
@@ -33,6 +36,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 
 import { createChatCache, type ChatCache } from '../chat/chat-cache';
 import { createSessionCache, type SessionCache } from '../pull/session-cache';
+import { createOverviewCache, type OverviewCache } from '../repo/overview-cache';
 import { createListStore, type ListStore } from '../pulls/list-store';
 import { accountsApi, type AuthApi } from './accounts';
 import { chatApi } from './chat';
@@ -43,7 +47,9 @@ import { EventStream, type StreamHandlers } from './event-stream';
 import { seg } from './http';
 import { membersApi, type MembersApi } from './members';
 import { pullsApi, type PullListQuery } from './pulls';
+import { reposApi } from './repos';
 import { reviewsApi, type DecisionInput } from './reviews';
+import { telemetryApi, type TelemetryApi } from './telemetry';
 import { updateApi, type UpdateApi } from './update';
 import { usageApi, type UsageApi } from './usage';
 
@@ -61,12 +67,18 @@ export interface ApiClient {
 	members: MembersApi;
 	/** What each person and model has used, for the admin. */
 	usage: UsageApi;
+	/** Pull request, review and finding telemetry, for the admin. */
+	telemetry: TelemetryApi;
 	/** Updating this Recoder install, for the admin. */
 	update: UpdateApi;
 	/** The signed-in forge login, or null when no forge is signed in. */
 	account: () => Promise<string | null>;
 	repos: () => Promise<Repo[]>;
+	/** What the repository page shows over the last thirty days; rejects with a 404 for a repository that is not tracked. */
+	repoOverview: (repoId: string) => Promise<RepoOverview>;
 	addRepo: (input: CreateRepoInput) => Promise<Repo>;
+	/** Stops tracking a repository; its reviews stay on the server. */
+	removeRepo: (repoId: string) => Promise<void>;
 	pulls: (query?: PullListQuery) => Promise<PullList>;
 	pullPage: (repoId: string, number: number) => Promise<PullPage>;
 	pullDiff: (repoId: string, number: number) => Promise<PullDiff>;
@@ -77,6 +89,8 @@ export interface ApiClient {
 	mergePull: (repoId: string, number: number, input: MergePullInput) => Promise<MergePullResult>;
 	reviews: () => Promise<ReviewListItem[]>;
 	review: (id: string) => Promise<Review>;
+	/** Token usage across every model call a review has made, or null before any call is recorded. */
+	reviewMetrics: (id: string, signal?: AbortSignal) => Promise<ReviewMetrics | null>;
 	createReview: (input: CreateReviewInput) => Promise<Review>;
 	startDraft: (id: string) => Promise<Review>;
 	continueReview: (id: string) => Promise<Review>;
@@ -109,8 +123,10 @@ export interface ApiClient {
 	repoChats: (limit: number) => Promise<RepoChatSummary[]>;
 	/** A chat with Recoder about one tracked repository. */
 	repoChat: (chatId: string) => Promise<RepoChat>;
-	/** Opens a chat on a tracked repository with its first message; resolves with the chat's id. */
-	startRepoChat: (input: StartRepoChatInput) => Promise<{ id: string }>;
+	/** Token usage across every model call a repository chat has made, or null before any call is recorded. */
+	chatMetrics: (chatId: string, signal?: AbortSignal) => Promise<ReviewMetrics | null>;
+	/** Opens a chat on a tracked repository with its first message; resolves with the saved chat. */
+	startRepoChat: (input: StartRepoChatInput) => Promise<RepoChat>;
 	/** Sends a message to a chat; the reply arrives on its events. */
 	sendRepoChat: (chatId: string, message: SendRepoChatInput) => Promise<RepoChatMessage>;
 	/** Stops the reply `messageId` if it is still being written; a reply that already closed stays as it is. */
@@ -123,6 +139,8 @@ export interface ApiClient {
 	repoTree: (repoId: string, path: string, ref?: string) => Promise<RepoTree>;
 	/** One file of a repository at `ref` (the default branch when omitted). */
 	repoFile: (repoId: string, path: string, ref?: string) => Promise<RepoFile>;
+	/** The skills a repository ships for agents, which "/" offers; with `pull`, its head's as well. */
+	repoSkills: (repoId: string, pull?: number) => Promise<SkillSummary[]>;
 }
 
 /** The first signed-in forge's login. */
@@ -147,10 +165,13 @@ export const liveApi: ApiClient = {
 	auth: accountsApi,
 	members: membersApi,
 	usage: usageApi,
+	telemetry: telemetryApi,
 	update: updateApi,
 	account: signedInLogin,
 	repos: reviewsApi.repos,
+	repoOverview: reposApi.overview,
 	addRepo: connectionsApi.addRepo,
+	removeRepo: async (repoId) => void (await connectionsApi.removeRepo(repoId)),
 	pulls: pullsApi.list,
 	pullPage: pullsApi.page,
 	pullDiff: pullsApi.diff,
@@ -161,6 +182,7 @@ export const liveApi: ApiClient = {
 	mergePull: pullsApi.merge,
 	reviews: reviewsApi.list,
 	review: reviewsApi.review,
+	reviewMetrics: reviewsApi.metrics,
 	createReview: reviewsApi.create,
 	startDraft: reviewsApi.startDraft,
 	continueReview: reviewsApi.continue,
@@ -181,13 +203,15 @@ export const liveApi: ApiClient = {
 	discuss: chatApi.discuss,
 	repoChats: chatsApi.recent,
 	repoChat: chatsApi.chat,
+	chatMetrics: chatsApi.metrics,
 	startRepoChat,
 	sendRepoChat: chatsApi.send,
 	stopRepoChat: async (chatId, messageId) => void (await chatsApi.stop(chatId, messageId)),
 	deleteRepoChat: chatsApi.delete,
 	followRepoChat: (chatId, handlers) => followStream(`/api/chats/${seg(chatId)}/events`, handlers),
 	repoTree: filesApi.tree,
-	repoFile: filesApi.file
+	repoFile: filesApi.file,
+	repoSkills: filesApi.skills
 };
 
 interface ApiContext {
@@ -197,6 +221,8 @@ interface ApiContext {
 	sessions: SessionCache;
 	/** Chats kept from earlier visits; hovering a chat's row reads it ahead of the click. */
 	chats: ChatCache;
+	/** Repository overviews kept from earlier visits; hovering a repository's link reads it ahead of the click. */
+	overviews: OverviewCache;
 }
 
 const Context = createContext<ApiContext | null>(null);
@@ -209,7 +235,13 @@ export function ApiProvider({ client, children }: { client: ApiClient; children:
 	const [value] = useState(() => {
 		const list = createListStore(client);
 
-		return { client, list, sessions: createSessionCache(client, list), chats: createChatCache(client) };
+		return {
+			client,
+			list,
+			sessions: createSessionCache(client, list),
+			chats: createChatCache(client),
+			overviews: createOverviewCache(client)
+		};
 	});
 
 	return <Context.Provider value={value}>{children}</Context.Provider>;
@@ -241,4 +273,9 @@ export function useSessionCache(): SessionCache {
 /** The chats the screens under the provider have read. */
 export function useChatCache(): ChatCache {
 	return useApiContext().chats;
+}
+
+/** The repository overviews the screens under the provider have read. */
+export function useOverviewCache(): OverviewCache {
+	return useApiContext().overviews;
 }

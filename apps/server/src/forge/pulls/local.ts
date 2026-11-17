@@ -1,6 +1,7 @@
 import type { PullRequest, PullStatus } from '@recoder/shared';
 import { localAdapter } from '../local/context.js';
-import { listLocalPulls, viewLocalPull } from '../local/pulls.js';
+import { listLocalPulls, localHeadSha, viewLocalPull } from '../local/pulls.js';
+import { localRepoPath } from '../local/schema.js';
 import { parseSlug } from '../providers.js';
 import { splitMessage, UnsupportedPullAction, type PullForge } from './status.js';
 
@@ -19,7 +20,7 @@ export function localPullForge(repoUrl: string): PullForge {
 		async list() {
 			const entries = (await listLocalPulls(repoUrl)).map((pull) => ({ pull, status: localStatus(pull, 'open') }));
 
-			return { entries, nextCursor: null };
+			return { entries, nextCursor: null, total: entries.length };
 		},
 
 		async view(n) {
@@ -28,11 +29,7 @@ export function localPullForge(repoUrl: string): PullForge {
 			return { pull: pr, status: localStatus(pr, state) };
 		},
 
-		async head(n) {
-			const { pr } = await viewLocalPull(repoUrl, n);
-
-			return pr.headSha;
-		},
+		head: (n) => localHeadSha(localRepoPath(repoUrl), n),
 
 		async commits(pull) {
 			const adapter = localAdapter(repoUrl, parseSlug(repoUrl), pull.number, AbortSignal.timeout(COMMITS_TIMEOUT_MS));

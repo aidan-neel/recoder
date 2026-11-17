@@ -11,7 +11,7 @@ import { initializePostgresEvents } from '../../src/storage/postgres-events';
 import { initializePublication } from '../../src/storage/postgres-publication';
 import { importLocalData } from '../../src/storage/import-local';
 import { testReview } from '../helpers/review';
-import { SHARED_SECRET_KEY } from '../helpers/shared-secret-key';
+import { SHARED_SECRET_KEY } from './shared-secret-key';
 
 const testUrl = process.env.TEST_DATABASE_URL;
 const schema = `recoder_import_${crypto.randomUUID().replaceAll('-', '')}`;
@@ -137,7 +137,7 @@ integration('import preserves committed WAL reviews, paused recovery, settings, 
 	expect(documents.some((row) => row.name === 'auto-review')).toBe(false);
 
 	expect(documents.find((row) => row.name === 'review-settings')?.value).toMatchObject({
-		subagentCap: 8,
+		subagentCap: 4,
 		models: [{ id: expect.any(String), model: 'test-model' }]
 	});
 
@@ -213,8 +213,8 @@ integration('the explicit import command initializes an empty database and repor
 			env: {
 				...process.env,
 				RECODER_DATABASE_URL: destination.href,
-				RECODER_DATA_DIR: directory,
-				RECODER_SECRET_KEY: SHARED_SECRET_KEY
+				RECODER_SECRET_KEY: SHARED_SECRET_KEY,
+				RECODER_DATA_DIR: directory
 			},
 			stdout: 'pipe',
 			stderr: 'pipe'

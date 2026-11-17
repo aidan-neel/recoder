@@ -4,6 +4,17 @@ import { modelsDevCatalog, modelsDevCost } from './model-providers';
 /** The price of a model by the id its calls were made with, or null when the catalog has none. */
 export type PriceLookup = (model: string) => ModelCost | null;
 
+/** Prices are per million tokens. */
+export const TOKENS_PER_PRICE_UNIT = 1_000_000;
+
+/** One call's tokens as a bill reads them; `input` counts cache reads and writes too. */
+export interface BilledTokens {
+	input: number;
+	cacheRead: number;
+	cacheWrite: number;
+	output: number;
+}
+
 /**
  * The labs that sell their own models. Their prices win when another provider (a reseller, a gateway) lists the same
  * model, so `claude-opus-5-5` run through the Claude Code CLI is priced as `anthropic`'s, not an aggregator's.
@@ -53,16 +64,50 @@ export function priceLookupFrom(body: unknown): PriceLookup {
 	return (model) => prices.get(normalizeModelId(model)) ?? null;
 }
 
+/** The catalog object changes when its cache refreshes, so the derived index lives exactly as long as its source. */
+const priceIndexes = new WeakMap<object, PriceLookup>();
+
 /**
  * The prices from models.dev, cached for an hour with the hosted catalogs. When models.dev cannot be reached every
  * model is unpriced, so a report shows its token counts with no cost instead of failing.
  */
 export async function loadPriceLookup(): Promise<PriceLookup> {
 	try {
-		return priceLookupFrom(await modelsDevCatalog());
+		const catalog = await modelsDevCatalog();
+		const object = catalog && typeof catalog === 'object' ? catalog : {};
+		let lookup = priceIndexes.get(object);
+
+		if (!lookup) {
+			lookup = priceLookupFrom(catalog);
+			priceIndexes.set(object, lookup);
+		}
+
+		return lookup;
 	} catch (error) {
 		console.warn('[usage] could not load model prices', error instanceof Error ? error.message : error);
 
 		return () => null;
 	}
+}
+
+/** The cost of a call's tokens, or null when a kind of token it used has no price. */
+export function tokenCost(tokens: BilledTokens, price: ModelCost | null): number | null {
+	const uncachedInput = Math.max(0, tokens.input - tokens.cacheRead - tokens.cacheWrite);
+
+	const parts: [count: number, perMillion: number | null | undefined][] = [
+		[uncachedInput, price?.input],
+		[tokens.cacheRead, price?.cacheRead],
+		[tokens.cacheWrite, price?.cacheWrite],
+		[tokens.output, price?.output]
+	];
+
+	let cost = 0;
+
+	for (const [count, perMillion] of parts) {
+		if (count === 0) continue;
+		if (perMillion === null || perMillion === undefined) return null;
+		cost += (count * perMillion) / TOKENS_PER_PRICE_UNIT;
+	}
+
+	return cost;
 }

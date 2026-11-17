@@ -377,8 +377,11 @@ export function reviewerValidationError(raw: unknown, defaultCategory: FindingCa
 		.join('; ');
 }
 
-/** The guided-decoding shape of one finding, with the lens's categories as the only choices. */
-function findingResponseSchema(categories: readonly FindingCategory[]): Record<string, unknown> {
+/**
+ * The guided-decoding shape of one finding. It offers every category so all reviewers send the same format and share
+ * a cached prompt prefix; the prompt names the lens's categories, and consolidation drops a finding outside them.
+ */
+function findingResponseSchema(): Record<string, unknown> {
 	const str = { type: 'string' };
 	const line = { type: ['integer', 'null'] };
 	const nullableStr = { type: ['string', 'null'] };
@@ -409,7 +412,7 @@ function findingResponseSchema(categories: readonly FindingCategory[]): Record<s
 			line,
 			endLine: line,
 			severity: { type: 'string', enum: ['high', 'medium', 'low'] },
-			category: { type: 'string', enum: categories.length ? [...categories] : [...FINDING_CATEGORIES] },
+			category: { type: 'string', enum: [...FINDING_CATEGORIES] },
 			symbol: nullableStr,
 			ruleId: nullableStr,
 			questionId: nullableStr,
@@ -436,14 +439,12 @@ function findingResponseSchema(categories: readonly FindingCategory[]): Record<s
  * What a reviewer turn may look like, for endpoints with guided decoding:
  * a retrieval request with at least one action, or the final result. On the
  * final turn only the result is allowed. Kept looser than the zod schema:
- * it shapes the reply, and `parseReviewerOutput` still validates it. An empty
- * category list (a subagent) allows every category. `delegate` allows handing
- * a task to a worker.
+ * it shapes the reply, and `parseReviewerOutput` still validates it. `delegate`
+ * allows handing a task to a worker.
  */
 export function reviewerResponseSchema(
 	exec: boolean,
 	finalTurn: boolean,
-	categories: readonly FindingCategory[] = [],
 	delegate = false
 ): { name: string; schema: Record<string, unknown> } {
 	const str = { type: 'string' };
@@ -458,7 +459,7 @@ export function reviewerResponseSchema(
 		type: 'object',
 		properties: {
 			message: str,
-			findings: { type: 'array', items: findingResponseSchema(categories), maxItems: MAX_FINDINGS },
+			findings: { type: 'array', items: findingResponseSchema(), maxItems: MAX_FINDINGS },
 			examinedHunks: strings,
 			gaps: {
 				type: 'array',

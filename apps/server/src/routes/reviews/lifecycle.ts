@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import { reviewListItem } from '@recoder/shared';
+import { REVIEW_SPEEDS, type Review } from '@recoder/shared';
+import { reviewListJson } from '../../storage/review-list-response';
 import { imageBodyLimit, refuseUnreadImages, serveImage } from '../../attachments/image-http';
 import { deleteReviewImages } from '../../attachments/image-store';
 import { imagesSchema } from '../../attachments/image-upload';
@@ -29,6 +30,8 @@ import { coordinator, storageTransaction } from '../../storage/backend';
 import { enqueueCommand } from '../../review/runtime/inbox';
 import { requestReviewControl } from '../../review/runtime/requests';
 import { ReviewChatError } from '../../review/chat/chat-input';
+import { isEmptyRequest, loadRepoSkills, pullHeadSha, skillNames, skillRequest } from '../../skills/repo-skills';
+import { skillsSchema } from '../../skills/names';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),
@@ -36,11 +39,33 @@ const createReviewSchema = z.object({
 	headSha: z.string().min(1).max(100).optional(),
 	start: z.boolean().optional(),
 	baselineCache: z.literal(false).optional(),
+	speed: z.enum(REVIEW_SPEEDS).optional(),
+	findingHistory: z.literal(false).optional(),
 	prTitle: z.string().max(500).optional(),
 	postComment: z.boolean().optional(),
 	instructions: z.string().max(4000).optional(),
-	images: imagesSchema
+	images: imagesSchema,
+	skills: skillsSchema
 });
+
+/** Reading a pull request's skills never runs past this. */
+const SKILLS_TIMEOUT_MS = 10_000;
+
+/**
+ * The skills the review loads: the attached ones and the ones its brief mentions with `/name`, looked up where the
+ * review will read them, the pull request's head when this server holds it, else the default branch. Refuses
+ * attached skills the repository lacks. A repository that is not tracked is left to the review's own refusal.
+ */
+async function reviewSkills(body: z.infer<typeof createReviewSchema>): Promise<string[] | undefined> {
+	const request = skillRequest(body.skills, body.instructions);
+	const repo = isEmptyRequest(request) ? undefined : await db.repos.get(body.repoId);
+
+	if (!repo) return body.skills;
+
+	const headSha = body.headSha ?? (await pullHeadSha(repo, body.prNumber));
+
+	return skillNames(await loadRepoSkills(repo, request, headSha, AbortSignal.timeout(SKILLS_TIMEOUT_MS)));
+}
 
 const app = new Hono();
 
@@ -83,17 +108,27 @@ async function sessionAction(c: Context, start: (id: string) => Promise<unknown>
  * group apart.
  */
 app.get('/', async (c) => {
-	const [reviews, states] = await Promise.all([db.reviews.list(), pullStateMap()]);
+	const summary = c.req.query('view') === 'summary';
 
-	const withPullState = <T extends { repoId: string; prNumber: number }>(item: T): T => {
-		const pullState = states.get(pullStateKey(item.repoId, item.prNumber));
+	const read = async () => {
+		const [reviews, states] = await Promise.all([summary ? db.reviews.summaries() : db.reviews.list(), pullStateMap()]);
 
-		return pullState === undefined ? item : { ...item, pullState };
+		const withPullState = <T extends { repoId: string; prNumber: number }>(item: T): T => {
+			const pullState = states.get(pullStateKey(item.repoId, item.prNumber));
+
+			return pullState === undefined ? item : { ...item, pullState };
+		};
+
+		if (summary) return reviews.map(withPullState);
+
+		return (reviews as Review[]).map(({ context: _context, ...review }) => withPullState(review));
 	};
 
-	if (c.req.query('view') === 'summary') return c.json(reviews.map((review) => withPullState(reviewListItem(review))));
+	if (summary) return c.json(await read());
 
-	return c.json(reviews.map(({ context: _context, ...review }) => withPullState(review)));
+	return c.body(await reviewListJson(async () => JSON.stringify(await read())), 200, {
+		'Content-Type': 'application/json'
+	});
 });
 
 /** Task and reviewer counts per review still queued or running, for list rows. */
@@ -245,9 +280,11 @@ app.post('/:id/replay', async (c) => {
  * no model is set up, and a review without images gets the queue's own refusal for that.
  */
 app.post('/', imageBodyLimit, async (c) => {
-	const body = await parseBody(c, createReviewSchema);
+	const parsed = await parseBody(c, createReviewSchema);
 
-	if (body instanceof Response) return body;
+	if (parsed instanceof Response) return parsed;
+
+	const body = { ...parsed, skills: await reviewSkills(parsed) };
 
 	if (body.start === false && body.images.length)
 		return c.json({ error: 'Images go with a review brief. Start the review to send them.' }, 400);

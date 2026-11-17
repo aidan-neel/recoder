@@ -1,35 +1,42 @@
 'use client';
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger, HoverList, RowButton } from '@recoder/ui';
-import { ChevronDown, GitMerge, GitPullRequestClosed } from 'lucide-react';
+import { HoverList, RowButton } from '@recoder/ui';
+import { ChevronDown, GitMerge, GitPullRequest, GitPullRequestClosed, MessageSquare, Undo2 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
-import { useSessionCache } from '@/lib/api/client';
+import { useChatCache, useSessionCache } from '@/lib/api/client';
 import { shortAge } from '@/lib/shell/age';
-import type { SettledReview } from '@/lib/shell/types';
+import { useSettleMarks } from '@/lib/shell/settle';
+import type { SettledRow } from '@/lib/shell/types';
 import { useNow } from '@/lib/shell/use-now';
 
-import { useReviewActions } from './recent-actions';
-import { RecentRow } from './recent-row';
+import { useChatActions, useReviewActions, type RowAction } from './recent-actions';
+import { AGE_TICK, RecentRow } from './recent-row';
+import { SidebarSection } from './sidebar-section';
 
 /** How many settled rows show before "Show more". */
 const PREVIEW = 5;
 
-/** How often the ages move on, in ms. */
-const AGE_TICK = 60_000;
-
 const MARKS = {
 	merged: { icon: GitMerge, label: 'Merged' },
-	closed: { icon: GitPullRequestClosed, label: 'Closed' }
+	closed: { icon: GitPullRequestClosed, label: 'Closed' },
+	review: { icon: GitPullRequest, label: 'Review' },
+	chat: { icon: MessageSquare, label: 'Chat' }
 };
 
+/** The mark for a settled row: how its pull request ended, or what it is. */
+function markOf(entry: SettledRow) {
+	return MARKS[entry.outcome ?? entry.kind];
+}
+
 /**
- * Reviews of pull requests that were merged or closed, folded away at the
+ * Reviews of pull requests that were merged or closed, and the chats and
+ * reviews settled by hand or after three quiet hours, folded away at the
  * bottom of the sidebar: one line each, the oldest news kept a click off. It
  * shows only when there is one, and starts folded on every load.
  */
-export function SettledReviews({ reviews }: { reviews: SettledReview[] }) {
+export function SettledReviews({ reviews }: { reviews: SettledRow[] }) {
 	const [open, setOpen] = useState(false);
 	const [showAll, setShowAll] = useState(false);
 
@@ -39,23 +46,20 @@ export function SettledReviews({ reviews }: { reviews: SettledReview[] }) {
 	const hidden = reviews.length - shown.length;
 
 	return (
-		<Collapsible open={open} onOpenChange={setOpen} className="settled">
-			<RowButton asChild className="settled-head">
-				<CollapsibleTrigger>
-					<span className="section-label">Settled</span>
-					<span className="settled-count">{reviews.length}</span>
-					<ChevronDown aria-hidden className="settled-chevron" />
-				</CollapsibleTrigger>
-			</RowButton>
-			<CollapsibleContent>
-				<SettledRows reviews={shown} hidden={hidden} onShowAll={() => setShowAll(true)} />
-			</CollapsibleContent>
-		</Collapsible>
+		<SidebarSection
+			title="Settled"
+			open={open}
+			onOpenChange={setOpen}
+			className="settled"
+			aside={<span className="settled-count">{reviews.length}</span>}
+		>
+			<SettledRows reviews={shown} hidden={hidden} onShowAll={() => setShowAll(true)} />
+		</SidebarSection>
 	);
 }
 
 interface SettledRowsProps {
-	reviews: SettledReview[];
+	reviews: SettledRow[];
 	/** How many more rows "Show more" reveals; none hides the button. */
 	hidden: number;
 	onShowAll: () => void;
@@ -64,24 +68,42 @@ interface SettledRowsProps {
 function SettledRows({ reviews, hidden, onShowAll }: SettledRowsProps) {
 	const pathname = usePathname();
 	const sessions = useSessionCache();
-	const actionsFor = useReviewActions();
+	const chatCache = useChatCache();
+	const reviewActions = useReviewActions();
+	const chatActions = useChatActions();
+	const mark = useSettleMarks((state) => state.mark);
 	const now = useNow(AGE_TICK);
+
+	/** The row's menu, led by Unsettle unless its pull request ended, which no mark undoes. */
+	function actionsFor(entry: SettledRow): RowAction[] {
+		const id = entry.kind === 'review' ? entry.row.reviewId : entry.row.chatId;
+		const base = entry.kind === 'review' ? reviewActions(entry.row) : chatActions(entry.row);
+
+		if (entry.outcome) return base;
+
+		return [{ id: 'unsettle', label: 'Unsettle', icon: Undo2, onSelect: () => mark(id, false) }, ...base];
+	}
 
 	return (
 		<HoverList className="recent-list settled-list" itemSelector="[data-recent]">
-			{reviews.map((review) => {
-				const { icon: Icon, label } = MARKS[review.outcome];
+			{reviews.map((entry) => {
+				const { icon: Icon, label } = markOf(entry);
+				const { row } = entry;
 
 				return (
 					<RecentRow
-						key={review.reviewId}
-						href={review.href}
-						active={pathname === review.href.split('?')[0]}
+						key={entry.kind === 'review' ? entry.row.reviewId : entry.row.chatId}
+						href={row.href}
+						active={pathname === row.href.split('?')[0]}
 						mark={<Icon role="img" aria-label={label} className="recent-mark" />}
-						title={review.title}
-						trailing={<span className="recent-age">{shortAge(review.updatedAt, now)}</span>}
-						actions={actionsFor(review)}
-						onIntent={() => sessions.warm(review.repoId, review.number)}
+						title={row.title}
+						trailing={<span className="recent-age">{shortAge(row.updatedAt, now)}</span>}
+						actions={actionsFor(entry)}
+						onIntent={() =>
+							entry.kind === 'review'
+								? sessions.warm(entry.row.repoId, entry.row.number)
+								: chatCache.warm(entry.row.chatId)
+						}
 					/>
 				);
 			})}

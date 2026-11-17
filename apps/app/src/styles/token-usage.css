@@ -1,0 +1,136 @@
+/* ───────── Token usage modal: review & repository chat metrics ───────── */
+
+/* When the trigger ends the page bar, its label reaches to the page gutter like the forge link beside it. */
+.page-bar-side[data-side='end'] > .token-usage-trigger:last-child {
+	margin-right: -9px;
+}
+
+.token-usage-panel {
+	max-width: 500px;
+}
+
+.token-usage-body {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+	padding-top: 2px;
+}
+
+.token-usage-head {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.token-usage-total-row {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.token-usage-total {
+	color: var(--text-primary);
+	font-size: 28px;
+	font-weight: 600;
+	letter-spacing: -0.025em;
+	line-height: 32px;
+}
+
+.token-usage-unit {
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+
+.token-usage-meta {
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+
+.token-usage-section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.token-usage-models,
+.token-usage-stages {
+	display: flex;
+	flex-direction: column;
+}
+
+.token-usage-model {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px 0;
+	border-top: 1px solid var(--line-subtle);
+}
+
+.token-usage-model-top {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.token-usage-model-name {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 7px;
+}
+
+.token-usage-model-title {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 18px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.token-usage-model-figures,
+.token-usage-stage-figures {
+	display: flex;
+	flex-shrink: 0;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.token-usage-count {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 18px;
+}
+
+.token-usage-stage {
+	display: grid;
+	min-height: 32px;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: 12px;
+	padding: 6px 0;
+	border-top: 1px solid var(--line-subtle);
+}
+
+.token-usage-stage-name {
+	overflow: hidden;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.token-usage-notes {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding-top: 10px;
+	border-top: 1px solid var(--line-subtle);
+}

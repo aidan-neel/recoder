@@ -266,7 +266,9 @@ export function endedTrail(steps: ChatTrailStep[], now: number): ChatTrailStep[]
 	return steps.map((step) => {
 		if (!isStepRunning(step)) return step;
 
-		return step.kind === 'thought' ? { ...step, endedAt } : { ...step, status: 'done', endedAt };
+		if (step.kind === 'thought' || step.kind === 'note') return { ...step, endedAt };
+
+		return { ...step, status: 'done', endedAt };
 	});
 }
 

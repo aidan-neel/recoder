@@ -296,5 +296,5 @@ test('a review agent on an Antigravity model completes through the shared engine
 	);
 
 	expect(error).toBeUndefined();
-	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+new') });
+	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+1|new') });
 });

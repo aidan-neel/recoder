@@ -1,8 +1,24 @@
-/* ───────── Pull request page: the header, the merge strip, the tabs, one tab's body ───────── */
-/* The page fills the window. The crumbs, title, badges, strip and first tab label share the bar's gutter. */
+/* ───────── Pull request page: the header, the review's badge, the merge facts, the tabs, one tab's body ───────── */
+/* The page fills the window. The crumbs, title, badges and first tab label share the bar's gutter. */
 .pull-head {
 	flex-shrink: 0;
-	padding: 18px var(--page-gutter) 6px;
+	padding: 18px var(--page-gutter) 14px;
+}
+/* The title, the review's badge beside it, and the buttons at the end. A long title gives way first. */
+.pull-title-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 12px;
+}
+.pull-actions {
+	display: flex;
+	min-width: 0;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+	padding-left: 12px;
 }
 /*
  * The forge link has no box at rest, so its ink ends on the gutter like the box edges below it: it reaches out by
@@ -23,7 +39,7 @@
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
-	margin-top: 8px;
+	margin-top: 10px;
 }
 
 /*
@@ -68,7 +84,7 @@
 	flex: 1;
 }
 
-/* While the page loads: bars as tall as the title, the facts and the strip, so nothing moves when they arrive. */
+/* While the page loads: bars as tall as the title and the facts, so nothing moves when they arrive. */
 .pull-head-skeleton {
 	display: flex;
 	flex-direction: column;
@@ -77,43 +93,39 @@
 	margin: 4px 0;
 }
 .pull-head-skeleton > :nth-child(2) {
-	margin-top: 8px;
-}
-.pull-head-skeleton > :nth-child(3) {
-	margin-top: 14px;
-	border-radius: var(--radius-row);
+	margin-top: 12px;
 }
 
-/* ───────── Merge strip: the checks, the conflicts, the open bugs, then the menu and the merge button ───────── */
-.merge-strip {
-	margin-top: 14px;
-	border-radius: var(--radius-row);
-	background: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-card);
-}
-/* Inside the box, the first icon sits 12px in; the merge button sits 6px from the right edge, as from the top and bottom. */
-.merge-strip-row {
+/* ───────── Merge facts: the checks and the conflicts after the facts, as quiet text past a hairline ───────── */
+.merge-facts {
 	display: flex;
-	height: 40px;
 	min-width: 0;
 	align-items: center;
-	padding: 0 6px 0 2px;
-	font-size: var(--font-size-label);
+	gap: 2px;
 }
-/* A fact: its icon on the strip's 12px inset, so it lines up with the check rows under it. */
+.merge-facts::before {
+	width: 1px;
+	height: 16px;
+	flex-shrink: 0;
+	margin: 0 6px 0 4px;
+	background: var(--line-control);
+	content: '';
+}
+/* A fact: muted text after its icon; the checks' one is a quiet button of the same height. */
 .merge-fact {
 	display: inline-flex;
-	height: 28px;
+	height: 24px;
 	flex-shrink: 0;
 	align-items: center;
-	gap: 8px;
-	padding: 0 10px;
-	color: var(--text-secondary);
+	gap: 6px;
+	padding: 0 6px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
 	white-space: nowrap;
 }
 .merge-fact svg {
-	width: 14px;
-	height: 14px;
+	width: 13px;
+	height: 13px;
 	flex-shrink: 0;
 }
 .merge-fact[data-tone='ok'] svg {
@@ -125,23 +137,10 @@
 .merge-fact[data-tone='wait'] svg {
 	color: var(--sev-medium);
 }
-.merge-fact[data-tone='none'] {
-	color: var(--text-muted);
-}
-.merge-fact[data-tone='none'] svg {
-	color: var(--text-faint);
-}
 .merge-fact-skeleton {
 	width: 120px;
 	height: 12px;
-	margin: 0 10px;
-}
-.merge-strip-divider {
-	width: 1px;
-	height: 16px;
-	flex-shrink: 0;
-	margin: 0 2px;
-	background: var(--line-control);
+	margin: 0 6px;
 }
 .merge-fact .checks-chevron {
 	width: 12px;
@@ -153,14 +152,6 @@
 .checks-toggle[data-state='open'] .checks-chevron {
 	rotate: 180deg;
 }
-.merge-strip-end {
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	gap: 6px;
-	margin-left: auto;
-	padding-left: 12px;
-}
 .merge-error {
 	min-width: 0;
 	max-width: 420px;
@@ -171,55 +162,26 @@
 	white-space: nowrap;
 }
 
-/*
- * The merge button and its method menu read as one control: outer corners
- * round, inner corners square, and a hairline of the label's own colour
- * between the halves. Each half lights on its own and rings inside its own shape.
- */
-.merge-split {
-	display: inline-flex;
-}
-.merge-split-main {
-	border-top-right-radius: 0;
-	border-bottom-right-radius: 0;
-}
-.merge-split-menu {
-	border-top-left-radius: 0;
-	border-bottom-left-radius: 0;
-}
-.merge-split-menu::before {
-	position: absolute;
-	top: 6px;
-	bottom: 6px;
-	left: 0;
-	width: 1px;
-	background: currentcolor;
-	content: '';
-	opacity: 0.2;
-	pointer-events: none;
-}
-.merge-split [data-ui='button']:focus-visible {
-	box-shadow: inset 0 0 0 2px color-mix(in oklab, currentcolor 65%, transparent);
-}
-
-/* A merge method in the menu: what it does, then what it leaves on the base branch. */
-.merge-method {
+/* A row in a split button's menu: what it does, then a line on what that means. */
+.split-option {
 	height: auto;
 	min-height: 30px;
 	align-items: flex-start;
 	padding-top: 6px;
 	padding-bottom: 6px;
 }
-.merge-method-detail {
+.split-option-detail {
 	color: var(--text-faint);
 	font-size: var(--font-size-meta);
 	line-height: 16px;
 }
 
-/* The checks under the strip: rows fill as many columns as the width holds. A long list scrolls inside the strip. */
+/* The checks under the facts: rows fill as many columns as the width holds. A long list scrolls in its box. */
 .checks-list {
 	max-height: 308px;
-	border-top: 1px solid var(--line-card);
+	margin-top: 10px;
+	border-radius: var(--radius-row);
+	box-shadow: inset 0 0 0 1px var(--line-card);
 }
 .checks-list-viewport {
 	padding: 4px 6px 6px;

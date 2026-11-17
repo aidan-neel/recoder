@@ -149,9 +149,13 @@ function sessionRouter(handlers: SessionHandlers): (event: unknown, session: str
 		else if (type === 'session.step.started' && !steps.has(`start:${message}`)) {
 			steps.add(`start:${message}`);
 			handlers.onStepStart?.(message || undefined);
-		} else if (type === 'session.step.ended' && data.tokens && !steps.has(`end:${message}`)) {
-			steps.add(`end:${message}`);
-			handlers.onStepFinish?.(usage(data.tokens), message || undefined);
+		} else if (type === 'session.step.ended' && !steps.has(`end:${message}`)) {
+			handlers.onStepEnd?.();
+
+			if (data.tokens) {
+				steps.add(`end:${message}`);
+				handlers.onStepFinish?.(usage(data.tokens), message || undefined);
+			}
 		}
 	};
 }
@@ -307,13 +311,14 @@ export class V2Api implements OpenCodeApi {
 	}
 
 	/** The model, effort and permissions go on the session; the system prompt is one of its instruction entries. */
-	async createSession({ directory, model, system, variant, allow, signal }: NewSession): Promise<string> {
+	async createSession({ parentID, directory, model, system, variant, allow, signal }: NewSession): Promise<string> {
 		const { providerID, modelID } = splitModel(model);
 
 		const { id } = await this.data(z.object({ id: z.string() }), '/api/session', {
 			method: 'POST',
 			body: {
 				title: 'Recoder',
+				...(parentID && { parentID }),
 				model: { providerID, id: modelID, ...(variant ? { variant } : {}) },
 				location: { directory },
 				permissions: permissions(allow)

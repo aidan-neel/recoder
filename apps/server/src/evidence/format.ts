@@ -16,6 +16,8 @@ export function actionCommand(action: RetrievalAction): string {
 			return `list ${action.prefix || '.'}`;
 		case 'readDiff':
 			return `readDiff ${action.path ?? 'scoped hunks'}`;
+		case 'loadSkill':
+			return `skill ${action.skill ?? ''}`.trim();
 		case 'run':
 			return `$ ${action.command ?? ''}`;
 		case 'writeFile':
@@ -80,6 +82,40 @@ export function finishedReport(
 	};
 }
 
+/** Number only displayed patch lines, after retrieval has applied its original paging and character budgets. */
+function numberedPatch(patch: string): string {
+	let oldLine = 0;
+	let newLine = 0;
+	let inHunk = false;
+
+	return patch
+		.split('\n')
+		.map((line) => {
+			const header = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+
+			if (header) {
+				oldLine = Number(header[1]);
+				newLine = Number(header[2]);
+				inHunk = true;
+
+				return line;
+			}
+
+			if (!inHunk) return line;
+
+			const sign = line[0];
+
+			if (sign === '-') return `-${oldLine++}|${line.slice(1)}`;
+			if (sign === '+') return `+${newLine++}|${line.slice(1)}`;
+			if (sign !== ' ') return line;
+
+			oldLine++;
+
+			return ` ${newLine++}|${line.slice(1)}`;
+		})
+		.join('\n');
+}
+
 /** Tool results as the text block fed back to the agent, one header line per result. */
 export function formatToolResults(results: ToolResult[]): string {
 	return results
@@ -99,7 +135,7 @@ export function formatToolResults(results: ToolResult[]): string {
 				.filter(Boolean)
 				.join(' ');
 
-			return `--- ${header} ---\n${result.content}`;
+			return `--- ${header} ---\n${result.action === 'readDiff' && result.ok ? numberedPatch(result.content) : result.content}`;
 		})
 		.join('\n\n');
 }

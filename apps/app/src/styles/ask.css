@@ -54,6 +54,13 @@
 .ask-message[data-from='person'] {
 	align-items: flex-end;
 }
+/* A reply stands a step clear of the question above it, and its trail sits tight on the words it led to. */
+.ask-message[data-from='recoder'] {
+	padding-top: 6px;
+}
+.ask-message[data-from='recoder'] > .trail {
+	margin-bottom: -6px;
+}
 /* The person's images under their words, on the same right edge. */
 .ask-images {
 	max-width: 85%;
@@ -83,6 +90,46 @@
 	gap: 10px;
 	color: var(--danger);
 	font-size: var(--font-size-label);
+}
+
+/* A review a reply started: one card, its pull request and its status, the whole card opening it. */
+.chat-review {
+	--row-button-radius: var(--radius-card);
+
+	position: relative;
+	display: flex;
+	max-width: 520px;
+	align-items: center;
+	gap: 10px;
+	margin-top: 4px;
+	padding: 10px 12px;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.chat-review:hover {
+	background-color: var(--bg-hover);
+}
+.chat-review-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+}
+.chat-review-title {
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+	line-height: 20px;
+}
+.chat-review-meta {
+	color: var(--text-faint);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+.chat-review .chat-review-chevron {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-faint);
 }
 
 /* Questions to start from: quiet rows whose text starts on the gutter; the hover fill reaches 8px past it. */
@@ -127,13 +174,23 @@
 	flex-shrink: 0;
 	color: var(--text-faint);
 }
+.composer-models .composer-models-mark {
+	width: 14px;
+	height: 14px;
+}
+.composer-models .composer-models-spark {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-secondary);
+}
 .composer-models-loading {
 	width: 88px;
 	height: 12px;
 	margin-inline: 8px;
 }
 .composer-models-menu {
-	width: 280px;
+	width: 300px;
 }
 .composer-models-role {
 	height: 30px;
@@ -168,6 +225,25 @@
 .composer-models-label {
 	padding: 6px 8px 2px;
 	color: var(--text-subtle);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+/* A speed: its name over what it trades, which wraps in the menu's width. */
+.composer-speed {
+	height: auto;
+	min-height: 30px;
+	align-items: flex-start;
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+.composer-speed-body {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	white-space: normal;
+}
+.composer-speed-detail {
+	color: var(--text-faint);
 	font-size: var(--font-size-meta);
 	line-height: 16px;
 }

@@ -18,8 +18,13 @@ Verify; do not assume. Check each suspicion by running code: a failing test, a t
 When something cannot be run here (a tool or test runner is missing or broken, or it needs the network, a service, credentials, or another platform), report the finding anyway: say why it could not run and cite the code evidence. A later stage verifies every candidate, so an unrun finding is not wasted.
 Edits to tracked files are reverted after every command; put experiments in new files, or patch and run in one command.`;
 
+/** Evidence gathering saves steps without skipping any required procedure or proof. */
+export const TOOL_ECONOMY_RULES =
+	'Batch independent reads and searches in one step, within the tool limits. Reuse code and evidence already in your context; retrieve it again only if it was truncated or a missing detail matters. Once every procedure and assigned question is covered and the evidence supports your result, give the final JSON immediately. Do not spend unused turns on redundant checks.';
+
 /** What every lens and subagent does, whatever it looks for. */
 const SHARED_RULES = `How to review:
+- ${TOOL_ECONOMY_RULES}
 - Follow your procedure step by step, over every changed symbol in the order the context lists them. Use the change-model context first: it already holds each symbol's callers, callees, tests and comparable code.
 - Report EVERY instance you find, each as its own finding, in procedure order. Repeats of one problem inside the same symbol go into one finding with related locations.
 - Use only the categories your role lists. Set "symbol" to the enclosing symbol's qualified name from the context, or null when the line is outside every symbol.
@@ -74,7 +79,7 @@ At most 4 actions per turn. Truncated results include continuation tokens — re
 
 /** How an agent reaches the repository: JSON action requests, reworded by `forNativeTools` for an agent with function tools. */
 export function toolsContract(exec: boolean): string {
-	return `${ACTIONS_NOTE}${exec ? EXEC_ACTIONS : READ_ONLY_ACTIONS}`;
+	return `${ACTIONS_NOTE}${exec ? EXEC_ACTIONS : READ_ONLY_ACTIONS}Patch hunk lines use +N|added and  N|context with new-side numbers, -N|removed with old-side numbers.\n\n`;
 }
 
 /** How a finding's body reads in the UI: short markdown, not a paragraph of prose. */
@@ -100,7 +105,7 @@ Use "high" only for issues that are certainly reachable and damaging.`;
 /** Which findings an agent reports, and so which rules it is held to: bugs, maintainability, or both under their own rules. */
 export type ReviewerFocus = 'defect' | 'quality' | 'both';
 
-const FOCUS_RULES: Record<ReviewerFocus, string> = {
+export const FOCUS_RULES: Record<ReviewerFocus, string> = {
 	defect: BUG_RULES,
 	quality: QUALITY_RULES,
 	both: `${BUG_RULES}- Maintainability findings (repo-rule, convention, duplication, dead-code, readability, complexity) follow these rules instead of the bug rules above:\n${QUALITY_RULES}`
@@ -110,9 +115,9 @@ const FOCUS_RULES: Record<ReviewerFocus, string> = {
  * The rules, tools and answer shape every reviewer and subagent gets; `exec` adds
  * the sandbox, and `focus` picks the defect rules, the maintainability ones, or both.
  */
-export function reviewerContract(exec: boolean, focus: ReviewerFocus): string {
+export function reviewerContract(exec: boolean, focus?: ReviewerFocus): string {
 	return `${exec ? EXEC_RULES : READ_ONLY_RULES}
-${SHARED_RULES}${FOCUS_RULES[focus]}${toolsContract(exec)}${FINAL_SHAPE}`;
+${SHARED_RULES}${focus ? FOCUS_RULES[focus] : ''}${toolsContract(exec)}${FINAL_SHAPE}`;
 }
 
 /** Copyable request shapes: weaker models follow an example far better than a type signature. */
@@ -152,7 +157,14 @@ export function forNativeTools(prompt: string): string {
 
 /** How an agent with function tools narrates and finishes. */
 export const NATIVE_REPLY_RULES =
-	'\nWork with your tools: read the code you need and, when you have a shell, run it. Before a step of tool calls, write at most one short reader-facing sentence (under 15 words) on what you are checking; it is shown live to the developer. Never restate tool output you already have. When a tool tells you this is your final turn, stop calling tools and give your final result with the evidence you have. Your final result is the JSON object described above, with its "message" a concise Markdown conclusion. ';
+	'\nWork with your tools: read the code you need and, when you have a shell, run it. Batch independent reads and searches into the same step with parallel tool calls. Keep dependent calls in order, especially writes before runs. Do not re-read code or evidence already available unless a missing or truncated detail is needed. Give your final result as soon as the evidence settles your assigned questions and required procedures; unused turns are not a target. Before a step of tool calls, write at most one short reader-facing sentence (under 15 words) on what you are checking; it is shown live to the developer. Never restate tool output you already have. When a tool tells you this is your final turn, stop calling tools and give your final result with the evidence you have. Your final result is the JSON object described above, with its "message" a concise Markdown conclusion. ';
+
+/**
+ * How an agent CLI run with no tools finishes. Without it the model reads "work with your tools", hunts for tools
+ * the CLI no longer offers, and is stopped as a runaway before it answers.
+ */
+export const TOOLLESS_REPLY_RULES =
+	'\nYou have no tools for this request: do not search for or call any. Answer at once with the JSON object described above, with its "message" a concise Markdown conclusion. ';
 
 /** How anything shown to the developer in the review chat should read. */
 export const CHAT_STYLE = `Writing style: be minimal. Use as few words as the point needs, usually one to three short sentences in total, and never more than 60 words unless the developer asks for detail. Put each separate subject in its own short paragraph, with a blank line between paragraphs; never run different subjects together in one paragraph. No preamble, no restating the question, no closing summary, no offers of more help. Use a list only for three or more parallel items.

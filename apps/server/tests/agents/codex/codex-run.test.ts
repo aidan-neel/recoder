@@ -225,5 +225,5 @@ test('a review agent on a Codex model completes through the shared engine, readi
 	);
 
 	expect(error).toBeUndefined();
-	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+new') });
+	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+1|new') });
 });

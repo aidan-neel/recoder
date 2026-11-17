@@ -1,6 +1,7 @@
-import type { DiffHunk } from '@recoder/shared';
+import { isSkillName, type DiffHunk } from '@recoder/shared';
 import type { ReviewInventory } from '../review/pipeline/inventory.js';
 import { REVIEW_POLICY } from '../review/session/review-policy.js';
+import { findSkills } from '../skills/discovery.js';
 import { git, readBlob, regularFiles } from './git.js';
 import { sanitizePrefix, sanitizeRepoPath } from './paths.js';
 import { cursorIndex, newSideText, paginateList, sliceLines } from './text.js';
@@ -40,6 +41,8 @@ export async function retrieve(
 			return search(context, action, signal);
 		case 'readDiff':
 			return readDiff(context, action);
+		case 'loadSkill':
+			return loadSkill(context, action, signal);
 		default:
 			return failure('unknown', `unsupported action ${JSON.stringify(action).slice(0, 160)}. ${UNSUPPORTED_HINT}`);
 	}
@@ -205,6 +208,44 @@ async function search(context: RetrievalContext, action: RetrievalAction, signal
 		continuation: truncated ? (page.at(-1) ?? null) : null,
 		matches: page.length
 	};
+}
+
+/** The skill's `SKILL.md` at the pull request head, else at the target branch. */
+async function loadSkill(
+	context: RetrievalContext,
+	action: RetrievalAction,
+	signal?: AbortSignal
+): Promise<ToolResult> {
+	const name = action.skill;
+
+	if (typeof name !== 'string' || !isSkillName(name)) return failure('loadSkill', 'name must be the name of a skill');
+	if (!context.revision) return failure('loadSkill', 'skills need a local checkout');
+
+	try {
+		for (const alias of ['head', 'target'] as const) {
+			const resolved = resolveRevision(context.revision, alias);
+
+			if ('error' in resolved) continue;
+
+			const revision = { root: context.revision.checkoutPath, sha: resolved.sha };
+			const [skill] = (await findSkills([revision], [name], signal)).skills;
+
+			if (skill) {
+				return {
+					action: 'loadSkill',
+					ok: true,
+					revision: alias,
+					path: skill.path,
+					content: skill.text,
+					truncated: skill.truncated
+				};
+			}
+		}
+	} catch (error) {
+		return failure('loadSkill', error instanceof Error ? error.message.slice(0, 400) : 'skill lookup failed');
+	}
+
+	return failure('loadSkill', `this repository has no skill named "${name}"`);
 }
 
 function hunkId(path: string, hunk: DiffHunk): string {

@@ -10,6 +10,8 @@ export const MCP_TIMEOUT_MS = 10_000;
 
 /** A session to create: everything OpenCode needs to know before the first prompt. */
 export interface NewSession {
+	/** Unprompted review root whose provider cache affinity this session shares. */
+	parentID?: string;
 	directory: string;
 	model: string;
 	system: string;

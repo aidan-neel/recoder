@@ -1,4 +1,5 @@
 import type { TokenCall, TokenStage } from '@recoder/shared';
+import { tokenCost, type PriceLookup } from '../models/model-prices';
 import type { ScoredRun } from './benchmark-report';
 
 /** One review's pipeline tokens for one kind of agent on one model. Input counts cache reads and writes too. */
@@ -56,22 +57,50 @@ function count(n: number): string {
 	return String(n);
 }
 
+/** `$1.23`, or `n/a` when a model has no price. */
+function dollars(cost: number | null): string {
+	return cost === null ? 'n/a' : `$${cost.toFixed(2)}`;
+}
+
+/** A row's cost at the model's catalog price. */
+function rowCost(row: StageTokens, priceOf: PriceLookup): number | null {
+	return tokenCost(
+		{ input: row.input, cacheRead: row.cached, cacheWrite: row.written, output: row.output },
+		priceOf(row.model)
+	);
+}
+
+/** The line under the stage rows: every row's calls and input, the cache rate, and the cost in all and per review. */
+function totalLine(rows: readonly StageTokens[], costs: readonly (number | null)[], reviews: number): string {
+	const sum = (field: 'calls' | 'input' | 'cached') => rows.reduce((total, row) => total + row[field], 0);
+	const input = sum('input');
+	const cost = costs.reduce<number>((total, rowCost) => total + (rowCost ?? 0), 0);
+	const unpriced = [...new Set(rows.filter((_, index) => costs[index] === null).map((row) => row.model))];
+	const cachedShare = input ? Math.round((sum('cached') / input) * 100) : 0;
+
+	return `  ${'total'.padEnd(41)}${String(sum('calls')).padStart(5)} calls  in ${count(input).padStart(6)}  cached ${cachedShare}%  cost ${dollars(cost)} · ${dollars(cost / reviews)} per review${unpriced.length ? ` (no price: ${unpriced.join(', ')})` : ''}`;
+}
+
 /**
- * Every run's pipeline tokens summed by stage and model. Uncached is input less cache reads and writes: the part
- * a provider bills at its full input price.
+ * Every PR run's pipeline tokens summed by stage and model, with what they cost at catalog prices. Uncached is input
+ * less cache reads and writes: the part a provider bills at its full input price. A model without a price is left
+ * out of the total cost and named.
  */
-export function tokenLines(runs: readonly ScoredRun[]): string[] {
-	const recorded = runs.filter((run) => run.reviewer?.tokens);
+export function tokenLines(prs: readonly { runs: readonly ScoredRun[] }[], priceOf: PriceLookup): string[] {
+	const recorded = prs.flatMap((pr) => pr.runs).filter((run) => run.reviewer?.tokens);
 	const rows = sumByStage(recorded.flatMap((run) => run.reviewer?.tokens ?? []));
 
 	if (!rows.length) return [];
 
+	const costs = rows.map((row) => rowCost(row, priceOf));
+
 	return [
 		'',
-		`Tokens by stage (${recorded.length} runs)`,
+		`Tokens by stage (${recorded.length} runs, catalog prices)`,
 		...rows.map(
-			(row) =>
-				`  ${row.stage.padEnd(13)}${row.model.padEnd(28)}${String(row.calls).padStart(5)} calls  in ${count(row.input).padStart(6)}  uncached ${count(row.input - row.cached - row.written).padStart(6)}  write ${count(row.written).padStart(6)}  out ${count(row.output).padStart(6)}`
-		)
+			(row, index) =>
+				`  ${row.stage.padEnd(13)}${row.model.padEnd(28)}${String(row.calls).padStart(5)} calls  in ${count(row.input).padStart(6)}  uncached ${count(row.input - row.cached - row.written).padStart(6)}  write ${count(row.written).padStart(6)}  out ${count(row.output).padStart(6)}  cost ${dollars(costs[index] ?? null).padStart(7)}`
+		),
+		totalLine(rows, costs, recorded.length)
 	];
 }

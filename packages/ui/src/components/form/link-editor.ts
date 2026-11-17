@@ -36,12 +36,15 @@ import { attachEditorEvents } from './link-events';
 import type { TextRange } from './link-find';
 import { EMPTY_HISTORY, record, redo, undo, type EditKind, type History, type Snapshot } from './link-history';
 import { withoutImageTokens } from './link-image';
+import { embedMentions } from './link-mention';
 import { docFromText, embedLinks, linkAfter, linkBefore, replaceRange, wordAround, type LinkDoc } from './link-model';
 
 /** What the editor asks of its host, read fresh on every use so a prop change needs no new editor. */
 export interface EditorHost extends EmbedSource {
 	maxLength: () => number | undefined;
 	disabled: () => boolean;
+	/** The skill names a `/` mention may take, so `/name` shows as an embed. */
+	mentions: () => ReadonlySet<string>;
 	/** The person changed the text. */
 	onChange: (text: string) => void;
 	/** The caret moved, or an edit landed: the host re-reads `embedBesideCaret` and `editedLast`. */
@@ -73,7 +76,7 @@ export class LinkEditor {
 		value: string,
 		private readonly host: EditorHost
 	) {
-		this.doc = docFromText(plainText(value));
+		this.doc = this.withMentions(docFromText(plainText(value)), null);
 		this.draw();
 	}
 
@@ -137,10 +140,12 @@ export class LinkEditor {
 		this.applyValue(text);
 	}
 
-	/** Draws the embeds again, after the host's facts about them changed. */
+	/** Draws the embeds again, after the host's facts about them or the names it offers changed. */
 	refresh(): void {
 		const selection = this.focused() ? readSelection(this.root) : null;
+		const caret = selection && selection.anchor === selection.focus ? selection.focus : null;
 
+		this.doc = this.withMentions(this.doc, this.typedWord(caret));
 		this.draw();
 
 		if (selection) writeSelection(this.root, selection);
@@ -285,7 +290,7 @@ export class LinkEditor {
 			this.typing = false;
 			this.conversion = null;
 			this.editedAt = null;
-			this.doc = docFromText(text);
+			this.doc = this.withMentions(docFromText(text), null);
 		}
 
 		this.draw();
@@ -295,14 +300,16 @@ export class LinkEditor {
 		this.host.onCaret();
 	}
 
-	/** Types text at a range. A link the typing ends (a space, a line break) becomes an embed in a step of its own. */
+	/** Types text at a range. A link or mention the typing ends (a space) becomes an embed in a step of its own. */
 	private insert(range: TextRange, text: string, kind: EditKind): void {
 		const typed = typeText(this.doc, range, text, this.host.maxLength());
 
 		if (!typed) return;
 
-		if (!typed.embedded) {
-			this.edit(typed.doc, typed.caret, kind);
+		const doc = this.withMentions(typed.doc, wordAround(typed.doc.text, typed.caret));
+
+		if (!typed.embedded && doc === typed.doc) {
+			this.edit(doc, typed.caret, kind);
 			this.typing = true;
 
 			return;
@@ -310,15 +317,15 @@ export class LinkEditor {
 
 		const before = this.snapshot();
 
-		this.edit(typed.doc, typed.caret, 'other');
+		this.edit(doc, typed.caret, 'other');
 		this.conversion = { caret: typed.caret, before };
 	}
 
-	/** Pasted or dropped text: plain text only, and every link in it an embed at once. */
+	/** Pasted or dropped text: plain text only, and every link and mention in it an embed at once. */
 	private paste(range: TextRange, raw: string): void {
 		const pasted = pasteText(this.doc, range, raw, this.host.maxLength());
 
-		this.edit(pasted.doc, pasted.caret, 'other');
+		this.edit(this.withMentions(pasted.doc, null), pasted.caret, 'other');
 	}
 
 	/**
@@ -390,7 +397,8 @@ export class LinkEditor {
 
 		const rawCaret = selection?.focus ?? read.text.length;
 		const before = beforeSnapshot ?? { doc: this.doc, caret: Math.min(rawCaret, this.doc.text.length) };
-		const adopted = adoptEdit({ before: this.doc, read, caret: rawCaret, maxLength: this.host.maxLength() });
+		const edited = adoptEdit({ before: this.doc, read, caret: rawCaret, maxLength: this.host.maxLength() });
+		const adopted = { ...edited, doc: this.withMentions(edited.doc, wordAround(edited.doc.text, edited.caret)) };
 
 		if (adopted.doc.text === this.doc.text && adopted.doc.links.length === this.doc.links.length) {
 			this.draw();
@@ -407,10 +415,10 @@ export class LinkEditor {
 		this.host.onChange(adopted.doc.text);
 	}
 
-	/** Turns links outside the word at `caret` into embeds (all of them when `caret` is null). */
+	/** Turns links and mentions outside the word at `caret` into embeds (all of them when `caret` is null). */
 	private commit(caret: number | null): void {
-		const keep = caret !== null && this.typing ? wordAround(this.doc.text, caret) : null;
-		const next = embedLinks(this.doc, keep);
+		const keep = this.typedWord(caret);
+		const next = this.withMentions(embedLinks(this.doc, keep), keep);
 
 		if (next === this.doc) return;
 
@@ -433,6 +441,16 @@ export class LinkEditor {
 		event.preventDefault();
 		writeSelection(this.root, next);
 		this.typing = false;
+	}
+
+	/** The word the caret is typing in, which stays text until it ends; null when the person is not typing. */
+	private typedWord(caret: number | null): TextRange | null {
+		return caret !== null && this.typing ? wordAround(this.doc.text, caret) : null;
+	}
+
+	/** The content with every mention of a name the host offers as an embed, except in `keep`. */
+	private withMentions(doc: LinkDoc, keep: TextRange | null): LinkDoc {
+		return embedMentions(doc, this.host.mentions(), keep);
 	}
 
 	private draw(): void {

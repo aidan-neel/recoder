@@ -1,14 +1,60 @@
 'use client';
 
+import { useGuidelines } from '@/lib/guidelines/guidelines-store';
+import { useGuidelinesSection } from '@/lib/guidelines/use-guidelines-section';
+
+import { GlobalRow } from '@/components/guidelines/global-row';
+import { GuidelinesConfirm } from '@/components/guidelines/guidelines-confirm';
+import { SectionNotice } from '@/components/settings/section-notice';
+import { SettingsGroup } from '@/components/settings/settings-group';
+import { SettingsSkeleton } from '@/components/settings/settings-skeleton';
+
+import { BranchGroup } from './branch-group';
 import { MembersSection } from './members-section';
+import { MentionGroup } from './mention-group';
 import { UpdateStrip } from './update-strip';
 
-/** Settings → Admin: the running Recoder and its updates, who has signed in, and their models. */
+/**
+ * The global guidelines layer: what every review follows. Reads the overview
+ * alone — each repository's file stays on the Guidelines page.
+ */
+function Guidelines() {
+	const section = useGuidelinesSection(useGuidelines.getState().loadOverview);
+
+	if (section.overview) {
+		return (
+			<SettingsGroup title="Guidelines">
+				<GlobalRow overview={section.overview} />
+			</SettingsGroup>
+		);
+	}
+
+	if (section.status === 'offline' || section.status === 'failed') {
+		return (
+			<SectionNotice
+				what="Guidelines"
+				error={section.status === 'failed' ? section.error : null}
+				retry={section.retry}
+			/>
+		);
+	}
+
+	return <SettingsSkeleton groups={[1]} />;
+}
+
+/**
+ * Settings → Recoder: the running Recoder, its updates and branch, the global review
+ * guidelines, whether a mention starts a review, who has signed in, and their models.
+ */
 export function AdminSection() {
 	return (
 		<div className="settings">
 			<UpdateStrip />
+			<BranchGroup />
+			<Guidelines />
+			<MentionGroup />
 			<MembersSection />
+			<GuidelinesConfirm />
 		</div>
 	);
 }

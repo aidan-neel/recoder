@@ -48,6 +48,15 @@ export async function readBlob(
 	if (type === 'commit' || mode === '160000') return { ok: false, error: 'refusing to enter submodule' };
 	if (type !== 'blob' || !hash) return { ok: false, error: 'not a file at this revision' };
 
+	return readBlobHash(cwd, hash, signal);
+}
+
+/** Reads a text blob by its object hash, refusing binary files. */
+export async function readBlobHash(
+	cwd: string,
+	hash: string,
+	signal?: AbortSignal
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
 	const blob = await git(cwd, ['cat-file', '-p', hash], signal);
 
 	if (blob.code !== 0) return { ok: false, error: blob.stderr.slice(0, 400) || 'read failed' };
@@ -56,21 +65,26 @@ export async function readBlob(
 	return { ok: true, text: blob.stdout };
 }
 
-/** The paths that `ls-tree` lists as regular files (not symlinks, submodules or trees). */
-export function regularFiles(lsTreeOutput: string): Set<string> {
-	const found = new Set<string>();
+/** The regular files (not symlinks, submodules or trees) that `ls-tree -z` lists, as object hashes by path. */
+export function regularBlobs(lsTreeOutput: string): Map<string, string> {
+	const found = new Map<string, string>();
 
 	for (const record of lsTreeOutput.split('\0')) {
 		const tab = record.indexOf('\t');
 
 		if (tab < 0) continue;
 
-		const [mode, type] = record.slice(0, tab).split(/\s+/);
+		const [mode, type, hash] = record.slice(0, tab).split(/\s+/);
 
-		if (type === 'blob' && (mode === '100644' || mode === '100755')) found.add(record.slice(tab + 1));
+		if (type === 'blob' && (mode === '100644' || mode === '100755')) found.set(record.slice(tab + 1), hash);
 	}
 
 	return found;
+}
+
+/** The paths that `ls-tree` lists as regular files (not symlinks, submodules or trees). */
+export function regularFiles(lsTreeOutput: string): Set<string> {
+	return new Set(regularBlobs(lsTreeOutput).keys());
 }
 
 /** A commit's committer time in ISO 8601, or null when git can't read the commit. */

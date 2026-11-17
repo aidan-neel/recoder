@@ -19,7 +19,7 @@ interface FigureProps {
 	children: ReactNode;
 }
 
-function Figure({ label, tone, children }: FigureProps) {
+export function Figure({ label, tone, children }: FigureProps) {
 	return (
 		<div className="usage-figure">
 			<dt>{label}</dt>

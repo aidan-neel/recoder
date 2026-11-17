@@ -49,7 +49,7 @@ interface HunkProps {
 	bugsHref: string;
 }
 
-/** One hunk: its range line, then its lines with each bug's note under the line the bug ends on. */
+/** One hunk: its lines, with each bug's note under the line the bug ends on. */
 function Hunk({ hunk, lang, bugs, bugsHref }: HunkProps) {
 	const lines = useMemo(() => codeLines(hunk, bugs), [hunk, bugs]);
 
@@ -65,7 +65,6 @@ function Hunk({ hunk, lang, bugs, bugsHref }: HunkProps) {
 
 	return (
 		<div className="hunk">
-			<div className="hunk-head">{hunk.header}</div>
 			<CodeLines lines={lines} lang={lang} annotate={bugs.length > 0 ? notes : undefined} />
 		</div>
 	);

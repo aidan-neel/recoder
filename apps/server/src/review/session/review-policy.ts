@@ -29,12 +29,6 @@ export const REVIEW_POLICY = {
 	/** The ceiling of a `ModelBudget` made without one; a review's own comes from `scaledReviewLimits`. */
 	maxModelCalls: 320,
 	analysisDeadlineMs: 30 * 60 * 1000,
-	/**
-	 * About 60k tokens. Past it, an agent that Recoder runs turn by turn has its
-	 * oldest tool output stubbed before the next call. Reviews stay under about
-	 * 53k tokens per call today, so this is a safety net; OpenCode compacts its own sessions.
-	 */
-	maxTranscriptChars: 240_000,
 	maxRetrievalsPerTurn: 4,
 	maxReadLines: 200,
 	maxSearchMatches: 30,

@@ -1,10 +1,11 @@
 import { expect, spyOn, test } from 'bun:test';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import { chatCompletion } from '../../../src/models/llm';
 import { acquireLlmSlot, releaseLlmSlot } from '../../../src/models/llm/limiter';
 import { lockedModels, runLocked, type LockedModels } from '../../../src/models/llm/locked-models';
 import { withUsageMetrics } from '../../../src/models/metrics';
 import { configForOrchestrator, configForSubagent, withLockedModels } from '../../../src/models/models';
-import { saveReviewSettings } from '../../../src/review/session/review-settings';
+import { saveReviewSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { db, reviewMetrics } from '../../../src/store';
 import { FIRST, pickModels, resetAfterEach, SECOND, storedRuns } from '../../helpers/fake-reviewer';
 import { testReview } from '../../helpers/review';
@@ -28,7 +29,13 @@ async function storedReview(): Promise<string> {
 
 /** A model config named `model`, for picks set by hand. */
 function picks(models: string[]): LockedModels {
-	const config = (model: string) => ({ baseUrl: 'http://locked-models.test/v1', apiKey: '', model });
+	const config = (model: string) => ({
+		baseUrl: 'http://locked-models.test/v1',
+		apiKey: '',
+		model,
+		contextWindow: DEFAULT_CONTEXT_WINDOW
+	});
+
 	const [orchestrator = 'lead', subagent = orchestrator, verifier = orchestrator] = models;
 
 	return { orchestrator: config(orchestrator), subagent: config(subagent), verifier: config(verifier) };
@@ -132,4 +139,23 @@ test('outside a pipeline the live pick is used, with no run and no miss recorded
 	} finally {
 		warn.mockRestore();
 	}
+});
+
+test('a lock at an effort lowers the models that run with one and sends none to a model without reasoning', () => {
+	setReviewOverrides({
+		baseUrl: 'http://locked-models.test/v1',
+		apiKey: 'test',
+		models: [
+			{ id: 'thinker', label: 'thinker', model: 'thinker', efforts: ['low', 'medium', 'high'] },
+			{ id: 'plain', label: 'plain', model: 'plain' }
+		],
+		orchestratorModelId: 'thinker',
+		orchestratorEffort: 'high',
+		specialistModelId: 'plain'
+	});
+
+	const efforts = () => [configForOrchestrator().reasoningEffort, configForSubagent().reasoningEffort];
+
+	expect(withLockedModels(efforts)).toEqual(['high', undefined]);
+	expect(withLockedModels(efforts, 'low')).toEqual(['low', undefined]);
 });

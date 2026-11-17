@@ -1,6 +1,7 @@
 'use client';
 
 import { Button, Pill, Spinner, type ButtonStatus, type PillTone } from '@recoder/ui';
+import Link from 'next/link';
 
 import { plural } from '@/lib/shell/format';
 import type { PullRowStatus } from '@/lib/pulls/types';
@@ -46,8 +47,28 @@ function statusFace(status: PullRowStatus): StatusFace | null {
 	}
 }
 
+/** A status as its pill, or nothing for the statuses that ask for a review instead. */
+export function StatusPill({ status }: { status: PullRowStatus }) {
+	const face = statusFace(status);
+
+	if (!face) return null;
+
+	const lead = status.kind === 'reviewing' ? <Spinner size={11} /> : <span aria-hidden className="pill-dot" />;
+
+	return (
+		<Pill tone={face.tone} icon={status.kind === 'draft' || status.kind === 'reviewed' ? undefined : lead}>
+			{face.label}
+		</Pill>
+	);
+}
+
+/** The statuses that say how the review went, so their pill opens the Review tab. */
+const REVIEW_KINDS: ReadonlySet<PullRowStatus['kind']> = new Set(['reviewing', 'bugs', 'review-failed']);
+
 interface PullStatusProps {
 	status: PullRowStatus;
+	/** The pull request's Review tab, where a pill about the review leads. */
+	reviewHref: string;
 	/** True while this row's review start is in flight. */
 	starting: boolean;
 	onReview: () => void;
@@ -56,21 +77,25 @@ interface PullStatusProps {
 /**
  * The one thing a row says about its pull request: a pill for a state, or
  * the Review button when the next step is a review. A pull request with
- * commits newer than its review gets the quieter "Review again".
+ * commits newer than its review gets the quieter "Review again". A pill about
+ * the review (reviewing, bugs, failed) is a link to the Review tab, beside
+ * the row's own link rather than inside it.
  */
-export function PullStatus({ status, starting, onReview }: PullStatusProps) {
-	const face = statusFace(status);
+export function PullStatus({ status, reviewHref, starting, onReview }: PullStatusProps) {
 	const pending: ButtonStatus = starting ? 'pending' : 'idle';
+	const face = statusFace(status);
 
-	if (face) {
-		const lead = status.kind === 'reviewing' ? <Spinner size={11} /> : <span aria-hidden className="pill-dot" />;
-
+	if (face && REVIEW_KINDS.has(status.kind)) {
 		return (
-			<Pill tone={face.tone} icon={status.kind === 'draft' || status.kind === 'reviewed' ? undefined : lead}>
-				{face.label}
-			</Pill>
+			<Button asChild variant="quiet" className="pill-link">
+				<Link href={reviewHref} aria-label={`${face.label}, see the review`}>
+					<StatusPill status={status} />
+				</Link>
+			</Button>
 		);
 	}
+
+	if (face) return <StatusPill status={status} />;
 
 	if (status.kind === 'outdated') {
 		return (

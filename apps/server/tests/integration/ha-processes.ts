@@ -2,7 +2,7 @@ import { SQL } from 'bun';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { SHARED_SECRET_KEY } from '../helpers/shared-secret-key';
+import { SHARED_SECRET_KEY } from './shared-secret-key';
 
 const root = resolve(import.meta.dir, '../../../..');
 

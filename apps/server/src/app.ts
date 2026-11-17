@@ -13,6 +13,7 @@ import health from './routes/health';
 import guidelines from './routes/guidelines';
 import members from './routes/members';
 import meModels from './routes/me-models';
+import telemetry from './routes/telemetry';
 import usage from './routes/usage';
 import home from './routes/home';
 import agent from './routes/agent';
@@ -30,8 +31,11 @@ import update from './routes/update';
 import webhooks from './routes/webhooks';
 import { VERSION } from './version';
 import { ModelConfigError } from './models/models';
+import { RepoFilesError } from './repo-files/errors';
+import { UnknownSkillError } from './skills/repo-skills';
 import { postgres, settingsOperation } from './storage/backend';
 import { SharedSettingsConflictError } from './config/shared-settings';
+import { jsonCompression } from './util/json-compression';
 import { redacted } from './util/redact';
 
 /**
@@ -47,10 +51,15 @@ const corsOptions = {
 	exposeHeaders: ['ETag']
 };
 
-/** Any route that needs a model says what to set up instead of a bare 500. */
+/**
+ * Any route that needs a model says what to set up instead of a bare 500; a skill the repository lacks and a
+ * repository copy that cannot be read answer as what they are.
+ */
 function handleError(err: Error, c: Context): Response {
 	if (err instanceof ModelConfigError) return c.json({ error: err.message, action: 'settings' }, 409);
 	if (err instanceof SharedSettingsConflictError) return c.json({ error: err.message }, 409);
+	if (err instanceof UnknownSkillError) return c.json({ error: err.message }, 400);
+	if (err instanceof RepoFilesError) return c.json({ error: err.message }, err.status);
 	if (postgres) console.error('[recoder] shared API operation failed', err.name);
 	else console.error('[recoder] unhandled error', redacted(err.stack ?? err.message, []));
 
@@ -62,6 +71,7 @@ export const app = new Hono();
 app.use('*', logger());
 
 app.use('*', cors(corsOptions));
+app.use('/api/*', jsonCompression());
 app.use('/api/*', requireSession);
 app.use('/api/*', async (_c, next) => settingsOperation(next));
 
@@ -81,6 +91,7 @@ app.route('/api/auth', auth);
 app.route('/api/members', members);
 app.route('/api/me/models', meModels);
 app.route('/api/usage', usage);
+app.route('/api/telemetry', telemetry);
 app.route('/api/home', home);
 app.route('/api/guidelines', guidelines);
 app.route('/api/settings/auto-review', autoReview);

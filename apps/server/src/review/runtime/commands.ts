@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { skillsSchema } from '../../skills/names';
 import { reviewCodeContextSchema } from '../chat/chat-input';
 
 const id = z.string().min(1).max(200);
@@ -16,7 +17,8 @@ export const reviewCommandSchema = z.union([
 			assignmentId: id,
 			text: z.string().trim().min(1).max(16_000),
 			at: z.iso.datetime().optional(),
-			codeContext: reviewCodeContextSchema.optional()
+			codeContext: reviewCodeContextSchema.optional(),
+			skills: skillsSchema
 		})
 		.strict(),
 	z.object({ id, kind: z.literal('stop-chat'), assignmentId: id }).strict(),

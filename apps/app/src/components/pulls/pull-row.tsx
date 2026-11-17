@@ -12,10 +12,12 @@ import { ArrowUpRight, Ellipsis, Link2, RotateCw } from 'lucide-react';
 import Link from 'next/link';
 import { memo, useCallback } from 'react';
 
+import { useApi } from '@/lib/api/client';
 import type { PullRow as PullRowView } from '@/lib/pulls/types';
 import { copyLink } from '@/lib/shell/copy-link';
 import { author } from '@/lib/shell/format';
 import { useIntent } from '@/lib/shell/intent';
+import { pullHref } from '@/lib/shell/routes';
 
 import { Age } from '@/components/common/age';
 import { DiffStat } from '@/components/common/diff-stat';
@@ -30,6 +32,8 @@ interface PullRowProps {
 	onReview: (row: PullRowView) => void;
 	/** Runs once the pointer or focus has rested on the row: prefetching its page. */
 	onIntent?: (row: PullRowView) => void;
+	/** False leaves the repository out of the facts, on a page that is about one repository. */
+	showRepo?: boolean;
 }
 
 /** True when the row's menu should offer a review: it has one already, so the row itself shows a state. */
@@ -65,9 +69,11 @@ function RowMenu({ row, onReview }: Pick<PullRowProps, 'row' | 'onReview'>) {
 
 /**
  * One open pull request: the whole row opens it, and the status and the menu
- * stay clickable above that. It re-renders only when its own row changes.
+ * stay clickable above that; a status about the review opens the Review tab.
+ * It re-renders only when its own row changes.
  */
-export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent }: PullRowProps) {
+export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent, showRepo = true }: PullRowProps) {
+	const { base } = useApi();
 	const by = author(row.author);
 	const intent = useIntent(useCallback(() => onIntent?.(row), [onIntent, row]));
 
@@ -77,7 +83,7 @@ export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent
 			<div className="pull-row-text">
 				<div className="pull-row-title">
 					<RowButton asChild cover>
-						<Link href={row.href} data-row-link>
+						<Link href={row.href} prefetch data-row-link>
 							{row.title}
 						</Link>
 					</RowButton>
@@ -85,12 +91,17 @@ export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent
 				</div>
 				<div className="meta pull-row-meta">
 					{by.name}
-					<RepoLabel className="meta-sep" name={row.repoName} forge={row.repoForge} />
+					{showRepo ? <RepoLabel className="meta-sep" name={row.repoName} forge={row.repoForge} /> : null}
 					<Age at={row.activeAt} className="meta-sep" />
 				</div>
 			</div>
 			<div className="pull-row-status">
-				<PullStatus status={row.status} starting={starting} onReview={() => onReview(row)} />
+				<PullStatus
+					status={row.status}
+					reviewHref={pullHref(base, row.repoId, row.number, 'review')}
+					starting={starting}
+					onReview={() => onReview(row)}
+				/>
 			</div>
 			<DiffStat additions={row.additions} deletions={row.deletions} />
 			<div className="pull-row-menu">

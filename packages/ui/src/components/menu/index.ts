@@ -10,12 +10,14 @@ export {
 } from './dropdown-menu';
 export {
 	ContextMenu,
+	ContextMenuCheckboxItem,
 	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuSeparator,
 	ContextMenuTrigger
 } from './context-menu';
 export { Select, type SelectOption } from './select';
+export { SplitButton } from './split-button';
 export {
 	CommandDialog,
 	CommandEmpty,

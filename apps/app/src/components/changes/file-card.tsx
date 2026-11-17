@@ -16,9 +16,8 @@ import { FileDiffBody } from './file-diff';
 /** A diff with more lines than this stays shut until asked for, so one generated file never buries the rest. */
 const LARGE_LINES = 800;
 
-/** The height of one diff line and of one hunk's range line, for the placeholder a diff leaves before it mounts. */
+/** The height of one diff line, for the placeholder a diff leaves before it mounts. */
 const LINE_HEIGHT = 22;
-const HUNK_HEAD_HEIGHT = 32;
 
 /** The tallest placeholder: past this, the true height matters less than not jumping far. */
 const PLACEHOLDER_MAX = 1600;
@@ -39,7 +38,7 @@ function lineCount(file: FileDiff): number {
 
 /** About how tall the mounted diff will be. */
 function placeholderHeight(file: FileDiff): number {
-	return Math.min(PLACEHOLDER_MAX, lineCount(file) * LINE_HEIGHT + file.hunks.length * HUNK_HEAD_HEIGHT);
+	return Math.min(PLACEHOLDER_MAX, lineCount(file) * LINE_HEIGHT);
 }
 
 /** The path with its folder quiet and its file name in ink. */

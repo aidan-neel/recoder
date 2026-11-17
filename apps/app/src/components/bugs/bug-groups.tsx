@@ -87,9 +87,10 @@ const UNRESOLVED_LABELS: Record<UnresolvedItem['kind'], string> = {
  * Everything the review reports that is not an open bug: what a person
  * decided, what the newest commits fixed, topics that were quieted, work the
  * review could not finish, and what it checked and found sound. Each is one
- * line until opened, so the open bugs stay the page.
+ * line until opened, so the open bugs stay the page. `clean` leaves out the
+ * checked line, because the no-bugs notice already shows those figures.
  */
-export function BugGroups({ view }: { view: BugsView }) {
+export function BugGroups({ view, clean }: { view: BugsView; clean: boolean }) {
 	return (
 		<>
 			{view.unresolved.length > 0 ? (
@@ -155,7 +156,7 @@ export function BugGroups({ view }: { view: BugsView }) {
 					))}
 				</Group>
 			) : null}
-			{view.checked.claims > 0 ? (
+			{view.checked.claims > 0 && !clean ? (
 				<div className="bug-group-head" role="note">
 					<StatusGlyph kind="ok" />
 					Checked, no issue found

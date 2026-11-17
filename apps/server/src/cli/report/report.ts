@@ -62,7 +62,7 @@ export interface ReportTarget {
 /** The settings the review ran with, after flags, the budget and saved settings were combined. */
 export interface ReportSettings {
 	budget: TokenBudget;
-	subagents: SubagentCap | number;
+	subagents: SubagentCap;
 	reviewerModel: string | null;
 	workerModel: string | null;
 	/** Set when the verifier runs on a model different from `reviewerModel`; null or absent when it follows `reviewerModel`. */

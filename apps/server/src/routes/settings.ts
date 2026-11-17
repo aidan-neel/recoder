@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono';
 import {
+	effectiveContextWindows,
 	effectiveReviewEnv,
 	effectiveReportLowSeverity,
 	effectiveSubagentCap,
@@ -55,6 +56,7 @@ async function settingsPayload(listing: ModelListing, waitMs?: number) {
 		orchestratorEffort: stored.orchestratorEffort ?? null,
 		specialistEffort: stored.specialistEffort ?? null,
 		verifierEffort: stored.verifierEffort ?? null,
+		contextWindows: effectiveContextWindows(),
 		subagentCap: effectiveSubagentCap(),
 		tokenBudget: effectiveTokenBudget(),
 		reportLowSeverity: effectiveReportLowSeverity(),

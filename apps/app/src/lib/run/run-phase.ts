@@ -11,3 +11,8 @@ export function runPhase(review: ReviewListItem | null, progress: ReviewProgress
 
 	return review.status;
 }
+
+/** A review still to finish: queued, running or paused. Its steps show in place of findings. */
+export function isLive(phase: RunPhase): boolean {
+	return phase === 'queued' || phase === 'running' || phase === 'paused';
+}

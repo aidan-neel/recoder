@@ -1,3 +1,4 @@
+import type { ReviewListItem } from '@recoder/shared';
 import { createStore } from 'zustand/vanilla';
 
 import type { ApiClient } from '../api/client';
@@ -47,9 +48,14 @@ export function createSession(client: ApiClient, list: ListStore, repoId: string
 			return Promise.allSettled([pages.loadPage(), pages.loadDiff()]).then(() => undefined);
 		},
 
-		/** Loads the page and the diff at once and follows the review; returns the close. */
+		/**
+		 * Loads the page and the diff at once and follows the review; returns the close. The review the list already
+		 * names for this pull request is read beside the page instead of after it; the page's own answer follows a
+		 * newer one if there is one.
+		 */
 		open(): () => void {
 			review.open();
+			review.sync(listedReview(list, repoId, number));
 			void pages.loadPage();
 			void pages.loadDiff();
 
@@ -66,3 +72,10 @@ export function createSession(client: ApiClient, list: ListStore, repoId: string
 }
 
 export type Session = ReturnType<typeof createSession>;
+
+/** The newest review of the pull request as the shared list carries it, or null when the list does not show it. */
+function listedReview(list: ListStore, repoId: string, number: number): ReviewListItem | null {
+	const items = list.state.getState().list?.items ?? [];
+
+	return items.find((item) => item.repoId === repoId && item.pull.number === number)?.review ?? null;
+}

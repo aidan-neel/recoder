@@ -456,11 +456,18 @@ describe('buildRuleLedger', () => {
 });
 
 describe('readLedgerSources', () => {
-	test('reads RECODER.md as the repo guidelines, not .recoder/REVIEW.md as well, after the instruction files', async () => {
+	test('with a RECODER.md, reads only the instruction files it names by path, and not .recoder/REVIEW.md', async () => {
 		const root = await mkdtemp(join(tmpdir(), 'recoder-ledger-'));
 
 		const { targetSha, headSha } = await twoCommitRepo(root, {
-			base: { 'RECODER.md': '- New rule.\n', '.recoder/REVIEW.md': '- Old rule.\n', 'AGENTS.md': '- Agents rule.\n' }
+			base: {
+				'RECODER.md': '- New rule.\n- Also hold changes to `AGENTS.md` and apps/web/AGENTS.md.\n',
+				'.recoder/REVIEW.md': '- Old rule.\n',
+				'AGENTS.md': '- Agents rule.\n',
+				'CLAUDE.md': '- Claude rule.\n',
+				'apps/web/AGENTS.md': '- Web rule.\n',
+				'apps/api/AGENTS.md': '- Api rule.\n'
+			}
 		});
 
 		const revision = { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' };
@@ -468,6 +475,7 @@ describe('readLedgerSources', () => {
 
 		expect(sources.map((source) => [source.path, source.revision])).toEqual([
 			['AGENTS.md', targetSha],
+			['apps/web/AGENTS.md', targetSha],
 			['RECODER.md', targetSha]
 		]);
 	});

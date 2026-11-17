@@ -1,6 +1,6 @@
-import type { ModelProvider, TokenUsage } from '@recoder/shared';
+import type { TokenUsage } from '@recoder/shared';
 import type { AgentEvent } from '../../../agents/contract.js';
-import { trackTokenCall } from '../../../models/metrics.js';
+import { StepUsage } from '../../../models/step-usage.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import type { JsonAgentOptions } from './options.js';
 import { isLooping } from './stream-turn.js';
@@ -20,17 +20,6 @@ interface Streaming {
 /** A model without the structured-output tool writes its final JSON as text; that is the result, not narration. */
 function isJsonAnswer(text: string): boolean {
 	return /^\s*(\{|```)/.test(text);
-}
-
-/** How long a prompt's last step may take to report its usage after the prompt itself has answered. */
-const USAGE_GRACE_MS = 1_000;
-
-/** One model step's record in the review's metrics, and whether its usage has arrived. */
-interface StepCall {
-	/** The model message the step produces, when the server names it. */
-	step?: string;
-	tracking: ReturnType<typeof trackTokenCall>;
-	reported: boolean;
 }
 
 /** What the run does when a step starts or ends, and when the model reasons without getting anywhere. */
@@ -57,15 +46,7 @@ export class StepRelay<T> {
 	finished = 0;
 
 	private readonly base: string;
-
-	/** The provider the steps are counted under: the agent CLI that runs them. */
-	private readonly provider: ModelProvider;
-
-	/** The step in progress, the steps of this prompt, and those that ended with no usage yet. */
-	private current: StepCall | null = null;
-	private promptCalls: StepCall[] = [];
-	private awaiting: StepCall[] = [];
-	private onReported: (() => void) | null = null;
+	private readonly usage: StepUsage;
 	private reasoning: Streaming | null = null;
 	private message: Streaming | null = null;
 	private stepMessageId: string | null = null;
@@ -75,12 +56,13 @@ export class StepRelay<T> {
 		private readonly hooks: RelayHooks
 	) {
 		this.base = `${opts.label.slice(0, 24)}_${Math.random().toString(36).slice(2, 8)}`;
-		this.provider = opts.config.provider ?? 'openai-compatible';
+		this.usage = new StepUsage(opts.config);
 	}
 
 	/** Acts on the events that carry a step, usage, reasoning, text or an error; tool events are the gate's. */
 	readonly onEvent = (event: AgentEvent): void => {
-		if (event.type === 'step-start') this.stepStarted(event.step);
+		if (event.type === 'prompt-start') this.usage.promptStarted(event);
+		else if (event.type === 'step-start') this.stepStarted(event.step);
 		else if (event.type === 'usage') this.stepFinished(event.usage, event.step);
 		else if (event.type === 'reasoning') this.reasoned(event.delta);
 		else if (event.type === 'text') this.narrated(event.delta, event.partId);
@@ -103,40 +85,16 @@ export class StepRelay<T> {
 		this.stepMessageId = null;
 		opts.budget.spend();
 
-		this.current = {
-			step,
-			tracking: trackTokenCall(opts.config.model, this.provider, opts.config.reasoningEffort),
-			reported: false
-		};
-
-		this.promptCalls.push(this.current);
+		this.usage.stepStarted(step);
 		opts.onLog?.(`${opts.label} model turn ${this.steps}/${opts.maxTurns} (${opts.config.model})`);
 		this.hooks.onStep(this.steps);
 	}
 
 	private stepFinished(usage: TokenUsage, step?: string): void {
-		this.report(this.callFor(step), usage);
+		this.usage.stepFinished(usage, step);
 		this.settle();
 		this.finished++;
 		this.hooks.onStepDone();
-	}
-
-	/** The call a finished step belongs to: the one with its message id, else, when ids are not given, the latest open one. */
-	private callFor(step?: string): StepCall | undefined {
-		if (!step) return this.current ?? this.awaiting[0];
-
-		const named = [this.current, ...this.awaiting].find((call) => call?.step === step);
-
-		return named ?? (this.current?.step ? undefined : (this.current ?? undefined));
-	}
-
-	private report(call: StepCall | undefined, usage: TokenUsage): void {
-		if (!call || call.reported) return;
-
-		call.reported = true;
-		call.tracking.usage(usage);
-		this.awaiting = this.awaiting.filter((item) => item !== call);
-		this.onReported?.();
 	}
 
 	private reasoned(delta: string): void {
@@ -195,61 +153,14 @@ export class StepRelay<T> {
 	 */
 	async finishPrompt(tokens: TokenUsage | undefined, error?: unknown): Promise<void> {
 		this.settle(error);
-
-		const calls = this.promptCalls;
-
-		this.promptCalls = [];
-
-		if (calls.length === 0) {
-			const missed = trackTokenCall(this.opts.config.model, this.provider, this.opts.config.reasoningEffort);
-
-			if (tokens) missed.usage(tokens);
-
-			if (error) missed.fail(error);
-			else missed.complete();
-
-			return;
-		}
-
-		await this.untilReported(calls);
-
-		const [only] = calls;
-
-		if (calls.length === 1 && !only!.reported && tokens) this.report(only, tokens);
-
-		this.awaiting = [];
-	}
-
-	/** Resolves once every call of `calls` has its usage, or after the grace period. */
-	private untilReported(calls: StepCall[]): Promise<void> {
-		if (calls.every((call) => call.reported)) return Promise.resolve();
-
-		return new Promise((resolve) => {
-			const done = () => {
-				clearTimeout(timer);
-				this.onReported = null;
-				resolve();
-			};
-
-			const timer = setTimeout(done, USAGE_GRACE_MS);
-
-			this.onReported = () => {
-				if (calls.every((call) => call.reported)) done();
-			};
-		});
+		await this.usage.finishPrompt(tokens, error);
 	}
 
 	/** Closes whatever the current step left open, failed with `error` when it has one: its token record, reasoning and narration. */
 	settle(error?: unknown): void {
 		const status = error ? 'error' : 'done';
 
-		if (this.current) {
-			if (error) this.current.tracking.fail(error);
-			else this.current.tracking.complete();
-			if (!this.current.reported) this.awaiting.push(this.current);
-		}
-
-		this.current = null;
+		this.usage.settle(error);
 
 		if (this.reasoning?.text) this.opts.onReasoning?.({ id: this.reasoning.id, text: this.reasoning.text, status });
 

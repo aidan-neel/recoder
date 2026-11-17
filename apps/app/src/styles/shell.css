@@ -90,63 +90,14 @@
 	padding: 0 8px 2px;
 }
 
-/*
- * Settings swaps two spots of the sidebar: the account row for Back to app, the places and reviews for its sections.
- * Each spot stacks both layers in one grid cell. The old one fades out on the hover clock, then the new one fades in
- * over the rest of --dur-swap: a cross-fade would put two labels on one lane at half strength. The search, the
- * toggle and the foot stay still. Settings opened or reloaded paints at once: only a change of page runs the fade.
- * The arriving layer turns visible at once, still at opacity 0, so keyboard focus can land in it on the first frame.
- */
-.sidebar-swap {
-	--swap-out: var(--dur-hover);
-	--swap-in: calc(var(--dur-swap) - var(--dur-hover));
-
-	display: grid;
-	min-width: 0;
-	grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-}
-.sidebar-swap-head {
-	flex: 0 1 auto;
-	margin-right: auto;
-}
-.sidebar-swap-body {
+/* The app's lists between the head and the foot scroll as one, so neither ever moves and no list is squeezed shut. */
+.sidebar-body {
+	display: flex;
 	min-height: 0;
 	flex: 1;
-}
-.sidebar-layer {
-	display: flex;
-	min-width: 0;
-	min-height: 0;
 	flex-direction: column;
-	grid-area: 1 / 1;
-	transition: opacity var(--swap-in) ease-out var(--swap-out);
-}
-.sidebar-layer[data-shown='false'] {
-	visibility: hidden;
-	opacity: 0;
-	transition:
-		opacity var(--swap-out) ease-out,
-		visibility 0s linear var(--swap-out);
-}
-.sidebar-swap-head .sidebar-layer {
-	flex-direction: row;
-	align-items: center;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.sidebar-layer,
-	.sidebar-layer[data-shown='false'] {
-		transition: none;
-	}
-}
-
-/* Back to app holds the account row's place and the nav rows' lanes: its arrow in the icon lane, its words on the text lane. */
-.sidebar-back {
-	width: auto;
-	transition: background-color var(--dur-hover) ease-out;
-}
-.sidebar-back:hover {
-	background: var(--bg-hover);
+	overflow-y: auto;
+	overscroll-behavior: contain;
 }
 
 /* The account row is a quiet menu trigger: square initial, login, chevron. The initial sits in the icon lane. */
@@ -236,43 +187,93 @@
 	font-size: var(--font-size-meta);
 	font-variant-numeric: tabular-nums;
 }
+/* A label in a nav row that may not fit, such as a repository's name, ends in an ellipsis. */
+.nav-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* A forge's mark fills its box where an outline icon leaves a margin, so it draws at 14px centred in the 16px lane. */
+.nav-item .nav-forge {
+	width: 14px;
+	height: 14px;
+	margin: 0 1px;
+}
+/* A repository with an open high-severity bug: a dot where the count sits on Pull requests. */
+.nav-alert {
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	margin: 0 2px 0 auto;
+	border-radius: 999px;
+	background: var(--sev-high);
+}
+/* The tracked repositories: a folding section on the places' lanes, at its own height above the recent lists. */
+.sidebar-repos {
+	flex: none;
+	margin-top: 20px;
+}
+.sidebar-repos .sidebar-nav {
+	padding-top: 0;
+}
+/* A group label in a nav (Settings' Admin) stands clear of the rows above and sits on the icon lane. */
+.nav-group-label {
+	margin-top: 14px;
+	padding: 0 8px 3px;
+}
 
-/* Recent reviews: two lines a row, the state as a glyph and as words. */
+/* Recent chats and reviews: a section of cards under a title that folds it. */
 .recent {
 	display: flex;
-	min-height: 0;
-	flex: 1;
+	flex: none;
 	flex-direction: column;
 	margin-top: 20px;
 }
-.recent-label {
-	padding: 0 16px 2px;
+/* A sidebar section's title: a quiet row that folds the list under it, its chevron turned while folded. */
+.section-head {
+	--row-button-radius: var(--radius-row);
+
+	width: calc(100% - 16px);
+	align-items: center;
+	gap: 6px;
+	margin: 0 8px 2px;
+	padding: 2px 8px;
 	color: var(--text-subtle);
 }
-/* The 2px on top keeps the first row's focus ring inside the scroller, which clips. */
+.section-head:hover {
+	color: var(--text-secondary);
+}
+.section-head .section-label {
+	margin-right: auto;
+	color: inherit;
+}
+.section-chevron {
+	width: 12px;
+	height: 12px;
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.section-head[data-state='closed'] .section-chevron {
+	rotate: -90deg;
+}
+/* The 2px on top keeps the first row's focus ring clear of the title above it. */
 .recent-list {
 	display: flex;
-	min-height: 0;
 	flex-direction: column;
-	gap: 2px;
-	overflow-y: auto;
+	gap: 6px;
 	padding: 2px 8px 12px;
 }
 .recent-item {
 	--row-button-radius: var(--radius-row);
 
-	align-items: flex-start;
+	align-items: center;
 	gap: 8px;
 	padding: 5px 8px;
-}
-.recent-item [data-ui='status-glyph'] {
-	margin-top: 1px;
 }
 .recent-mark {
 	width: 16px;
 	height: 16px;
 	flex-shrink: 0;
-	margin-top: 1px;
 	padding: 1px;
 	color: var(--text-subtle);
 	stroke-width: 1.75;
@@ -282,56 +283,126 @@
 .recent-item[data-active] .recent-mark {
 	color: var(--text-primary);
 }
-/* The row's "more" button waits until the row is pointed at, focused, or its menu is open; the text steps aside for it. */
+/* A row's tools (Settle, the "more" button) wait until the row is pointed at, focused, or its menu is open. */
 .recent-entry {
 	position: relative;
 }
-.recent-more {
+.recent-tools {
 	position: absolute;
+	z-index: 1;
 	top: 50%;
 	right: 4px;
+	display: flex;
+	align-items: center;
+	gap: 2px;
 	opacity: 0;
 	transform: translateY(-50%);
-	transition:
-		opacity var(--dur-hover) ease-out,
-		background-color var(--dur-hover) ease-out,
-		color var(--dur-hover) ease-out;
+	transition: opacity var(--dur-hover) ease-out;
 }
-.recent-entry:hover .recent-more,
-.recent-entry:focus-within .recent-more,
-.recent-more[data-state='open'] {
+:is(.recent-entry, .recent-card):is(:hover, :focus-within, :has([data-state='open'])) .recent-tools {
 	opacity: 1;
 }
-.recent-entry:hover .recent-text,
-.recent-entry:focus-within .recent-text,
-.recent-entry:has([data-state='open']) .recent-text {
+:is(.recent-entry, .recent-card):is(:hover, :focus-within, :has([data-state='open'])) .recent-age {
+	opacity: 0;
+}
+.recent-entry:is(:hover, :focus-within, :has([data-state='open'])) .recent-title {
 	padding-right: 24px;
 }
 @media (hover: none) {
-	.recent-more {
+	.recent-tools {
 		opacity: 1;
 	}
-	.recent-text {
-		padding-right: 24px;
+	.recent-age {
+		display: none;
 	}
 }
-/* Chats sit above the reviews at their own height; the reviews take the rest and scroll. */
-.recent-chats {
-	flex: none;
+
+/* The card's tools stay bare: on hover only their ink brightens, so they never sit as a box on the card. */
+.recent-tools :is(.recent-settle, .recent-more) {
+	background: none;
+	color: var(--text-subtle);
 }
-.recent-chats .recent-list {
-	overflow: visible;
-	padding-bottom: 0;
+.recent-tools :is(.recent-settle, .recent-more):is(:hover, [data-state='open']) {
+	background: none;
+	color: var(--text-primary);
 }
-/* A placeholder row on the same lanes as the row that replaces it. */
-.recent-skeleton {
-	gap: 8px;
-	padding: 0 8px;
+
+/* A chat or review as a card: the repository and age, the title, then its state and pull request. The whole card opens it. */
+.recent-card {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 10px;
+	border-radius: var(--radius-card);
+	background: rgb(var(--wash-rgb) / 0.035);
+	transition: background-color var(--dur-hover) ease-out;
 }
-.recent-text {
+.recent-card:hover {
+	background: rgb(var(--wash-rgb) / 0.06);
+}
+.recent-card[data-active] {
+	background: rgb(var(--wash-rgb) / 0.085);
+}
+/* Chats sit bare until pointed at or open. */
+.recent-chats .recent-card:not(:hover, [data-active]) {
+	background: none;
+}
+.recent-card-head,
+.recent-card-foot {
 	display: flex;
 	min-width: 0;
-	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	white-space: nowrap;
+}
+.recent-card-head .repo-label {
+	margin-right: auto;
+}
+.recent-card .recent-tools {
+	top: 4px;
+	right: 4px;
+	transform: none;
+}
+.recent-card-title {
+	--row-button-radius: var(--radius-card);
+
+	color: var(--text-secondary);
+	font-size: var(--font-size-body);
+	line-height: 20px;
+}
+.recent-card:hover .recent-card-title,
+.recent-card[data-active] .recent-card-title {
+	color: var(--text-primary);
+}
+.recent-state {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	margin-right: auto;
+}
+.recent-pull {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 3px;
+	font-variant-numeric: tabular-nums;
+}
+.recent-pull svg {
+	width: 12px;
+	height: 12px;
+	stroke-width: 1.75;
+}
+/* Chats sit close over the reviews under them. */
+.recent-chats .recent-list {
+	padding-bottom: 0;
+}
+/* A placeholder card on the same lanes as the card that replaces it. */
+.recent-skeleton {
+	padding: 0 10px;
+	border-radius: var(--radius-card);
+	background: rgb(var(--wash-rgb) / 0.035);
 }
 .recent-title {
 	overflow: hidden;
@@ -341,15 +412,6 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	transition: color var(--dur-hover) ease-out;
-}
-.recent-text .meta {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.recent-item:hover .recent-title,
-.recent-item[data-active] .recent-title {
-	color: var(--text-primary);
 }
 
 .sidebar-foot {

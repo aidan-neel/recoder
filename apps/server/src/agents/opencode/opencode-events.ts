@@ -11,6 +11,8 @@ export interface SessionHandlers {
 	/** `step` is the model message the step produces, when the server names it; it pairs a finish with its start. */
 	onStepStart?: (step?: string) => void;
 	onStepFinish?: (usage: TokenUsage, step?: string) => void;
+	/** A step ended, including when the provider omitted its usage. */
+	onStepEnd?: () => void;
 }
 
 /** The session handlers that report what OpenCode does as the contract's events. */

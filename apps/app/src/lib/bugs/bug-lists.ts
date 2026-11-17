@@ -6,10 +6,19 @@ import { formatDuration, plural } from '../shell/format';
 import { bugView } from './bug-view';
 import type { BugsView, BugTone, BugView, UnresolvedItem } from './types';
 
-/** What the Bugs tab lists, read from one finished review. */
+/** What the Review tab lists, read from one finished review. */
 export type BugLists = Pick<
 	BugsView,
-	'open' | 'decided' | 'resolved' | 'quieted' | 'unresolved' | 'checked' | 'reviewedAt' | 'headSha' | 'duration'
+	| 'open'
+	| 'decided'
+	| 'resolved'
+	| 'quieted'
+	| 'unresolved'
+	| 'checked'
+	| 'reviewedAt'
+	| 'headSha'
+	| 'duration'
+	| 'speed'
 >;
 
 const TONE_ORDER: Record<BugTone, number> = { high: 0, medium: 1, low: 2 };
@@ -87,13 +96,34 @@ function unresolvedItems(review: Review): UnresolvedItem[] {
 	return [...openQuestions(review), ...openObligations(review), ...unprovenClaims(review), ...checksNotRun(review)];
 }
 
-/** Questions and risky changes the review investigated, and those it disproved. */
+/** How much of the change the brief read in full, out of every changed unit; null when the review did not record it. */
+function unitsRead(review: Review): BugsView['checked']['units'] {
+	const units = review.funnel?.brief?.units;
+
+	if (!units?.length) return null;
+
+	return { read: units.filter((unit) => unit.status === 'included').length, total: units.length };
+}
+
+/** Candidates the review raised and then dropped at some stage; null when the review did not count them. */
+function leadsRuledOut(review: Review): number | null {
+	const dropped = review.funnel?.dropped;
+
+	return dropped ? Object.values(dropped).reduce((sum, count) => sum + count, 0) : null;
+}
+
+/** Questions and risky changes the review investigated and those it disproved, how much it read, and what it ruled out. */
 function checkedClaims(review: Review): BugsView['checked'] {
 	const questions = review.questions?.questions ?? [];
 	const answers = review.obligations?.answers ?? [];
 	const disproved = [...questions, ...answers].filter((item) => item.result === 'disproved').length;
 
-	return { claims: questions.length + answers.length, cleared: disproved };
+	return {
+		claims: questions.length + answers.length,
+		cleared: disproved,
+		units: unitsRead(review),
+		ruledOut: leadsRuledOut(review)
+	};
 }
 
 /** How long the review took, from its start to its last update. */
@@ -108,7 +138,7 @@ export function modelLabel(model: string | undefined): string | null {
 	return model ? prettyModelName(model) : null;
 }
 
-/** The finished review's findings, sorted into the Bugs tab's lists. */
+/** The finished review's findings, sorted into the Review tab's lists. */
 export function bugLists(review: Review, votes: Record<string, Vote>): BugLists {
 	const view = (finding: Review['findings'][number]) => bugView(finding, review, votes[finding.id] ?? null);
 	const shown = review.findings.filter((finding) => !finding.topic?.quieted);
@@ -125,6 +155,7 @@ export function bugLists(review: Review, votes: Record<string, Vote>): BugLists 
 		checked: checkedClaims(review),
 		reviewedAt: review.updatedAt,
 		headSha: review.headSha,
-		duration: durationOf(review)
+		duration: durationOf(review),
+		speed: review.speed ?? 'standard'
 	};
 }

@@ -8,13 +8,16 @@
 }
 
 /*
- * A page: a 44px bar, then a column that scrolls. Every text, icon and box on it starts and ends on
- * --page-gutter from the page's sides; quiet controls and row fills reach past it so their text lands on it.
- * The page is a size container, so a column can centre on the page's 100cqw.
+ * A page, and the Settings dialog's pane: a 44px bar, then a column that scrolls. Every text, icon and box on it
+ * starts and ends on --page-gutter from its sides; quiet controls and row fills reach past it so their text lands on it.
  */
-.page {
+.page,
+.settings-modal-main {
 	--page-gutter: 20px;
+}
 
+/* The page is a size container, so a column can centre on the page's 100cqw. */
+.page {
 	display: flex;
 	min-width: 0;
 	height: 100dvh;
@@ -110,6 +113,24 @@
 }
 .page-tab-count[data-tone='bugs'] {
 	color: var(--sev-high);
+}
+/* Where a review stands, after a tab's name: a spinner with its clock, or one glyph. */
+.page-tab-mark {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--text-faint);
+	font-size: 12px;
+}
+.page-tab-mark > svg {
+	width: 12px;
+	height: 12px;
+}
+.page-tab-mark[data-tone='danger'] {
+	color: var(--danger);
+}
+.page-tab-mark[data-tone='medium'] {
+	color: var(--sev-medium);
 }
 
 /* A page with no parent names itself in the bar. */
@@ -356,4 +377,10 @@
 	height: 12px;
 	flex-shrink: 0;
 	opacity: 0.8;
+}
+.repo-label-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }

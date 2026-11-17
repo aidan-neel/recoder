@@ -21,6 +21,7 @@ import { repoInventoryStage } from './repo-inventory-stage.js';
 import { runUnitPool } from './pool.js';
 import { detectorStage, diagnosticStage, ruleLedgerStage } from './quality-stage.js';
 import { checksInTime, prepareSandbox, startSetup, waitForBackground } from './sandbox-setup.js';
+import { skillsStage } from './skills-stage.js';
 import { runSubagents } from './subagent-stage.js';
 import { completeReview, stoppedReview } from './summary.js';
 import type { AdaptiveReviewInput, AdaptiveReviewResult, HarnessEvents } from './types.js';
@@ -86,6 +87,7 @@ export async function runAdaptiveReview(
 /** Every stage in order; throws when the review is blocked, cancelled or out of time. */
 async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	await understandChanges(run);
+	await skillsStage(run);
 
 	const setup = startSetup(run);
 

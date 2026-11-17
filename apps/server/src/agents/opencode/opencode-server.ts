@@ -1,9 +1,12 @@
+import { effectiveContextWindows } from '../../review/session/review-settings';
+import { openCodeConfigContent } from './opencode-config';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { childEnv, findCli, probeVersion } from '../cli-process';
 import { apiFor } from './api/api';
 import type { OpenCodeApi } from './api/types';
 import { OpenCodeError } from './opencode-error';
+import { forgetServe, recordServe, stopOrphanedServes } from './opencode-orphans';
 
 export { probeVersion } from '../cli-process';
 
@@ -215,13 +218,21 @@ export class OpenCodeServer {
 		const version = await probeVersion(path, this.env).catch(() => null);
 		const password = randomBytes(24).toString('base64url');
 
+		stopOrphanedServes();
+
 		const proc = Bun.spawn([path, 'serve', '--hostname', '127.0.0.1', '--port', '0'], {
 			stdout: 'pipe',
 			stderr: 'pipe',
-			env: { ...childEnv(this.env), OPENCODE_SERVER_PASSWORD: password }
+			env: {
+				...childEnv(this.env),
+				OPENCODE_SERVER_PASSWORD: password,
+				OPENCODE_CONFIG_CONTENT: openCodeConfigContent(this.env.OPENCODE_CONFIG_CONTENT, effectiveContextWindows())
+			}
 		});
 
 		this.startingProcess = proc;
+		recordServe(proc.pid);
+		void proc.exited.then(() => forgetServe(proc.pid));
 
 		const url = await readListenUrl(proc, START_TIMEOUT_MS)
 			.catch((e) => {

@@ -1,8 +1,10 @@
-import { ORCHESTRATOR_ID, type ReviewChatMessage, type ReviewCodeContext } from '@recoder/shared';
+import { ORCHESTRATOR_ID, type ReviewChatMessage } from '@recoder/shared';
 import { db, reviewProgress } from '../../store';
 import { coordinator, storageTransaction } from '../../storage/backend';
 import { configForAgent } from '../../models/models';
-import { ReviewChatError } from '../chat/chat-input';
+import { ReviewChatError, type ChatAttachments } from '../chat/chat-input';
+import { attachedReviewSkills } from '../chat/chat-skills';
+import { skillNames, skillRequest } from '../../skills/repo-skills';
 import { recordChatMessage } from '../chat/chat-replies';
 import { flushReviewEvents } from '../session/events';
 import { enqueueActor, enqueueCommand } from './inbox';
@@ -26,9 +28,13 @@ export async function requestChat(
 	reviewId: string,
 	assignmentId: string,
 	text: string,
-	codeContext?: ReviewCodeContext
+	{ codeContext, skills: attached }: ChatAttachments = {}
 ): Promise<ReviewChatMessage> {
-	if (!(await db.reviews.get(reviewId))) throw new ReviewChatError('Review not found.', 404);
+	const review = await db.reviews.get(reviewId);
+
+	if (!review) throw new ReviewChatError('Review not found.', 404);
+
+	const skills = skillNames(await attachedReviewSkills(review, skillRequest(attached, text)));
 
 	const snapshot = await reviewProgress.get(reviewId);
 	const assignment = snapshot?.assignments?.find((entry) => entry.id === assignmentId);
@@ -59,7 +65,8 @@ export async function requestChat(
 			at: new Date().toISOString(),
 			status: 'done',
 			discussion: true,
-			...(codeContext ? { codeContext } : {})
+			...(codeContext ? { codeContext } : {}),
+			...(skills.length ? { skills } : {})
 		};
 
 		await enqueueCommand(transaction, reviewId, {
@@ -69,7 +76,8 @@ export async function requestChat(
 			assignmentId,
 			text,
 			at: user.at,
-			...(codeContext ? { codeContext } : {})
+			...(codeContext ? { codeContext } : {}),
+			...(skills.length ? { skills } : {})
 		});
 
 		recordChatMessage(reviewId, user);

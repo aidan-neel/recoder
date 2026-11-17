@@ -1,6 +1,6 @@
 /*
  * The app's palette. The kit's tokens keep their names and get neutral values:
- * near-black surfaces, hairlines of white, one cream primary and one azure
+ * near-black surfaces, hairlines of white, one cream primary and one light-blue
  * accent. Scoped to `.app-skin`, on <html> here and in apps/site.
  */
 .app-skin {
@@ -51,9 +51,9 @@
 	--on-primary: #111111;
 
 	/* The one accent: links, the selected line, the hunk header. */
-	--accent: #5b9dff;
-	--accent-text: #8dbbff;
-	--accent-tint: rgba(91, 157, 255, 0.12);
+	--accent: #2383e2;
+	--accent-text: #5aa6f0;
+	--accent-tint: rgba(35, 131, 226, 0.14);
 
 	/* Status: text on a tint of its own hue. */
 	--sev-high: #ff9da1;
@@ -86,7 +86,7 @@
 	--diff-add-gutter: rgba(61, 214, 140, 0.15);
 	--diff-del-gutter: rgba(255, 99, 105, 0.15);
 	--diff-focus: rgba(245, 165, 36, 0.08);
-	--selection: rgba(91, 157, 255, 0.24);
+	--selection: rgba(35, 131, 226, 0.26);
 	--selection-bar: var(--accent);
 	--syn-keyword: #8fb4f0;
 	--syn-function: #cdb4f2;
@@ -173,9 +173,9 @@
 	--primary-hover: #000000;
 	--on-primary: #ffffff;
 
-	--accent: #2563eb;
-	--accent-text: #1d4ed8;
-	--accent-tint: rgba(37, 99, 235, 0.08);
+	--accent: #2383e2;
+	--accent-text: #0b6bcb;
+	--accent-tint: rgba(35, 131, 226, 0.09);
 
 	--sev-high: #b3261e;
 	--sev-high-icon: #d6352c;
@@ -205,7 +205,7 @@
 	--diff-add-gutter: rgba(26, 127, 55, 0.15);
 	--diff-del-gutter: rgba(214, 53, 44, 0.14);
 	--diff-focus: rgba(214, 140, 0, 0.08);
-	--selection: rgba(37, 99, 235, 0.16);
+	--selection: rgba(35, 131, 226, 0.16);
 	--syn-keyword: #1d4ed8;
 	--syn-function: #7a3fb0;
 	--syn-type: #0f766e;

@@ -34,7 +34,33 @@ describe('bugLists', () => {
 	});
 
 	test('the checked line counts the questions investigated and those disproved', () => {
-		expect(bugLists(review(), {}).checked).toEqual({ claims: 6, cleared: 5 });
+		expect(bugLists(review(), {}).checked).toEqual({ claims: 6, cleared: 5, units: null, ruledOut: 0 });
+	});
+
+	test('the checked line counts only fully read units as read, and every dropped candidate as ruled out', () => {
+		const funnel: ReviewFunnel = {
+			...FUNNEL,
+			dropped: { ...FUNNEL.dropped, evidence: 2, refuted: 3 },
+			brief: {
+				complete: false,
+				units: [
+					{ id: 'a', status: 'included' },
+					{ id: 'b', status: 'partial' },
+					{ id: 'c', status: 'omitted', reason: 'file-cap' }
+				]
+			}
+		};
+
+		const { units, ruledOut } = bugLists(review({ funnel }), {}).checked;
+
+		expect(units).toEqual({ read: 1, total: 3 });
+		expect(ruledOut).toBe(5);
+	});
+
+	test('a review that did not count its funnel leaves units and ruled out unknown', () => {
+		const { units, ruledOut } = bugLists(review({ funnel: undefined }), {}).checked;
+
+		expect([units, ruledOut]).toEqual([null, null]);
 	});
 
 	test('a decided finding leaves the open list for the decided one, and a quieted topic hides it from both', () => {

@@ -6,10 +6,13 @@ import {
 	type PullRequest,
 	type PullStatus,
 	type Repo,
-	type Review
+	type Review,
+	type ReviewProgress
 } from '@recoder/shared';
 
 import { MANY_CHECKS, MANY_CHECKS_PASSING } from './sample-checks';
+import { exportsProgress } from './sample-claims';
+import { cleanReviewChecks } from './sample-clean-review';
 import { sampleTime } from './sample-clock';
 import { SAMPLE_CHECKS, SAMPLE_PULL, SAMPLE_REVIEW } from './sample-review';
 
@@ -26,10 +29,15 @@ export interface SampleSeed {
 	repos: Repo[];
 	pulls: SamplePull[];
 	reviews: Review[];
+	/** The live progress of the reviews that are running when the sample loads, by review id. */
+	progress: Record<string, ReviewProgress>;
 	comments: Record<string, PullComment[]>;
 }
 
 const AT = sampleTime('2026-10-13T09:00:00.000Z');
+
+/** When the sample's repositories were first tracked, so the repository page has a month of history behind it. */
+const TRACKED_AT = sampleTime('2026-08-04T09:00:00.000Z');
 
 const REPOS: Repo[] = [
 	{
@@ -38,7 +46,7 @@ const REPOS: Repo[] = [
 		url: 'https://github.com/acme/api',
 		provider: 'github',
 		defaultBranch: 'main',
-		createdAt: AT,
+		createdAt: TRACKED_AT,
 		updatedAt: AT
 	},
 	{
@@ -47,7 +55,7 @@ const REPOS: Repo[] = [
 		url: 'https://github.com/acme/web',
 		provider: 'github',
 		defaultBranch: 'main',
-		createdAt: AT,
+		createdAt: TRACKED_AT,
 		updatedAt: AT
 	}
 ];
@@ -308,13 +316,15 @@ export function sampleCommits(pull: SamplePull): PullCommit[] {
 
 /** A fresh copy of the sample's repositories, pull requests, reviews and conversations. */
 export function sampleSeed(): SampleSeed {
+	const exports = plainReview(PULLS.exports, 'running');
+
 	const reviews: Review[] = [
 		structuredClone(SAMPLE_REVIEW),
-		plainReview(PULLS.exports, 'running'),
+		exports,
 		plainReview(PULLS.webhooks, 'failed'),
 		{ ...plainReview(PULLS.audit, 'failed'), summary: REVIEW_CANCELLED },
 		plainReview(PULLS.datePicker, 'passed', '85bead'),
-		plainReview(PULLS.pagination, 'passed'),
+		{ ...plainReview(PULLS.pagination, 'passed'), ...cleanReviewChecks() },
 		plainReview(PULLS.billing, 'passed'),
 		plainReview(PULLS.cache, 'passed'),
 		plainReview(PULLS.locale, 'passed'),
@@ -329,6 +339,7 @@ export function sampleSeed(): SampleSeed {
 		repos: structuredClone(REPOS),
 		pulls: structuredClone(Object.values(PULLS)),
 		reviews,
+		progress: { [exports.id]: exportsProgress(exports) },
 		comments: { [`sample-api#${SAMPLE_PULL.number}`]: structuredClone(CONVERSATION) }
 	};
 }

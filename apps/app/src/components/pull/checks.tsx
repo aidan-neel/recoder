@@ -52,20 +52,12 @@ function summarize({ outcome, tally }: PullChecksView): Summary {
 const SUMMARY_ICONS = { ok: CircleCheck, bad: CircleX, wait: CircleDashed };
 
 /**
- * The head commit's checks as one fact in the merge strip. When they loaded,
- * it is the button that opens the list under the strip.
+ * The head commit's checks as one fact in the header. When they loaded, it is
+ * the button that opens the list under the facts; without checks, nothing.
  */
 export function ChecksToggle({ view }: { view: PullChecksView }) {
 	if (view.phase === 'loading') return <Skeleton className="merge-fact-skeleton" />;
-
-	if (view.phase === 'none') {
-		return (
-			<span className="merge-fact" data-tone="none">
-				<CircleDashed aria-hidden />
-				No checks
-			</span>
-		);
-	}
+	if (view.phase === 'none') return null;
 
 	if (view.phase === 'failed') {
 		return (
@@ -118,7 +110,7 @@ function CheckRow({ check }: { check: PrCheck }) {
 	);
 }
 
-/** Rows laid into as many columns as the strip's width holds. */
+/** Rows laid into as many columns as the header's width holds. */
 function CheckGrid({ checks, label }: { checks: PrCheck[]; label: string }) {
 	return (
 		<HoverList className="checks-grid" itemSelector="[data-check]" aria-label={label}>
@@ -147,7 +139,7 @@ function SkippedChecks({ checks }: { checks: PrCheck[] }) {
 }
 
 /**
- * Every check of the head commit under the strip that opens it. Failed come
+ * Every check of the head commit, under the facts. Failed come
  * first, then those that still run, then those that passed, across the
  * columns row by row; skipped checks fold into one row at the end.
  */

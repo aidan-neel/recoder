@@ -5,6 +5,7 @@ export { Card } from './card';
 export { ClampedText } from './clamped-text';
 export { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
 export { CopyButton } from './copy-button';
+export { FileIcon } from './file-icon';
 export { ForgeMark } from './forge-mark';
 export { HoverList } from './hover-list';
 export { Meter, type MeterTone } from './meter';

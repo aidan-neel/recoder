@@ -16,18 +16,24 @@ import { createSampleAuth } from './sample-auth';
 import { createSampleChat } from './sample-chat';
 import { createSampleFiles } from './sample-files';
 import { createSampleMembers } from './sample-members';
+import { sampleChatMetrics, sampleReviewMetrics } from './sample-metrics';
+import { createSampleTelemetry } from './sample-telemetry';
 import { createSampleUpdate } from './sample-update';
 import { createSampleUsage } from './sample-usage';
 import { createSampleRepoChats } from './sample-repo-chat';
+import { sampleRepoOverview } from './sample-repo-overview';
+import { createSampleSkills } from './sample-skills';
+import { sampleClaims } from './sample-claims';
 import { sampleCommits } from './sample-pulls';
 import { SAMPLE_REVIEW } from './sample-review';
 import { adoptSampleRun, playSampleRun, type RunScript, type SampleRun } from './sample-run';
 import { createSampleWorld, type SampleWorld } from './sample-world';
 
-/** What a scripted review of `review` reads, and what it finds: the sample review's findings and summary. */
+/** What a scripted review of `review` reads, the claims it checks, and what it finds: the sample review's findings and summary. */
 function sampleScript(world: SampleWorld, review: Review): RunScript {
 	return {
 		paths: world.diff(review.repoId, review.prNumber).map((file) => file.path),
+		claims: sampleClaims(review, SAMPLE_REVIEW.findings),
 		ending: { findings: structuredClone(SAMPLE_REVIEW.findings), summary: SAMPLE_REVIEW.summary ?? '' }
 	};
 }
@@ -89,6 +95,7 @@ function createSampleReviews(world: SampleWorld) {
 				source: 'github',
 				prTitle: pull.title,
 				prUrl: pull.url,
+				...(input.speed === 'spark' && { speed: input.speed }),
 				createdAt: at,
 				updatedAt: at
 			};
@@ -197,6 +204,7 @@ function createSampleFindings(world: SampleWorld) {
 export function createSampleApi(): ApiClient {
 	const world = createSampleWorld();
 	const chat = createSampleChat(world);
+	const repoChats = createSampleRepoChats(world);
 	let added = 0;
 
 	return {
@@ -204,9 +212,11 @@ export function createSampleApi(): ApiClient {
 		auth: createSampleAuth(),
 		members: createSampleMembers(),
 		usage: createSampleUsage(),
+		telemetry: createSampleTelemetry(),
 		update: createSampleUpdate(),
 		account: async () => 'you',
 		repos: async () => world.data().repos,
+		repoOverview: async (repoId) => sampleRepoOverview(world.data(), repoId),
 
 		async addRepo(input): Promise<Repo> {
 			const at = new Date().toISOString();
@@ -228,13 +238,20 @@ export function createSampleApi(): ApiClient {
 			return repo;
 		},
 
+		async removeRepo(repoId) {
+			const data = world.data();
+
+			data.repos = data.repos.filter((repo) => repo.id !== repoId);
+			data.pulls = data.pulls.filter((item) => item.repoId !== repoId);
+		},
+
 		async pulls(query = {}) {
 			const items = world
 				.data()
 				.pulls.filter((item) => item.status.state === 'open' && (!query.repoId || item.repoId === query.repoId))
 				.map(({ repoId, pull, status }) => ({ repoId, pull, status, review: world.newestReview(repoId, pull.number) }));
 
-			return { items, failures: [], nextCursors: {}, fetchedAt: new Date().toISOString() };
+			return { items, failures: [], nextCursors: {}, openCounts: {}, fetchedAt: new Date().toISOString() };
 		},
 
 		pullPage: async (repoId, number) => world.page(repoId, number),
@@ -278,14 +295,17 @@ export function createSampleApi(): ApiClient {
 
 		reviews: async () => world.data().reviews.map((review) => world.listedReview(review)),
 		review: async (id) => world.findReview(id),
+		reviewMetrics: async (id) => sampleReviewMetrics(world.findReview(id), world.progressOf(id).messages),
 		...createSampleReviews(world),
 		...createSampleFindings(world),
 		markUseful: async () => {},
 		unmarkUseful: async () => {},
 		follow: world.follow,
 		...chat,
-		...createSampleRepoChats(world),
-		...createSampleFiles()
+		...repoChats,
+		chatMetrics: async (chatId) => sampleChatMetrics(await repoChats.repoChat(chatId)),
+		...createSampleFiles(),
+		...createSampleSkills()
 	};
 }
 

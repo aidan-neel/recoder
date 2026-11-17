@@ -37,9 +37,10 @@ export function recordChatMessage(reviewId: string, message: ReviewChatMessage):
 
 /**
  * The developer's brief as their message to the orchestrator, recorded before
- * the review starts, so `reviewInstructions` gives it to the review.
+ * the review starts, so `reviewInstructions` gives it to the review. `skills`
+ * names the repository skills attached to it.
  */
-export function recordBrief(reviewId: string, text: string | undefined): void {
+export function recordBrief(reviewId: string, text: string | undefined, skills?: readonly string[]): void {
 	const brief = text?.trim();
 
 	if (!brief) return;
@@ -51,7 +52,8 @@ export function recordBrief(reviewId: string, text: string | undefined): void {
 		text: brief,
 		at: new Date().toISOString(),
 		status: 'done',
-		discussion: true
+		discussion: true,
+		...(skills?.length ? { skills: [...skills] } : {})
 	});
 }
 export function stopReviewChat(reviewId: string, assignmentId: string): void {

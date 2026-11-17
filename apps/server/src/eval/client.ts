@@ -94,13 +94,20 @@ export async function resolveRepo(base: string, query: string): Promise<Repo> {
 }
 
 /**
- * Queues a new automated review. The server mints a new review id each time
- * and nothing compares it with earlier reviews of the PR, so it is a full review.
+ * Queues a new automated review that stands alone: without finding history,
+ * the server carries no earlier review's findings into it, so the score counts
+ * only what this review raised.
  */
 export function startReview(base: string, repoId: string, prNumber: number, baselineCache = true): Promise<Review> {
 	return request<Review>(base, '/api/reviews', {
 		method: 'POST',
-		body: JSON.stringify({ repoId, prNumber, start: true, ...(baselineCache ? {} : { baselineCache: false }) })
+		body: JSON.stringify({
+			repoId,
+			prNumber,
+			start: true,
+			findingHistory: false,
+			...(baselineCache ? {} : { baselineCache: false })
+		})
 	});
 }
 

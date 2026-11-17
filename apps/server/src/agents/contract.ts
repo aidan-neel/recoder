@@ -1,4 +1,12 @@
-import type { AgentStatus, ImageUpload, ModelEntry, ModelFailure, ReasoningEffort, TokenUsage } from '@recoder/shared';
+import type {
+	AgentStatus,
+	ImageUpload,
+	ModelEntry,
+	ModelFailure,
+	ReasoningEffort,
+	ModelCallRow,
+	TokenUsage
+} from '@recoder/shared';
 import type { LlmError } from '../models/llm/errors';
 import type { ChatOptions } from '../models/llm/types';
 
@@ -117,6 +125,7 @@ export type ToolRunner = (name: string, args: unknown) => Promise<ToolOutcome>;
  * more. `step` names the model message a step produces, when the CLI says, and pairs `usage` with `step-start`.
  */
 export type AgentEvent =
+	| { type: 'prompt-start'; session: string; turn: number; prefix?: ModelCallRow['prefix'] }
 	| { type: 'step-start'; step?: string }
 	| { type: 'text'; delta: string; partId: string }
 	| { type: 'reasoning'; delta: string; partId: string }
@@ -146,7 +155,7 @@ export interface AgentRunOptions {
 }
 
 export interface AgentPromptOptions {
-	/** False on the final turn: the agent may only answer. A CLI that cannot take tools away refuses them in the gate. */
+	/** False on the final turn: the agent may only answer. Adapters may retain definitions for caching and refuse calls locally. */
 	tools: boolean;
 	/** The JSON schema of the answer; a CLI that cannot enforce one is asked for JSON in words. */
 	schema?: Record<string, unknown>;

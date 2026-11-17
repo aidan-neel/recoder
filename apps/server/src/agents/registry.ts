@@ -164,6 +164,21 @@ export async function agentModels(waitMs?: number): Promise<ModelEntry[]> {
 }
 
 /**
+ * The entry an agent model id (`claude-code:opus`) has in its agent's latest listing, else in the adapter's fixed
+ * list, so a synchronous config can read what the model reports (its context window) without waiting on a listing.
+ * Undefined when no agent owns the id, or neither list knows it yet.
+ */
+export function listedModel(id: string): ModelEntry | undefined {
+	const owner = agentForModel(id);
+
+	if (!owner) return undefined;
+
+	const fixed = owner.agent.fixedModels();
+
+	return listed.get(owner.agent.id)?.find((entry) => entry.id === id) ?? fixed?.find((entry) => entry.id === id);
+}
+
+/**
  * The entries of the models `ids` name, as {@link agentModels} lists them.
  * An agent's model ids start with its own id (`opencode:…`, `devin:…`), so
  * only the agents that run a picked model are asked; an id no agent lists

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { HaProcesses } from './ha-processes';
-import { SHARED_SECRET_KEY } from '../helpers/shared-secret-key';
+import { SHARED_SECRET_KEY } from './shared-secret-key';
 
 export async function runCorrectnessProcess(url: string, program: string): Promise<string> {
 	const fixture = new HaProcesses(url);

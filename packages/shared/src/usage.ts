@@ -44,8 +44,8 @@ export interface UsageKind extends UsageTotals {
 	kind: ModelCallKind;
 }
 
-/** One account in the report. */
-export interface UsagePerson extends UsageTotals {
+/** An account's identity in an admin report. */
+export interface ReportPerson {
 	accountId: string;
 	role: AccountRole;
 	provider: SignInForge;
@@ -53,6 +53,10 @@ export interface UsagePerson extends UsageTotals {
 	host: string | null;
 	login: string;
 	avatarUrl?: string;
+}
+
+/** One account in the report. */
+export interface UsagePerson extends UsageTotals, ReportPerson {
 	/** This person's part of all tokens in the window, 0 to 1. */
 	share: number;
 	/** The models this person's calls used, most tokens first; each `share` is of this person's tokens. */

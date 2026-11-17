@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import { buildInventory } from '../../../src/review/pipeline/inventory';
 import {
 	applyDirective,
@@ -28,7 +29,12 @@ const DIFF = ['src/app.py', 'src/util.ts', 'tests/test_app.py', 'README.md']
 	)
 	.join('');
 
-const config = { baseUrl: 'http://model.test/v1', apiKey: 'k', model: 'small-7b' };
+const config = {
+	baseUrl: 'http://model.test/v1',
+	apiKey: 'k',
+	model: 'small-7b',
+	contextWindow: DEFAULT_CONTEXT_WINDOW
+};
 
 test('common phrasings become file globs without a model', () => {
 	expect(heuristicDirective('review only python files')).toEqual({

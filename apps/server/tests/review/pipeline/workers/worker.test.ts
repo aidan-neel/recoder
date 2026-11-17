@@ -42,6 +42,7 @@ function stubWorker() {
 		exec: false,
 		label: 'correctness',
 		changedFiles: ['pool.ts'],
+		skills: '',
 		setupNotes: () => ''
 	});
 

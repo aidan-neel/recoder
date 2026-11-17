@@ -11,6 +11,7 @@ import { newReviewHref } from '@/lib/shell/routes';
 
 import { Crumbs, type Crumb } from '@/components/common/crumbs';
 import { Page } from '@/components/common/page';
+import { TokenUsageButton } from '@/components/common/token-usage-modal';
 import { FilePanelHost } from '@/components/files/file-panel-host';
 
 import { ChatConversation, ChatSkeleton } from './chat-conversation';
@@ -24,7 +25,10 @@ export function ChatScreen({ chatId }: { chatId: string }) {
 	const chat = useRepoChat(chatId);
 
 	return (
-		<Page start={<Crumbs parts={chatCrumbs(chat)} />}>
+		<Page
+			start={<Crumbs parts={chatCrumbs(chat)} />}
+			end={chat.phase === 'ready' ? <TokenUsageButton kind="chat" id={chatId} /> : null}
+		>
 			<ChatBody chat={chat} />
 		</Page>
 	);

@@ -2,6 +2,7 @@ import {
 	settleAssignments,
 	parseUnifiedDiff,
 	REVIEW_CANCELLED,
+	REVIEW_SPEED_PLANS,
 	type ImageUpload,
 	type Provider,
 	type Repo
@@ -28,7 +29,7 @@ import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
 import type { GatheredContext } from '../review/pipeline/intent/types';
 import { runAdaptiveReview } from '../review/pipeline/harness';
 import { configForOrchestrator, isReviewConfigured, stageConfigs } from '../models/models';
-import { withReviewModels } from '../models/model-policy';
+import { withPipelineModels } from '../models/model-policy';
 import { ModelBlockedError } from '../review/pipeline/agent-loop';
 import { signedOutAgent, signedOutReason } from '../models/agent-sign-in';
 import { reviewInstructions } from '../review/chat/review-chat';
@@ -57,7 +58,7 @@ import { touch } from './review-session';
 export async function runReviewPipeline(reviewId: string, signal?: AbortSignal): Promise<void> {
 	if (reviewStartsHeld()) return;
 
-	return withReviewModels(
+	return withPipelineModels(
 		reviewId,
 		async () => await withUsageMetrics(reviewId, 'pipeline', () => runTrackedReviewPipeline(reviewId, signal))
 	);
@@ -205,7 +206,7 @@ async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal):
 			emitReviewEvent(reviewId, { type: 'log', step: 'review', message: discarded });
 		}
 
-		const tokenBudget = effectiveTokenBudget();
+		const tokenBudget = REVIEW_SPEED_PLANS[review.speed ?? 'standard'].tokenBudget ?? effectiveTokenBudget();
 
 		recordTokenBudget(tokenBudget);
 
@@ -222,11 +223,13 @@ async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal):
 					prsForCommit: (sha, signal) => prsForCommit(repo, provider, sha, signal),
 					instructions: await reviewInstructions(reviewId, initial.startedAt),
 					images,
+					skills: review.skills,
 					signal: analysis.signal,
 					subagentCap: effectiveSubagentCap(),
 					tokenBudget,
 					reportLowSeverity: effectiveReportLowSeverity(),
 					baselineCache: review.baselineCache,
+					speed: review.speed,
 					resume
 				},
 				harnessCallbacks(reviewId, { headSha, mergeBaseSha })

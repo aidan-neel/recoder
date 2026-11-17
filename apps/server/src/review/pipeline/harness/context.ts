@@ -2,6 +2,7 @@ import {
 	DEFAULT_SUBAGENT_CAP,
 	DEFAULT_TOKEN_BUDGET,
 	ORCHESTRATOR_ID,
+	REVIEW_SPEED_PLANS,
 	type SubagentCap,
 	type BriefQuestion,
 	type Finding,
@@ -87,6 +88,8 @@ export interface ReviewRun {
 	intent: ChangeIntent | null;
 	/** The repo's guidelines as numbered rules; null when the repo has none. */
 	ledger: RuleLedger | null;
+	/** What every agent reads about repository skills, built once; empty when there are none or no checkout. */
+	skills: string;
 	/** Findings people dismissed in this repository, newest first; empty without a repository. */
 	dismissals: Dismissal[];
 	/** How people in this repository decided each topic's findings, by topic id; empty without a repository. */
@@ -116,6 +119,8 @@ export interface ReviewRun {
 	repairs: number;
 	/** Dependency setup and baseline check results, shared with every reviewer and verifier. */
 	setupNotes: string;
+	/** Stable setup context shared by reviewer pools and verifier sessions. */
+	sharedSetupNotes?: string;
 	task: TaskFn;
 }
 
@@ -127,7 +132,7 @@ const UNCAPPED_REQUESTS = 4;
 
 /** What the review is sized for: its reviewers, its brief calls and the subagents its cap allows. */
 function reviewShape(inventory: ReviewInventory, limits: ReviewLimits, input: AdaptiveReviewInput): ReviewShape {
-	const cap: SubagentCap | number = input.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+	const cap: SubagentCap = input.subagentCap ?? DEFAULT_SUBAGENT_CAP;
 
 	return {
 		reviewers: partitionReviewers(inventory, limits, input.lenses).length,
@@ -136,8 +141,23 @@ function reviewShape(inventory: ReviewInventory, limits: ReviewLimits, input: Ad
 	};
 }
 
+/** Why a Spark review runs no code: it trades proving bugs for time, so its bugs are reported unrun. */
+const SPARK_READS_ONLY = 'A Spark review reads the code and does not run it.';
+
+/** The input a review of its speed runs with: Spark is one reviewer, the Low budget's, and no subagents. */
+function atSpeed(input: AdaptiveReviewInput): AdaptiveReviewInput {
+	const plan = REVIEW_SPEED_PLANS[input.speed ?? 'standard'];
+
+	return {
+		...input,
+		tokenBudget: plan.tokenBudget ?? input.tokenBudget,
+		subagentCap: plan.subagentCap ?? input.subagentCap
+	};
+}
+
 /** Builds the run's shared state from the input, restoring what a resumed review carries over. */
-export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): ReviewRun {
+export function createRun(given: AdaptiveReviewInput, events?: HarnessEvents): ReviewRun {
+	const input = atSpeed(given);
 	const startedAt = reviewNow();
 	const inventory = buildInventory(input.diff, extraExcludes());
 	const coverage = new CoverageLedger();
@@ -180,6 +200,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		changeModel: null,
 		intent: null,
 		ledger: null,
+		skills: '',
 		dismissals: input.repoId ? listDismissals(input.repoId) : [],
 		topicTallies: input.repoId ? topicTallies(input.repoId) : new Map(),
 		baseline: [],
@@ -242,7 +263,9 @@ export async function openWorkspace(run: ReviewRun): Promise<void> {
 
 	run.execReason = !revision
 		? 'Running code needs a local checkout of the pull request.'
-		: await execUnavailableReason();
+		: run.input.speed === 'spark'
+			? SPARK_READS_ONLY
+			: await execUnavailableReason();
 
 	const scope = revision ? scopeOfCheckout(revision.checkoutPath) : null;
 
@@ -383,6 +406,7 @@ export function poolContext(run: ReviewRun): PoolContext {
 		recommended: run.recommended,
 		exec: Boolean(run.workspace),
 		images: input.images ?? [],
+		sharedSetupNotes: (run.sharedSetupNotes ??= run.setupNotes),
 		setupNotes: () => run.setupNotes,
 		directive: run.directive,
 		subagentRequests: requestsPerReviewer(run),
@@ -392,6 +416,7 @@ export function poolContext(run: ReviewRun): PoolContext {
 		changeModel: run.changeModel,
 		intent: run.intent,
 		ledger: run.ledger,
+		skills: run.skills,
 		dismissals: run.dismissals,
 		requests: run.subagents.requests,
 		questions: run.questions,

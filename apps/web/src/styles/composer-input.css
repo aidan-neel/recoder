@@ -30,6 +30,16 @@
 	opacity: 1;
 	color: var(--text-subtle);
 }
+.settings-subagents {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+}
+.settings-subagents > * {
+	flex-shrink: 0;
+}
 .settings-number {
 	width: 96px;
 }

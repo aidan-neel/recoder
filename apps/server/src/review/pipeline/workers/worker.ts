@@ -32,6 +32,8 @@ export interface WorkerHost {
 	/** The delegating reviewer's name, so a worker's log lines say whose it is. */
 	label: string;
 	changedFiles: string[];
+	/** The review's skills block, the same for every agent; empty when there are none. */
+	skills: string;
 	/** Dependency setup and baseline check results as they stand when the worker starts. */
 	setupNotes: () => string;
 	/** Reports the delegation and the worker's reads in the reviewer's feed. */
@@ -59,6 +61,7 @@ function workerUserPrompt(task: string, host: WorkerHost): string {
 	return [
 		`Task from the reviewer:\n${task}`,
 		`Files this pull request changes:\n${files.join('\n')}${more > 0 ? `\n- and ${more} more` : ''}`,
+		host.skills,
 		notes
 	]
 		.filter(Boolean)

@@ -2,37 +2,33 @@ import type { UsageKind, UsageModel, UsagePerson, UsageReport, UsageTotals } fro
 import { formatCompact, formatShare, type ChartTipRow } from '@recoder/ui';
 
 import {
+	BREAKDOWN_PAGE,
+	foldParts,
+	formatReportDay,
+	formatWhole,
+	OTHERS_COLOR,
+	OTHERS_ID,
+	othersLabel,
+	type RowLead,
+	type RowPart,
+	type RowTip
+} from './report-shared';
+import {
 	activePeople,
 	failureRate,
 	formatDuration,
-	formatWhole,
 	modelColor,
 	moreModelsLabel,
-	othersLabel,
-	OTHERS_COLOR,
-	OTHERS_ID,
 	personColor,
 	uncachedInput,
 	type Cost,
 	type UsageScope
 } from './usage-model';
 
+export { BREAKDOWN_PAGE };
+
 /** What the Breakdown table groups by. */
 export type BreakdownMode = 'model' | 'day' | 'person';
-
-/** What leads a row: a model's provider, a person's avatar, or nothing for a day or a folded row. */
-export type RowLead =
-	| { kind: 'model'; provider: string }
-	| { kind: 'person'; login: string; avatarUrl: string | undefined }
-	| { kind: 'none' };
-
-/** One part of a row's tokens, in the color its line has in the chart. */
-interface RowPart {
-	id: string;
-	label: string;
-	color: string;
-	value: number;
-}
 
 export interface UsageRow {
 	key: string;
@@ -56,48 +52,8 @@ export interface UsageRow {
 	kinds: UsageTotals | null;
 }
 
-/** What a row's tip shows: its tokens, the split by the chart's lines and the split by kind. */
-export interface RowTip {
-	heading: string;
-	value: string;
-	rows: ChartTipRow[];
-	details: ChartTipRow[];
-}
-
-/** The rows the Breakdown shows before Show all. */
-export const BREAKDOWN_PAGE = 10;
-
-const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
-
-/** A report day as a row's name: "Thu, Nov 13". */
-function formatDay(day: string): string {
-	return dayName.format(new Date(`${day}T00:00:00Z`));
-}
-
 function costOf(totals: UsageTotals): Cost {
 	return { usd: totals.costUsd, complete: totals.costComplete };
-}
-
-/**
- * The parts with tokens, in the order given (the chart's lines' order, so
- * every row's colors run the same way), the grey ones past the fifth folded
- * into one at the end.
- */
-function foldParts(parts: readonly RowPart[], label: (count: number) => string): RowPart[] {
-	const present = parts.filter((part) => part.value > 0);
-	const folded = present.filter((part) => part.color === OTHERS_COLOR);
-
-	if (folded.length <= 1) return present;
-
-	return [
-		...present.filter((part) => part.color !== OTHERS_COLOR),
-		{
-			id: OTHERS_ID,
-			label: label(folded.length),
-			color: OTHERS_COLOR,
-			value: folded.reduce((sum, part) => sum + part.value, 0)
-		}
-	];
 }
 
 /** How many tokens of `model` each person used, in their colors. */
@@ -196,7 +152,7 @@ function dayRows(report: UsageReport, scope: UsageScope): UsageRow[] {
 		.filter(({ tokens }) => tokens > 0)
 		.map(({ day, parts, tokens }) => ({
 			key: day.day,
-			name: formatDay(day.day),
+			name: formatReportDay(day.day),
 			lead: { kind: 'none' as const },
 			sessions: null,
 			calls: null,

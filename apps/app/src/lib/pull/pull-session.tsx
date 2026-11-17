@@ -1,7 +1,7 @@
 'use client';
 
 import type { PrCheck, PullCheckTally, Review, ReviewListItem } from '@recoder/shared';
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
 import { useListStore, useSessionCache } from '../api/client';
@@ -85,22 +85,24 @@ export function usePullPageView(): PullPageView {
 	const repos = useStore(useListStore().state, (data) => data.repos);
 	const value = page.value;
 
-	return useMemo(
-		() => ({
+	return useMemo(() => {
+		const activeReview = countedReview(review, value?.review ?? null);
+
+		return {
 			phase: page.phase,
 			error: page.error,
 			offline: page.offline,
 			page: value,
+			reviewId: activeReview?.id ?? null,
 			repoName: shortRepoName(repos, session.repoId),
 			counts: {
 				files: files ?? value?.pull.changedFiles ?? null,
-				bugs: openBugCount(countedReview(review, value?.review ?? null)),
+				bugs: openBugCount(activeReview),
 				commits: value?.status.commits ?? commits
 			},
 			refresh: () => void session.pages.loadPage()
-		}),
-		[page, value, repos, session, files, review, commits]
-	);
+		};
+	}, [page, value, repos, session, files, review, commits]);
 }
 
 /** The diff of the Changes tab; it loads with the page. */
@@ -111,14 +113,22 @@ export function usePullDiffView(): PullDiffView {
 	return useMemo(() => loadable(diff, () => void session.pages.loadDiff()), [diff, session]);
 }
 
-/** The Commits tab; it loads the first time it is used. */
+/** Reads the commits unless they have been read: for the Commits tab, and for the pointer resting on its link. */
+export function useWarmCommits(): () => void {
+	const session = useSession();
+
+	return useCallback(() => {
+		if (session.state.getState().commits.phase === 'idle') void session.pages.loadCommits();
+	}, [session]);
+}
+
+/** The Commits tab; it loads the first time it is used, if the pointer resting on its link has not loaded it already. */
 export function usePullCommitsView(): PullCommitsView {
 	const session = useSession();
 	const commits = useSessionData((data) => data.commits);
+	const warm = useWarmCommits();
 
-	useEffect(() => {
-		if (session.state.getState().commits.phase === 'idle') void session.pages.loadCommits();
-	}, [session]);
+	useEffect(warm, [warm]);
 
 	return useMemo(() => loadable(commits, () => void session.pages.loadCommits()), [commits, session]);
 }

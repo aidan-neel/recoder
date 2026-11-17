@@ -30,6 +30,7 @@ export function harnessInput({ options, target, settings, signal }: HarnessRun):
 		subagentCap: settings.subagents,
 		reportLowSeverity: settings.reportLowSeverity,
 		baselineCache: tuning.baselineCache,
+		speed: tuning.speed,
 		...(tuning.lenses ? { lenses: tuning.lenses } : {}),
 		signal
 	};

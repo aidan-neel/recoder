@@ -14,10 +14,11 @@ const NO_LISTS: BugLists = {
 	resolved: [],
 	quieted: [],
 	unresolved: [],
-	checked: { claims: 0, cleared: 0 },
+	checked: { claims: 0, cleared: 0, units: null, ruledOut: null },
 	reviewedAt: null,
 	headSha: null,
-	duration: null
+	duration: null,
+	speed: 'standard'
 };
 
 function phaseOf(review: Review | null, load: 'none' | 'loading' | 'ready' | 'failed'): BugsView['phase'] {
@@ -28,7 +29,7 @@ function phaseOf(review: Review | null, load: 'none' | 'loading' | 'ready' | 'fa
 	return 'none';
 }
 
-/** The Bugs tab: the findings of the newest finished review, and what a person can do with each. */
+/** The Review tab: the findings of the newest finished review, and what a person can do with each. */
 export function useBugsView(): BugsView {
 	const session = useSession();
 	const review = useSessionData((data) => data.review);

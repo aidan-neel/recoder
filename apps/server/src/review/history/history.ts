@@ -48,8 +48,8 @@ export async function earlierCopies(review: Review, findingId: string): Promise<
 /**
  * A finished review's findings with their history across pushes
  * (`carryHistory`), and the earlier findings its evidence shows fixed. The
- * first review of a pull request keeps its findings as they are, with no
- * history. An earlier review whose diff is gone reads as touching every file,
+ * first review of a pull request, and one started without finding history,
+ * keeps its findings as they are, with no history. An earlier review whose diff is gone reads as touching every file,
  * so nothing of it is carried as untouched.
  */
 export async function withFindingHistory(
@@ -60,6 +60,8 @@ export async function withFindingHistory(
 	const review = await db.reviews.get(reviewId);
 
 	if (!review) throw new Error(`review ${reviewId} not found while attaching finding history`);
+
+	if (review.findingHistory === false) return { findings };
 
 	const [previous] = await earlierReviews(review);
 

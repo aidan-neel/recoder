@@ -24,7 +24,7 @@ function copyBranch(name: string): void {
 	);
 }
 
-/** The pull request's own menu in the merge strip: copy its branch name or the link to this page. */
+/** The pull request's own menu beside the merge button: copy its branch name or the link to this page. */
 export function PullMenu({ page }: { page: PullPage }) {
 	const { base } = useApi();
 	const href = pullHref(base, page.repoId, page.pull.number);

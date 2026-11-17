@@ -5,9 +5,6 @@ import { plural, pullTitle } from './format';
 import { pullHref } from './routes';
 import type { RecentReview, SettledReview } from './types';
 
-/** How many reviews the sidebar lists. */
-const RECENT_LIMIT = 8;
-
 /** Where a review stands for the sidebar, in a word or two. */
 function standing(review: ReviewListItem): Pick<RecentReview, 'state' | 'label'> {
 	if (review.status === 'queued') return { state: 'queued', label: 'Queued' };
@@ -23,10 +20,10 @@ function standing(review: ReviewListItem): Pick<RecentReview, 'state' | 'label'>
 	return { state: 'clean', label: 'No bugs' };
 }
 
-/** The sidebar's two lists of reviews. */
+/** The sidebar's reviews, split by whether their pull request is still open. */
 interface SidebarReviews {
-	recent: RecentReview[];
-	settled: SettledReview[];
+	open: RecentReview[];
+	ended: SettledReview[];
 }
 
 /** How the pull request ended, or null while it is open or its state is not yet known. */
@@ -37,7 +34,7 @@ function outcomeOf(review: ReviewListItem): SettledReview['outcome'] | null {
 function toRow(review: ReviewListItem, repos: Repo[] | null, base: string): RecentReview {
 	return {
 		reviewId: review.id,
-		href: pullHref(base, review.repoId, review.prNumber, 'bugs'),
+		href: pullHref(base, review.repoId, review.prNumber, 'review'),
 		repoId: review.repoId,
 		title: pullTitle(review.prTitle, review.prNumber),
 		repoName: shortRepoName(repos, review.repoId),
@@ -51,8 +48,7 @@ function toRow(review: ReviewListItem, repos: Repo[] | null, base: string): Rece
 /**
  * The newest review of each pull request in a connected repo, newest first;
  * draft sessions are not reviews and are left out. Reviews of pull requests
- * that were merged or closed go to `settled`; only the rest count against the
- * limit of `recent`.
+ * that were merged or closed go to `ended`.
  */
 export function recentReviews(reviews: ReviewListItem[], repos: Repo[] | null, base: string): SidebarReviews {
 	const newestFirst = [...latestReviews(reviews).values()]
@@ -60,11 +56,8 @@ export function recentReviews(reviews: ReviewListItem[], repos: Repo[] | null, b
 		.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
 
 	return {
-		recent: newestFirst
-			.filter((review) => outcomeOf(review) === null)
-			.slice(0, RECENT_LIMIT)
-			.map((review) => toRow(review, repos, base)),
-		settled: newestFirst.flatMap((review) => {
+		open: newestFirst.filter((review) => outcomeOf(review) === null).map((review) => toRow(review, repos, base)),
+		ended: newestFirst.flatMap((review) => {
 			const outcome = outcomeOf(review);
 
 			return outcome ? [{ ...toRow(review, repos, base), outcome }] : [];

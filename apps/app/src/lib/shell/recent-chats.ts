@@ -13,6 +13,7 @@ export function recentChats(chats: RepoChatSummary[], repos: Repo[] | null, base
 			href: chatHref(base, chat.id),
 			title: chat.title,
 			repoName: shortRepoName(repos, chat.repoId),
-			repoForge: repoForge(repos, chat.repoId)
+			repoForge: repoForge(repos, chat.repoId),
+			updatedAt: chat.updatedAt
 		}));
 }

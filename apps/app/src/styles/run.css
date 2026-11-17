@@ -1,0 +1,147 @@
+/* ───────── Run steps: a review in progress, one row a step, in the bug rows' language ───────── */
+.run-step-list {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.run-step {
+	border-bottom: 1px solid var(--line-subtle);
+}
+/* The head is a bug head with a 16px glyph lane before the name; its hover fill reaches 12px past the gutter. */
+.run-step-head {
+	display: grid;
+	width: calc(100% + 24px);
+	align-items: center;
+	grid-template-columns: 16px minmax(0, 1fr) auto;
+	gap: 8px 12px;
+	margin: 0 -12px;
+	padding: 14px 12px;
+	border-radius: var(--radius-row);
+	outline: none;
+	text-align: left;
+	transition: background-color var(--dur-hover) ease-out;
+}
+button.run-step-head:hover {
+	background: var(--bg-hover);
+}
+button.run-step-head:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--focus-color);
+}
+.run-step-title {
+	grid-column: 2;
+	overflow: hidden;
+	color: var(--text-secondary);
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 20px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.run-step[data-state='active'] .run-step-title,
+.run-step[data-state='queued'] .run-step-title {
+	color: var(--text-primary);
+}
+.run-step[data-state='waiting'] .run-step-title {
+	color: var(--text-faint);
+}
+/* The chevron hangs out as the bug head's does, so its ink ends on the edge. */
+.run-step-chevron {
+	width: 14px;
+	height: 14px;
+	margin-right: calc(14px * -5 / 24);
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.run-step-head[data-state='open'] > .run-step-chevron {
+	rotate: 180deg;
+}
+.run-step-facts {
+	grid-column: 2 / -1;
+}
+.run-fact-progress {
+	--pill-fg: var(--accent-text);
+	--pill-bg: var(--accent-tint);
+}
+/* The body starts under the name: the glyph lane and the gap. */
+.run-step-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 0 0 18px 28px;
+}
+.run-step-meter {
+	max-width: 560px;
+}
+/* What the review does now: a plain verb, with its file, search or command as a code badge. */
+.run-activity {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 20px;
+}
+.run-activity [data-ui='pill'] {
+	min-width: 0;
+	flex-shrink: 1;
+}
+.run-lines {
+	display: flex;
+	max-width: 760px;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.run-line {
+	display: flex;
+	min-height: 32px;
+	align-items: center;
+	gap: 10px;
+	border-top: 1px solid var(--line-subtle);
+	font-size: var(--font-size-label);
+}
+.run-line:last-child {
+	border-bottom: 1px solid var(--line-subtle);
+}
+.run-line-title {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	color: var(--text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.run-line-word {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.run-line[data-mark='found'] .run-line-title {
+	color: var(--text-primary);
+}
+.run-line[data-mark='found'] .run-line-word {
+	color: var(--sev-high);
+}
+.run-line[data-mark='working'] .run-line-word {
+	color: var(--accent-text);
+}
+.run-line[data-mark='stopped'] .run-line-word {
+	color: var(--danger);
+}
+.run-line[data-mark='settled'] .run-line-title {
+	color: var(--text-faint);
+}
+.run-rest {
+	margin: 0;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+/* What is at work turns in the accent, as the meter fills in it. */
+.run-steps [data-ui='status-glyph-face'][data-kind='spinner'] {
+	--glyph: var(--accent-text);
+}

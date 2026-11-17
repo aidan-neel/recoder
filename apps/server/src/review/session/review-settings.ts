@@ -1,188 +1,35 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { z } from 'zod';
 import {
 	DEFAULT_SUBAGENT_CAP,
 	DEFAULT_TOKEN_BUDGET,
-	REASONING_EFFORTS,
-	SUBAGENT_CAPS,
 	isRoutedModelId,
-	migrateSubagentCap,
-	parseProviderKey,
-	TOKEN_BUDGETS,
-	type ModelEntryPatch,
 	type ModelPolicy,
-	type ModelSettingsPatch,
 	type SubagentCap,
 	type TokenBudget
 } from '@recoder/shared';
 import { SealedValueError } from '../../secrets/seal.js';
 import { SecretKeyError } from '../../secrets/secret-key.js';
 import { serverDataDir } from '../../util/data-dir.js';
-import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
-import { isChatGptSignInEntry, moveChatGptModels, SAVED_ENTRY_PROVIDERS } from './chatgpt-migration.js';
-import { hiddenModelsSchema, modelPolicySchema } from './model-pick-schemas.js';
+import { sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
 import { hasUnsealedKey, openSettingsKeys, sealSettingsKeys } from './settings-secrets.js';
+import {
+	parseSavedReviewSettings,
+	sharedStoredForm,
+	type ReviewEntryInput,
+	type ReviewSettingsInput,
+	type SavedSettings,
+	type StoredModelEntry,
+	type StoredSettings
+} from './review-settings-schema.js';
 
-const runtimeSchema = z.object({
-	temperature: z.number().min(0).max(2).nullable().optional(),
-	maxOutputTokens: z.number().int().positive().max(1_000_000).optional(),
-	topP: z.number().gt(0).max(1).optional()
-});
-
-const modelEntrySchema = z.object({
-	provider: z.literal('openai-compatible').optional(),
-	/** Hosted provider id; the entry uses that provider's endpoint and connected key. */
-	source: z.string().max(40).optional(),
-	id: z.string().max(100).optional(),
-	label: z.string().min(1).max(100),
-	model: z.string().min(1).max(200),
-	baseUrl: z.string().max(500).optional(),
-	apiKey: z.string().max(500).optional(),
-	efforts: z.array(z.enum(REASONING_EFFORTS)).max(8).optional(),
-	defaultEffort: z.enum(REASONING_EFFORTS).optional(),
-	contextWindow: z.number().int().positive().max(100_000_000).optional(),
-	runtime: runtimeSchema.optional()
-});
-
-/**
- * The providers switched off in Settings, by `providerKey`, kept deduplicated and sorted. A key no installed CLI or
- * connected provider has yet is kept: the CLI may be installed again, and its switch should still hold.
- */
-const disabledProvidersSchema = z
-	.array(
-		z
-			.string()
-			.max(200)
-			.refine((key) => parseProviderKey(key) !== null, 'Expected cli:<agent id> or opencode:<provider id>.')
-	)
-	.max(200)
-	.transform((keys) => [...new Set(keys)].sort());
-
-export const reviewSettingsSchema = z.object({
-	baseUrl: z.string().max(500).optional(),
-	apiKey: z.string().max(500).optional(),
-	models: z.array(modelEntrySchema).max(50).optional(),
-	sharedModelId: z.string().max(100).nullable().optional(),
-	orchestratorModelId: z.string().max(100).nullable().optional(),
-	specialistModelId: z.string().max(100).nullable().optional(),
-	verifierModelId: z.string().max(100).nullable().optional(),
-	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
-	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
-	verifierEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
-	subagentCap: z.literal(SUBAGENT_CAPS).optional(),
-	tokenBudget: z.enum(TOKEN_BUDGETS).optional(),
-	reportLowSeverity: z.boolean().optional(),
-	disabledProviders: disabledProvidersSchema.optional(),
-	hiddenModels: hiddenModelsSchema.optional(),
-	modelPolicy: modelPolicySchema.optional(),
-	maxFiles: z.number().int().positive().max(200).optional(),
-	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
-	maxFileChars: z.number().int().positive().max(200_000).optional()
-});
-
-export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
-
-/** A saved entry, which may be one from before the Codex CLI that used Recoder's own ChatGPT sign-in. */
-const savedEntrySchema = modelEntrySchema.extend({ provider: z.enum(SAVED_ENTRY_PROVIDERS).optional() });
-
-/**
- * Saved files from before models were just Review and a second model carried per-role picks, files from before
- * subagents carried a specialist dispatch level, and files from before the Codex CLI carried ChatGPT entries.
- */
-const storedFileSchema = reviewSettingsSchema.extend({
-	models: z.array(savedEntrySchema).max(50).optional(),
-	subagentCap: z.union([z.literal(SUBAGENT_CAPS), z.number().int().nonnegative()]).optional(),
-	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional(),
-	roles: z.record(z.string().max(40), z.string().max(200)).optional(),
-	roleEfforts: z.record(z.string().max(40), z.enum(REASONING_EFFORTS)).optional(),
-	applyToSpecialists: z.boolean().optional(),
-	specialistDispatch: z.enum(['low', 'medium', 'high']).optional()
-});
-
-type StoredFile = z.infer<typeof storedFileSchema>;
-
-/** The subagent cap each old dispatch level stands for. */
-const CAP_FOR_DISPATCH: Record<NonNullable<StoredFile['specialistDispatch']>, SubagentCap> = {
-	low: 0,
-	medium: 3,
-	high: 8
-};
-
-/** Whether the saved cap is one that no longer exists (2 or 4, from before the caps were 3, 8 and 12). */
-function hasRetiredCap(data: StoredFile): boolean {
-	return data.subagentCap !== undefined && migrateSubagentCap(data.subagentCap) !== data.subagentCap;
-}
-
-/** Whether a saved file still holds fields that `migrateLegacy` rewrites, so it is saved again in the new shape. */
-function hasLegacyFields(data: StoredFile): boolean {
-	return (
-		hasRetiredCap(data) ||
-		!!data.models?.some(isChatGptSignInEntry) ||
-		[data.roles, data.roleEfforts, data.applyToSpecialists, data.specialistDispatch].some(
-			(field) => field !== undefined
-		)
-	);
-}
-
-/**
- * Old per-role picks become one second-model pick: correctness (always ran) speaks for them all.
- * An old dispatch level becomes the subagent cap it stands for, and a cap that no longer exists the nearest one.
- * A ChatGPT entry leaves the list, and each pick of one names the same model through the Codex CLI.
- */
-function migrateLegacy(data: StoredFile): ReviewSettingsInput {
-	const { roles, roleEfforts, applyToSpecialists, specialistDispatch, subagentCap, models, ...rest } = data;
-	const next: ReviewSettingsInput = { ...rest };
-
-	if (subagentCap !== undefined) next.subagentCap = migrateSubagentCap(subagentCap);
-	else if (specialistDispatch) next.subagentCap = CAP_FOR_DISPATCH[specialistDispatch];
-
-	if (next.orchestratorEffort === undefined && roleEfforts?.correctness)
-		next.orchestratorEffort = roleEfforts.correctness;
-
-	if (!applyToSpecialists) {
-		if (!next.specialistModelId && roles?.correctness) next.specialistModelId = roles.correctness;
-		if (next.specialistEffort === undefined && roleEfforts?.correctness)
-			next.specialistEffort = roleEfforts.correctness;
-	}
-
-	return { ...next, ...moveChatGptModels(next, models) };
-}
-
-/** A saved model entry: the settings patch's entry, always with an id. */
-export interface StoredModelEntry extends ModelEntryPatch {
-	id: string;
-}
-
-interface StoredSettings extends Omit<ModelSettingsPatch, 'models'> {
-	/** API keys for hosted providers, by provider id. */
-	connections?: Record<string, { apiKey: string }>;
-	models?: StoredModelEntry[];
-}
+export { parseSavedReviewSettings, reviewSettingsSchema } from './review-settings-schema.js';
+export type { ReviewSettingsInput, StoredModelEntry } from './review-settings-schema.js';
 
 /** Reviewer model settings saved from the UI. They win over process env; unset fields fall back to env. */
 let localOverrides: StoredSettings = {};
 
-const sharedStoredSchema = reviewSettingsSchema.extend({
-	models: z.array(savedEntrySchema.extend({ id: z.string().min(1).max(100) })).optional(),
-	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional()
-});
-
-/**
- * The shared settings as stored, their keys sealed or not, in the current shape: a ChatGPT entry saved before the
- * Codex CLI moves as in a file.
- */
-function sharedStoredForm(): StoredSettings {
-	const { models, ...rest } = sharedStoredSchema.parse(readSharedSetting('review-settings') ?? {});
-
-	return { ...rest, ...moveChatGptModels(rest, models) };
-}
-
-function sharedOverrides(): StoredSettings {
-	return openSettingsKeys(sharedStoredForm());
-}
-
 function currentOverrides(): StoredSettings {
-	return sharedSettingsActive() ? sharedOverrides() : localOverrides;
+	return sharedSettingsActive() ? openSettingsKeys(sharedStoredForm()) : localOverrides;
 }
 
 function replaceOverrides(settings: StoredSettings): void {
@@ -219,43 +66,6 @@ function persist(): void {
 	} catch (err) {
 		console.warn('[settings] could not persist review config', err instanceof Error ? err.message : err);
 	}
-}
-
-/**
- * What a saved settings file holds, converted to the current shape with its keys opened, and whether it was in an
- * older one: before the shapes above, or before keys were sealed.
- */
-interface SavedSettings {
-	settings: StoredSettings;
-	legacy: boolean;
-}
-
-/** Parse a saved settings document and migrate its model identifiers and retired configuration fields. */
-export function parseSavedReviewSettings(raw: unknown): SavedSettings {
-	const parsed = storedFileSchema.parse(raw);
-	const { apiKey, models, ...rest } = migrateLegacy(parsed);
-
-	const normalized: StoredSettings = {
-		...rest,
-		...(parsed.connections ? { connections: parsed.connections } : {}),
-		models: models?.map((e) => ({
-			provider: e.provider,
-			...(e.source ? { source: e.source } : {}),
-			id: e.id ?? crypto.randomUUID(),
-			label: e.label,
-			model: e.model,
-			...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
-			...(e.apiKey ? { apiKey: e.apiKey } : {}),
-			...(e.efforts?.length ? { efforts: e.efforts } : {}),
-			...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
-			...(e.contextWindow ? { contextWindow: e.contextWindow } : {}),
-			...(e.runtime && Object.keys(e.runtime).length ? { runtime: e.runtime } : {})
-		}))
-	};
-
-	const stored = apiKey ? { ...normalized, apiKey } : normalized;
-
-	return { settings: openSettingsKeys(stored), legacy: hasLegacyFields(parsed) || hasUnsealedKey(stored) };
 }
 
 function readSavedSettings(): SavedSettings | null {
@@ -340,10 +150,7 @@ export function setConnection(providerId: string, apiKey: string | null): Stored
  * stored key and new entries store what was given; hosted-provider entries use the provider's
  * connected key instead.
  */
-function mergeModelEntry(
-	entry: z.infer<typeof modelEntrySchema>,
-	kept: StoredModelEntry | undefined
-): StoredModelEntry {
+function mergeModelEntry(entry: ReviewEntryInput, kept: StoredModelEntry | undefined): StoredModelEntry {
 	const next: StoredModelEntry = {
 		provider: entry.provider ?? kept?.provider ?? 'openai-compatible',
 		id: entry.id ?? crypto.randomUUID(),
@@ -388,6 +195,26 @@ function dropDeletedRoutes(settings: StoredSettings, models: StoredModelEntry[])
 	if (!keep(settings.verifierModelId)) delete settings.verifierModelId;
 }
 
+/**
+ * Merge a patch's context windows over the saved ones: a model set again overwrites its window and `null` removes
+ * its key. A `null` that a saved document kept (it is only ever valid in a patch) counts as unset.
+ */
+function mergeContextWindows(
+	saved: Record<string, number | null> | undefined,
+	patch: Record<string, number | null>
+): Record<string, number> {
+	const windows: Record<string, number> = {};
+
+	for (const [id, tokens] of Object.entries(saved ?? {})) if (typeof tokens === 'number') windows[id] = tokens;
+
+	for (const [id, tokens] of Object.entries(patch)) {
+		if (tokens === null) delete windows[id];
+		else windows[id] = tokens;
+	}
+
+	return windows;
+}
+
 /** Merge a validated patch over the stored settings and persist. */
 export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	const clean: StoredSettings = { ...currentOverrides() };
@@ -418,6 +245,8 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.disabledProviders !== undefined) clean.disabledProviders = patch.disabledProviders;
 	if (patch.hiddenModels !== undefined) clean.hiddenModels = patch.hiddenModels;
 	if (patch.modelPolicy !== undefined) clean.modelPolicy = patch.modelPolicy;
+	if (patch.contextWindows !== undefined)
+		clean.contextWindows = mergeContextWindows(clean.contextWindows, patch.contextWindows);
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
 	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;
@@ -492,4 +321,15 @@ export function hiddenModelIds(): string[] {
 /** Who picks the models members run on: the saved policy, else each member picks. */
 export function effectiveModelPolicy(): ModelPolicy {
 	return currentOverrides().modelPolicy ?? { kind: 'choose' };
+}
+
+/** The context windows the user set, by model id; empty when none is set. */
+export function effectiveContextWindows(): Record<string, number> {
+	const saved = currentOverrides().contextWindows;
+
+	if (!saved) return {};
+
+	return Object.fromEntries(
+		Object.entries(saved).filter((entry): entry is [string, number] => typeof entry[1] === 'number')
+	);
 }
