@@ -12,12 +12,12 @@ import { ChevronDown } from 'lucide-react';
 
 import type { PullFilter } from '@/lib/pulls/types';
 
-/** The heading each filter gives the list, and its name in the menu. */
-const FILTERS: { id: PullFilter; heading: string; label: string }[] = [
-	{ id: 'all', heading: 'Open pull requests', label: 'All open' },
-	{ id: 'needs-review', heading: 'Needs review', label: 'Needs review' },
-	{ id: 'bugs', heading: 'With bugs', label: 'With bugs' },
-	{ id: 'ready', heading: 'Ready to merge', label: 'Ready to merge' }
+/** The name each filter has, as the list's heading and in the menu alike. */
+const FILTERS: { id: PullFilter; heading: string }[] = [
+	{ id: 'all', heading: 'Open pull requests' },
+	{ id: 'needs-review', heading: 'Needs review' },
+	{ id: 'bugs', heading: 'With bugs' },
+	{ id: 'ready', heading: 'Ready to merge' }
 ];
 
 interface PullFilterMenuProps {
@@ -47,10 +47,10 @@ export function PullFilterMenu({ filter, counts, onChange }: PullFilterMenuProps
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className="w-[220px]">
 				<DropdownMenuRadioGroup value={filter} onValueChange={choose}>
-					{FILTERS.map(({ id, label }) => (
+					{FILTERS.map(({ id, heading }) => (
 						<DropdownMenuRadioItem key={id} value={id}>
 							<span className="flex items-center justify-between gap-3">
-								{label}
+								{heading}
 								<span className="tabular text-fg-faint">{counts[id]}</span>
 							</span>
 						</DropdownMenuRadioItem>

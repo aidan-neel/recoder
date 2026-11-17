@@ -410,9 +410,24 @@
 .model-provider[data-off] .settings-row-text {
 	opacity: 0.55;
 }
+/*
+ * Under a model provider's row the windows sit side by side in equal columns, from where the row's text starts
+ * to where its switch ends, in the quieter meta size: they read as that provider's own, not as more providers.
+ * Too narrow for three, they wrap.
+ */
 .usage-windows[data-compact] {
-	gap: 10px;
-	padding-bottom: 12px;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	gap: 12px 20px;
+	padding: 2px 0 14px;
+}
+.usage-windows[data-compact] .usage-window-label {
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.usage-windows[data-compact] .usage-window-used {
+	color: var(--text-secondary);
 }
 
 /* Usage: each window's name and share used over its track, the reset under it. */

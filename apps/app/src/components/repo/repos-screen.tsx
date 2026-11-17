@@ -1,124 +1,184 @@
 'use client';
 
-import { Button, Card, DURATION, EASE_OUT, SkeletonRows, useMotionVariants } from '@recoder/ui';
+import {
+	Button,
+	Card,
+	DURATION,
+	EASE_IN,
+	EASE_OUT,
+	RowButton,
+	Skeleton,
+	StatusNotice,
+	useMotionVariants
+} from '@recoder/ui';
 import { Plus } from 'lucide-react';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
-import Link from 'next/link';
-import type { ReactNode } from 'react';
 
-import { useReposPage, type RepoListRow } from '@/lib/repo/use-repos-page';
+import type { FleetScope } from '@/lib/repo/fleet';
+import { useReposPage, type ReposPageView } from '@/lib/repo/use-repos-page';
 
-import { ForgeTile } from '@/components/common/forge-tile';
+import { FindField } from '@/components/common/find-field';
+import { Page } from '@/components/common/page';
+import { PageTabs } from '@/components/common/page-tabs';
 import { RepoBrowser } from '@/components/connections/repo-browser';
 import { SectionNotice } from '@/components/settings/section-notice';
-import { SettingsRow } from '@/components/settings/settings-group';
-import { SettingsPage } from '@/components/settings/settings-page';
-import { SETTINGS_ROW_HEIGHT } from '@/components/settings/settings-skeleton';
 
-/** A row folds away as it leaves the list and unfolds as it joins or Undo brings it back; the rows under it follow. */
-const FOLD: Variants = {
-	folded: { height: 0, opacity: 0, transition: { duration: DURATION.disclose, ease: EASE_OUT } },
-	open: { height: 'auto', opacity: 1, transition: { duration: DURATION.disclose, ease: EASE_OUT } }
+import { FleetTile } from './fleet-tile';
+
+/** A tile fades out as its repository leaves the page, and in as one joins or Undo brings it back. */
+const TILE: Variants = {
+	gone: { opacity: 0, scale: 0.97, transition: { duration: DURATION.menuOut, ease: EASE_IN } },
+	shown: { opacity: 1, scale: 1, transition: { duration: DURATION.disclose, ease: EASE_OUT } }
 };
 
-/** Widths for the name and detail bars of a loading row, so the rows do not look stamped. */
-const SKELETON_WIDTHS = [
-	['132px', '240px'],
-	['104px', '210px'],
-	['150px', '260px']
-] as const;
+/** How many placeholder tiles stand in while the tracked repositories load. */
+const LOADING_TILES = 3;
 
-/** One item of the list, folding in and out. */
-function Fold({ children }: { children: ReactNode }) {
-	const variants = useMotionVariants(FOLD);
+/** What the page says with no tile to show: the filter text matched nothing, or nothing is under the scope. */
+function emptyTitle(scope: FleetScope, query: string): string {
+	if (query) return `No repository matches “${query}”`;
+	if (scope === 'needs-you') return 'Nothing needs you';
+	if (scope === 'quiet') return 'Every repository has something waiting';
 
-	return (
-		<motion.div className="repo-fold" variants={variants} initial="folded" animate="open" exit="folded">
-			{children}
-		</motion.div>
-	);
+	return 'Auto review watches every repository';
 }
 
-/** The line under a repository's name: where it lives, its default branch, and its open pull requests. */
-function RepoDetail({ row }: { row: RepoListRow }) {
+/** A tile's outline while the repositories load: a name, a figure, the bars and the last line. */
+function TileSkeleton() {
 	return (
-		<>
-			{row.place}
-			<span className="meta-sep mono">{row.defaultBranch}</span>
-			{row.open === null ? null : <span className="meta-sep tabular">{row.open} open</span>}
-		</>
-	);
-}
-
-/** A tracked repository: its name opens its page, and Stop tracking takes it off the list with Undo. */
-function RepoRow({ row, onStop }: { row: RepoListRow; onStop: (row: RepoListRow) => void }) {
-	return (
-		<SettingsRow
-			leading={<ForgeTile provider={row.provider} />}
-			name={
-				<Link href={row.href} prefetch className="repos-name">
-					{row.owner ? <span className="repos-owner">{row.owner} / </span> : null}
-					{row.name}
-					{row.alert ? <span className="repos-alert" role="img" aria-label="Has high-severity bugs" /> : null}
-				</Link>
-			}
-			detail={<RepoDetail row={row} />}
-		>
-			<Button variant="ghost" aria-label={`Stop tracking ${row.name}`} onClick={() => onStop(row)}>
-				Stop tracking
-			</Button>
-		</SettingsRow>
-	);
-}
-
-/** Every tracked repository by name, or what to do with none. */
-function RepoList({ rows, onStop }: { rows: RepoListRow[]; onStop: (row: RepoListRow) => void }) {
-	return (
-		<Card>
-			<AnimatePresence initial={false}>
-				{rows.length === 0 ? (
-					<Fold key="empty">
-						<SettingsRow name="No repositories yet" detail="Add one to see its pull requests and review them here." />
-					</Fold>
-				) : (
-					rows.map((row) => (
-						<Fold key={row.id}>
-							<RepoRow row={row} onStop={onStop} />
-						</Fold>
-					))
-				)}
-			</AnimatePresence>
+		<Card className="fleet-tile" aria-hidden>
+			<Skeleton className="h-[18px] w-[132px]" />
+			<Skeleton className="fleet-figures-skeleton" />
+			<Skeleton className="fleet-bars-skeleton" />
+			<div className="fleet-foot">
+				<Skeleton className="h-4 w-[210px]" />
+			</div>
 		</Card>
 	);
 }
 
+/** The last tile: it opens the dialog that tracks another repository. */
+function ConnectTile({ onConnect }: { onConnect: () => void }) {
+	return (
+		<div className="fleet-connect">
+			<span className="fleet-connect-mark" aria-hidden>
+				<Plus />
+			</span>
+			<RowButton cover className="fleet-connect-name" onClick={onConnect}>
+				Connect a repository
+			</RowButton>
+			<span className="fleet-connect-detail">From GitHub, GitLab, or a URL</span>
+		</div>
+	);
+}
+
+/** The scopes as tabs with how many repositories each holds, and the days the tiles cover. */
+function FleetHead({ view }: { view: ReposPageView }) {
+	const tabs = view.scopes.map((scope) => ({
+		...scope,
+		tone: scope.id === 'needs-you' ? ('bugs' as const) : undefined
+	}));
+
+	return (
+		<div className="fleet-head">
+			<PageTabs label="Repositories" tabs={tabs} current={view.scope} />
+			{view.days === null ? null : <span className="fleet-window">Last {view.days} days</span>}
+		</div>
+	);
+}
+
 /**
- * Repositories: every tracked repository, each opening its page, with Add repository in the bar to track more from a
- * signed-in forge or by URL, and Stop tracking on each row.
+ * The tiles in a grid. A repository that is stopped fades before the others close the gap, and one that is added
+ * or brought back by Undo fades in; another scope or other filter text swaps the grid at once, like any list.
+ */
+function FleetGrid({ view }: { view: ReposPageView }) {
+	const variants = useMotionVariants(TILE);
+	const unfiltered = view.scope === 'all' && view.query.trim() === '';
+
+	return (
+		<div className="fleet-grid" key={`${view.scope}\n${view.query}`}>
+			<AnimatePresence initial={false}>
+				{view.tiles.map((tile) => (
+					<motion.div
+						key={tile.id}
+						className="fleet-cell"
+						variants={variants}
+						initial="gone"
+						animate="shown"
+						exit="gone"
+					>
+						<FleetTile tile={tile} onStop={view.stop} onRetry={view.retryOverviews} />
+					</motion.div>
+				))}
+			</AnimatePresence>
+			{unfiltered ? <ConnectTile onConnect={() => view.setAdding(true)} /> : null}
+		</div>
+	);
+}
+
+/** The scopes over the tiles, or what the scope and the filter text leave to say with no tile to show. */
+function Fleet({ view }: { view: ReposPageView }) {
+	const query = view.query.trim();
+	const nothing = view.tiles.length === 0 && (view.scope !== 'all' || query !== '');
+
+	return (
+		<>
+			{view.tracked > 0 ? <FleetHead view={view} /> : null}
+			{nothing ? (
+				<div className="page-notice">
+					<StatusNotice variant="section" heading="h2" title={emptyTitle(view.scope, query)} />
+				</div>
+			) : (
+				<FleetGrid view={view} />
+			)}
+		</>
+	);
+}
+
+/**
+ * Repositories: every tracked repository as a tile that opens its page, those with something to do first, under
+ * scopes that narrow them. The bar filters by name and adds a repository from a signed-in forge or by URL.
  */
 export function ReposScreen() {
 	const view = useReposPage();
 
 	return (
-		<SettingsPage
-			name="Repositories"
+		<Page
+			start={<h1 className="page-bar-title">Repositories</h1>}
 			end={
-				<Button variant="primary" onClick={() => view.setAdding(true)}>
-					<Plus aria-hidden />
-					Add repository
-				</Button>
+				<>
+					{view.tracked > 1 ? (
+						<FindField
+							className="fleet-find"
+							label="Filter repositories"
+							placeholder="Filter"
+							query={view.query}
+							onQueryChange={view.setQuery}
+						/>
+					) : null}
+					<Button variant="primary" className="fleet-add" onClick={() => view.setAdding(true)}>
+						<Plus aria-hidden />
+						Add repository
+					</Button>
+				</>
 			}
 		>
-			{view.phase === 'loading' ? (
-				<Card aria-hidden>
-					<SkeletonRows count={3} height={SETTINGS_ROW_HEIGHT} widths={SKELETON_WIDTHS} rowClassName="settings-row" />
-				</Card>
-			) : null}
-			{view.phase === 'failed' ? (
-				<SectionNotice what="Repositories" error={view.error} retry={{ status: 'idle', run: view.retry }} />
-			) : null}
-			{view.phase === 'ready' ? <RepoList rows={view.rows} onStop={view.stop} /> : null}
+			<div className="page-scroll">
+				<div className="fleet">
+					{view.phase === 'loading' ? (
+						<div className="fleet-grid">
+							{Array.from({ length: LOADING_TILES }, (_, index) => (
+								<TileSkeleton key={index} />
+							))}
+						</div>
+					) : null}
+					{view.phase === 'failed' ? (
+						<SectionNotice what="Repositories" error={view.error} retry={{ status: 'idle', run: view.retry }} />
+					) : null}
+					{view.phase === 'ready' ? <Fleet view={view} /> : null}
+				</div>
+			</div>
 			<RepoBrowser open={view.adding} onOpenChange={view.setAdding} />
-		</SettingsPage>
+		</Page>
 	);
 }

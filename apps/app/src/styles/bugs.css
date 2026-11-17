@@ -15,6 +15,10 @@
 .reading-column[data-width='narrow'] {
 	max-width: 800px;
 }
+/* The Review tab reads in one 800px column on the header's gutter, so a bug's controls end where its evidence does. */
+.reading-column[data-width='bugs'] {
+	max-width: calc(800px + 2 * var(--page-gutter));
+}
 
 .bug-item {
 	border-bottom: 1px solid var(--line-subtle);
@@ -196,6 +200,10 @@
 	color: var(--text-muted);
 	white-space: pre;
 }
+.proof-output:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--focus-color);
+	outline: none;
+}
 .proof [data-ui='code-lines'] {
 	border-radius: 0;
 	background: transparent;
@@ -263,12 +271,28 @@
 	color: var(--text-faint);
 	font-size: var(--font-size-meta);
 }
-.bug-actions-end > span {
-	margin-right: 6px;
-}
 .bug-actions-end [aria-pressed='true'] {
 	background: var(--bg-selected);
 	color: var(--text-primary);
+}
+/* The post button keeps one width for both its labels, so the buttons after it never move when a bug is posted. */
+.bug-post {
+	width: 148px;
+}
+/* The link to the posted comment comes after the last action, behind a hairline. */
+.bug-posted-link {
+	position: relative;
+	margin-left: 9px;
+	color: var(--accent-text);
+}
+.bug-posted-link::before {
+	position: absolute;
+	top: 6px;
+	bottom: 6px;
+	left: -5px;
+	width: 1px;
+	background: var(--line-card);
+	content: '';
 }
 .bug-ask {
 	display: flex;
@@ -435,4 +459,33 @@
 }
 .clean-figure-of {
 	color: var(--text-faint);
+}
+
+/*
+ * The previous review's findings, under the steps of the review that runs now: a label line with the commit and
+ * the time, then the findings with their badges and chevrons stepped back so they never read as current.
+ */
+.bugs-previous {
+	display: flex;
+	flex-direction: column;
+	margin-top: 18px;
+}
+.bugs-previous-head {
+	display: flex;
+	min-height: 32px;
+	align-items: center;
+	gap: 8px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.bugs-previous-note {
+	margin-left: auto;
+	white-space: nowrap;
+}
+.bug-item[data-stale] .bug-title {
+	color: var(--text-secondary);
+}
+.bug-item[data-stale] .bug-facts,
+.bug-item[data-stale] .bug-head > svg {
+	opacity: 0.6;
 }

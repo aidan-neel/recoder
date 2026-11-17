@@ -9,6 +9,7 @@ import { plural } from '@/lib/shell/format';
 import { AUTOMATIONS_HREF, GUIDELINES_HREF } from '@/lib/shell/routes';
 
 import { RepoEmpty, RepoSection } from './repo-section';
+import { ReviewBar } from './review-bar';
 
 /** A bar a day: the reviews in grey, the part that found a bug in the high-severity colour. A tip names the day. */
 function ReviewChart({ chart }: { chart: ReviewChartView }) {
@@ -40,17 +41,7 @@ function ReviewChart({ chart }: { chart: ReviewChartView }) {
 							/>
 						}
 					>
-						<span className="repo-bar-slot">
-							<span
-								className="repo-bar"
-								data-empty={bar.reviews === 0 || undefined}
-								style={{ height: `${bar.height * 100}%` }}
-							>
-								{bar.withBugs > 0 ? (
-									<span className="repo-bar-bugs" style={{ height: `${bar.bugShare * 100}%` }} />
-								) : null}
-							</span>
-						</span>
+						<ReviewBar bar={bar} />
 					</Tooltip>
 				))}
 				{chart.empty ? <span className="repo-chart-empty">{chart.empty}</span> : null}

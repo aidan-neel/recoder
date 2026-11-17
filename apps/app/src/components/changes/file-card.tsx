@@ -5,9 +5,10 @@ import { Button, Checkbox, Pill } from '@recoder/ui';
 import { ChevronRight } from 'lucide-react';
 import { memo, useId, useRef, useState } from 'react';
 
+import { openFound } from '@/lib/bugs/bug-lists';
 import type { BugView } from '@/lib/bugs/types';
 import { useNear } from '@/lib/changes/use-near';
-import { plural } from '@/lib/shell/format';
+import { findingsLabel, plural } from '@/lib/shell/format';
 
 import { DiffStat } from '@/components/common/diff-stat';
 
@@ -67,6 +68,7 @@ export const FileCard = memo(function FileCard({ file, viewed, onToggleViewed, b
 	const bodyId = useId();
 	const viewedId = useId();
 	const large = lineCount(file) > LARGE_LINES;
+	const found = openFound(bugs);
 	const [open, setOpen] = useState(!viewed && !large);
 	const [wasViewed, setWasViewed] = useState(viewed);
 
@@ -97,7 +99,9 @@ export const FileCard = memo(function FileCard({ file, viewed, onToggleViewed, b
 				</button>
 				<DiffStat additions={file.additions} deletions={file.deletions} />
 				<div className="file-head-end">
-					{bugs.length > 0 ? <Pill tone="high">{plural(bugs.length, 'bug')}</Pill> : null}
+					{bugs.length > 0 ? (
+						<Pill tone={found.bugs > 0 ? 'high' : 'low'}>{findingsLabel(found.bugs, found.suggestions)}</Pill>
+					) : null}
 					<label className="file-viewed" htmlFor={viewedId}>
 						<Checkbox id={viewedId} checked={viewed} onCheckedChange={() => onToggleViewed(file.path)} />
 						Viewed

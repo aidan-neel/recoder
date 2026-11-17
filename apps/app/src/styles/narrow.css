@@ -1,0 +1,269 @@
+/* ───────── Narrow windows: the sidebar opens over the page, and each screen stacks what it laid side by side ───────── */
+
+/*
+ * Under 1024px the sidebar leaves the grid and becomes a drawer: it slides in over a scrim from the left edge and
+ * the page keeps the whole width. `data-drawer` opens it; the saved `data-sidebar` choice is for wide windows only,
+ * so a narrow window always starts with the page. Keep the width in step with NARROW_QUERY in lib/shell/chrome.ts.
+ */
+@media (max-width: 1023px) {
+	.app-frame,
+	.app-frame[data-sidebar='closed'] {
+		grid-template-columns: minmax(0, 1fr);
+		transition: none;
+	}
+	.app-frame .sidebar,
+	.app-frame[data-sidebar='closed'] .sidebar {
+		position: fixed;
+		z-index: 70;
+		inset: 0 auto 0 0;
+		width: min(304px, calc(100vw - 48px));
+		translate: -100% 0;
+		visibility: hidden;
+		transition:
+			translate var(--dur-sidebar) var(--ease-sidebar),
+			visibility 0s linear var(--dur-sidebar);
+	}
+	.app-frame[data-drawer='open'] .sidebar {
+		box-shadow: var(--shadow-menu);
+		translate: 0 0;
+		visibility: visible;
+		transition:
+			translate var(--dur-sidebar) var(--ease-sidebar),
+			visibility 0s linear;
+	}
+	.sidebar [data-ui='resize-handle'] {
+		display: none;
+	}
+	.sidebar-scrim {
+		position: fixed;
+		z-index: 69;
+		display: block;
+		inset: 0;
+		background: var(--scrim);
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity var(--dur-sidebar) ease-out;
+	}
+	.app-frame[data-drawer='open'] .sidebar-scrim {
+		opacity: 1;
+		pointer-events: auto;
+	}
+	/* The button that opens the drawer is always in the bar. */
+	.sidebar-reveal,
+	.app-frame[data-sidebar='closed'] .sidebar-reveal {
+		width: var(--size-icon-md);
+		margin-right: 0;
+		margin-left: -6px;
+		opacity: 1;
+		transition: none;
+	}
+
+	/*
+	 * The tab row keeps the tabs and the tab's buttons on one line; the review's facts, which no longer fit beside
+	 * them, drop to a line of their own under it.
+	 */
+	.pull-tabs-row {
+		height: auto;
+		min-height: 44px;
+		flex-wrap: wrap;
+		gap: 0 10px;
+	}
+	.pull-tools {
+		display: contents;
+	}
+	.pull-tools > :first-child:not(.review-facts),
+	.pull-tools > .review-facts + * {
+		margin-left: auto;
+	}
+	.pull-tools > .review-facts {
+		flex-basis: 100%;
+		flex-wrap: wrap;
+		order: 1;
+		padding-bottom: 12px;
+	}
+}
+
+/*
+ * Under 760px two columns no longer fit side by side: the diff keeps the page and the file tree steps out, and
+ * the Summary's Ask pane moves under the reading, the two scrolling as one.
+ */
+@media (max-width: 759px) {
+	.changes {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.changes-side {
+		display: none;
+	}
+	.summary {
+		flex-direction: column;
+		overflow-y: auto;
+	}
+	.summary > .reading {
+		flex: none;
+		overflow: visible;
+	}
+	.summary-column {
+		padding-right: var(--page-gutter);
+	}
+	.fleet {
+		padding: 20px var(--page-gutter) 48px;
+	}
+	.ask-pane {
+		width: 100%;
+		min-height: 420px;
+		border-top: 1px solid var(--line-subtle);
+		border-left: 0;
+	}
+	/* A banner's actions take a line of their own under its words. */
+	[data-ui='status-notice'][data-variant='banner'] [data-ui='status-notice-body'] {
+		flex-wrap: wrap;
+	}
+	[data-ui='status-notice'][data-variant='banner'] [data-ui='status-notice-text'] {
+		min-width: 0;
+		flex: 1 1 60%;
+	}
+	[data-ui='status-notice'][data-variant='banner'] [data-ui='status-notice-actions'] {
+		flex-basis: 100%;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.app-frame .sidebar,
+	.sidebar-scrim {
+		transition: none;
+	}
+}
+
+/*
+ * Under 640px, a phone: a 16px gutter, the bar keeps the last two crumbs and icon actions, a list row stacks its
+ * title, its facts and its one fact, and the pull request's strip and tab tools stack too. Nothing is cut off.
+ */
+@media (max-width: 639px) {
+	.page {
+		--page-gutter: 16px;
+	}
+	.crumbs > :not(:nth-last-child(-n + 3)) {
+		display: none;
+	}
+	.page-bar-side[data-side='end'] {
+		min-width: 0;
+		flex-shrink: 1;
+	}
+	/* The bar's links keep their icons and their names for assistive tech; the words give way. */
+	.pull-forge-link,
+	.token-usage-trigger,
+	.fleet-add {
+		width: var(--size-icon-md);
+		justify-content: center;
+		gap: 0;
+		padding: 0;
+		font-size: 0;
+	}
+	.pulls-find,
+	.fleet-find {
+		width: auto;
+		min-width: 0;
+		flex: 1;
+	}
+	.pulls-find [data-ui='keycap'],
+	.fleet-find [data-ui='keycap'] {
+		display: none;
+	}
+	/* The Repositories page: the scopes keep the line, and the days the tiles cover go without saying. */
+	.fleet-window {
+		display: none;
+	}
+
+	/* A list row: the mark, the title (which wraps) with the menu at its end, the meta line, then fact and size. */
+	.pull-row {
+		align-items: start;
+		grid-template-columns: 16px minmax(0, 1fr) var(--size-icon-md);
+		gap: 8px 12px;
+		padding: 12px 4px 12px 12px;
+	}
+	.pull-row > .pull-mark {
+		margin-top: 2px;
+	}
+	.pull-row-title {
+		flex-wrap: wrap;
+		gap: 0 8px;
+	}
+	.pull-row-title [data-ui='row-button'][data-cover] {
+		overflow: visible;
+		white-space: normal;
+	}
+	.pull-row-status {
+		grid-row: 2;
+		grid-column: 2;
+		justify-content: flex-start;
+	}
+	/* A ghost button has no box, so its words start where the pills above and below do. */
+	.pull-row-status [data-ui='button'][data-variant='ghost'] {
+		margin-left: -9px;
+	}
+	.pull-row .diff-stat {
+		grid-row: 2;
+		grid-column: 2 / 4;
+		align-self: center;
+		justify-self: end;
+		padding-right: 8px;
+	}
+	.pull-row-menu {
+		grid-row: 1;
+		grid-column: 3;
+		margin-top: -4px;
+	}
+	.pull-row-menu [data-ui='button'] {
+		opacity: 1;
+	}
+	.pull-row:has([data-row-link]:focus-visible)::after {
+		top: 12px;
+	}
+
+	/*
+	 * The pull request's title wraps over its buttons, which take a line of their own with the merge button filling
+	 * it; the checks and the conflicts take the line after the badges.
+	 */
+	.pull-title-row {
+		flex-wrap: wrap;
+		row-gap: 10px;
+	}
+	.pull-head .page-title {
+		display: block;
+		flex-basis: 100%;
+	}
+	.pull-head .page-title-text {
+		margin-right: 8px;
+		white-space: normal;
+	}
+	.pull-actions {
+		width: 100%;
+		margin-left: 0;
+		padding-left: 0;
+	}
+	.pull-actions > [data-ui='split-button']:last-child,
+	.pull-actions > [data-ui='split-button']:last-child > [data-ui='button']:first-child {
+		flex: 1;
+	}
+	.merge-facts {
+		flex-basis: 100%;
+	}
+	.merge-facts::before {
+		content: none;
+	}
+
+	/* The tab's buttons take a line of their own under the facts, sharing its width. */
+	.pull-tools > [data-ui='button'],
+	.pull-tools > [data-ui='split-button'],
+	.pull-tools > [data-ui='split-button'] > [data-ui='button']:first-child {
+		flex: 1;
+	}
+	.pull-tools > [data-ui='button'],
+	.pull-tools > [data-ui='split-button'] {
+		order: 2;
+		margin: 0 0 12px;
+	}
+	.pull-tools > .review-facts + * {
+		margin-left: 0;
+	}
+}

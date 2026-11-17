@@ -3,7 +3,8 @@ import type { Provider } from '@recoder/shared';
 /**
  * What one row of the pull request list says about its pull request, most
  * urgent first: a review that runs, open findings, a review that failed,
- * merge conflicts, failing checks, a draft, no review yet, commits newer than
+ * merge conflicts, failing checks, a draft, no review yet (or one a person
+ * cancelled), commits newer than
  * the review, then a clean review that can merge (`ready`) or cannot yet
  * (`reviewed`).
  */
@@ -14,7 +15,10 @@ export type PullRowStatus =
 	| { kind: 'conflicts' }
 	| { kind: 'checks-failing'; failed: number }
 	| { kind: 'draft' }
-	| { kind: 'not-reviewed' }
+	| {
+			kind: 'not-reviewed';
+			/** When a person stopped the last review, as an ISO time; null when none ran. */ cancelledAt: string | null;
+	  }
 	| { kind: 'outdated' }
 	| { kind: 'ready' }
 	| { kind: 'reviewed' };

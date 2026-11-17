@@ -57,4 +57,6 @@ export interface GuidePart {
 	paths: string[];
 	/** Open findings in the part's files. */
 	bugs: number;
+	/** How many of those are suggestions. */
+	suggestions: number;
 }

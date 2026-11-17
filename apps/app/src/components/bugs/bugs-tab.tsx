@@ -1,6 +1,7 @@
 'use client';
 
-import { Button, SkeletonRows, StatusNotice } from '@recoder/ui';
+import { Button, Pill, SkeletonRows, StatusNotice } from '@recoder/ui';
+import { Clock, GitCommitHorizontal } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type { BugsView } from '@/lib/bugs/types';
@@ -9,6 +10,7 @@ import { isLive } from '@/lib/run/run-phase';
 import { useRunView } from '@/lib/run/use-run';
 import { useKeys } from '@/lib/shell/use-keys';
 
+import { Age } from '@/components/common/age';
 import { RunBanner } from '@/components/pull/run-banner';
 
 import { BugCard } from './bug-card';
@@ -70,10 +72,48 @@ function useOpenBugs(view: BugsView): [ReadonlySet<string>, (id: string) => void
 	return [open ?? new Set<string>(), toggle];
 }
 
+interface PreviousFindingsProps {
+	view: BugsView;
+	open: ReadonlySet<string>;
+	onToggle: (id: string) => void;
+}
+
+/**
+ * The findings of the review before the one that runs now, under its steps:
+ * named as the previous review, stepped back, and with nothing to act on, so
+ * they read as what was found last time and never as current.
+ */
+function PreviousFindings({ view, open, onToggle }: PreviousFindingsProps) {
+	if (!view.previous || view.previous.open.length === 0) return null;
+
+	return (
+		<section className="bugs-previous" aria-label="Previous review">
+			<div className="bugs-previous-head">
+				<h2 className="section-label">Previous review</h2>
+				{view.previous.headSha ? (
+					<Pill face="code" icon={<GitCommitHorizontal aria-hidden />} title={view.previous.headSha}>
+						{view.previous.headSha.slice(0, 7)}
+					</Pill>
+				) : null}
+				{view.previous.reviewedAt ? (
+					<Pill icon={<Clock aria-hidden />}>
+						<Age at={view.previous.reviewedAt} form="long" />
+					</Pill>
+				) : null}
+				<span className="meta bugs-previous-note">Replaced when this review finishes</span>
+			</div>
+			{view.previous.open.map((bug) => (
+				<BugCard key={bug.id} bug={bug} view={view} open={open.has(bug.id)} onToggle={onToggle} stale />
+			))}
+		</section>
+	);
+}
+
 /**
  * The Review tab: the open findings of the newest review as cards, the first
  * one open, then what else the review reports. While a review is queued,
- * runs or is paused, its steps show as rows above them; a review that failed,
+ * runs or is paused, its steps show as rows above the last review's findings,
+ * which stay to read until the new one lands; a review that failed,
  * is out of date or is not there yet says so in a banner with its next step.
  * `j` and `k` step through the cards; Enter opens the one focus rests on.
  */
@@ -88,9 +128,12 @@ export function BugsTab() {
 
 	return (
 		<div className="reading">
-			<div className="reading-column">
+			<div className="reading-column" data-width="bugs">
 				{isLive(run.phase) ? (
-					<RunSteps run={run} />
+					<>
+						<RunSteps run={run} />
+						<PreviousFindings view={view} open={open} onToggle={toggle} />
+					</>
 				) : (
 					<RunBanner run={run} bugs={view.phase === 'ready' ? view.open.length : null} />
 				)}

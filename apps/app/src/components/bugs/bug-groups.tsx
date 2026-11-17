@@ -99,7 +99,7 @@ export function BugGroups({ view, clean }: { view: BugsView; clean: boolean }) {
 						<div key={item.id} className="bug-line">
 							<div className="bug-line-text">
 								<span className="bug-line-title">{item.title}</span>
-								<span className="meta">{item.detail}</span>
+								<span className="bug-note">{item.detail}</span>
 							</div>
 							<Pill tone="question">{UNRESOLVED_LABELS[item.kind]}</Pill>
 						</div>

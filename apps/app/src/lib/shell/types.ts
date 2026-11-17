@@ -13,8 +13,8 @@ export interface RecentReview {
 	/** Where the repository lives, for the mark beside its name; null while the repositories load. */
 	repoForge: Provider | null;
 	number: number;
-	state: 'queued' | 'running' | 'bugs' | 'clean' | 'failed';
-	/** `Reviewing`, `2 bugs`, `No bugs`, `Failed`, `Queued`. */
+	state: 'queued' | 'running' | 'bugs' | 'clean' | 'failed' | 'cancelled';
+	/** `Reviewing`, `2 bugs`, `1 suggestion`, `No bugs`, `Failed`, `Cancelled`, `Queued`. */
 	label: string;
 	/** When the review last changed, as an ISO date. */
 	updatedAt: string;

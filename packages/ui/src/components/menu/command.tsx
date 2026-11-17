@@ -1,6 +1,6 @@
 'use client';
 
-import { Command } from 'cmdk';
+import { Command, useCommandState } from 'cmdk';
 import { Search } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Dialog } from 'radix-ui';
@@ -284,6 +284,11 @@ export function CommandEmpty({
 }
 
 /** One footer hint: the keys, then what they do. */
+/** True for a key that moves between rows. */
+function isArrow(key: string): boolean {
+	return key === 'ArrowUp' || key === 'ArrowDown';
+}
+
 export interface CommandHint {
 	keys: string[];
 	label: string;
@@ -292,6 +297,7 @@ export interface CommandHint {
 /**
  * The 32px footer: keycaps and what they do (`↑↓ navigate`, `↵ open`, `esc close`),
  * and anything in `aside` at the far end (a switch that changes what Enter does).
+ * With nothing listed there is nothing to move between, so the arrow hints go.
  */
 export function CommandFooter({
 	hints,
@@ -302,6 +308,9 @@ export function CommandFooter({
 	aside?: ReactNode;
 	className?: string;
 }) {
+	const listed = useCommandState((state) => state.filtered.count);
+	const shown = listed > 0 ? hints : hints.filter((hint) => !hint.keys.some(isArrow));
+
 	return (
 		<div
 			data-ui="command-footer"
@@ -310,7 +319,7 @@ export function CommandFooter({
 				className
 			)}
 		>
-			{hints.map((hint) => (
+			{shown.map((hint) => (
 				<span key={hint.label} className="inline-flex items-center gap-[7px]">
 					<span className="inline-flex gap-[3px]">
 						{hint.keys.map((key) => (

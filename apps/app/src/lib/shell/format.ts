@@ -25,6 +25,14 @@ export function plural(count: number, word: string, many = `${word}s`): string {
 	return `${count} ${count === 1 ? word : many}`;
 }
 
+/** What a review left open, in the words every screen uses: `2 bugs`, `1 suggestion`, or `2 bugs, 1 suggestion`. */
+export function findingsLabel(bugs: number, suggestions: number): string {
+	if (suggestions === 0) return plural(bugs, 'bug');
+	if (bugs === 0) return plural(suggestions, 'suggestion');
+
+	return `${plural(bugs, 'bug')}, ${plural(suggestions, 'suggestion')}`;
+}
+
 /** A span of time in the largest whole unit: "40 seconds", "2 minutes", "3 hours", "4 days". */
 export function span(ms: number): string {
 	const seconds = Math.max(0, Math.round(ms / 1000));

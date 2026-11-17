@@ -8,7 +8,7 @@ import type { ComponentType } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import { useIntent } from '@/lib/shell/intent';
-import { AUTOMATIONS_HREF, GUIDELINES_HREF, newReviewHref, pullsHref, reposHref } from '@/lib/shell/routes';
+import { AUTOMATIONS_HREF, GUIDELINES_HREF, isLiveApp, newReviewHref, pullsHref, reposHref } from '@/lib/shell/routes';
 
 type Place = 'new' | 'pulls' | 'repos' | 'automations' | 'guidelines';
 
@@ -30,6 +30,12 @@ const WARM: Partial<Record<Place, () => void>> = {
 		void import('@/lib/guidelines/guidelines-store').then((module) => module.useGuidelines.getState().load())
 };
 
+/** The places only the live app has. */
+const LIVE_ROWS: NavRow[] = [
+	{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: Clock },
+	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpen }
+];
+
 /** The place the address belongs to, or null on a page the sidebar does not list (Settings). */
 function placeOf(pathname: string, base: string): Place | null {
 	const path = pathname.slice(base.length) || '/';
@@ -43,7 +49,10 @@ function placeOf(pathname: string, base: string): Place | null {
 	return null;
 }
 
-/** The places. The one on screen sits on a still fill; the count beside Pull requests is the open ones. */
+/**
+ * The places. The one on screen sits on a still fill; the count beside Pull requests is the open ones. The
+ * sample lists only the places it has.
+ */
 export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	const { base } = useApi();
 	const active = placeOf(usePathname(), base);
@@ -52,8 +61,7 @@ export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 		{ id: 'new', label: 'New review', href: newReviewHref(base), icon: Plus },
 		{ id: 'pulls', label: 'Pull requests', href: pullsHref(base), icon: GitPullRequest },
 		{ id: 'repos', label: 'Repositories', href: reposHref(base), icon: FolderGit2 },
-		{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: Clock },
-		{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpen }
+		...(isLiveApp(base) ? LIVE_ROWS : [])
 	];
 
 	return (

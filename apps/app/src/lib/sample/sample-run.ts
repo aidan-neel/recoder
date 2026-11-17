@@ -91,6 +91,11 @@ function plan(paths: string[]): ReviewAssignment[] {
 	}));
 }
 
+/** The plan as a finished review leaves it, every part done: what the Changes tab's guide reads. */
+export function finishedPlan(paths: string[]): ReviewAssignment[] {
+	return plan(paths).map((part) => ({ ...part, status: 'done' }));
+}
+
 /** A claim's verification task, labelled and worded as the pipeline's. */
 /** Each part of the plan as its reviewer's task, and the part itself, in `status`; a done part keeps its claims. */
 function setParts(run: RunState, status: 'running' | 'done'): void {

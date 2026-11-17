@@ -2,12 +2,19 @@
 
 import { useEffect, useState, type RefObject } from 'react';
 
-/** How far under the top of the scroller a file's card must reach to count as the one being read. */
+/** The least a file's card must reach under the top of the scroller to count as the one being read. */
 const READING_LINE = 72;
 
-/** The path of the last card whose top is above the reading line; the first card's when none is yet. */
+/** The share of the scroller's height the reading line sits at, when that is lower than `READING_LINE`. */
+const READING_SHARE = 1 / 3;
+
+/**
+ * The path of the last card whose top is above the reading line; the first card's when none is yet. The line sits
+ * a third of the way down, so a file that fills most of the view is the one being read even while the last line of
+ * the file before it is still leaving at the top.
+ */
 function fileAtReadingLine(host: HTMLElement): string | null {
-	const line = host.getBoundingClientRect().top + READING_LINE;
+	const line = host.getBoundingClientRect().top + Math.max(READING_LINE, host.clientHeight * READING_SHARE);
 	let current: string | null = null;
 
 	for (const card of host.querySelectorAll<HTMLElement>('[data-file]')) {

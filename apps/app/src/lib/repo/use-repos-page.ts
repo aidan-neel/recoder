@@ -1,34 +1,32 @@
 'use client';
 
-import type { Provider, Repo } from '@recoder/shared';
-import { useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useApi, useListStore } from '../api/client';
-import { highBugs } from '../pulls/high-bugs';
-import { useRowEntries, useWatchList, type RowEntry } from '../pulls/use-rows';
-import { repoHref } from '../shell/routes';
+import { useApi, useListStore, useOverviewCache } from '../api/client';
+import { useRowEntries, useWatchList } from '../pulls/use-rows';
+import { reposHref } from '../shell/routes';
+import {
+	FLEET_SCOPES,
+	fleetScopeOf,
+	fleetTiles,
+	inScope,
+	matchesFilter,
+	scopeCounts,
+	type FleetScope,
+	type FleetTile,
+	type OverviewRead
+} from './fleet';
 import { stopTracking } from './stop-tracking';
 
-/** How a clone on this machine starts its address. */
-const LOCAL_PREFIX = 'file://';
-
-/** One tracked repository on the Repositories page. */
-export interface RepoListRow {
-	id: string;
-	/** The owner, shown faint before the name; null for a repository without one. */
-	owner: string | null;
-	name: string;
+/** One scope of the page as a tab: its name, its address and the repositories under it. */
+interface FleetScopeTab {
+	id: FleetScope;
+	label: string;
 	href: string;
-	provider: Provider;
-	/** Where it lives: the forge's host, or the folder of a clone on this machine. */
-	place: string;
-	defaultBranch: string;
-	/** Its open pull requests, null until the list answers. */
-	open: number | null;
-	/** One of its open pull requests has an open high-severity bug. */
-	alert: boolean;
+	count: number;
 }
 
 /** What the Repositories page shows and does. */
@@ -37,58 +35,68 @@ export interface ReposPageView {
 	phase: 'loading' | 'ready' | 'failed';
 	error: string | null;
 	retry: () => void;
-	rows: RepoListRow[];
+	/** The repositories under the scope and the filter text, those with something to do first. */
+	tiles: FleetTile[];
+	/** How many repositories are tracked, whatever the scope and the filter. */
+	tracked: number;
+	scope: FleetScope;
+	scopes: FleetScopeTab[];
+	query: string;
+	setQuery: (query: string) => void;
+	/** How many days the tiles' charts and merge counts cover; null until an overview answers. */
+	days: number | null;
+	/** Reads again the overviews that did not load. */
+	retryOverviews: () => void;
 	/** Whether the Add repository dialog is open. */
 	adding: boolean;
 	/** Opens or closes the dialog; closing it reads the list again, so a repository just added shows. */
 	setAdding: (open: boolean) => void;
 	/** Stops tracking a repository, with Undo in its toast. */
-	stop: (row: RepoListRow) => void;
-}
-
-/** Where a repository lives, for the line under its name. An address that does not parse shows as it is. */
-function placeOf(url: string): string {
-	if (url.startsWith(LOCAL_PREFIX)) return url.slice(LOCAL_PREFIX.length);
-
-	return URL.canParse(url) ? new URL(url).host : url;
-}
-
-/** Each repository's open pull requests as the list counts them, and those with a high-severity bug. */
-function pullFacts(entries: readonly RowEntry[]): { open: Map<string, number>; alerted: Set<string> } {
-	const open = new Map<string, number>();
-	const alerted = new Set<string>();
-
-	for (const entry of entries) {
-		const { repoId } = entry.listed.item;
-
-		open.set(repoId, (open.get(repoId) ?? 0) + 1);
-
-		if (highBugs(entry) > 0) alerted.add(repoId);
-	}
-
-	return { open, alerted };
-}
-
-/** One repository as a row: owner and name split, its place and branch, and its open pull requests. */
-function rowOf(repo: Repo, base: string, counts: Record<string, number> | null, facts: ReturnType<typeof pullFacts>) {
-	const slash = repo.name.lastIndexOf('/');
-
-	return {
-		id: repo.id,
-		owner: slash > 0 ? repo.name.slice(0, slash) : null,
-		name: slash > 0 ? repo.name.slice(slash + 1) : repo.name,
-		href: repoHref(base, repo.id),
-		provider: repo.provider,
-		place: placeOf(repo.url),
-		defaultBranch: repo.defaultBranch,
-		open: counts ? (counts[repo.id] ?? facts.open.get(repo.id) ?? 0) : null,
-		alert: facts.alerted.has(repo.id)
-	};
+	stop: (tile: FleetTile) => void;
 }
 
 /**
- * The Repositories page: every tracked repository by name, from the list the sidebar reads, so a repository added or
- * stopped here changes there at once.
+ * Every tracked repository's overview. The copies read before paint at once, and each is read again once per visit.
+ * A read that fails keeps a copy already on screen, and with none reads as failed until `retry`.
+ */
+function useOverviews(repoIds: readonly string[]): { of: (repoId: string) => OverviewRead; retry: () => void } {
+	const overviews = useOverviewCache();
+	const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
+	const [, setAnswers] = useState(0);
+	const [attempt, setAttempt] = useState(0);
+	const wanted = repoIds.join('\n');
+
+	const retry = useCallback(() => {
+		setFailed(new Set());
+		setAttempt((count) => count + 1);
+	}, []);
+
+	useEffect(() => {
+		let current = true;
+
+		for (const repoId of wanted ? wanted.split('\n') : []) {
+			overviews.read(repoId).then(
+				() => current && setAnswers((count) => count + 1),
+				() => current && setFailed((before) => new Set(before).add(repoId))
+			);
+		}
+
+		return () => {
+			current = false;
+		};
+	}, [overviews, wanted, attempt]);
+
+	return { of: (repoId) => overviews.peek(repoId) ?? (failed.has(repoId) ? 'failed' : 'loading'), retry };
+}
+
+/** The scope's address: the page itself for every repository, else the page with the scope named. */
+function scopeHref(base: string, scope: FleetScope): string {
+	return scope === 'all' ? reposHref(base) : `${reposHref(base)}?scope=${scope}`;
+}
+
+/**
+ * The Repositories page: every tracked repository as a tile, from the list the sidebar reads, so a repository added
+ * or stopped here changes there at once. The address names the scope; the filter text narrows by name.
  */
 export function useReposPage(): ReposPageView {
 	useWatchList();
@@ -96,27 +104,35 @@ export function useReposPage(): ReposPageView {
 	const { base } = useApi();
 	const store = useListStore();
 	const entries = useRowEntries();
+	const scope = fleetScopeOf(useSearchParams().get('scope'));
+	const [query, setQuery] = useState('');
 	const [adding, setOpen] = useState(false);
 
 	const data = useStore(
 		store.state,
 		useShallow((current) => ({
 			repos: current.repos,
-			counts: current.list?.openCounts ?? null,
+			openCounts: current.list?.openCounts ?? null,
+			reviews: current.reviews,
 			phase: current.phase,
 			error: current.error
 		}))
 	);
 
-	const rows = useMemo(() => {
-		const facts = pullFacts(entries);
+	const overviews = useOverviews((data.repos ?? []).map((repo) => repo.id));
 
-		return (data.repos ?? [])
-			.map((repo) => rowOf(repo, base, data.counts, facts))
-			.sort(
-				(left, right) => left.name.localeCompare(right.name) || (left.owner ?? '').localeCompare(right.owner ?? '')
-			);
-	}, [data.repos, data.counts, entries, base]);
+	const all = fleetTiles({
+		repos: data.repos ?? [],
+		entries,
+		openCounts: data.openCounts,
+		reviews: data.reviews,
+		overviewOf: overviews.of,
+		base
+	});
+
+	const named = all.filter((tile) => matchesFilter(tile, query));
+	const counts = scopeCounts(named);
+	const [answered] = all.flatMap((tile) => (tile.overview.phase === 'ready' ? [tile.overview.days] : []));
 
 	function setAdding(open: boolean): void {
 		setOpen(open);
@@ -132,9 +148,16 @@ export function useReposPage(): ReposPageView {
 		phase,
 		error: data.error,
 		retry: store.refresh,
-		rows,
+		tiles: named.filter((tile) => inScope(tile, scope)),
+		tracked: all.length,
+		scope,
+		scopes: FLEET_SCOPES.map(({ id, label }) => ({ id, label, href: scopeHref(base, id), count: counts[id] })),
+		query,
+		setQuery,
+		days: answered ?? null,
+		retryOverviews: overviews.retry,
 		adding,
 		setAdding,
-		stop: (row) => stopTracking(store, { id: row.id, name: row.owner ? `${row.owner}/${row.name}` : row.name })
+		stop: (tile) => stopTracking(store, { id: tile.id, name: tile.owner ? `${tile.owner}/${tile.name}` : tile.name })
 	};
 }

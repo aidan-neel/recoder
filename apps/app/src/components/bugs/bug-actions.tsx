@@ -76,8 +76,7 @@ function Votes({ bug, view }: Pick<BugActionsProps, 'bug' | 'view'>) {
 
 	return (
 		<div className="bug-actions-end">
-			<span>Was this useful?</span>
-			<Tooltip content="Useful">
+			<Tooltip content="This bug was useful">
 				<Button
 					variant="ghost"
 					size="icon"
@@ -88,7 +87,7 @@ function Votes({ bug, view }: Pick<BugActionsProps, 'bug' | 'view'>) {
 					<ThumbsUp />
 				</Button>
 			</Tooltip>
-			<Tooltip content="Not useful">
+			<Tooltip content="This bug was not useful">
 				<Button
 					variant="ghost"
 					size="icon"
@@ -107,28 +106,33 @@ function Votes({ bug, view }: Pick<BugActionsProps, 'bug' | 'view'>) {
  * What a person does with an open bug: post it to the pull request (the
  * primary action when the forge takes comments), hand its fix prompt to a
  * coding agent, ask about it, accept it or dismiss it, and say whether it
- * helped.
+ * helped. Posting changes the first button's words in a slot of fixed width
+ * and adds the link to the comment after the last action, so no button a
+ * person might be about to press moves.
  */
 export function BugActions({ bug, view, asking, onAskToggle }: BugActionsProps) {
 	const pending = view.pending.has(bug.id);
+
+	/** Accepts the bug and offers the way back, as dismissing does. */
+	function accept(): void {
+		view
+			.accept(bug.id)
+			.then(
+				() => undoToast('Accepted', () => void view.reopen(bug.id).catch(refused('The bug did not reopen.'))),
+				refused('The bug was not accepted.')
+			);
+	}
 
 	return (
 		<div className="bug-actions">
 			{view.canPost ? (
 				<Button
 					variant={bug.posted ? 'outline' : 'primary'}
+					className="bug-post"
 					status={pending ? 'pending' : 'idle'}
 					onClick={() => view.post(bug.id).catch(refused('The comment was not posted.'))}
 				>
 					{bug.posted ? 'Update the comment' : 'Post to pull request'}
-				</Button>
-			) : null}
-			{bug.posted ? (
-				<Button asChild variant="ghost">
-					<a href={bug.posted.url} target="_blank" rel="noreferrer">
-						See the comment
-						<ArrowUpRight aria-hidden className="size-3.5" />
-					</a>
 				</Button>
 			) : null}
 			<CopyButton
@@ -141,14 +145,18 @@ export function BugActions({ bug, view, asking, onAskToggle }: BugActionsProps) 
 				<MessageCircle aria-hidden />
 				Ask
 			</Button>
-			<Button
-				variant="ghost"
-				disabled={pending}
-				onClick={() => view.accept(bug.id).catch(refused('The bug was not accepted.'))}
-			>
+			<Button variant="ghost" disabled={pending} onClick={accept}>
 				Accept
 			</Button>
 			<DismissMenu bug={bug} view={view} />
+			{bug.posted ? (
+				<Button asChild variant="ghost" className="bug-posted-link">
+					<a href={bug.posted.url} target="_blank" rel="noreferrer">
+						See the comment
+						<ArrowUpRight aria-hidden className="size-3.5" />
+					</a>
+				</Button>
+			) : null}
 			<Votes bug={bug} view={view} />
 		</div>
 	);

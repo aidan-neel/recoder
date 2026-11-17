@@ -13,11 +13,12 @@ import { errorToast } from '@/lib/shell/notify';
 import { useAction } from '@/lib/shell/use-action';
 
 import { Age } from '@/components/common/age';
+import { FindField } from '@/components/common/find-field';
 import { Page } from '@/components/common/page';
 
 import { PullFilterMenu } from './pull-filter';
 import { PullList } from './pull-list';
-import { PullsFind, RefreshButton, RepoScope } from './pulls-bar';
+import { RefreshButton, RepoScope } from './pulls-bar';
 import { PullsMore } from './pulls-more';
 import { PullsNotice } from './pulls-notice';
 
@@ -120,7 +121,14 @@ export function PullsScreen() {
 			start={<RepoScope repos={view.repos} repoId={view.repoId} onChange={view.setRepoId} />}
 			end={
 				<>
-					<PullsFind query={view.query} onQueryChange={view.setQuery} onSubmit={openPasted} />
+					<FindField
+						className="pulls-find"
+						label="Filter pull requests, or paste a link"
+						placeholder="Filter, or paste a pull request link"
+						query={view.query}
+						onQueryChange={view.setQuery}
+						onSubmit={openPasted}
+					/>
 					<RefreshButton refreshing={view.refreshing} onRefresh={view.refresh} />
 				</>
 			}

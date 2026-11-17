@@ -91,6 +91,8 @@ export interface BugsView {
 	};
 	/** The forge review the finished findings went up as, once someone posted them; null before. */
 	findingsReview: { state: 'posting' | 'posted' | 'failed'; url: string | null; error: string | null } | null;
+	/** While a new review runs: the open findings of the review before it, to read but not to act on; null otherwise. */
+	previous: { open: BugView[]; headSha: string | null; reviewedAt: string | null } | null;
 	/** Facts for the line under the tabs. */
 	reviewedAt: string | null;
 	headSha: string | null;

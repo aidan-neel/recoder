@@ -33,16 +33,15 @@
 	height: 40px;
 	align-items: center;
 	gap: 8px;
-	padding: 0 calc(var(--settings-end, 16px) - 8px) 0 var(--settings-inset, 16px);
+	padding: 0 var(--settings-end, 16px) 0 var(--settings-inset, 16px);
 }
 .chooser-trigger > [data-ui='agent-mark'] {
 	color: var(--text-subtle);
 }
-/* The trigger starts 8px before the chevron's ink, so its focus line clears the ink and the ink stays on the rows' left edge. */
+/* The trigger runs from the box to the card's edge, so the whole line opens the provider. */
 .chooser-provider-title {
 	min-width: 0;
 	flex: 1;
-	margin-left: -8px;
 }
 .chooser-trigger {
 	display: flex;
@@ -50,7 +49,6 @@
 	height: 40px;
 	align-items: center;
 	gap: 8px;
-	padding-left: 8px;
 	border-radius: var(--radius-control);
 	outline: none;
 	text-align: left;
@@ -58,20 +56,22 @@
 .chooser-trigger:focus-visible {
 	box-shadow: inset 0 0 0 1px var(--line-focus);
 }
-.chooser-trigger > svg:first-child {
+/* The chevron ends the line: its ink on the lane where the models' context sizes end. */
+.chooser-trigger > svg:last-child {
 	width: 14px;
 	height: 14px;
 	flex-shrink: 0;
+	margin-left: auto;
 	color: var(--text-faint);
 	transition:
 		rotate var(--dur-toggle) var(--ease-menu),
 		color var(--dur-hover) ease-out;
 }
-.chooser-trigger:hover > svg:first-child {
+.chooser-trigger:hover > svg:last-child {
 	color: var(--text-muted);
 }
-.chooser-trigger[data-state='open'] > svg:first-child {
-	rotate: 90deg;
+.chooser-trigger[data-state='open'] > svg:last-child {
+	rotate: 180deg;
 }
 .chooser-title {
 	min-width: 0;
@@ -95,16 +95,18 @@
 	padding: 0 0 4px;
 	list-style: none;
 }
+/* A model's box sits under its provider's mark, so its name starts where the provider's does. */
 .chooser-row {
 	display: flex;
-	height: 34px;
+	height: 32px;
 	align-items: center;
-	gap: 12px;
-	padding: 0 var(--settings-end, 16px) 0 var(--settings-inset, 16px);
+	gap: 10px;
+	padding: 0 var(--settings-end, 16px) 0 calc(var(--settings-inset, 16px) + 22px);
 }
 .chooser-name {
 	min-width: 0;
 	flex: 1;
+	cursor: pointer;
 	overflow: hidden;
 	color: var(--text-primary);
 	font-size: var(--font-size-label);

@@ -209,7 +209,7 @@ export function RunBanner({ run, bugs }: RunBannerProps) {
 
 	return (
 		<Banner
-			glyph={<StatusGlyph kind="idle" />}
+			glyph={<StatusGlyph kind={cancelled ? 'cancelled' : 'idle'} />}
 			title={cancelled ? 'The review was cancelled.' : 'Recoder has not reviewed this pull request.'}
 			meta={<RunFacts at={cancelled ? run.finishedAt : null} model={run.modelLabel} />}
 			actions={<ReviewButton run={run} again={false} />}
