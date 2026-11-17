@@ -105,6 +105,9 @@
 	.summary-column {
 		padding-right: var(--page-gutter);
 	}
+	.fleet {
+		padding: 20px var(--page-gutter) 48px;
+	}
 	.ask-pane {
 		width: 100%;
 		min-height: 420px;
@@ -148,19 +151,26 @@
 	}
 	/* The bar's links keep their icons and their names for assistive tech; the words give way. */
 	.pull-forge-link,
-	.token-usage-trigger {
+	.token-usage-trigger,
+	.fleet-add {
 		width: var(--size-icon-md);
 		justify-content: center;
 		gap: 0;
 		padding: 0;
 		font-size: 0;
 	}
-	.pulls-find {
+	.pulls-find,
+	.fleet-find {
 		width: auto;
 		min-width: 0;
 		flex: 1;
 	}
-	.pulls-find [data-ui='keycap'] {
+	.pulls-find [data-ui='keycap'],
+	.fleet-find [data-ui='keycap'] {
+		display: none;
+	}
+	/* The Repositories page: the scopes keep the line, and the days the tiles cover go without saying. */
+	.fleet-window {
 		display: none;
 	}
 

@@ -130,16 +130,35 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   end of the list nears, with skeleton rows at the end while they do and
   one plain line with Retry when a page fails. Rows append in place, below the
   ones shown, with no entrance.
-- **Repositories page**: the settings column on the page, with Add
-  repository (primary) in the bar, which opens the repository dialog: the
+- **Repositories page**: a full-width page, not the settings column. The bar
+  names it and holds a filter field (`/` focuses it; it narrows by owner and
+  name) and Add repository (primary), which opens the repository dialog: the
   repositories the signed-in forges can see, searchable, and Add by URL.
-  Under it, one card with a row a tracked repository, by name: its forge on
-  a tile, `owner / name` (the owner faint) as the link to its page with the
-  high-severity dot after it, over where it lives, its default branch and its
-  open pull requests; Stop tracking (ghost) at the end. Stopping folds the
-  row away and takes it out of the sidebar at once; the server forgets it
-  when the toast's Undo is gone. With none tracked, one quiet row says so.
-  It loads behind skeleton rows of the same height.
+  Under the bar, the scopes as page tabs with a count each (All, Needs you
+  with its count in the high-severity colour, Quiet, Auto review off; the
+  address names the scope as `?scope=`) and, at the right, the days the tiles
+  cover. Then a grid of tiles at least 300px wide with 16px between, a
+  tracked repository each, those with something to do first, then by name.
+  A tile is a card, 224px tall: the forge's mark and `owner / name` (the
+  owner faint and cut first), which is the link to the repository page and
+  covers the tile, with a 6px dot at the end that is green when auto review
+  watches the repository and grey when it does not (a tip says which); the
+  open pull requests as a 28px figure beside what waits for a review and the
+  open bugs (high ones in the high-severity colour, "No bugs" in the success
+  tone once a review came back clean); the repository page's chart, a bar a
+  day, 28px tall with no axis and no tips; and under a hairline the pull
+  request to open next with its status, which is its own link. With nothing
+  to do, that last line says auto review is off (with a link to Automations
+  on the real app) or "All caught up" and when the last review was. A More
+  button, shown while the tile is pointed at or focused, holds Stop tracking:
+  the tile fades, the grid closes the gap, and the repository leaves the
+  sidebar at once; the server forgets it when the toast's Undo is gone. The
+  last tile, an outline with no fill, opens the same dialog as Add
+  repository, and stands alone when nothing is tracked. A scope or filter
+  text with no repository under it says so in one line. The page loads
+  behind three skeleton tiles; a tile whose month did not load says so with
+  Try again. Under 640px the tiles stack, Add repository keeps its icon and
+  the days go.
 - **Repository page**: the bar holds the crumbs (Repositories, linking to the
   Repositories page, then the
   name) and, on the right, the forge link as an icon button, Ask (outline),

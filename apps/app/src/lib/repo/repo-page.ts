@@ -31,8 +31,8 @@ const URGENCY: Record<PullRowStatus['kind'], number> = {
 
 const monthDay = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
-/** The rows most urgent first; rows equally urgent keep their order, newest activity first. */
-function byUrgency(entries: readonly RowEntry[]): PullRow[] {
+/** The rows most urgent first, at most five; rows equally urgent keep their order, newest activity first. */
+export function byUrgency(entries: readonly RowEntry[]): PullRow[] {
 	const rank = (entry: RowEntry) => (highBugs(entry) > 0 ? 0 : URGENCY[entry.row.status.kind]);
 
 	return [...entries]
@@ -117,7 +117,7 @@ function figuresOf(entries: readonly RowEntry[], openCount: string, overview: Re
 }
 
 /** A bar a day, each as a share of the busiest day, so the tallest bar fills the chart. */
-function chartOf(overview: RepoOverview): ReviewChart {
+export function chartOf(overview: RepoOverview): ReviewChart {
 	const busiest = Math.max(0, ...overview.daily.map((day) => day.reviews));
 	const reviews = overview.daily.reduce((sum, day) => sum + day.reviews, 0);
 	const withBugs = overview.daily.reduce((sum, day) => sum + day.withBugs, 0);
