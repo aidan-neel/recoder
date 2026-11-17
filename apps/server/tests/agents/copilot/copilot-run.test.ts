@@ -269,7 +269,7 @@ test('a review agent on a Copilot model completes through the shared engine, rea
 	);
 
 	expect(error).toBeUndefined();
-	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+new') });
+	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+1|new') });
 });
 
 test('a prompt may make more tool calls than one step allows, one model call at a time', async () => {
@@ -279,5 +279,5 @@ test('a prompt may make more tool calls than one step allows, one model call at 
 	);
 
 	expect(error).toBeUndefined();
-	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+new') });
+	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+1|new') });
 });

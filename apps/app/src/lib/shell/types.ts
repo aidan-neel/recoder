@@ -1,9 +1,9 @@
 import type { Provider } from '@recoder/shared';
 
-/** One row of "Recent reviews" in the sidebar. */
+/** One row of "Reviews" in the sidebar. */
 export interface RecentReview {
 	reviewId: string;
-	/** The pull request page, on its Bugs tab. */
+	/** The pull request page, on its Review tab. */
 	href: string;
 	/** The repository the pull request is in, for warming its page on hover. */
 	repoId: string;
@@ -35,6 +35,25 @@ export interface RecentChat {
 	repoName: string;
 	/** Where the repository lives, for the mark beside its name; null while the repositories load. */
 	repoForge: Provider | null;
+	/** When the chat last changed, as an ISO date. */
+	updatedAt: string;
+}
+
+/** A row of "Settled": a review or a chat, and how its pull request ended when it did. */
+export type SettledRow =
+	| { kind: 'review'; row: RecentReview; outcome: SettledReview['outcome'] | null }
+	| { kind: 'chat'; row: RecentChat; outcome: null };
+
+/** A tracked repository in the sidebar, which opens its page. */
+export interface SidebarRepo {
+	id: string;
+	/** The repository's short name, or the label that tells it apart from another of the same name. */
+	name: string;
+	href: string;
+	/** Where the repository lives, for the mark on the row. */
+	provider: Provider;
+	/** One of its open pull requests has an open high-severity bug. */
+	alert: boolean;
 }
 
 /** What the sidebar shows around the pages. */
@@ -43,11 +62,13 @@ export interface ShellView {
 	account: string | null;
 	/** The count beside "Pull requests"; null until the list answered once. */
 	openPulls: number | null;
-	/** The newest review of each open pull request, newest first; at most eight. */
+	/** The tracked repositories, by name. */
+	repos: SidebarRepo[];
+	/** The newest review of each open pull request that is not settled, newest first; at most eight. */
 	recent: RecentReview[];
-	/** The newest review of each merged or closed pull request, newest first. */
-	settled: SettledReview[];
-	/** The chats most recently active, newest first; at most five. */
+	/** Reviews of merged or closed pull requests, and the reviews and chats settled by hand or by rest, newest first. */
+	settled: SettledRow[];
+	/** The chats most recently active that are not settled, newest first. */
 	chats: RecentChat[];
 	/** True while the recent reviews load for the first time. */
 	loading: boolean;

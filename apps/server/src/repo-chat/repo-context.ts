@@ -85,6 +85,15 @@ export async function readRepoText(repo: Repo, path: string, signal: AbortSignal
 	return readRepoFile(repo, await repoTree(repo), path, signal);
 }
 
+/** The repository's git copy at its default-branch head, or null when this server has no copy it can read. */
+export async function repoAtDefaultBranch(repo: Repo): Promise<{ root: string; sha: string } | null> {
+	const tree = await repoTree(repo);
+
+	if (!tree) return null;
+
+	return { root: tree.root, sha: tree.sha };
+}
+
 async function repoTree(repo: Repo): Promise<RepoTree | null> {
 	return trees
 		.get(repo.id, () => findTree(repo))

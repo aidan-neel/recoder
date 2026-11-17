@@ -28,7 +28,7 @@ const READ_TOOLS: NativeTool[] = [
 	tool(
 		'read_diff',
 		'readDiff',
-		'Read the pull request patch for one file, or for the hunks named.',
+		'Read the pull request patch for one file, or for the hunks named. Hunk lines use +N|added and  N|context with new-side numbers, -N|removed with old-side numbers.',
 		{ path: str, hunkIds: { type: 'array', items: str }, cursor },
 		[]
 	),
@@ -52,6 +52,13 @@ const READ_TOOLS: NativeTool[] = [
 		'List repository files, optionally under a directory prefix.',
 		{ revision, prefix: str, cursor },
 		[]
+	),
+	tool(
+		'load_skill',
+		'loadSkill',
+		"Read one of the repository's skills (its SKILL.md) by name, as listed under Repository skills. Reads the pull request head, then the target branch.",
+		{ name: { type: 'string', description: 'A skill name from the Repository skills list.' } },
+		['name']
 	)
 ];
 
@@ -106,5 +113,17 @@ export function toolAction(name: string, args: unknown, offer: ToolOffer): Retri
 
 	const fields = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
 
-	return normalizeActions([{ ...fields, action: known.action }])[0] ?? null;
+	return normalizeActions([{ ...actionFields(known, fields), action: known.action }])[0] ?? null;
+}
+
+/**
+ * A tool call's arguments as the fields of its action. A skill's `name` is renamed `skill`, since `name` is what
+ * a model's request calls the action itself and is dropped when requests are parsed.
+ */
+function actionFields(tool: NativeTool, fields: object): object {
+	if (tool.action !== 'loadSkill') return fields;
+
+	const { name, ...rest } = fields as { name?: unknown };
+
+	return { ...rest, skill: name };
 }

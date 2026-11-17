@@ -8,6 +8,7 @@
 @layer components {
 	/* ───────── Fields: input frames and textareas share the fill, ring and focus halo ───────── */
 	[data-ui='input'],
+	[data-ui='number-field'],
 	[data-ui='textarea'],
 	[data-ui='link-field'] {
 		width: 100%;
@@ -20,27 +21,32 @@
 			box-shadow var(--dur-menu) ease-out;
 	}
 	[data-ui='input']:hover:not(:focus-within, [data-invalid], [data-disabled]),
+	[data-ui='number-field']:hover:not(:focus-within, [data-invalid], [data-disabled]),
 	[data-ui='textarea']:hover:not(:focus, [data-invalid], :disabled),
 	[data-ui='link-field']:hover:not(:focus, [data-invalid], [data-disabled]) {
 		box-shadow: inset 0 0 0 1px var(--line-hover);
 	}
 	[data-ui='input']:focus-within,
+	[data-ui='number-field']:focus-within,
 	[data-ui='textarea']:focus,
 	[data-ui='link-field']:focus {
 		background-color: var(--bg-raised);
 		box-shadow: inset 0 0 0 1px var(--line-focus);
 	}
 	[data-ui='input'][data-invalid],
+	[data-ui='number-field'][data-invalid],
 	[data-ui='textarea'][data-invalid],
 	[data-ui='link-field'][data-invalid] {
 		box-shadow: inset 0 0 0 1px var(--danger);
 	}
 	[data-ui='input'][data-invalid]:focus-within,
+	[data-ui='number-field'][data-invalid]:focus-within,
 	[data-ui='textarea'][data-invalid]:focus,
 	[data-ui='link-field'][data-invalid]:focus {
 		box-shadow: inset 0 0 0 1px var(--danger);
 	}
 	[data-ui='input-field']::placeholder,
+	[data-ui='number-input']::placeholder,
 	[data-ui='textarea']::placeholder {
 		color: var(--text-faint);
 		opacity: 1;
@@ -104,6 +110,76 @@
 		stroke-width: 1.75;
 	}
 
+	/* ───────── Number field: step buttons flank a centered, tabular value ───────── */
+	[data-ui='number-field'] {
+		display: inline-flex;
+		width: auto;
+		height: var(--size-control-md);
+		align-items: stretch;
+		padding: 1px;
+		border-radius: var(--radius-control);
+	}
+	[data-ui='number-step'] {
+		display: inline-grid;
+		width: 26px;
+		flex-shrink: 0;
+		place-items: center;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: var(--text-subtle);
+		outline: none;
+		transition:
+			background-color var(--dur-hover) ease-out,
+			color var(--dur-hover) ease-out;
+	}
+	[data-ui='number-step']:first-child {
+		border-radius: var(--radius-chip) 0 0 var(--radius-chip);
+	}
+	[data-ui='number-step']:last-child {
+		border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+	}
+	@media (hover: hover) and (pointer: fine) {
+		[data-ui='number-step']:hover:not(:disabled) {
+			background-color: rgb(var(--wash-rgb) / 0.06);
+			color: var(--text-primary);
+		}
+	}
+	[data-ui='number-step']:active:not(:disabled) {
+		background-color: rgb(var(--wash-rgb) / 0.1);
+		color: var(--text-primary);
+	}
+	[data-ui='number-step']:disabled {
+		color: var(--text-ghost);
+		opacity: 0.4;
+		pointer-events: none;
+	}
+	[data-ui='number-step'] svg {
+		width: 13px;
+		height: 13px;
+		stroke-width: 1.75;
+	}
+	[data-ui='number-input'] {
+		width: var(--number-input-width, 50px);
+		min-width: 0;
+		flex: 1;
+		padding: 0 6px;
+		border: 0;
+		border-inline: 1px solid var(--line-card);
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		font-size: var(--font-size-label);
+		font-variant-numeric: tabular-nums;
+		text-align: center;
+		outline: none;
+		transition: border-color var(--dur-menu) ease-out;
+	}
+	[data-ui='number-field']:hover:not([data-disabled]) [data-ui='number-input'],
+	[data-ui='number-field']:focus-within [data-ui='number-input'] {
+		border-color: var(--line-control);
+	}
+
 	/* ───────── Textarea and link field: a line height of 20px a row ───────── */
 	[data-ui='textarea'],
 	[data-ui='link-field'] {
@@ -160,11 +236,16 @@
 	[data-ui='input'][data-disabled],
 	[data-ui='input']:has([data-ui='input-field']:disabled),
 	[data-ui='input-field']:disabled,
+	[data-ui='number-field'][data-disabled],
+	[data-ui='number-field']:has([data-ui='number-input']:disabled),
+	[data-ui='number-input']:disabled,
 	[data-ui='textarea']:disabled {
 		cursor: not-allowed;
 	}
 	[data-ui='input'][data-disabled],
 	[data-ui='input']:has([data-ui='input-field']:disabled),
+	[data-ui='number-field'][data-disabled],
+	[data-ui='number-field']:has([data-ui='number-input']:disabled),
 	[data-ui='textarea']:disabled {
 		opacity: 0.4;
 	}

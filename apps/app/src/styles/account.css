@@ -44,6 +44,10 @@
 	width: 100%;
 	gap: 8px;
 }
+/* The self-managed host, a badge beside the login; a long host truncates instead of widening the button. */
+.forge-host {
+	max-width: 140px;
+}
 .forge-host-toggle {
 	align-self: center;
 }

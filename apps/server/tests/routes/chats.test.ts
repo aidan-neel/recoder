@@ -189,6 +189,59 @@ test('malformed and over-long input is refused before anything is saved', async 
 	expect((await post(`/api/chats/${chat.id}/stop`, {})).status).toBe(400);
 });
 
+test('a skill the repository lacks is refused by name, and nothing is saved', async () => {
+	const repo = await trackedRepo({ '.agents/skills/lint/SKILL.md': '---\nname: lint\n---\nLint it.\n' });
+	const response = await post('/api/chats', { repoId: repo.id, text: 'Hello', skills: ['lint', 'ghost'] });
+
+	expect(response.status).toBe(400);
+	expect(await response.json()).toMatchObject({ error: expect.stringContaining('"ghost"') });
+	expect(await db.repoChats.list()).toEqual([]);
+
+	streamingModel(['Fine.']);
+
+	const chat = await startChat(repo.id, 'Hello');
+
+	await replySettled(chat.id);
+
+	const refused = await post(`/api/chats/${chat.id}/messages`, { text: 'Again', skills: ['ghost'] });
+
+	expect(refused.status).toBe(400);
+	expect((await db.repoChats.get(chat.id))?.messages).toHaveLength(2);
+});
+
+test('an attached skill is kept on the message and its text reaches the model', async () => {
+	const repo = await trackedRepo({ '.agents/skills/lint/SKILL.md': '---\nname: lint\n---\nSkill marker 8841.\n' });
+	const model = streamingModel(['Done.']);
+	const response = await post('/api/chats', { repoId: repo.id, text: 'Check this', skills: ['lint', 'lint'] });
+
+	expect(response.status).toBe(201);
+
+	const chat = (await response.json()) as RepoChat;
+
+	await replySettled(chat.id);
+
+	expect(chat.messages[0].skills).toEqual(['lint']);
+	expect(model.bodies[0]).toContain('Skill marker 8841.');
+});
+
+test('a skill a follow-up names with / is loaded, and a / that names no skill is left as text', async () => {
+	const repo = await trackedRepo({ '.agents/skills/lint/SKILL.md': '---\nname: lint\n---\nSkill marker 5512.\n' });
+	const model = streamingModel(['Done.']);
+	const chat = await startChat(repo.id, 'Hello');
+
+	await replySettled(chat.id);
+
+	const sent = await post(`/api/chats/${chat.id}/messages`, {
+		text: 'Open /src/app.ts and /maya, then check with /lint.'
+	});
+
+	expect(sent.status).toBe(202);
+	expect(((await sent.json()) as RepoChatMessage).skills).toEqual(['lint']);
+
+	await replySettled(chat.id);
+	expect(model.bodies.at(-1)).toContain('Skill marker 5512.');
+});
+
 test('with no model set up, a chat does not open and the error says where to pick one', async () => {
 	const repo = await trackedRepo();
 

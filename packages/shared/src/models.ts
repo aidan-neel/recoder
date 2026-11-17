@@ -36,40 +36,76 @@ export function supportedEffort(
 }
 
 /**
- * How many subagents one review may run in all, chosen in Settings → Review harness; 0 turns them off. Second
- * looks the harness sends itself count inside it, so this is the most agents a review adds after its reviewers.
- * The three counts are the Low, Medium and High token budgets'; `uncapped` runs one for every question that
- * warrants it, as far as the review's model calls and time allow. A string rather than `Infinity`, so it
- * survives JSON.
+ * How many subagents one review may run in all, chosen in Settings → Limits.
+ * 0 turns them off. Second looks the harness sends itself count inside it, so
+ * this is the most agents a review adds after its reviewers. Named picks are 3
+ * and 6; any other count is Custom, up to {@link MAX_SUBAGENT_CAP}. `uncapped`
+ * runs one for every question that warrants it, as far as the review's model
+ * calls and time allow. A string rather than `Infinity`, so it survives JSON.
  */
-export const SUBAGENT_CAPS = [0, 3, 8, 12, 'uncapped'] as const;
-export type SubagentCap = (typeof SUBAGENT_CAPS)[number];
-export const DEFAULT_SUBAGENT_CAP: SubagentCap = 8;
+export type SubagentCap = number | 'uncapped';
+export const DEFAULT_SUBAGENT_CAP = 8;
+export const MAX_SUBAGENT_CAP = 99;
 
-/**
- * A subagent cap saved before the caps were 3, 8 and 12 (2 and 4), as the nearest cap that is at least as
- * generous, so an old settings file keeps working. A cap that still exists is returned as it is.
- */
-export function migrateSubagentCap(saved: number | 'uncapped'): SubagentCap {
-	if (saved === 'uncapped') return saved;
+const SUBAGENT_PRESETS = [3, 6] as const;
 
-	const counts = SUBAGENT_CAPS.filter((cap): cap is Exclude<SubagentCap, 'uncapped'> => cap !== 'uncapped');
+export type SubagentChoice = '3' | '6' | 'custom' | 'uncapped';
 
-	return counts.find((cap) => cap >= saved) ?? counts[counts.length - 1];
+/** Whether `cap` is one of the named counts the Settings control offers. */
+export function isSubagentPreset(cap: SubagentCap): cap is (typeof SUBAGENT_PRESETS)[number] {
+	return SUBAGENT_PRESETS.some((preset) => preset === cap);
+}
+
+/** The segmented-control pick `cap` stands for; any other count is Custom. */
+export function subagentChoice(cap: SubagentCap): SubagentChoice {
+	if (cap === 'uncapped') return 'uncapped';
+	if (cap === 3) return '3';
+	if (cap === 6) return '6';
+
+	return 'custom';
 }
 
 /**
- * How many tokens a review may spend, chosen in Settings → Review harness. One pick sets the subagent cap and both
+ * The count Custom uses when leaving a named pick: the current count when it
+ * is already Custom, else `fallback` (the last Custom count, or the default).
+ */
+export function customSubagentCount(cap: SubagentCap, fallback: number = DEFAULT_SUBAGENT_CAP): number {
+	return typeof cap === 'number' && !isSubagentPreset(cap) ? cap : fallback;
+}
+
+/** The cap a Settings pick stands for; Custom keeps the current custom count. */
+export function subagentCapFromChoice(choice: string, current: SubagentCap, fallback?: number): SubagentCap {
+	if (choice === 'uncapped') return 'uncapped';
+	if (choice === '3') return 3;
+	if (choice === '6') return 6;
+	if (choice === 'custom') return customSubagentCount(current, fallback);
+
+	return current;
+}
+
+/** The subagent cap picks for the Settings segmented control. */
+export const SUBAGENT_OPTIONS: { value: SubagentChoice; label: string }[] = [
+	{ value: '3', label: 'Up to 3' },
+	{ value: '6', label: 'Up to 6' },
+	{ value: 'custom', label: 'Custom' },
+	{ value: 'uncapped', label: 'Uncapped' }
+];
+
+/** What the current cap allows; shown under the Settings name. */
+export function subagentCapText(cap: SubagentCap): string {
+	if (cap === 'uncapped') return 'One per open question. Far more tokens and time';
+	if (cap === 0) return 'Reviewers work alone, using the fewest tokens';
+
+	return `Up to ${cap} deep dives per review`;
+}
+
+/**
+ * How many tokens a review may spend, chosen in Settings → Limits. One pick sets the subagent cap and both
  * reasoning efforts, and decides how many reviewers run and for how long (`budgetLimits` on the server).
  */
 export const TOKEN_BUDGETS = ['low', 'medium', 'high'] as const;
 export type TokenBudget = (typeof TOKEN_BUDGETS)[number];
 export const DEFAULT_TOKEN_BUDGET: TokenBudget = 'medium';
-
-/** The cap a picker's string value stands for, so `'uncapped'` stays a string and the counts become numbers again. */
-export function subagentCapFrom(value: string): SubagentCap {
-	return SUBAGENT_CAPS.find((cap) => String(cap) === value) ?? DEFAULT_SUBAGENT_CAP;
-}
 
 /** An agent CLI by the id of its server adapter: one of {@link AGENT_CLIS}. */
 export type AgentCliId = string;
@@ -104,6 +140,21 @@ export function endpointProviderName(baseUrl: string): string {
 	}
 }
 
+/**
+ * The context window assumed for a model that neither the user set a window for nor anyone reports: the most
+ * tokens (prompt + output) one request to it may spend.
+ */
+export const DEFAULT_CONTEXT_WINDOW = 128_000;
+
+/** The smallest context window a user may set for a model. */
+export const MIN_CONTEXT_WINDOW = 16_000;
+
+/** The largest context window a user may set for a model. */
+export const MAX_CONTEXT_WINDOW = 1_000_000;
+
+/** Where a resolved context window came from: the user's setting, the provider's report, or the default. */
+export type ContextWindowSource = 'set' | 'reported' | 'default';
+
 /** Sampling settings a model wants; an unset field takes the built-in profile for the model, then the default. */
 export interface ModelRuntimeProfile {
 	/** `null` leaves the field out of the request, for models that reject or ignore it. */
@@ -132,6 +183,8 @@ export interface ModelEntry {
 	defaultEffort?: ReasoningEffort;
 	/** Max tokens per request (prompt + output), when the endpoint reports it. */
 	contextWindow?: number;
+	/** The user's context window for this model, when set, so the picker can show it against the reported one. */
+	contextWindowSet?: number;
 	/** The server no longer lists this model; a review still set to it stops with a message until another is picked. */
 	unavailable?: boolean;
 	/** Sampling overrides for this model, set in the settings file or API. */
@@ -256,17 +309,22 @@ export interface ModelSettings {
 	specialistEffort?: ReasoningEffort | null;
 	/** The verifier model's reasoning effort; null follows the Review effort when the model does too. */
 	verifierEffort?: ReasoningEffort | null;
-	/** How many subagents one review may run in all. */
+	/** How many subagents one review may run in all: a count, or `'uncapped'`. */
 	subagentCap: SubagentCap;
 	/** The token budget last picked, whose limits reviews run with; the cap and efforts may since have been changed by hand. */
 	tokenBudget: TokenBudget;
 	/** Whether reviews report low-severity findings; off keeps them to medium and above. */
 	reportLowSeverity: boolean;
-	/**
-	 * The providers switched off in Settings, by `providerKey` (`cli:codex`, `opencode:anthropic`). Their models
+	/** The providers switched off in Settings, by `providerKey` (`cli:codex`, `opencode:anthropic`). Their models
 	 * leave every picker and the catalog, and a review whose pick runs on one fails before it starts.
 	 */
 	disabledProviders: string[];
+	/**
+	 * The user's context windows, in tokens per request, by the model id a pick uses (`opencode:openai/gpt-6.1-terra`,
+	 * a saved entry id, `vllm:<server>/<model>`, `claude-code:opus`). A model missing here runs with what its
+	 * provider, agent or catalog reports, else `DEFAULT_CONTEXT_WINDOW`.
+	 */
+	contextWindows: Record<string, number>;
 	/**
 	 * Model entry ids the admin switched off in Settings, sorted. The model lists the pickers read leave them out and a
 	 * hidden model cannot be newly picked (by the admin, a member or the enforced policy); a pick saved before it was
@@ -316,6 +374,8 @@ export interface ModelSettingsPatch {
 	hiddenModels?: string[];
 	/** Replaces the policy. An enforced policy must name models the server offers on providers that are switched on. */
 	modelPolicy?: ModelPolicy;
+	/** Merged into the saved context windows, by model id; `null` removes that model's key. */
+	contextWindows?: Record<string, number | null>;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;

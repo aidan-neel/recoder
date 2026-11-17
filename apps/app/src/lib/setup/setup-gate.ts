@@ -49,9 +49,12 @@ export function recheckSetup(): void {
 	void useConnections.getState().loadAuth();
 }
 
-/** First run's steps, or null until the settings and the repositories have loaded. */
+/**
+ * First run's steps, or null until the settings and the repositories have loaded. The models land before the
+ * agents' providers do, so the steps wait for the whole settings load rather than judge the providers too early.
+ */
 export function useSetupSteps(): SetupSteps | null {
-	const models = useSettings((state) => state.models);
+	const models = useSettings((state) => (state.status === 'ready' ? state.models : null));
 	const providers = useSettings((state) => state.providers);
 	const repos = useConnections((state) => state.repos);
 

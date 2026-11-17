@@ -77,7 +77,7 @@ Other entry points:
 - `source`: a hosted provider id (`HOSTED_PROVIDERS` in `apps/server/src/models/model-providers.ts`: `opencode-go`, `opencode`, `openrouter`).
 - `id`, `label`, `model`.
 - `baseUrl`, `apiKey`.
-- `efforts`, `defaultEffort`, `contextWindow`.
+- `efforts`, `defaultEffort`, `contextWindow`. The entry's `contextWindow` is what its endpoint reported when the entry was saved; it counts as the reported window, under the user's setting for the id in `contextWindows` (see below).
 - `runtime`: `temperature`, `maxOutputTokens`, `topP`. These override the built-in profile from `resolveRuntime` in `apps/server/src/models/runtime-profiles.ts`.
 
 How `entryConfig` turns an entry into a config:
@@ -86,6 +86,10 @@ How `entryConfig` turns an entry into a config:
 - Any other entry uses its own `baseUrl` and `apiKey`, else the shared ones. With no base URL, it throws `ModelConfigError`.
 
 Id formats: `vllm:<server>/<model>` and `<agent id>:<model>`, where `<agent id>` is a registered adapter's id (`agentForModel` in `apps/server/src/agents/registry.ts`). `isRoutedModelId` in `@recoder/shared` recognizes both.
+
+## Context windows
+
+Every resolved `ModelConfig` carries `contextWindow`, the tokens per request the model takes, resolved by `contextWindowFor` in `apps/server/src/models/models.ts`: the user's setting for the model id in saved `contextWindows`, else the window reported by what lists the model (a saved entry's `contextWindow`, the agent's model list, a vLLM capture, a hosted catalog), else `DEFAULT_CONTEXT_WINDOW` (128000). Saved settings keep the windows keyed by the model id a pick uses; the Settings API returns them as `contextWindows` and marks the set models with `contextWindowSet` in `models`. See [configuration.md](configuration.md#context-window).
 
 ## Agent CLI adapters
 
@@ -212,7 +216,9 @@ Prompt caching on Claude Code, measured with CLI 2.1.295 on a subscription (1-ho
 - openai-compatible: `streamChat` or `requestChat`. A non-streaming call that wants reasoning text still streams.
 - every agent CLI: the `agentCli` transport finds the adapter with `agentById` in `apps/server/src/agents/registry.ts` and runs `agent.complete()`. `TRANSPORTS` names only openai-compatible; every other provider is an agent CLI.
 
-An agent Recoder runs turn by turn resends its whole transcript on transports that keep no session. Past `maxTranscriptChars` (`REVIEW_POLICY`), `compactTranscript` in `apps/server/src/review/pipeline/agent-loop/compaction.ts` stubs its oldest tool results, keeping the brief and the latest two.
+An agent Recoder runs turn by turn keeps its prompt prefix unchanged until the next call would exceed 75% of its resolved context window (estimated at four characters per token). It appends a checkpoint request, spending a model call, then rebuilds with the original system and opening messages, validated checkpoint JSON, discussion and repair notes, and the last two tool rounds verbatim. Invalid checkpoint JSON gets one repair call. Each agent may attempt at most three checkpoints, and never on its final turn. If checkpointing fails or is unavailable, past 90% of the window, old tool results are stubbed toward the 75% threshold, keeping the latest two rounds; an oversized brief or recent rounds may prevent reaching that threshold. Retrieval rounds are capped at the smaller of 24000 characters and 8% of the window in characters.
+
+When Recoder starts its managed OpenCode server, it merges user-set `opencode:` context windows into `OPENCODE_CONFIG_CONTENT` as `provider.<providerId>.models.<modelId>.limit.context`, preserving other configuration. OpenCode handles its own compaction using these limits. Changes take effect on the next managed OpenCode server start; restart Recoder to apply them to an already running server.
 
 `runChat` in `apps/server/src/models/llm/run.ts` wraps the transport. It takes a limiter slot, records token usage, retries transient failures (`withRetries` in `apps/server/src/models/llm/retry.ts`) and settles by a hard deadline.
 
@@ -275,8 +281,9 @@ Routes in `apps/server/src/routes/settings.ts`, mounted at `/api/settings`.
 
 - `configured`, `baseUrl`, `model`, `apiKeySet` (whether an API key is saved; a key is never returned, not even in part).
 - `sharedModelId`, `orchestratorModelId`, `specialistModelId`, `verifierModelId`.
-- `models`: the connected vLLM servers' models and the agent CLIs' models.
-- `orchestratorEffort`, `specialistEffort`, `verifierEffort`, `subagentCap`, `tokenBudget`, `reportLowSeverity`. `tokenBudget` is the last budget picked; the cap and efforts may since have been changed by hand. `subagentCap` is one of 0, 3, 8, 12 or `'uncapped'`; a file saved with 2 or 4 (the caps before) loads as the nearest cap at least as large (`migrateSubagentCap`) and is saved again that way. See [pipeline.md](pipeline.md#token-budget).
+- `models`: the connected vLLM servers' models and the agent CLIs' models. An entry whose id is in saved `contextWindows` also carries `contextWindowSet`, the user's window, next to the reported `contextWindow`.
+- `orchestratorEffort`, `specialistEffort`, `verifierEffort`, `subagentCap`, `tokenBudget`, `reportLowSeverity`. `tokenBudget` is the last budget picked; the cap and efforts may since have been changed by hand. `subagentCap` is a count from 0 to 99, or `'uncapped'`. Settings named picks are 3 and 6; any other count is Custom. A saved file keeps the count it has. See [pipeline.md](pipeline.md#token-budget).
+- `contextWindows`: the user's context windows, by model id. See [Context windows](#context-windows).
 - `configPath`: where settings are saved, with home shortened to `~`.
 - `limits`: `maxFiles`, `maxDiffChars`, `maxFileChars`.
 
@@ -285,6 +292,7 @@ Routes in `apps/server/src/routes/settings.ts`, mounted at `/api/settings`.
 - The body is validated with `reviewSettingsSchema`. Its fields match `ModelSettingsPatch` in `packages/shared/src/models.ts`.
 - `saveReviewSettings` merges it over the saved settings, persists them and returns the new payload.
 - An empty `apiKey`, top-level or in an entry, keeps the saved key. An empty `baseUrl` clears it.
+- A `contextWindows` map merges into the saved one, a model set again overwrites its window and `null` removes its key. A value must be an integer between 16000 and 1000000.
 - Sending `models` replaces the stored HTTP entry list. `dropDeletedRoutes` clears any of `sharedModelId`, `orchestratorModelId`, `specialistModelId` and `verifierModelId` whose stored HTTP route was deleted, while keeping routed picks (`vllm:` and `<agent id>:` ids, which `isRoutedModelId` in `@recoder/shared` recognizes), which live outside the stored HTTP entry list.
 
 Hosted provider keys live in `connections`, by provider id. They are not in the models payload.

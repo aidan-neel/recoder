@@ -107,7 +107,7 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
  * subagents never spend a verifier's share. Time bounds them too: none
  * launches past the investigation deadline, which keeps the verifiers' reserve.
  */
-function subagentLimit(run: ReviewRun, cap: SubagentCap | number): number {
+function subagentLimit(run: ReviewRun, cap: SubagentCap): number {
 	if (cap !== 'uncapped') return cap;
 
 	const free = run.budget.remaining() - run.budget.reserve - (run.verifying?.heldCalls ?? 0);
@@ -116,7 +116,7 @@ function subagentLimit(run: ReviewRun, cap: SubagentCap | number): number {
 }
 
 /** The cap as the orchestrator words it: the setting, or with it uncapped, how many the budget had room for. */
-function capText(cap: SubagentCap | number, limit: number): string {
+function capText(cap: SubagentCap, limit: number): string {
 	return cap === 'uncapped' ? `${limit}, all the review's model calls had room for` : String(cap);
 }
 
@@ -147,10 +147,10 @@ function asksForSubagents(instructions: string | null | undefined): boolean {
 }
 
 /** Why a brief that asked for subagents got none. */
-function noSubagentsNote(cap: SubagentCap | number): string {
+function noSubagentsNote(cap: SubagentCap): string {
 	return cap
 		? 'You asked for subagents, but no reviewer had an open question that needed one.'
-		: 'You asked for subagents, but the Subagents setting is off. Turn it on under Settings › Harness and run the review again.';
+		: 'You asked for subagents, but the Subagents setting is off. Turn it on under Settings › Limits and run the review again.';
 }
 
 /** The orchestrator's note on the subagents it's running, and any it left out over the cap. */

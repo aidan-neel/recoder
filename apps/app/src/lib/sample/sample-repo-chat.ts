@@ -153,7 +153,7 @@ export function createSampleRepoChats(world: SampleWorld) {
 
 		repoChat: async (chatId: string): Promise<RepoChat> => structuredClone(findChat(chatId)),
 
-		async startRepoChat({ repoId, text }: StartRepoChatInput): Promise<{ id: string }> {
+		async startRepoChat({ repoId, text }: StartRepoChatInput): Promise<RepoChat> {
 			if (!world.data().repos.some((repo) => repo.id === repoId))
 				throw new ApiError('That repository is not tracked. Add it in Settings first.', 404);
 
@@ -173,7 +173,7 @@ export function createSampleRepoChats(world: SampleWorld) {
 
 			ask(id, text);
 
-			return { id };
+			return structuredClone(findChat(id));
 		},
 
 		async sendRepoChat(chatId: string, { text }: SendRepoChatInput): Promise<RepoChatMessage> {

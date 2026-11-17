@@ -243,20 +243,8 @@
 	user-select: none;
 }
 
-/* A hunk: its range line in the accent, then its lines. */
-.hunk-head {
-	display: flex;
-	height: 28px;
-	align-items: center;
-	overflow: hidden;
-	padding: 0 12px;
-	background: var(--accent-tint);
-	color: var(--accent-text);
-	font-family: var(--font-code);
-	font-size: 12px;
-	white-space: pre;
-}
-.hunk + .hunk .hunk-head {
+/* Hunks follow one another with a hairline where the diff skips lines; the line numbers say how many. */
+.hunk + .hunk {
 	border-top: 1px solid var(--line-card);
 }
 .file-body > :last-child {

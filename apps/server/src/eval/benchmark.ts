@@ -44,6 +44,8 @@ import { HOLDOUT_SET, readLabels, readTaskSet, selectTasks, subsetLines, type Pr
 import { runAgreement } from './benchmark-merge';
 import { benchmarkSummary } from './benchmark-score';
 import { parseShard, shardTasks, type ShardSpec } from './shard';
+import { loadPriceLookup } from '../models/model-prices';
+import { balanceOrWarn, billedLines } from './provider-balance';
 
 const USAGE =
 	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--set <name|holdout> | --only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--mode auto --since <report.json>] [--allow-diff field,field] [--shard i/n] [--runs 1] [--repeat 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
@@ -412,6 +414,7 @@ async function main(): Promise<void> {
 	console.log(`Report: ${save(report(initial))}`);
 
 	const replays = plan.rescore ? labels.map(() => []) : options.replay ? replayedReviews(plan.origin!, labels) : null;
+	const balanceBefore = await balanceOrWarn(process.env);
 
 	const final = report(
 		await runAll(options, labels, repos, judge, adjudications, identity, initial, replays, (records) =>
@@ -419,7 +422,8 @@ async function main(): Promise<void> {
 		)
 	);
 
-	printBenchmark(final);
+	printBenchmark(final, await loadPriceLookup());
+	console.log(billedLines(balanceBefore, await balanceOrWarn(process.env)).join('\n'));
 	console.log(`\nReport: ${save(final)}`);
 }
 

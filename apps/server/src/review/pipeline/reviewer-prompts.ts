@@ -11,7 +11,7 @@ import type { LensId } from './lenses/types.js';
 import type { RepoInventory } from './repo-inventory/repo-inventory.js';
 import { repoMap } from './repo-inventory/repo-map.js';
 import { REVIEW_POLICY } from '../session/review-policy.js';
-import { UNTRUSTED_PREFIX, reviewerContract, type ReviewerFocus } from './prompts.js';
+import { UNTRUSTED_PREFIX, FOCUS_RULES, reviewerContract, type ReviewerFocus } from './prompts.js';
 import type { ReviewUnit } from './units.js';
 
 /** Most requests one reviewer's answer may carry: the largest subagent cap, though a reviewer is asked for its share. */
@@ -43,13 +43,12 @@ const FOLLOW_UP_OFFER = `Brief question: your task names the open question of th
 ${QUESTION_ANSWERS}`;
 
 /**
- * Which optional parts a reviewer is offered: how many subagents it may ask for (none when they are off), brief
- * questions to settle (when a defect lens applies and subagents are on), and workers when the second model
+ * Which shared optional parts a reviewer is offered: how many subagents it may ask for (none when they are off),
+ * and workers when the second model
  * differs from Review.
  */
 interface ReviewerOffers {
 	subagents: number;
-	unsettled: boolean;
 	delegate: boolean;
 }
 
@@ -61,27 +60,32 @@ function focusOf(lenses: readonly LensId[]): ReviewerFocus {
 }
 
 /**
- * A reviewer's prompt: the procedures of every lens that fits its slice, applied one after another to every
- * changed symbol in it, reporting only those lenses' categories. Subagent requests and unsettled
- * questions are offered only when the caller allows them.
+ * The system instructions shared by every reviewer; unit-specific rules and procedures live in its opening message.
  */
-export function reviewerSystemPrompt(
-	lenses: readonly LensId[],
-	exec: boolean,
-	directive: ReviewDirective | null,
-	offers: ReviewerOffers
-): string {
+export function reviewerSystemPrompt(exec: boolean, directive: ReviewDirective | null, offers: ReviewerOffers): string {
 	return withDirective(
-		`${reviewerContract(exec, focusOf(lenses))}
+		`${reviewerContract(exec)}
 
-Role: reviewer. You apply the procedures below, one lens after another, to every changed symbol in your slice and report only these categories: ${lensCategories(lenses).join(', ')}. A finding in any other category is dropped.
+Role: reviewer. Apply only the focus rules, categories and procedures assigned in your unit message.
+
+${offers.subagents ? subagentsOffer(offers.subagents) : 'Leave "subagents" empty.'}${offers.delegate ? `\n\n${DELEGATE_OFFER}` : ''}`,
+		directive
+	);
+}
+
+/** Only this unit's rules and lens procedures, placed after shared review context. */
+function reviewerAssignment(unit: ReviewUnit, questions: boolean): string {
+	const lenses = unit.lenses ?? [];
+
+	return `Unit review instructions (trusted; apply only these rules and procedures):
+${FOCUS_RULES[focusOf(lenses)]}
+
+Report only these categories: ${lensCategories(lenses).join(', ')}. A finding in any other category is dropped.
 
 Procedures (apply each step to each changed symbol, in order):
 ${combinedProcedure(lenses.map(lensById))}
 
-${offers.subagents ? subagentsOffer(offers.subagents) : 'Leave "subagents" empty.'}${offers.unsettled ? `\n\n${UNSETTLED_OFFER}` : ''}${offers.delegate ? `\n\n${DELEGATE_OFFER}` : ''}`,
-		directive
-	);
+${questions && answersQuestions(unit) ? UNSETTLED_OFFER : ''}`;
 }
 
 /**
@@ -165,6 +169,8 @@ export interface ReviewerPromptContext {
 	changeModel: ChangeModel | null;
 	intent: ChangeIntent | null;
 	ledger: RuleLedger | null;
+	/** The review's skills block (`reviewSkillsContext`), the same for every agent; empty when there are none. */
+	skills: string;
 }
 
 /** Changed files listed for orientation; a reviewer reads only its own unit's patch up front. */
@@ -209,7 +215,7 @@ function ledgerLines(unit: ReviewUnit, ledger: RuleLedger | null): string {
 }
 
 /** Whether the brief's open questions are put to this unit's agent: every one but a reviewer of maintainability lenses only. */
-export function answersQuestions(unit: ReviewUnit): boolean {
+function answersQuestions(unit: ReviewUnit): boolean {
 	return !unit.lenses || unit.lenses.some((lens) => !isQualityLens(lens));
 }
 
@@ -229,12 +235,17 @@ export function reviewerUserPrompt(
 	remaining: { turns: number; calls: number },
 	ctx: ReviewerPromptContext,
 	declarations: string,
-	heading: ReviewerHeading
+	heading: ReviewerHeading,
+	setupNotes = '',
+	questions = false
 ): string {
 	return [
 		developerInstructions(ctx.directive),
 		...pullRequestLines(ctx.pr),
+		ctx.skills,
 		intentBlock(ctx.intent),
+		setupNotes,
+		heading === 'Unit' && !unit.purpose ? reviewerAssignment(unit, questions) : '',
 		`${heading} ${unit.id}: ${unit.title}`,
 		unit.reason,
 		`${heading === 'Unit' ? 'Changes in this unit' : 'Changes to start from'}:\n${scopeLines(unit.scope)}`,

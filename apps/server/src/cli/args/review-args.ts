@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { REASONING_EFFORTS, TOKEN_BUDGETS } from '@recoder/shared';
+import { REASONING_EFFORTS, REVIEW_SPEED_PLANS, TOKEN_BUDGETS } from '@recoder/shared';
 import type { Audience } from '../audience.js';
 import type { OutputOptions, ReviewIntent, ReviewOptions, ReviewScope, ReviewTuning } from '../review/options.js';
 import {
@@ -94,18 +94,28 @@ function textOrFile(
 	return inline ?? null;
 }
 
+/**
+ * `--spark` is the Spark speed (`REVIEW_SPEED_PLANS`): the Low budget, no subagents and no code run, which the flags
+ * that set those would contradict, and its low effort for the models whose effort is not given.
+ */
 function resolveTuning(values: ReviewFlagValues): ReviewTuning {
+	for (const flag of ['budget', 'subagents', 'no-exec']) rejectMoreThanOne(values, ['spark', flag]);
+
+	const speed = values.spark === true ? 'spark' : 'standard';
+	const { effort, tokenBudget, subagentCap } = REVIEW_SPEED_PLANS[speed];
+
 	return {
-		budget: parseChoice('--budget', values.budget ?? REVIEW_DEFAULTS.budget, TOKEN_BUDGETS),
-		subagents: parseSubagents(values.subagents, REVIEW_FLAGS.subagents.bounds),
+		speed,
+		budget: tokenBudget ?? parseChoice('--budget', values.budget ?? REVIEW_DEFAULTS.budget, TOKEN_BUDGETS),
+		subagents: subagentCap ?? parseSubagents(values.subagents, REVIEW_FLAGS.subagents.bounds),
 		reviewerModel: parseText('--reviewer', values.reviewer),
 		workerModel: parseText('--worker', values.worker),
 		verifierModel: parseText('--verifier', values.verifier),
-		reviewerEffort: parseChoiceOr('--reviewer-effort', values['reviewer-effort'], REASONING_EFFORTS, null),
-		workerEffort: parseChoiceOr('--worker-effort', values['worker-effort'], REASONING_EFFORTS, null),
+		reviewerEffort: parseChoiceOr('--reviewer-effort', values['reviewer-effort'], REASONING_EFFORTS, effort),
+		workerEffort: parseChoiceOr('--worker-effort', values['worker-effort'], REASONING_EFFORTS, effort),
 		lenses: parseLenses(values),
 		reportLowSeverity: resolveLowSeverity(values),
-		exec: values['no-exec'] !== true,
+		exec: speed === 'standard' && values['no-exec'] !== true,
 		baselineCache: values['no-baseline-cache'] !== true,
 		maxFileChars: parseMaxFileChars(values['max-file-chars']),
 		levers: parseLevers(values.enable)

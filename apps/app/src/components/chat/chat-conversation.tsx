@@ -5,6 +5,7 @@ import { Skeleton, SkeletonText, StatusNotice } from '@recoder/ui';
 import { useFollowEnd } from '@/lib/ask/use-follow-end';
 import type { RepoChatView } from '@/lib/chat/types';
 import { useImageDraft } from '@/lib/compose/use-image-draft';
+import { useRepoSkills } from '@/lib/skills/use-repo-skills';
 
 import { AskThread } from '@/components/ask/ask-thread';
 import { ChatComposer } from '@/components/ask/chat-composer';
@@ -20,6 +21,7 @@ export function ChatConversation({ chat }: { chat: RepoChatView }) {
 	const { ask } = chat;
 	const images = useImageDraft();
 	const scroller = useFollowEnd(ask.replying);
+	const skills = useRepoSkills({ repoId: chat.repoId });
 
 	/** Sends the words with the images attached; the images clear once the message is taken. */
 	async function send(text: string): Promise<void> {
@@ -49,6 +51,7 @@ export function ChatConversation({ chat }: { chat: RepoChatView }) {
 						onStop={ask.stop}
 						onSend={send}
 						images={images}
+						skills={skills}
 						trailing={<ComposerModels />}
 					/>
 				</div>

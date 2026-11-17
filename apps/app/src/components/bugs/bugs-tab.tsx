@@ -5,20 +5,16 @@ import { useEffect, useState } from 'react';
 
 import type { BugsView } from '@/lib/bugs/types';
 import { useBugsView } from '@/lib/bugs/use-bugs';
+import { isLive } from '@/lib/run/run-phase';
 import { useRunView } from '@/lib/run/use-run';
-import { plural } from '@/lib/shell/format';
 import { useKeys } from '@/lib/shell/use-keys';
 
 import { RunBanner } from '@/components/pull/run-banner';
 
 import { BugCard } from './bug-card';
 import { BugGroups } from './bug-groups';
-import { RunCard } from './run-card';
-
-interface BugsTabProps {
-	repoId: string;
-	number: number;
-}
+import { CleanNotice } from './clean-notice';
+import { RunSteps } from './run-steps';
 
 /** The bug the address points at (`#bug-<id>`), when it names one. */
 function bugInAddress(): string | null {
@@ -74,47 +70,30 @@ function useOpenBugs(view: BugsView): [ReadonlySet<string>, (id: string) => void
 	return [open ?? new Set<string>(), toggle];
 }
 
-/** What the tab says when a finished review has no open bugs. */
-function CleanNotice({ view }: { view: BugsView }) {
-	const detail =
-		view.checked.claims > 0
-			? `It checked ${plural(view.checked.claims, 'claim')} and none held.`
-			: 'Nothing it looked at needs your attention.';
-
-	return (
-		<div className="page-notice">
-			<StatusNotice title="Recoder found no bugs." detail={detail} />
-		</div>
-	);
-}
-
 /**
- * The Bugs tab: the open findings of the newest review as cards, the first
- * one open, then what else the review reports. While a review runs, its
- * progress shows above them. `j` and `k` step through the cards; Enter opens
- * the one focus rests on.
+ * The Review tab: the open findings of the newest review as cards, the first
+ * one open, then what else the review reports. While a review is queued,
+ * runs or is paused, its steps show as rows above them; a review that failed,
+ * is out of date or is not there yet says so in a banner with its next step.
+ * `j` and `k` step through the cards; Enter opens the one focus rests on.
  */
-export function BugsTab({ repoId, number }: BugsTabProps) {
+export function BugsTab() {
 	const view = useBugsView();
 	const run = useRunView();
 	const [open, toggle] = useOpenBugs(view);
-	const busy = run.phase === 'queued' || run.phase === 'running';
 	const settled = run.phase === 'passed' && !run.outdated;
+	const clean = view.phase === 'ready' && view.open.length === 0 && settled;
 
 	useKeys({ j: () => stepBug(1), k: () => stepBug(-1) });
 
 	return (
 		<div className="reading">
 			<div className="reading-column">
-				{busy ? <RunCard run={run} /> : null}
-				{!busy && !settled ? (
-					<RunBanner
-						run={run}
-						repoId={repoId}
-						number={number}
-						bugs={view.phase === 'ready' ? view.open.length : null}
-					/>
-				) : null}
+				{isLive(run.phase) ? (
+					<RunSteps run={run} />
+				) : (
+					<RunBanner run={run} bugs={view.phase === 'ready' ? view.open.length : null} />
+				)}
 				{view.phase === 'loading' ? <SkeletonRows count={3} height={52} glyph lines={1} /> : null}
 				{view.phase === 'failed' ? (
 					<div className="page-notice">
@@ -126,13 +105,13 @@ export function BugsTab({ repoId, number }: BugsTabProps) {
 						/>
 					</div>
 				) : null}
-				{view.phase === 'ready' && view.open.length === 0 && settled ? <CleanNotice view={view} /> : null}
+				{clean ? <CleanNotice checked={view.checked} /> : null}
 				{view.phase === 'ready'
 					? view.open.map((bug) => (
 							<BugCard key={bug.id} bug={bug} view={view} open={open.has(bug.id)} onToggle={toggle} />
 						))
 					: null}
-				{view.phase === 'ready' ? <BugGroups view={view} /> : null}
+				{view.phase === 'ready' ? <BugGroups view={view} clean={clean} /> : null}
 			</div>
 		</div>
 	);

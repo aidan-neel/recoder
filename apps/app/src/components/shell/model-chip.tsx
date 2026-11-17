@@ -1,7 +1,6 @@
 import { Tooltip } from '@recoder/ui';
-import Link from 'next/link';
 
-import { settingsHref } from '@/lib/shell/routes';
+import { useChrome } from '@/lib/shell/chrome';
 
 /** Whether reviews can run: a model is ready, one is set but does not answer, or none is set up. */
 type ModelState = 'ready' | 'off' | 'missing';
@@ -22,10 +21,10 @@ interface ModelChipProps {
 export function ModelChip({ label, state }: ModelChipProps) {
 	return (
 		<Tooltip content="Change the review model">
-			<Link href={settingsHref('models')} className="model-chip">
+			<button type="button" className="model-chip" onClick={() => useChrome.getState().openSettings('models')}>
 				<span className="model-dot" data-state={state} role="img" aria-label={STATE_LABELS[state]} />
 				<span className="model-chip-name">{label}</span>
-			</Link>
+			</button>
 		</Tooltip>
 	);
 }

@@ -10,6 +10,8 @@ import { useCompose } from '@/lib/compose/use-compose';
 import { useImageDraft } from '@/lib/compose/use-image-draft';
 import { useOpenStarted } from '@/lib/compose/use-open-started';
 import type { PullRow } from '@/lib/pulls/types';
+import { formatCount } from '@/lib/shell/format';
+import { useRepoSkills } from '@/lib/skills/use-repo-skills';
 
 import { ComposerModels } from '@/components/ask/model-menu';
 import { Crumbs } from '@/components/common/crumbs';
@@ -35,8 +37,10 @@ const MODES: { value: ComposeMode; label: string }[] = [
  * starts the review of the choice with the brief, which may be empty, and
  * opens the pull request. In Chat mode the field takes anything about the
  * repository; Enter opens the chat. The title and the mode sit over the
- * field; the repository, the pull request, images and models sit in its bar.
- * Images go with the brief or the chat's first message. The pull requests
+ * field; the repository, the pull request, images and models sit in its bar,
+ * and in Review mode the model menu also holds the review's speed. Images go
+ * with the brief or the chat's first message, and "/" offers the
+ * repository's skills, a chosen pull request's head included. The pull requests
  * with no review yet sit below; a click chooses one and puts the caret in
  * the field.
  */
@@ -48,6 +52,7 @@ export function ComposeScreen() {
 	const [browsing, setBrowsing] = useState(false);
 	const column = useRef<HTMLDivElement>(null);
 	const chat = compose.mode === 'chat';
+	const skills = useRepoSkills(skillSource(compose));
 
 	/** Starts a review or a chat and opens its page; a refusal stays in the composer's bar. */
 	function start(begin: () => Promise<string>): void {
@@ -135,30 +140,26 @@ export function ComposeScreen() {
 						onFiles={images.add}
 						images={images.images}
 						onRemoveImage={images.remove}
-						tools={
+						skills={skills}
+						tools={<AttachImages onAttach={images.add} />}
+						targets={
 							<>
-								<AttachImages onAttach={images.add} />
-								{compose.loading ? (
-									<>
-										<PickerSkeleton width={140} />
-										{chat ? null : <PickerSkeleton width={180} />}
-									</>
+								{compose.reposLoading ? (
+									<PickerSkeleton width={140} />
 								) : (
-									<>
-										<RepoPicker
-											repos={compose.repos}
-											repoId={compose.repoId}
-											onPick={compose.setRepoId}
-											onAdd={() => setBrowsing(true)}
-										/>
-										{chat || !compose.repoId ? null : (
-											<PullPicker rows={compose.pulls} pick={compose.pick} onPick={compose.choose} />
-										)}
-									</>
+									<RepoPicker
+										repos={compose.repos}
+										repoId={compose.repoId}
+										onPick={compose.setRepoId}
+										onAdd={() => setBrowsing(true)}
+									/>
 								)}
+								{chat ? null : <PullChoice compose={compose} />}
 							</>
 						}
-						trailing={<ComposerModels />}
+						trailing={
+							<ComposerModels speed={chat ? undefined : { speed: compose.speed, onSpeedChange: compose.setSpeed }} />
+						}
 						action={
 							<ComposerSend
 								label={chat ? 'Start the chat' : 'Start the review'}
@@ -170,7 +171,7 @@ export function ComposeScreen() {
 					/>
 					<Suggestions
 						rows={compose.suggestions}
-						loading={compose.loading}
+						loading={compose.pullsLoading}
 						picked={chat ? null : (compose.pick?.target ?? null)}
 						onPick={pickRow}
 					/>
@@ -179,6 +180,23 @@ export function ComposeScreen() {
 			<RepoBrowser open={browsing} onOpenChange={browse} />
 		</Page>
 	);
+}
+
+/** The pull request picker in Review mode, held as a skeleton until the pull requests answer. */
+function PullChoice({ compose }: { compose: ComposeView }) {
+	if (compose.reposLoading || compose.pullsLoading) return <PickerSkeleton width={180} />;
+	if (!compose.repoId) return null;
+
+	return <PullPicker rows={compose.pulls} pick={compose.pick} onPick={compose.choose} />;
+}
+
+/** Where "/" reads skills: the chosen pull request in Review mode, else the chosen repository. */
+function skillSource(compose: ComposeView): { repoId: string | null; pull?: number } {
+	const target = compose.mode === 'review' ? compose.pick?.target : undefined;
+
+	if (target?.kind === 'pull') return { repoId: target.repoId, pull: target.number };
+
+	return { repoId: compose.repoId };
 }
 
 /** What to write, by mode; a chat names its repository. */
@@ -206,7 +224,7 @@ function noteFor(compose: ComposeView, error: string | null): ComposerNote | nul
 
 /** A chat's line: how far it runs over the limit. With no repository the bar offers to add one instead. */
 function chatNote(compose: ComposeView): ComposerNote | null {
-	if (compose.overBy > 0) return { tone: 'danger', text: `${compose.overBy.toLocaleString('en-US')} over the limit` };
+	if (compose.overBy > 0) return { tone: 'danger', text: `${formatCount(compose.overBy)} over the limit` };
 
 	return null;
 }

@@ -9,6 +9,8 @@ import { CHAT_STYLE, EXEC_EXAMPLES, RETRIEVAL_EXAMPLES } from './prompts.js';
 import { reviewNow, reviewPausePoint } from '../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
 import { compactTranscript } from './agent-loop/compaction.js';
+import { contextBudget } from './agent-loop/context-budget.js';
+import { MAX_CHECKPOINTS, requestCheckpoint, transcriptChars } from './agent-loop/checkpoint.js';
 import { DELEGATE_SHAPE, commandsRun, executeTurn } from './agent-loop/delegation.js';
 import { agentDeadlines, callSettleAt, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
 import { runNativeAgent } from './agent-loop/native-engine.js';
@@ -171,6 +173,9 @@ async function runTurns<T>(
 	let stuck = false;
 	let lastError = 'no model output';
 	let sentDiscussion = '';
+	let checkpoints = 0;
+	let checkpointAttempted = false;
+	const context = contextBudget(opts.config.contextWindow);
 	const shapes = `${opts.exec ? EXEC_EXAMPLES : RETRIEVAL_EXAMPLES}${opts.delegate ? DELEGATE_SHAPE : ''}\nTo finish, reply with ONLY the final JSON object${opts.finalExample ? `, for example:\n${opts.finalExample}` : '.'}\nNo prose outside the JSON, no code fences.`;
 
 	/**
@@ -200,15 +205,44 @@ async function runTurns<T>(
 			sentDiscussion = discussion;
 		}
 
+		const chars = transcriptChars(messages);
+
+		if (chars <= context.compactAtChars) checkpointAttempted = false;
+
+		if (
+			chars > context.compactAtChars &&
+			!checkpointAttempted &&
+			checkpoints < MAX_CHECKPOINTS &&
+			!lastTurn &&
+			opts.budget.canSpend(2, spendOpts)
+		) {
+			checkpointAttempted = true;
+			checkpoints++;
+
+			const checkpoint = await requestCheckpoint(opts, messages, toolResults, conversation, turn, limits);
+
+			if (checkpoint?.kind === 'failed') afterFailedCall(opts, checkpoint, false, shapes);
+			if (checkpoint?.kind === 'out-of-time') checkpoint.settle();
+
+			throwIfAborted(opts.signal);
+			call--;
+			continue;
+		}
+
+		if (
+			transcriptChars(messages) > context.hardLimitChars &&
+			(lastTurn || checkpointAttempted || checkpoints >= MAX_CHECKPOINTS)
+		) {
+			const stubbed = compactTranscript(messages, toolResults, context.compactAtChars);
+
+			if (stubbed) opts.onLog?.(`${opts.label} compacted ${stubbed} earlier tool results`);
+		}
+
 		if (lastTurn && !messages.at(-1)?.content.startsWith('This is your final turn.'))
 			messages.push({ role: 'user', content: FINAL_TURN });
 
 		opts.budget.spend();
 		opts.onLog?.(`${opts.label} model turn ${turn}/${opts.maxTurns} (${opts.config.model})`);
-
-		const stubbed = compactTranscript(messages, toolResults, REVIEW_POLICY.maxTranscriptChars);
-
-		if (stubbed) opts.onLog?.(`${opts.label} compacted ${stubbed} earlier tool results`);
 
 		const started = Date.now();
 		const settleAt = callSettleAt(limits, lastTurn);

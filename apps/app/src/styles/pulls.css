@@ -116,6 +116,18 @@
 	display: flex;
 	justify-content: flex-end;
 }
+/* A status about the review links to the Review tab: the pill is the target, and it deepens on hover. */
+.pill-link {
+	height: auto;
+	padding: 0;
+	border-radius: var(--radius-chip);
+}
+.pill-link:hover {
+	background: transparent;
+}
+.pill-link:hover [data-ui='pill'] {
+	background-color: color-mix(in srgb, var(--pill-fg) 22%, transparent);
+}
 .pull-row .diff-stat {
 	justify-content: flex-end;
 	transition: opacity var(--dur-hover) ease-out;

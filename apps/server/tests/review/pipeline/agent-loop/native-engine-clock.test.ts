@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import type { AgentAdapter, AgentPromptOptions, AgentReply, AgentRun } from '../../../../src/agents/contract';
 import { cancelledError, timedOutError } from '../../../../src/models/llm/errors';
 import { runNativeAgent } from '../../../../src/review/pipeline/agent-loop/native-engine';
@@ -10,7 +11,7 @@ useFakeClock();
 const ANSWER = '{"done":true}';
 
 /** A model of an agent CLI, which the engine runs as a native run. */
-const CONFIG = { provider: 'fake-cli', model: 'm', baseUrl: '', apiKey: '' };
+const CONFIG = { provider: 'fake-cli', model: 'm', baseUrl: '', apiKey: '', contextWindow: DEFAULT_CONTEXT_WINDOW };
 
 /** A model call of minutes, on the review's clock. */
 const SLOW_CALL_MS = 150_000;

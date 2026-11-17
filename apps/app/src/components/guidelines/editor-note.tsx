@@ -1,11 +1,11 @@
 'use client';
 
 import { SwapText } from '@recoder/ui';
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import type { EditorNote as Note } from '@/lib/guidelines/editor-note';
-import { settingsHref } from '@/lib/shell/routes';
+import { formatCount } from '@/lib/shell/format';
+import { useChrome } from '@/lib/shell/chrome';
 
 interface EditorNoteProps {
 	/** What the line says, or null when there is nothing to say. */
@@ -16,11 +16,6 @@ interface EditorNoteProps {
 	max: number;
 }
 
-/** A count as people read it: `8,000`. */
-function count(value: number): string {
-	return value.toLocaleString('en-US');
-}
-
 /** A note's words. A blocked save has none of its own: it points at the page that unblocks it. */
 function noteWords(note: Note): ReactNode {
 	if (note.kind !== 'blocked') return note.text;
@@ -28,9 +23,9 @@ function noteWords(note: Note): ReactNode {
 	return (
 		<>
 			Connect a token with write access in{' '}
-			<Link href={settingsHref('connections')} className="text-link">
+			<button type="button" className="text-link" onClick={() => useChrome.getState().openSettings('connections')}>
 				Connections
-			</Link>{' '}
+			</button>{' '}
 			to open a pull request.
 		</>
 	);
@@ -52,7 +47,7 @@ export function EditorNote({ note, length, max }: EditorNoteProps) {
 				) : null}
 			</SwapText>
 			<span className="guidelines-count" data-over={length > max || undefined}>
-				{count(length)} / {count(max)}
+				{formatCount(length)} / {formatCount(max)}
 			</span>
 		</div>
 	);

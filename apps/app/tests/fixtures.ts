@@ -1,7 +1,28 @@
-import type { AgentStatus, DiffHunk, Repo, ReviewListItem } from '@recoder/shared';
+import type { AgentStatus, DiffHunk, ModelSettings, Repo, ReviewListItem } from '@recoder/shared';
 
 /** The head commit the fixtures' pull requests and reviews share. */
 export const HEAD = 'head1';
+
+/** Model settings with nothing picked or configured beyond the defaults, overridden by `patch`. */
+export function modelSettings(patch: Partial<ModelSettings> = {}): ModelSettings {
+	return {
+		configured: true,
+		baseUrl: '',
+		model: '',
+		apiKeySet: false,
+		sharedModelId: null,
+		models: [],
+		subagentCap: 8,
+		tokenBudget: 'medium',
+		reportLowSeverity: true,
+		disabledProviders: [],
+		contextWindows: {},
+		hiddenModels: [],
+		modelPolicy: { kind: 'choose' },
+		limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 },
+		...patch
+	};
+}
 
 /** A Map-backed stand-in for the browser's localStorage or sessionStorage. */
 export function memoryStorage(): Storage {

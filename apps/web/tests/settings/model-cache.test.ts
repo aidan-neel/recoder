@@ -21,6 +21,7 @@ const settings: ModelSettings = {
 	tokenBudget: 'medium',
 	reportLowSeverity: false,
 	disabledProviders: [],
+	contextWindows: {},
 	hiddenModels: [],
 	modelPolicy: { kind: 'choose' },
 	limits: { maxFiles: 50, maxDiffChars: 100_000, maxFileChars: 20_000 }

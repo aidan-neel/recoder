@@ -5,7 +5,7 @@ import { useCallback, useMemo } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useApi, useListStore } from '../api/client';
+import { useApi, useChatCache, useListStore } from '../api/client';
 import { needsReview } from '../pulls/pull-rows';
 import type { TargetContext } from '../pulls/pull-target';
 import { trackedPull } from '../pulls/use-open-pull';
@@ -31,8 +31,9 @@ const TYPED_CHARS = 1;
 export function useCompose(): ComposeView {
 	useWatchList();
 
-	const { mode, setMode } = useComposeMode();
+	const { mode, setMode, speed, setSpeed } = useComposeMode();
 	const client = useApi();
+	const chats = useChatCache();
 	const list = useListStore();
 	const entries = useRowEntries();
 	const picking = usePullPick(entries);
@@ -135,28 +136,29 @@ export function useCompose(): ComposeView {
 
 			await list.start(
 				{ repoId: pull.repoId, number: pull.number, ...(pick.title && { title: pick.title }) },
-				{ instructions: instructions || undefined, images }
+				{ instructions: instructions || undefined, images, speed }
 			);
 
 			list.setComposeRepo(pull.repoId);
 
 			return pull.href;
 		},
-		[pick, list, client, text]
+		[pick, list, client, text, speed]
 	);
 
 	const startChat = useCallback(
 		async (images: ImageUpload[]) => {
 			if (!repoId) throw new Error(CHAT_NEEDS_REPO);
 
-			const { id } = await client.startRepoChat({ repoId, text: text.trim(), ...(images.length && { images }) });
+			const chat = await client.startRepoChat({ repoId, text: text.trim(), ...(images.length && { images }) });
 
+			chats.keep(chat.id, chat);
 			list.setComposeRepo(repoId);
 			list.reload();
 
-			return chatHref(client.base, id);
+			return chatHref(client.base, chat.id);
 		},
-		[repoId, client, text, list]
+		[repoId, client, chats, text, list]
 	);
 
 	const submit = useCallback(
@@ -170,6 +172,8 @@ export function useCompose(): ComposeView {
 			setMode: chooseMode,
 			text,
 			setText,
+			speed,
+			setSpeed,
 			clear,
 			pick,
 			choose: picking.choose,
@@ -183,7 +187,8 @@ export function useCompose(): ComposeView {
 			setRepoId,
 			reload: list.reload,
 			suggestions,
-			loading: data.phase === 'loading',
+			reposLoading: repos === null,
+			pullsLoading: data.phase === 'loading',
 			overBy,
 			ready,
 			submit
@@ -193,6 +198,8 @@ export function useCompose(): ComposeView {
 			chooseMode,
 			text,
 			setText,
+			speed,
+			setSpeed,
 			clear,
 			pick,
 			picking.choose,
@@ -206,6 +213,7 @@ export function useCompose(): ComposeView {
 			setRepoId,
 			list,
 			suggestions,
+			repos,
 			data.phase,
 			overBy,
 			ready,

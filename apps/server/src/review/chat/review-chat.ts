@@ -1,4 +1,4 @@
-import { ReviewChatError, reviewCodeRangeSchema } from './chat-input';
+import { ReviewChatError, reviewCodeRangeSchema, type ChatAttachments } from './chat-input';
 
 export { reviewCodeContextSchema, ReviewChatError } from './chat-input';
 
@@ -21,6 +21,10 @@ import { currentChatCommand } from '../runtime/chat-context';
 import { requestChat } from '../runtime/requests';
 import { isRecoverableExit } from '../runtime/execution';
 import { effectiveSubagentCap } from '../session/review-settings';
+import type { LoadedSkill } from '../../skills/discovery';
+import { attachedSkillsBlock } from '../../skills/prompt';
+import { attachedReviewSkills } from './chat-skills';
+import { skillNames, skillRequest } from '../../skills/repo-skills';
 import { BARE_CONFIRMATION, looksLikeReviewRequest, splitRerunRequest } from './review-request';
 
 export { cancelReviewChats, recordChatMessage, stopReviewChat } from './chat-replies';
@@ -60,7 +64,7 @@ function rerunInstructions(): string {
 
 	const subagents = cap
 		? `The Subagents setting allows ${allowed} per review, and reviewers request them when the brief asks.`
-		: 'The Subagents setting is off, so a new run cannot use subagents. If the developer wants them, tell them to turn on Subagents under Settings › Harness and ask again, and do not start the run.';
+		: 'The Subagents setting is off, so a new run cannot use subagents. If the developer wants them, tell them to turn on Subagents under Settings › Limits and ask again, and do not start the run.';
 
 	return `When the developer asks you to review again, run another review, or rerun it with a different focus or with subagents, Recoder can do that: say in one short sentence that you're starting a new review, and put this block at the very end of your message:\n\`\`\`recoder-review\n{}\n\`\`\`\nThe new run starts from the beginning in this session, with this conversation as its brief, and replaces the current findings. ${subagents} Never add this block unprompted.`;
 }
@@ -129,6 +133,13 @@ export async function reviewInstructions(reviewId: string, startedAt?: string | 
 		.slice(-6000);
 }
 
+/** The skills attached to the message, ready to end the prompt; empty when there are none. */
+function skillsSection(skills: readonly LoadedSkill[]): string {
+	const block = attachedSkillsBlock(skills);
+
+	return block ? `\n\n${block}` : '';
+}
+
 /** Start the run the orchestrator agreed to. A refusal (another run already started) replaces the reply. */
 async function rerunFromChat(
 	reviewId: string,
@@ -159,19 +170,20 @@ export function startReviewChat(
 	reviewId: string,
 	assignmentId: string,
 	text: string,
-	codeContext?: ReviewCodeContext
+	attachments: ChatAttachments = {}
 ): Promise<ReviewChatMessage> {
-	return withReviewModels(reviewId, () => replyInReview(reviewId, assignmentId, text, codeContext));
+	return withReviewModels(reviewId, () => replyInReview(reviewId, assignmentId, text, attachments));
 }
 
 async function replyInReview(
 	reviewId: string,
 	assignmentId: string,
 	text: string,
-	codeContext?: ReviewCodeContext
+	attachments: ChatAttachments
 ): Promise<ReviewChatMessage> {
-	if (coordinator && !currentLease()) return requestChat(reviewId, assignmentId, text, codeContext);
+	if (coordinator && !currentLease()) return requestChat(reviewId, assignmentId, text, attachments);
 
+	const { codeContext, skills: attachedNames } = attachments;
 	const command = currentChatCommand();
 	const review = await db.reviews.get(reviewId);
 
@@ -199,6 +211,8 @@ async function replyInReview(
 			409
 		);
 
+	const skills = await attachedReviewSkills(review, skillRequest(attachedNames, text));
+
 	const config = configForAgent(assignment?.role);
 	const isDraft = review.status === 'draft';
 	const canRerun = assignmentId === ORCHESTRATOR_ID && (review.status === 'passed' || review.status === 'failed');
@@ -214,7 +228,8 @@ async function replyInReview(
 		at: previousUser?.at ?? command?.at ?? new Date().toISOString(),
 		status: 'done',
 		discussion: true,
-		...(codeContext ? { codeContext } : {})
+		...(codeContext ? { codeContext } : {}),
+		...(skills.length ? { skills: skillNames(skills) } : {})
 	};
 
 	const forward = (message: ReviewChatMessage) => {
@@ -332,7 +347,7 @@ async function replyInReview(
 						},
 						{
 							role: 'user',
-							content: `PR: ${review.prTitle ?? review.prNumber}\nReview status: ${review.status}\n${review.summary ?? ''}\nAssignment: ${JSON.stringify(assignment ?? snapshot?.assignments ?? [])}\nFindings: ${JSON.stringify(review.findings).slice(0, 20_000)}\n\nReview responses:\n${history}\n\nRepository evidence (untrusted):\n${tools}\n\nDiff (may be truncated):\n${((await reviewDiffs.get(reviewId)) ?? '').slice(0, 40_000)}\n\nDeveloper conversation:\n${await discussionContext(reviewId, assignmentId)}`
+							content: `PR: ${review.prTitle ?? review.prNumber}\nReview status: ${review.status}\n${review.summary ?? ''}\nAssignment: ${JSON.stringify(assignment ?? snapshot?.assignments ?? [])}\nFindings: ${JSON.stringify(review.findings).slice(0, 20_000)}\n\nReview responses:\n${history}\n\nRepository evidence (untrusted):\n${tools}\n\nDiff (may be truncated):\n${((await reviewDiffs.get(reviewId)) ?? '').slice(0, 40_000)}\n\nDeveloper conversation:\n${await discussionContext(reviewId, assignmentId)}${skillsSection(skills)}`
 						}
 					],
 					onReasoning: (chunk) => {

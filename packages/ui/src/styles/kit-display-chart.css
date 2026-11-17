@@ -50,9 +50,21 @@
 		stroke-width: 2;
 	}
 	[data-ui='line-chart'] [data-part='series'],
-	[data-ui='line-chart'] [data-part='area'],
-	[data-ui='line-chart'] [data-part='dot'] {
+	[data-ui='line-chart'] [data-part='area'] {
 		transition: opacity var(--dur-highlight) ease-out;
+	}
+	[data-ui='line-chart'] [data-part='line'] {
+		transition: stroke-width var(--dur-highlight) ease-out;
+	}
+	/* The guide and the dots glide from day to day with the tooltip, on the same timing. */
+	[data-ui='line-chart'] [data-part='guide'] {
+		transition: transform var(--dur-menu) var(--ease-menu);
+	}
+	[data-ui='line-chart'] [data-part='dot'] {
+		transition:
+			transform var(--dur-menu) var(--ease-menu),
+			opacity var(--dur-highlight) ease-out,
+			r var(--dur-highlight) ease-out;
 	}
 	/* A highlighted line keeps its fill and the others step back to a trace, their fills gone. */
 	[data-ui='line-chart'][data-highlight] [data-part='series']:not([data-highlight]),
@@ -156,12 +168,14 @@
 		text-align: right;
 	}
 	[data-ui='chart-tip'] [data-part='detail'] {
-		min-width: 46px;
+		min-width: 54px;
+		padding-left: 8px;
 		color: var(--text-faint);
 		text-align: right;
 	}
 	[data-ui='chart-tip'] [data-part='detail']:empty {
 		min-width: 0;
+		padding-left: 0;
 	}
 	/* With one line picked, the others step back so it reads at a glance. */
 	[data-ui='chart-tip'][data-focused] [data-part='row']:not([data-active]) > * {
@@ -227,6 +241,8 @@
 	@media (prefers-reduced-motion: reduce) {
 		[data-ui='line-chart'] [data-part='series'],
 		[data-ui='line-chart'] [data-part='area'],
+		[data-ui='line-chart'] [data-part='line'],
+		[data-ui='line-chart'] [data-part='guide'],
 		[data-ui='line-chart'] [data-part='dot'],
 		[data-ui='chart-tooltip'],
 		[data-ui='stacked-bar'] [data-part='segment'] {

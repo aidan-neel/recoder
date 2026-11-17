@@ -14,7 +14,7 @@ import { REVIEW_POLICY } from '../session/review-policy.js';
 import type { CandidateFinding } from './consolidate.js';
 import { readSandboxFile } from './harness/sandbox-files.js';
 import type { ReviewInventory } from './inventory.js';
-import { UNTRUSTED_PREFIX } from './prompts.js';
+import { TOOL_ECONOMY_RULES, UNTRUSTED_PREFIX } from './prompts.js';
 import { candidateLocation, citedEvidence, claimBlock, type VerdictOutput, type VerifierNotes } from './verify.js';
 
 /**
@@ -416,6 +416,7 @@ function standard(candidate: CandidateFinding, rule: RepoRule | undefined): stri
 /** The verifier for a maintainability finding: it reads and searches, it doesn't run code. */
 export function qualityVerifierSystemPrompt(): string {
 	return `You verify one code quality finding against the repository. You can read the diff and any file and search the repository; you do not run code.
+${TOOL_ECONOMY_RULES}
 The finding came from another reviewer and may be wrong. Your job is to check it against the stated standard, not to agree with it.
 - The reason is shown to the developer: one or two plain sentences naming what you read or searched, with \`file:line\`.
 - "confirmed": what you read or searched shows the standard is broken. "refuted": it shows the code meets it, is out of scope, or is covered by a stated exception. "unverified": you could not settle it.
@@ -437,6 +438,8 @@ export function qualityVerifierUserPrompt(
 	);
 
 	return [
+		notes.intent,
+		notes.skills,
 		`Quality finding ${candidate.candidateId} (${candidate.category}) at ${candidateLocation(candidate)}`,
 		candidate.title ? `Title: ${candidate.title}` : '',
 		`Standard:\n${standard(candidate, notes.rule)}`,
@@ -444,7 +447,6 @@ export function qualityVerifierUserPrompt(
 		examples.length ? `Examples the reviewer cited:\n${examples.join('\n')}` : '',
 		`Claim:\n${candidate.message}`,
 		cited ? `Evidence the reviewer cited:\n${cited}` : 'The reviewer cited no evidence.',
-		notes.intent,
 		`You have ${REVIEW_POLICY.maxVerifierTurns - 1} action rounds and a final turn.`
 	]
 		.filter(Boolean)

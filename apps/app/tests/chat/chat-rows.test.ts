@@ -13,7 +13,13 @@ function outgoing(text: string, extra: Partial<Outgoing> = {}): Outgoing {
 	return { key: `local-${text}`, text, state: 'pending', after: 0, ...extra };
 }
 
-const pullHref = (prNumber: number) => `/pulls/r/${prNumber}`;
+const reviewCard = ({ prNumber }: { id: string; prNumber: number }) => ({
+	href: `/pulls/r/${prNumber}`,
+	prNumber,
+	title: `Pull request #${prNumber}`,
+	repo: 'shop',
+	status: { kind: 'reviewing' as const }
+});
 
 describe('chatRows', () => {
 	test('a pending message shows once the events carry its copy before the send answers', () => {
@@ -26,7 +32,7 @@ describe('chatRows', () => {
 			message('m4', 'assistant', '', { status: 'streaming' })
 		];
 
-		const rows = chatRows(messages, [sent], pullHref);
+		const rows = chatRows(messages, [sent], reviewCard);
 
 		expect(rows.map((row) => row.id)).toEqual(['m1', 'm2', 'm3', 'm4']);
 	});
@@ -35,7 +41,7 @@ describe('chatRows', () => {
 		const sent = outgoing('Where is the limiter?', { after: 2 });
 		const messages = [message('m1', 'user', 'Where is the limiter?'), message('m2', 'assistant', 'In src/limit.ts.')];
 
-		const rows = chatRows(messages, [sent], pullHref);
+		const rows = chatRows(messages, [sent], reviewCard);
 
 		expect(rows.map((row) => row.id)).toEqual(['m1', 'm2', sent.key]);
 	});
@@ -44,17 +50,18 @@ describe('chatRows', () => {
 		const refused = outgoing('Again?', { state: 'failed', error: 'Recoder is still replying.' });
 		const messages = [message('m1', 'user', 'Again?')];
 
-		const rows = chatRows(messages, [refused], pullHref);
+		const rows = chatRows(messages, [refused], reviewCard);
 
 		expect(rows.at(-1)).toMatchObject({ id: refused.key, state: 'failed', error: 'Recoder is still replying.' });
 	});
 
-	test('a reply that started a review links to the pull request', () => {
+	test('a reply that started a review carries its card and keeps its words as they are', () => {
 		const reply = message('m2', 'assistant', 'Started a review of #42.', { review: { id: 'rv', prNumber: 42 } });
 
-		const [row] = chatRows([reply], [], pullHref);
+		const [row] = chatRows([reply], [], reviewCard);
 
-		expect(row.text).toContain('[Open #42](/pulls/r/42)');
+		expect(row.review).toMatchObject({ href: '/pulls/r/42', prNumber: 42 });
+		expect(row.text).toBe('Started a review of #42.');
 	});
 });
 

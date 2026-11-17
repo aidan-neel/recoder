@@ -1,9 +1,13 @@
 import type { Repo, RepoChatMessage } from '@recoder/shared';
+import type { AgentAdapter } from '../agents/contract';
+import { agentById } from '../agents/registry';
 import { LlmError, streamChatCompletion } from '../models/llm';
 import { withUsageMetrics } from '../models/metrics';
 import { modelFailure } from '../models/model-failure';
 import type { ModelConfig } from '../models/models';
 import { settingsOperation } from '../storage/backend';
+import type { LoadedSkill } from '../skills/discovery';
+import { answerWithAgent } from './chat-agent';
 import { INTERRUPTED, MAX_REPLY_CHARS, WRITER_HEARTBEAT_MS, type ChatTurn, type StoredRepoChat } from './chat-record';
 import { replyPrompt } from './chat-prompt';
 import { requestedReview, reviewFromChat } from './chat-review';
@@ -29,6 +33,8 @@ export interface ReplyJob {
 	turn: ChatTurn;
 	/** Resolved from the request's settings, so a settings change mid-reply does not switch models. */
 	config: ModelConfig;
+	/** The skills the person attached to the message, read when it was accepted. */
+	skills: readonly LoadedSkill[];
 }
 
 /** A reply this server is writing. */
@@ -134,13 +140,19 @@ async function writeReply(job: ReplyJob, controller: AbortController): Promise<v
 	await saver.close(reply);
 }
 
-/** Fills in the reply: a review the message asked for, else the model's answer as it streams. */
-async function answer(
+/**
+ * Fills in the reply. A message that names a pull request starts that review
+ * without a model call. A model that runs on an agent CLI answers as one agent
+ * run; any other model gets the prefetched repository context and a chat completion.
+ * `agent` defaults to the CLI for `job.config.provider`, and is null when that provider is not one.
+ */
+export async function answer(
 	job: ReplyJob,
 	reply: RepoChatMessage,
 	trail: TrailRecorder,
 	signal: AbortSignal,
-	grew: () => void
+	grew: () => void,
+	agent: AgentAdapter | null = agentById(job.config.provider)
 ): Promise<void> {
 	const question = job.turn.user.text;
 	const pull = requestedReview(question);
@@ -151,9 +163,15 @@ async function answer(
 		return;
 	}
 
+	if (agent) {
+		await answerWithAgent(agent, job, reply, trail, signal, grew);
+
+		return;
+	}
+
 	trail.startReading();
 
-	const { messages, files } = await replyPrompt(job.repo, job.chat, signal);
+	const { messages, files } = await replyPrompt(job.repo, job.chat, job.skills, signal);
 
 	trail.finishReading(files);
 

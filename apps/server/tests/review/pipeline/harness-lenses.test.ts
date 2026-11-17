@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAdaptiveReview } from '../../../src/review/pipeline/harness';
-import { LENSES, lensCategories } from '../../../src/review/pipeline/lenses/lenses';
+import { LENSES } from '../../../src/review/pipeline/lenses/lenses';
 import type { LensId } from '../../../src/review/pipeline/lenses/types';
 import {
 	NOTHING,
@@ -35,8 +35,9 @@ const READABILITY = { ...finding('magic number'), category: 'readability', smell
 
 /** What a stubbed review saw: the system prompt of each reviewer and subagent, and and how many verifier and repair calls were made. */
 interface Seen {
-	reviewerSystems: string[];
+	reviewerPrompts: string[];
 	subagentSystems: string[];
+	reviewerBodies: string[];
 	subagentBodies: string[];
 	verifiers: number;
 	repairs: number;
@@ -47,7 +48,14 @@ interface Seen {
  * a subagent reports `subagentReported`, and every verifier confirms.
  */
 function stubReview(reported: unknown[], options: { ask?: boolean; subagentReported?: unknown[] } = {}): Seen {
-	const seen: Seen = { reviewerSystems: [], subagentSystems: [], subagentBodies: [], verifiers: 0, repairs: 0 };
+	const seen: Seen = {
+		reviewerPrompts: [],
+		subagentSystems: [],
+		reviewerBodies: [],
+		subagentBodies: [],
+		verifiers: 0,
+		repairs: 0
+	};
 
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		if (systemOf(init).includes('You repair one code review finding')) seen.repairs++;
@@ -65,7 +73,15 @@ function stubReview(reported: unknown[], options: { ask?: boolean; subagentRepor
 			return modelReply({ message: 'ok', ...NOTHING, findings: options.subagentReported ?? [] });
 		}
 
-		if (unitOf(init)) seen.reviewerSystems.push(systemOf(init));
+		if (unitOf(init)) {
+			seen.reviewerBodies.push(String(init?.body));
+
+			seen.reviewerPrompts.push(
+				JSON.parse(String(init?.body))
+					.messages.map((message: { content: string }) => message.content)
+					.join('\n\n')
+			);
+		}
 
 		const asked = options.ask
 			? [{ concern: 'Callers', question: 'Who calls it?', scope: [{ path: 'src/a.ts', hunkIds: [] }], why: 'Wide.' }]
@@ -103,7 +119,7 @@ test('a reviewer is offered only the selected lenses', async () => {
 
 	await runAdaptiveReview({ diff: CODE, sandboxPath: null, lenses: SELECTED });
 
-	const [system] = seen.reviewerSystems;
+	const [system] = seen.reviewerPrompts;
 
 	for (const lens of LENSES) {
 		expect(system.includes(`${lens.title} (${lens.categories.join(', ')}):`)).toBe(SELECTED.includes(lens.id));
@@ -170,7 +186,7 @@ test('a documentation-only change is reviewed when a selected lens fits it', asy
 	const seen = stubReview([]);
 	const result = await runAdaptiveReview({ diff: DOCS, sandboxPath: null, lenses: ['readability', 'security'] });
 
-	expect(seen.reviewerSystems).toHaveLength(1);
+	expect(seen.reviewerPrompts).toHaveLength(1);
 	expect(result.coverage.reviewed).toBe(1);
 	expect(result.coverageGaps).toEqual([]);
 });
@@ -194,14 +210,20 @@ test('a selection with an unknown lens throws before any model call, naming it',
 	expect(seen.calls).toBe(0);
 });
 
-test('a subagent is offered only the categories of the selected lenses to report in', async () => {
+test('a reviewer and its subagent send the same finding format, so their prompts can share a cached prefix', async () => {
 	useTestModel();
 
 	const seen = stubReview([], { ask: true });
 
-	await runAdaptiveReview({ diff: CODE, sandboxPath: null, lenses: SELECTED });
+	await runAdaptiveReview({ diff: CODE, sandboxPath: null });
 
-	const offered = JSON.stringify(lensCategories(SELECTED));
-
-	expect(seen.subagentBodies[0]).toContain(`"enum":${offered}`);
+	expect(findingFormat(seen.subagentBodies[0])).toEqual(findingFormat(seen.reviewerBodies[0]));
 });
+
+/** The guided-decoding shape of one finding in a model request body. */
+function findingFormat(body: string): unknown {
+	const { schema } = JSON.parse(body).response_format.json_schema;
+	const final = schema.anyOf ? schema.anyOf.at(-1) : schema;
+
+	return final.properties.findings.items;
+}

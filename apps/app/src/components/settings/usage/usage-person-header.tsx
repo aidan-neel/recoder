@@ -1,11 +1,11 @@
-import type { UsagePerson } from '@recoder/shared';
+import type { ReportPerson } from '@recoder/shared';
 import { Button, Pill } from '@recoder/ui';
 import { ArrowLeft } from 'lucide-react';
 
 import { Avatar } from '@/components/common/avatar';
 
 interface UsagePersonHeaderProps {
-	person: UsagePerson;
+	person: ReportPerson;
 	onBack: () => void;
 }
 

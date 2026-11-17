@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { useSettings } from '../settings-store';
 import { useAgentSection, type ProviderHost } from '../use-agent-section';
-import { missingClis, providerEntries, type ProviderEntry } from './provider-entries';
+import { providerEntries, type ProviderEntry } from './provider-entries';
 import { useProviderDisconnect, type ProviderDisconnect } from './use-provider-disconnect';
 import { useProviderSwitches, type ProviderSwitches } from './use-provider-switches';
 
@@ -18,8 +18,8 @@ export interface ProvidersSectionView {
 	agentError: string | null;
 	switches: ProviderSwitches;
 	disconnect: ProviderDisconnect;
-	/** The Add provider dialog: the CLIs still to install. */
-	adding: { open: boolean; setOpen: (open: boolean) => void; missing: ProviderEntry['agent'][] };
+	/** The Add provider dialog. */
+	adding: { open: boolean; setOpen: (open: boolean) => void };
 	/** Model providers can be connected now: the provider manager is installed, running and signed in. */
 	canConnect: boolean;
 	/** The model provider dialog, opened from OpenCode's details. */
@@ -50,7 +50,7 @@ export function useProvidersSection(): ProvidersSectionView {
 		agentError,
 		switches,
 		disconnect,
-		adding: { open: adding, setOpen: setAdding, missing: missingClis(agents) },
+		adding: { open: adding, setOpen: setAdding },
 		canConnect: agentSection.providersReady,
 		providerHost: agentSection.host,
 		connectProvider: agentSection.addProvider

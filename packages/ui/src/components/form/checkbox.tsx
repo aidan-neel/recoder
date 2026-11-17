@@ -38,14 +38,21 @@ export function Checkbox({ checked, onCheckedChange, disabled, id, 'aria-label':
 			aria-describedby={field.describedBy}
 			className={cn(className)}
 		>
-			<svg data-ui="checkbox-check" viewBox="0 0 24 24" fill="none" aria-hidden>
-				<motion.path
-					d="M5 12.5 9.5 17 19 7"
-					initial={false}
-					animate={{ pathLength: checked ? 1 : 0, opacity: checked ? 1 : 0 }}
-					transition={checked ? DRAW : ERASE}
-				/>
-			</svg>
+			<CheckboxMark checked={checked} />
 		</CheckboxPrimitive.Root>
+	);
+}
+
+/** The check inside a checkbox's box: it draws in when ticked and fades out when cleared. */
+export function CheckboxMark({ checked }: { checked: boolean }) {
+	return (
+		<svg data-ui="checkbox-check" viewBox="0 0 24 24" fill="none" aria-hidden>
+			<motion.path
+				d="M5 12.5 9.5 17 19 7"
+				initial={false}
+				animate={{ pathLength: checked ? 1 : 0, opacity: checked ? 1 : 0 }}
+				transition={checked ? DRAW : ERASE}
+			/>
+		</svg>
 	);
 }

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import { EvidenceStore } from '../../../../src/evidence/evidence';
 import type { RetrievalAction } from '../../../../src/evidence/types';
 import { ModelBudget } from '../../../../src/review/pipeline/agent-loop';
@@ -22,7 +23,7 @@ test('a turn that mixes reads and a delegation returns results in the order they
 			stage: 'reviewer',
 			system: '',
 			user: '',
-			config: { model: 'test', baseUrl: 'https://model.test', apiKey: 'test' },
+			config: { model: 'test', baseUrl: 'https://model.test', apiKey: 'test', contextWindow: DEFAULT_CONTEXT_WINDOW },
 			budget: new ModelBudget(),
 			evidence: new EvidenceStore(null, buildInventory(diff), 12000),
 			maxTurns: 4,

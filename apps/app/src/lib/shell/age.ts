@@ -39,11 +39,18 @@ export function longAge(at: string | null | undefined, now: number): string {
 	return `${plural(Math.floor(ms / DAY), 'day')} ago`;
 }
 
+/** Formats every tooltip time: `toLocaleString` with options builds a formatter per call, a few ms across a list. */
+let fullTimeFormat: Intl.DateTimeFormat | undefined;
+
 /** The full date and time for a tooltip, in the reader's locale. Empty when `at` is no date. */
 export function fullTime(at: string | null | undefined): string {
 	const then = at ? Date.parse(at) : Number.NaN;
 
-	return Number.isNaN(then) ? '' : new Date(then).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+	if (Number.isNaN(then)) return '';
+
+	fullTimeFormat ??= new Intl.DateTimeFormat([], { dateStyle: 'medium', timeStyle: 'short' });
+
+	return fullTimeFormat.format(then);
 }
 
 /** A running clock for a review in progress: `2:14`, `1:02:09`. */

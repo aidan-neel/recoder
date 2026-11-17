@@ -135,3 +135,63 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+
+/* ───────── Admin: the running branch and the dialog that switches it ───────── */
+.branch-trigger {
+	min-width: 0;
+	max-width: 260px;
+	gap: 6px;
+	padding-inline: 8px;
+	font-family: var(--font-code);
+	font-size: var(--font-size-meta);
+}
+.branch-trigger svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+.branch-trigger .branch-trigger-chevron {
+	width: 12px;
+	height: 12px;
+	color: var(--text-faint);
+}
+.branch-trigger-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.branch-dialog {
+	max-width: 520px;
+}
+.branch-row {
+	font-family: var(--font-code);
+}
+.branch-row [data-ui='command-item-leading'] {
+	color: var(--text-secondary);
+}
+.branch-row .branch-row-check {
+	width: 14px;
+	height: 14px;
+	color: var(--text-primary);
+}
+/* A placeholder the height of a row while the server fetches. */
+.branch-row-skeleton {
+	display: flex;
+	height: 30px;
+	align-items: center;
+	padding-inline: 10px;
+}
+.branch-row-skeleton > * {
+	width: 45%;
+	height: 12px;
+}
+.branch-failed {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 10px;
+	color: var(--danger);
+	font-size: var(--font-size-label);
+}

@@ -1,0 +1,409 @@
+/* ───────── Repository page: the header and figures, then two columns of titled parts ───────── */
+/* No boxes: space, section titles and hairlines group the page, as on Usage. */
+.repo-page {
+	display: flex;
+	width: 100%;
+	max-width: 1200px;
+	margin-inline: auto;
+	flex-direction: column;
+	gap: 36px;
+	padding: 32px 40px 48px;
+}
+
+.repo-head {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.repo-title {
+	align-items: center;
+}
+.repo-title-mark {
+	width: 22px;
+	height: 22px;
+	flex-shrink: 0;
+	color: var(--text-primary);
+}
+.repo-title-owner {
+	color: var(--text-faint);
+	font-weight: 400;
+}
+.repo-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+/* Five figures on one line, split by hairlines; the first and last sit on the column's edges. */
+.repo-figures {
+	display: flex;
+	border-top: 1px solid var(--line-subtle);
+	border-bottom: 1px solid var(--line-subtle);
+}
+.repo-figure {
+	display: flex;
+	min-width: 0;
+	flex: 1 1 0;
+	flex-direction: column;
+	gap: 6px;
+	padding: 16px 20px 18px;
+}
+.repo-figure + .repo-figure {
+	border-left: 1px solid var(--line-subtle);
+}
+.repo-figure:first-child {
+	padding-left: 0;
+}
+.repo-figure:last-child {
+	padding-right: 0;
+}
+.repo-figure dt {
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.repo-figure dd {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 8px;
+}
+.repo-figure-value {
+	color: var(--text-primary);
+	font-size: 28px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	line-height: 32px;
+	white-space: nowrap;
+}
+.repo-figure-detail {
+	overflow: hidden;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.repo-figure-detail[data-tone='high'] {
+	color: var(--sev-high);
+}
+
+.repo-columns {
+	display: flex;
+	align-items: flex-start;
+	gap: 40px;
+}
+.repo-main,
+.repo-side {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 36px;
+}
+.repo-main {
+	flex: 1.6 1 0;
+}
+.repo-side {
+	flex: 1 1 0;
+}
+
+/* A part's title on a 28px line over a hairline; its link or fact at the end. */
+.repo-section-head {
+	display: flex;
+	height: 36px;
+	align-items: center;
+	gap: 12px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.repo-section-title {
+	margin-right: auto;
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 18px;
+}
+.repo-section-link {
+	color: var(--text-faint);
+}
+.repo-section-link:hover {
+	color: var(--text-secondary);
+}
+.repo-empty {
+	min-height: 48px;
+	color: var(--text-faint);
+}
+
+/* Rows of a part: 36px, split by hairlines, the hover fill reaching past the column like the pull request list's. */
+.repo-rows {
+	display: flex;
+	flex-direction: column;
+	margin: 0 -12px;
+}
+.repo-rows [data-ui='hover-list-highlight'] {
+	border-radius: var(--radius-row);
+}
+.repo-row {
+	--row-button-radius: var(--radius-row);
+
+	position: relative;
+	display: flex;
+	height: 36px;
+	align-items: center;
+	gap: 12px;
+	padding: 0 12px;
+}
+.repo-row + .repo-row::before {
+	position: absolute;
+	top: 0;
+	right: 12px;
+	left: 12px;
+	height: 1px;
+	background: var(--line-subtle);
+	content: '';
+	transition: opacity var(--dur-highlight) ease-out;
+}
+.repo-rows[data-ui='hover-list'] .repo-row:hover::before,
+.repo-rows[data-ui='hover-list'] .repo-row:hover + .repo-row::before {
+	opacity: 0;
+}
+.repo-row-link {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 12px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+.repo-row-link .pull-mark {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+.repo-row-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.repo-row-number {
+	flex-shrink: 0;
+	margin-left: -4px;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+.repo-row-end {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+.repo-needs .pull-list {
+	margin-top: 0;
+}
+
+/* The reviews chart: a bar a day on a 64px field, grey for reviews and the high-severity colour for the part that found a bug. */
+.repo-legend {
+	display: flex;
+	gap: 12px;
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.repo-legend li {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+}
+.repo-swatch {
+	width: 8px;
+	height: 8px;
+	border-radius: 2px;
+	background: var(--text-ghost);
+}
+.repo-swatch[data-part='bugs'],
+.repo-bar-bugs {
+	background: var(--sev-high-icon);
+}
+.repo-chart-section .repo-section-head {
+	border-bottom: 0;
+}
+.repo-chart {
+	position: relative;
+	display: flex;
+	height: 66px;
+	align-items: stretch;
+	gap: 3px;
+	margin-top: 6px;
+	padding-bottom: 1px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.repo-bar-slot {
+	display: flex;
+	min-width: 0;
+	flex: 1 1 0;
+	align-items: flex-end;
+}
+.repo-bar {
+	display: flex;
+	width: 100%;
+	min-height: 2px;
+	flex-direction: column;
+	justify-content: flex-end;
+	overflow: hidden;
+	border-radius: 2px;
+	background: var(--text-ghost);
+	transition: opacity var(--dur-hover) ease-out;
+}
+.repo-bar[data-empty] {
+	background: var(--line-strong);
+}
+.repo-bar-slot:hover .repo-bar {
+	opacity: 0.8;
+}
+.repo-chart-empty {
+	position: absolute;
+	inset: 0 0 1px;
+	display: grid;
+	place-items: center;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.repo-axis {
+	display: flex;
+	justify-content: space-between;
+	margin-top: 8px;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 11px;
+	line-height: 14px;
+}
+
+/* Where bugs land: the path in the code face, a share line, the count on the column's edge. */
+.repo-hotspot-path {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	color: var(--text-secondary);
+	font-family: var(--font-code);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.repo-hotspot-share {
+	width: 80px;
+	height: 4px;
+	flex-shrink: 0;
+}
+.repo-hotspot-share [data-ui='meter-fill'] {
+	background: var(--text-subtle);
+}
+.repo-hotspot-count {
+	width: 24px;
+	flex-shrink: 0;
+	color: var(--text-primary);
+	font-size: var(--font-size-meta);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+.repo-setup-icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-muted);
+	stroke-width: 1.75;
+}
+.repo-setup-chevron {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	margin-left: auto;
+	color: var(--text-faint);
+}
+
+/* The skeleton's bars, at the sizes of what replaces them. */
+.repo-skeleton-title {
+	width: 220px;
+	height: 18px;
+}
+.repo-skeleton-pill {
+	width: 96px;
+	height: 20px;
+}
+.repo-skeleton-label {
+	width: 96px;
+	height: 12px;
+	margin: 2px 0;
+}
+.repo-skeleton-figure {
+	width: 64px;
+	height: 26px;
+	margin: 3px 0;
+}
+.repo-skeleton .repo-title {
+	height: 28px;
+}
+/* The chart's field and the axis words under it. */
+.repo-skeleton-chart {
+	height: 66px;
+	margin: 6px 0 22px;
+}
+.repo-skeleton-rows {
+	margin: 0 -12px;
+}
+
+/* A narrow page stacks the columns and lets the figures wrap. */
+@container (max-width: 860px) {
+	.repo-page {
+		padding: 24px var(--page-gutter) 48px;
+	}
+	.repo-columns {
+		flex-direction: column;
+		align-items: stretch;
+	}
+	.repo-figures {
+		flex-wrap: wrap;
+	}
+	.repo-figure {
+		flex-basis: 33%;
+	}
+}
+
+/* ───────── Repositories: every tracked repository, a row each ───────── */
+/* A row folds in and out of the list; the hairline goes between folds, since each row sits in its own. */
+.repo-fold {
+	overflow: hidden;
+}
+.repo-fold + .repo-fold {
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+}
+.repos-name {
+	display: inline-flex;
+	max-width: 100%;
+	align-items: center;
+	white-space: pre;
+	border-radius: var(--radius-chip);
+	color: var(--text-primary);
+	transition: color var(--dur-hover) ease-out;
+}
+.repos-name:hover {
+	text-decoration: underline;
+	text-decoration-color: var(--line-control);
+	text-underline-offset: 3px;
+}
+.repos-name:focus-visible {
+	box-shadow: var(--focus-ring);
+	outline: none;
+}
+.repos-owner {
+	color: var(--text-faint);
+}
+.repos-alert {
+	margin-left: 6px;
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: var(--sev-high);
+}

@@ -1,5 +1,7 @@
 import { proposeRefusal, type Provider, type RepoGuidelines } from '@recoder/shared';
 
+import { formatCount } from '../shell/format';
+
 /** What the editor's note line says, most pressing first: a failure, the limit, then what saving does. */
 export type EditorNote =
 	| { kind: 'error'; key: string; tone: 'danger'; text: string }
@@ -61,7 +63,7 @@ export function editorNote({
 			kind: 'over',
 			key: 'over',
 			tone: 'danger',
-			text: `Guidelines are limited to ${max.toLocaleString('en-US')} characters.`
+			text: `Guidelines are limited to ${formatCount(max)} characters.`
 		};
 	}
 

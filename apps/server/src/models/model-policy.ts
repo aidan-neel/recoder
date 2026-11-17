@@ -1,4 +1,4 @@
-import type { ModelPicks, MyModels } from '@recoder/shared';
+import { REVIEW_SPEED_PLANS, type ModelPicks, type MyModels, type ReasoningEffort } from '@recoder/shared';
 import { ADMIN_ACCOUNT_ID } from '../accounts/account-records';
 import {
 	effectiveModelPolicy,
@@ -85,10 +85,14 @@ export async function saveMemberPicks(accountId: string, patch: Partial<ModelPic
  * Runs `run` on the models work `startedBy` began resolves to (see {@link modelPicksFor}), locked as a review locks them.
  * Every model resolved under it, locked or live, uses those picks, so a follow-up never falls back to the admin's.
  */
-export async function withStarterModels<T>(startedBy: string | undefined, run: () => T): Promise<Awaited<T>> {
+export async function withStarterModels<T>(
+	startedBy: string | undefined,
+	run: () => T,
+	effort?: ReasoningEffort
+): Promise<Awaited<T>> {
 	const picks = await modelPicksFor(startedBy);
 
-	return await runWithStarterPicks(picks, () => withLockedModels(run));
+	return await runWithStarterPicks(picks, () => withLockedModels(run, effort));
 }
 
 /** {@link withStarterModels} for the account that started the review: its pipeline, re-reviews, fixes and discussion. */
@@ -96,6 +100,14 @@ export async function withReviewModels<T>(reviewId: string, run: () => T): Promi
 	const review = await db.reviews.get(reviewId);
 
 	return withStarterModels(review?.startedBy, run);
+}
+
+/** {@link withReviewModels} for the review's own pipeline, at its speed's effort: a Spark review runs every model low. */
+export async function withPipelineModels<T>(reviewId: string, run: () => T): Promise<Awaited<T>> {
+	const review = await db.reviews.get(reviewId);
+	const effort = REVIEW_SPEED_PLANS[review?.speed ?? 'standard'].effort ?? undefined;
+
+	return withStarterModels(review?.startedBy, run, effort);
 }
 
 /**

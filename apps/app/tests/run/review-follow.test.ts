@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { reviewListItem, type ProgressMessage, type Review } from '@recoder/shared';
+import { reviewListItem, type CreateReviewInput, type ProgressMessage, type Review } from '@recoder/shared';
 import { createStore } from 'zustand/vanilla';
 
 import type { ApiClient } from '../../src/lib/api/client';
@@ -84,5 +84,28 @@ describe('following the newest review', () => {
 		await Promise.resolve();
 
 		expect(state.getState().review?.findings[0].decision).toMatchObject({ state: 'accepted' });
+	});
+
+	test('a Spark start on a draft session queues a new Spark review instead of running the draft', async () => {
+		const asked: CreateReviewInput[] = [];
+		const draft: Review = { ...OLDER, status: 'draft' };
+
+		const { review, state } = followWith({
+			createReview: async (input) => {
+				asked.push(input);
+
+				return { ...NEWER, speed: 'spark' };
+			},
+			startDraft: async () => {
+				throw new Error('The draft must not run as a Spark review.');
+			}
+		});
+
+		review.open();
+		state.setState({ review: draft });
+		await review.start('spark');
+
+		expect(asked.map((input) => input.speed)).toEqual(['spark']);
+		expect(state.getState().review?.id).toBe(NEWER.id);
 	});
 });

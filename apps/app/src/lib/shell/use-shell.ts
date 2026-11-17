@@ -5,17 +5,31 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useApi, useListStore } from '../api/client';
-import { useWatchList } from '../pulls/use-rows';
+import { highBugs } from '../pulls/high-bugs';
+import { shortRepoName } from '../pulls/pull-rows';
+import { useRowEntries, useWatchList, type RowEntry } from '../pulls/use-rows';
 import { recentChats } from './recent-chats';
 import { recentReviews } from './recent-reviews';
+import { repoHref } from './routes';
+import { sidebarLists, useSettleMarks } from './settle';
 import type { ShellView } from './types';
+import { useNow } from './use-now';
 
-/** What the sidebar shows: the account, the open pull request count, the recent reviews and the newest chats. */
+/** How often rows are checked for having rested long enough to settle, in ms. */
+const SETTLE_TICK = 60_000;
+
+/** The repositories with an open pull request that has an open high-severity bug. */
+function alertedRepos(entries: readonly RowEntry[]): ReadonlySet<string> {
+	return new Set(entries.filter((entry) => highBugs(entry) > 0).map((entry) => entry.listed.item.repoId));
+}
+
+/** What the sidebar shows: the account, the open pull request count, the tracked repositories, the recent reviews and chats, and the settled ones. */
 export function useShell(): ShellView {
 	useWatchList();
 
 	const { base } = useApi();
 	const { state } = useListStore();
+	const entries = useRowEntries();
 
 	const data = useStore(
 		state,
@@ -29,25 +43,63 @@ export function useShell(): ShellView {
 		}))
 	);
 
-	const { recent, settled } = useMemo(
-		() => (data.reviews ? recentReviews(data.reviews, data.repos, base) : { recent: [], settled: [] }),
+	const marks = useSettleMarks((current) => current.marks);
+	const now = useNow(SETTLE_TICK);
+
+	const reviews = useMemo(
+		() => (data.reviews ? recentReviews(data.reviews, data.repos, base) : { open: [], ended: [] }),
 		[data.reviews, data.repos, base]
 	);
 
-	const chats = useMemo(
+	const alerted = useMemo(() => alertedRepos(entries), [entries]);
+
+	const repos = useMemo(
+		() =>
+			(data.repos ?? [])
+				.map((repo) => ({
+					id: repo.id,
+					name: shortRepoName(data.repos, repo.id),
+					href: repoHref(base, repo.id),
+					provider: repo.provider,
+					alert: alerted.has(repo.id)
+				}))
+				.sort(byName),
+		[data.repos, base, alerted]
+	);
+
+	const allChats = useMemo(
 		() => (data.chats ? recentChats(data.chats, data.repos, base) : []),
 		[data.chats, data.repos, base]
+	);
+
+	const { recent, settled, chats } = useMemo(
+		() => sidebarLists({ ...reviews, chats: allChats }, marks, now),
+		[reviews, allChats, marks, now]
 	);
 
 	return useMemo(
 		() => ({
 			account: data.account,
 			openPulls: data.openPulls,
+			repos,
 			recent,
 			settled,
 			chats,
 			loading: data.reviews === null && data.phase === 'loading'
 		}),
-		[data.account, data.openPulls, recent, settled, chats, data.reviews, data.phase]
+		[data.account, data.openPulls, repos, recent, settled, chats, data.reviews, data.phase]
 	);
+}
+
+/**
+ * Repository names in order, case aside. Plain comparison, since names are ASCII paths: `localeCompare` sets up a
+ * collator on first use, about 4 ms of the first paint.
+ */
+function byName(a: { name: string }, b: { name: string }): number {
+	const left = a.name.toLowerCase();
+	const right = b.name.toLowerCase();
+
+	if (left === right) return 0;
+
+	return left < right ? -1 : 1;
 }

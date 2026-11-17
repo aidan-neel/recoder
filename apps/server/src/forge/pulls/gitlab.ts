@@ -39,7 +39,8 @@ export function gitlabPullForge(repo: Repo): PullForge {
 
 			return {
 				entries: rows.map(({ pr, row }) => gitlabEntry(pr, row)),
-				nextCursor: rows.length === PULL_LIST_PAGE ? String(page + 1) : null
+				nextCursor: rows.length === PULL_LIST_PAGE ? String(page + 1) : null,
+				total: null
 			};
 		},
 

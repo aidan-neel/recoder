@@ -213,7 +213,7 @@ test('a review agent on a Pi model completes through the shared engine, reading 
 	);
 
 	expect(error).toBeUndefined();
-	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+new') });
+	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+1|new') });
 });
 
 /** A user agent dir with an extension, a settings file naming a package and an extension, and prompt files. */

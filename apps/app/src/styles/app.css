@@ -6,8 +6,10 @@
 @import './settled.css';
 @import './pulls.css';
 @import './pull.css';
+@import './repo.css';
 @import './changes.css';
 @import './bugs.css';
+@import './run.css';
 @import './summary.css';
 @import './ask.css';
 @import './chat.css';
@@ -17,6 +19,7 @@
 @import './compose.css';
 @import './settings.css';
 @import './usage.css';
+@import './token-usage.css';
 @import './update.css';
 @import './models.css';
 @import './model-chooser.css';

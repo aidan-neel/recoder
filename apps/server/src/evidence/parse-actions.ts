@@ -22,6 +22,8 @@ const ACTION_ALIASES: Record<string, ActionName> = {
 	diff: 'readDiff',
 	getdiff: 'readDiff',
 	get_diff: 'readDiff',
+	loadskill: 'loadSkill',
+	load_skill: 'loadSkill',
 	run: 'run',
 	bash: 'run',
 	shell: 'run',
@@ -154,6 +156,7 @@ function canonicalFields(args: Record<string, unknown>, action?: string): Record
 	if (action === 'run') canonicalRunFields(out);
 	if (action === 'writeFile') canonicalWriteFields(out);
 	if (action === 'delegate') pick(out, 'task', 'question', 'prompt', 'request', 'instructions', 'text');
+	if (action === 'loadSkill') pick(out, 'skill', 'skillName', 'skill_name');
 
 	pick(out, 'query', 'pattern', 'regex', 'text', 'term', 'q', 'keyword', 'symbol');
 	pick(out, 'path', 'file', 'filePath', 'file_path', 'filepath', 'filename', 'fileName');
@@ -190,8 +193,8 @@ function namedAction(item: Record<string, unknown>, named: ActionName): Retrieva
 	} as RetrievalAction;
 }
 
-/** The field a bare string stands for: `{"run": "ls"}` is a command, `{"delegate": "…"}` a task. */
-const BARE_STRING_FIELD: Partial<Record<ActionName, string>> = { run: 'command', delegate: 'task' };
+/** The field a bare string stands for: `{"run": "ls"}` is a command, `{"delegate": "…"}` a task, `{"loadSkill": "x"}` a skill. */
+const BARE_STRING_FIELD: Partial<Record<ActionName, string>> = { run: 'command', delegate: 'task', loadSkill: 'skill' };
 
 /** `{"readDiff": {…}}`, or `{"run": "ls"}` with the command as a bare string. */
 function keyedAction(args: unknown, key: ActionName): RetrievalAction {

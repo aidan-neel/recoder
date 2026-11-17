@@ -10,10 +10,10 @@ export interface PullRouteParams {
 
 /**
  * A pull request's page from its address. A number that is no pull request
- * number is a missing page. The `loading.tsx` beside the page paints this
- * page's own skeleton the moment a link is clicked — the same bars the
- * session shows until its data lands — so the route commits at once and the
- * page it leaves never freezes under the pointer.
+ * number is a missing page. The route has no `loading.tsx`: a Suspense
+ * fallback makes React hold the real page back until 300 ms after the
+ * fallback painted, and the session only starts reading once the page
+ * mounts. The screen paints the same skeleton itself until its data lands.
  */
 export function PullRoute({ repoId, number }: PullRouteParams) {
 	const pull = Number(number);

@@ -1,3 +1,4 @@
+import { settleBackgroundWork } from '../util/background-work.js';
 import type { ExitCode } from './exit.js';
 import { hasRepositoryEnv, runWithoutRepositoryEnv, stopWithOuterProcess } from './repository-env.js';
 import { exitOnSignal } from './signals/exit-on-signal.js';
@@ -26,12 +27,14 @@ function runHere(argv: string[], runCommand: CommandRunner): Promise<ExitCode> {
  * Ends the process once its output is out. A review leaves agent children (`opencode serve`, the MCP tool host) that
  * keep the event loop alive and that only the `exit` hooks stop, so the process would never end by itself. Both
  * standard streams are ended first, which waits for text a slow reader has not taken yet: `process.exit` would drop
- * it. Until the exit, a stop ends the process at once, since nothing is left to cancel.
+ * it. A rule ledger the review started distilling for the next review is let finish after the output is out, so the
+ * next review need not wait for it. Until the exit, a stop ends the process at once, since nothing is left to cancel.
  */
 async function endProcess(exitCode: number): Promise<never> {
 	exitOnSignal();
 
 	await Promise.all([finishStream(process.stdout), finishStream(process.stderr)]);
+	await settleBackgroundWork();
 
 	process.exit(exitCode);
 }

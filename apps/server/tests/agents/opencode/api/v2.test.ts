@@ -137,7 +137,7 @@ describe('OpenCode 2 agent', () => {
 		});
 	}
 
-	test('registers its tools natively, not as code mode, and allows only the ones named on each prompt', async () => {
+	test('registers native tools and preserves their permissions on final prompts', async () => {
 		const target = await start();
 		const session = await open(target);
 
@@ -155,9 +155,8 @@ describe('OpenCode 2 agent', () => {
 		expect(permissions).toEqual([
 			[
 				{ action: '*', resource: '*', effect: 'deny' },
-				{ action: 'recoder1_search', resource: '*', effect: 'allow' }
-			],
-			[{ action: '*', resource: '*', effect: 'deny' }]
+				{ action: `${decodeURIComponent(registered!.path.split('/').at(-1)!)}_search`, resource: '*', effect: 'allow' }
+			]
 		]);
 	});
 

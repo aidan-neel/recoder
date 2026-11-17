@@ -1,5 +1,6 @@
 import type { FailureAction, UsageLimit } from '@recoder/shared';
 
+import { takeEarly } from './early-fetch';
 import { plainError } from './server-error';
 import { reportSessionRefused } from './session-refused';
 
@@ -69,13 +70,21 @@ export async function plainly<T>(action: () => Promise<T>): Promise<T> {
 	}
 }
 
+/** True for a plain read: no method, body or abort signal, so an early read of the same path can stand in for it. */
+function isPlainRead(init: RequestInit | undefined): boolean {
+	return !init?.method && !init?.body && !init?.signal;
+}
+
 /**
  * `fetch`, with a failure to reach the server (the `TypeError` fetch rejects
- * with) turned into a `NetworkError`. An abort stays an abort.
+ * with) turned into a `NetworkError`. An abort stays an abort. A plain read
+ * the early fetch script already started is taken instead of asked again.
  */
 async function send(path: string, init?: RequestInit): Promise<Response> {
 	try {
-		return await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' });
+		const early = isPlainRead(init) ? takeEarly(path) : undefined;
+
+		return await (early ?? fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' }));
 	} catch (error) {
 		if (error instanceof TypeError) throw new NetworkError(error.message, { cause: error });
 

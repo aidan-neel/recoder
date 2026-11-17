@@ -172,7 +172,8 @@
 	height: 18px;
 	font-size: 9px;
 }
-.usage-rail-mark [data-ui='agent-mark'] {
+.usage-rail-mark [data-ui='agent-mark'],
+.usage-rail-mark svg[role='img'] {
 	color: var(--text-subtle);
 }
 .usage-rail-name {
@@ -253,35 +254,36 @@
  * The table bleeds 8px past the column so the hover highlight has room
  * around the text; the hairlines and the text keep to the column's edges.
  */
+/*
+ * Each column's width lives here; the table sets --usage-columns from the
+ * columns it renders, so the head and the rows always have one track per cell.
+ */
 .usage-rows {
-	--usage-columns: minmax(0, 1fr) var(--usage-sessions-column,) var(--usage-calls-column,) 64px
-		var(--usage-cost-column,) 72px;
+	--usage-col-name: minmax(0, 1fr);
+	--usage-col-sessions: 72px;
+	--usage-col-calls: 72px;
+	--usage-col-share: 64px;
+	--usage-col-cost: 96px;
+	--usage-col-tokens: 72px;
+	--usage-col-prs: 52px;
+	--usage-col-merged: 60px;
+	--usage-col-accepted: 68px;
+	--usage-col-blocking: 68px;
+	--usage-col-dismissed: 76px;
+	--usage-col-avg-tokens: 84px;
+	--usage-col-go: 14px;
+	--usage-columns: var(--usage-col-name);
 
 	margin: 0 -8px;
-}
-.usage-rows[data-sessions] {
-	--usage-sessions-column: 72px;
-}
-.usage-rows[data-calls] {
-	--usage-calls-column: 72px;
-}
-.usage-rows[data-cost] {
-	--usage-cost-column: 96px;
-}
-.usage-rows[data-go] {
-	--usage-go: 14px;
 }
 .usage-head,
 .usage-row {
 	position: relative;
 	display: grid;
-	grid-template-columns: var(--usage-columns) var(--usage-go, 0);
+	grid-template-columns: var(--usage-columns);
 	align-items: center;
 	column-gap: 24px;
 	padding: 0 8px;
-}
-.usage-rows:not([data-go]) :is(.usage-head, .usage-row) {
-	grid-template-columns: var(--usage-columns);
 }
 .usage-head::after,
 .usage-row:not(:last-child)::after {
@@ -297,6 +299,7 @@
 	height: 32px;
 	color: var(--text-muted);
 	font-size: var(--font-size-meta);
+	white-space: nowrap;
 }
 .usage-head > :not(:first-child) {
 	text-align: right;
@@ -367,7 +370,8 @@
 	height: 18px;
 	font-size: 9px;
 }
-.usage-row-title [data-ui='agent-mark'] {
+.usage-row-title [data-ui='agent-mark'],
+.usage-row-title svg[role='img'] {
 	color: var(--text-subtle);
 }
 .usage-row-name {

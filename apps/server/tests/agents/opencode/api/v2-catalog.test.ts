@@ -13,9 +13,19 @@ async function paths(target: OpenCodeAgent): Promise<string[]> {
 test('lists the connected models with the efforts their variants offer', async () => {
 	const target = await start();
 
-	expect(await target.models()).toEqual([
-		expect.objectContaining({ model: 'openai/m', source: 'OpenAI', efforts: ['high'], contextWindow: 1000 })
-	]);
+	expect(await target.models()).toEqual(
+		expect.arrayContaining([
+			expect.objectContaining({ model: 'openai/m', source: 'OpenAI', efforts: ['high'], contextWindow: 1000 }),
+			/** The id recoder sends back to OpenCode is the config key `big`, not the provider-facing modelID. */
+			expect.objectContaining({
+				id: 'opencode:vllm/big',
+				model: 'vllm/big',
+				label: 'Ornith 1.5',
+				efforts: ['high'],
+				contextWindow: 262144
+			})
+		])
+	);
 });
 
 test('shows a sign-in as connected, and a key method with its form fields', async () => {

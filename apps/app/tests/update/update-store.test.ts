@@ -28,7 +28,9 @@ function scripted(steps: (UpdateStatus | Error)[], apply: UpdateStatus = status(
 			return step;
 		},
 		check: async () => status('idle'),
-		apply: async () => apply
+		apply: async () => apply,
+		branches: async () => ({ current: 'main', branches: ['main'] }),
+		switchBranch: async () => apply
 	};
 }
 

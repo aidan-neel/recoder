@@ -3,6 +3,7 @@ import { SQL } from 'bun';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { SHARED_SECRET_KEY } from './shared-secret-key';
 import {
 	closePublicationStorage,
 	initializePublication,
@@ -242,6 +243,7 @@ describe.skipIf(!databaseUrl)('Postgres publication (requires TEST_DATABASE_URL)
 				GITHUB_TOKEN: '',
 				GITLAB_TOKEN: '',
 				RECODER_DATABASE_URL: isolatedUrl.href,
+				RECODER_SECRET_KEY: SHARED_SECRET_KEY,
 				RECODER_DATA_DIR: directory,
 				RECODER_OPENCODE_BIN: '',
 				RECODER_CLAUDE_BIN: ''

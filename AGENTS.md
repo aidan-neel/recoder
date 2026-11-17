@@ -74,7 +74,7 @@ this. Treat a lint error as a bug, not a suggestion.
   flat `lib/`:
   - Server `apps/server/src/`: `agents/<cli>/`, `models/`,
     `review/{pipeline,session,chat,guidelines,fixes}/`, `evidence/`,
-    `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `eval/`, `util/`,
+    `skills/`, `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `eval/`, `util/`,
     `cli/{args,doctor,init,mcp,models,output,report,review,run,runs,signals,skill,target,terminal,upgrade}/`.
     A command's view for a person is a `*-view.ts` beside the command, built
     from `cli/terminal/` (surface, paint, glyphs, text, live region, prompts).
@@ -86,7 +86,7 @@ this. Treat a lint error as a bug, not a suggestion.
     `apps/web/src/styles/`.
   - App `apps/app/src/`: routes in `app/` (`(live)` for the real server,
     `sample/` for the built-in sample), components in `components/<feature>/`
-    (`shell`, `pulls`, `pull`, `changes`, `summary`, `bugs`, `commits`, `ask`,
+    (`shell`, `pulls`, `pull`, `repo`, `changes`, `summary`, `bugs`, `commits`, `ask`,
     `compose`, `automations`, `guidelines`, `settings`, `admin`, `connections`,
     `setup`, `common`), logic in `lib/<feature>/` (the same names, plus `review`, `run`
     and `sample`) with server calls in `lib/api/`, and one CSS file per feature
@@ -142,12 +142,13 @@ change makes a test obsolete, delete the test.
 
 - **Load the giga-ui skill first.** Every UI task (components, pages,
   layout, styling, motion, interface copy, in any app or `packages/ui`)
-  starts by loading the `giga-ui` skill. This repo's copy,
-  `.claude/skills/giga-ui/SKILL.md`, is the Recoder edition: it keeps the
-  original's craft, motion and QA rules and swaps its monochrome palette,
-  shadows and component recipes for Recoder's tokens, kit and `DESIGN.md`.
-  Agents without skills read that file directly. Where it and `DESIGN.md`
-  disagree, `DESIGN.md` wins.
+  starts by loading the `giga-ui` skill (`.agents/skills/giga-ui/SKILL.md`,
+  symlinked at `.claude/skills/giga-ui/SKILL.md`). This repo's copy is
+  style-adaptive: it keeps the craft, layout, motion, anti-slop and QA
+  rules and defers to the host design system (`DESIGN.md`,
+  `apps/app/DESIGN.md`, tokens and kit) instead of enforcing a monochrome
+  palette or shadow recipe. Agents without skills read that file directly.
+  Where it and `DESIGN.md` disagree, `DESIGN.md` wins.
 - **One kit per framework.** apps/web (Svelte) builds ALL UI with Sivir
   (`@sivir-ui/svelte`). apps/app and apps/site (React) build ALL UI with
   `@recoder/ui` (`packages/ui`: Radix primitives and `motion`, styled with the

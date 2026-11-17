@@ -16,8 +16,10 @@
 
 import { z } from 'zod';
 import {
+	DEFAULT_CONTEXT_WINDOW,
 	VLLM_MODEL_PREFIX,
 	supportedEffort,
+	type ContextWindowSource,
 	type ModelProvider,
 	type ModelRuntimeProfile,
 	type ProviderRef,
@@ -29,8 +31,13 @@ import { hostedProvider } from './model-providers.js';
 import { providerName, providerSwitches } from './provider-switches.js';
 import { resolveRuntime } from './runtime-profiles.js';
 import { vllmTarget } from './vllm/vllm-models.js';
-import { agentForModel } from '../agents/registry.js';
-import { effectiveReviewEnv, getStoredSettings, type StoredModelEntry } from '../review/session/review-settings.js';
+import { agentForModel, listedModel } from '../agents/registry.js';
+import {
+	effectiveContextWindows,
+	effectiveReviewEnv,
+	getStoredSettings,
+	type StoredModelEntry
+} from '../review/session/review-settings.js';
 
 const configSchema = z.object({
 	baseUrl: z.string().min(1),
@@ -47,9 +54,31 @@ export interface ModelConfig {
 	runtime?: ModelRuntimeProfile;
 	/** Hosted provider id (`opencode-go`…) when the model came from one; for OpenCode, its provider id. */
 	source?: string;
+	/**
+	 * Tokens per request (prompt + output) this model takes: the user's setting for it, else what its provider, agent
+	 * or catalog reports, else `DEFAULT_CONTEXT_WINDOW`. `contextWindowFor` resolves it.
+	 */
+	contextWindow: number;
 	baseUrl: string;
 	apiKey: string;
 	model: string;
+}
+
+/**
+ * The context window a model runs with and where it came from. The user's setting for `modelId` wins, then the
+ * window `reported` by its provider, agent or catalog; a model nobody names and nothing reports takes
+ * `DEFAULT_CONTEXT_WINDOW`. A reported or saved window that is not a positive number counts as unset.
+ */
+export function contextWindowFor(
+	modelId: string | undefined,
+	reported: number | null | undefined
+): { tokens: number; source: ContextWindowSource } {
+	const set = modelId === undefined ? undefined : effectiveContextWindows()[modelId];
+
+	if (set !== undefined) return { tokens: set, source: 'set' };
+	if (typeof reported === 'number' && reported > 0) return { tokens: reported, source: 'reported' };
+
+	return { tokens: DEFAULT_CONTEXT_WINDOW, source: 'default' };
 }
 
 /** No model can serve a request; the message tells the developer what to set. */
@@ -123,16 +152,18 @@ function stagePickErrors(): unknown[] {
  * different models can run at once and no review mixes models. Resolved
  * synchronously, before `run` awaits anything. A pick that does not resolve
  * runs unlocked, so the review fails through its own error handling, and
- * each model it resolves is recorded as a lock miss in its metrics.
+ * each model it resolves is recorded as a lock miss in its metrics. With
+ * `effort`, every model that runs with an effort runs at that one instead
+ * (a Spark review's), or the nearest its model offers.
  */
-export function withLockedModels<T>(run: () => T): T {
+export function withLockedModels<T>(run: () => T, effort?: ReasoningEffort): T {
 	let picks: LockedModels;
 
 	try {
 		picks = {
-			orchestrator: resolveConfig('orchestrator'),
-			subagent: resolveConfig('subagent'),
-			verifier: resolveConfig('verifier')
+			orchestrator: resolveConfig('orchestrator', effort),
+			subagent: resolveConfig('subagent', effort),
+			verifier: resolveConfig('verifier', effort)
 		};
 	} catch {
 		return run();
@@ -214,9 +245,11 @@ export function savedReviewModelId(): string | undefined {
  * workers, and the verifier model. An unset second or verifier pick follows
  * the Review model and its effort. A pick whose entry was deleted out-of-band
  * falls back to the first entry, each entry falling back to the global base
- * URL/key. The legacy env trio still works when no entries exist.
+ * URL/key. The legacy env trio still works when no entries exist. `effort`
+ * replaces the saved effort only for a model that runs with one, so a model
+ * with no reasoning control is never sent one.
  */
-function resolveConfig(role: StageRole): ModelConfig {
+function resolveConfig(role: StageRole, effort?: ReasoningEffort): ModelConfig {
 	const stored = getStoredSettings();
 	const entries = stored.models ?? [];
 	const member = starterPicks();
@@ -237,13 +270,18 @@ function resolveConfig(role: StageRole): ModelConfig {
 	const inheritedEffort = followsReview ? reviewEffort : undefined;
 	const requested = role === 'orchestrator' ? ownEffort : (ownEffort ?? inheritedEffort);
 
-	if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, requested);
+	const resolve = (wanted: ReasoningEffort | null | undefined): ModelConfig => {
+		if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, wanted);
 
-	const agentModel = entryId ? agentConfig(entryId, requested ?? undefined) : null;
+		return (
+			(entryId ? agentConfig(entryId, wanted ?? undefined) : null) ??
+			entryConfig(entries.find((e) => e.id === entryId) ?? entries[0], wanted)
+		);
+	};
 
-	if (agentModel) return agentModel;
+	const config = resolve(requested);
 
-	return entryConfig(entries.find((e) => e.id === entryId) ?? entries[0], requested);
+	return effort && config.reasoningEffort ? resolve(effort) : config;
 }
 
 /**
@@ -276,13 +314,22 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 
 		const runtime = resolveRuntime(entry.model, entry.runtime);
 		const hosted = hostedProvider(entry.source);
+		const contextWindow = contextWindowFor(entry.id, entry.contextWindow).tokens;
 
 		if (hosted) {
 			const apiKey = stored.connections?.[hosted.id]?.apiKey;
 
 			if (!apiKey) throw new ModelConfigError(`${hosted.name} isn't connected. Connect it in Settings → Agent.`);
 
-			return { source: hosted.id, baseUrl: hosted.baseUrl, apiKey, model: entry.model, reasoningEffort, runtime };
+			return {
+				source: hosted.id,
+				baseUrl: hosted.baseUrl,
+				apiKey,
+				model: entry.model,
+				contextWindow,
+				reasoningEffort,
+				runtime
+			};
 		}
 
 		const baseUrl = entry.baseUrl || eff.baseUrl;
@@ -290,7 +337,7 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 
 		if (!baseUrl) throw new ModelConfigError(`${entry.label} has no endpoint. Pick another model in Settings → Agent.`);
 
-		return { baseUrl, apiKey, model: entry.model, reasoningEffort, runtime };
+		return { baseUrl, apiKey, model: entry.model, contextWindow, reasoningEffort, runtime };
 	}
 
 	const shared = reviewConfig();
@@ -299,6 +346,7 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 		baseUrl: shared.baseUrl,
 		apiKey: shared.apiKey,
 		model: shared.model,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		runtime: resolveRuntime(shared.model),
 		reasoningEffort: requested ?? undefined
 	};
@@ -321,6 +369,7 @@ function vllmConfig(entryId: string, requested: ReasoningEffort | null | undefin
 		baseUrl,
 		apiKey,
 		model,
+		contextWindow: contextWindowFor(entryId, target.contextWindow).tokens,
 		reasoningEffort: supportedEffort(requested ?? undefined, efforts, defaultEffort),
 		runtime: resolveRuntime(model)
 	};
@@ -345,7 +394,14 @@ function agentConfig(id: string, requested: ReasoningEffort | undefined): ModelC
 
 	const { agent, model } = owner;
 
-	return { provider: agent.id, baseUrl: '', apiKey: '', model, ...agent.modelSettings(model, requested) };
+	return {
+		provider: agent.id,
+		baseUrl: '',
+		apiKey: '',
+		model,
+		contextWindow: contextWindowFor(id, listedModel(id)?.contextWindow).tokens,
+		...agent.modelSettings(model, requested)
+	};
 }
 
 /** Caps so one PR can't blow the context window. */

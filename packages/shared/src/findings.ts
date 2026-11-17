@@ -164,6 +164,8 @@ export interface FindingDecision {
 	/** What the person added in their own words. */
 	note?: string;
 	decidedAt: string;
+	/** The account that recorded the decision; absent on decisions saved before it was tracked. */
+	decidedBy?: string;
 }
 
 /** The body of `PUT /api/reviews/:id/findings/:findingId/decision`: an acceptance, or a dismissal with its reason. */

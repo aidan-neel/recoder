@@ -7,11 +7,13 @@ import { useEffect, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import { useChrome } from '@/lib/shell/chrome';
-import { newReviewHref, settingsHref } from '@/lib/shell/routes';
+import { newReviewHref } from '@/lib/shell/routes';
 import { toggleSidebar } from '@/lib/shell/sidebar-toggle';
 import { followSystemTheme } from '@/lib/shell/theme';
 import { useKeys } from '@/lib/shell/use-keys';
 import { useNavigator } from '@/lib/shell/navigation';
+
+import { SettingsModal } from '@/components/settings/settings-modal';
 
 import { CommandPalette } from './command-palette';
 import { ShortcutsModal } from './shortcuts-modal';
@@ -24,7 +26,7 @@ interface AppShellProps {
 }
 
 /**
- * The frame every page sits in: the sidebar, the page beside it, and the two
+ * The frame every page sits in: the sidebar, the page beside it, and the
  * app-wide overlays. It owns the keys that work anywhere.
  */
 export function AppShell({ model, children }: AppShellProps) {
@@ -36,7 +38,7 @@ export function AppShell({ model, children }: AppShellProps) {
 
 	useKeys({
 		'mod+k': () => useChrome.getState().setPaletteOpen(!useChrome.getState().paletteOpen),
-		'mod+,': () => router.push(settingsHref()),
+		'mod+,': toggleSettings,
 		'[': () => toggleSidebar(),
 		c: () => router.push(newReviewHref(base)),
 		'?': () => useChrome.getState().setShortcutsOpen(true)
@@ -51,6 +53,7 @@ export function AppShell({ model, children }: AppShellProps) {
 				</Frame>
 				<CommandPalette />
 				<ShortcutsModal />
+				<SettingsModal />
 				<Toaster />
 			</TooltipProvider>
 		</MotionConfig>
@@ -70,4 +73,12 @@ function Frame({ children }: { children: ReactNode }) {
 			{children}
 		</div>
 	);
+}
+
+/** ⌘, opens Settings on its first section, and closes it when it is open. */
+function toggleSettings(): void {
+	const chrome = useChrome.getState();
+
+	if (chrome.settingsSection === null) chrome.openSettings();
+	else chrome.closeSettings();
 }

@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { HaProcesses } from './ha-processes';
+import { SHARED_SECRET_KEY } from './shared-secret-key';
 
 export async function runCorrectnessProcess(url: string, program: string): Promise<string> {
 	const fixture = new HaProcesses(url);
@@ -23,6 +24,7 @@ export async function runCorrectnessProcess(url: string, program: string): Promi
 				RECODER_DATA_DIR: join(directory, 'data'),
 				RECODER_WORKDIR: join(directory, 'work'),
 				RECODER_DATABASE_URL: fixture.databaseUrl,
+				RECODER_SECRET_KEY: SHARED_SECRET_KEY,
 				RECODER_OPENCODE_BIN: '',
 				RECODER_CLAUDE_BIN: '',
 				GH_TOKEN: '',

@@ -15,7 +15,7 @@ import { outOfUsage } from '../../models/out-of-usage';
 import type { ChatOptions } from '../../models/llm/types';
 import type { AgentAdapter, AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { childEnv } from '../cli-process';
-import { openCodeDataDir } from './limits';
+import { openCodeDataDir } from './opencode-credentials';
 import { OAUTH_TIMEOUT_MS } from './api/types';
 import { OpenCodeAgentRun, refusesStructuredOutput } from './opencode-agent-session';
 import { openCodeChat } from './opencode-chat';
@@ -73,6 +73,7 @@ export class OpenCodeAgent implements AgentAdapter {
 
 	private readonly server: OpenCodeServer;
 	private status: AgentStatus | null = null;
+	private readonly providersCache = new TtlCache<AgentProvider[]>(10_000, 1);
 	private attempts = new Map<string, Attempt>();
 	/**
 	 * Models whose provider refused OpenCode's structured output. OpenCode forces
@@ -89,6 +90,7 @@ export class OpenCodeAgent implements AgentAdapter {
 
 	/** Installed, version, and whether the server came up. Cached until `refresh`. */
 	async detect(refresh = false): Promise<AgentStatus> {
+		if (refresh) this.providersCache.clear();
 		if (this.status && !refresh) return this.status;
 
 		const path = findOpenCode(this.env);
@@ -144,7 +146,11 @@ export class OpenCodeAgent implements AgentAdapter {
 		return { reason: err.status >= 500 ? fallback : err.message || fallback };
 	}
 
-	async providers(): Promise<AgentProvider[]> {
+	providers(): Promise<AgentProvider[]> {
+		return this.providersCache.get('all', () => this.readProviders());
+	}
+
+	private async readProviders(): Promise<AgentProvider[]> {
 		const api = await this.server.api();
 		const [catalog, config, auth] = await Promise.all([this.catalog(), api.connected(), api.authMethods()]);
 
@@ -235,10 +241,12 @@ export class OpenCodeAgent implements AgentAdapter {
 	/** Save an API key (plus any prompt answers) for a provider. */
 	async setKey(providerId: string, key: string, inputs: Record<string, string> = {}): Promise<void> {
 		await (await this.server.api()).setKey(providerId, key, inputs);
+		this.providersCache.clear();
 	}
 
 	async remove(providerId: string): Promise<void> {
 		await (await this.server.api()).removeLogin(providerId);
+		this.providersCache.clear();
 	}
 
 	/**
@@ -302,6 +310,8 @@ export class OpenCodeAgent implements AgentAdapter {
 		try {
 			const ok = await attempt.finish(code);
 
+			if (ok) this.providersCache.clear();
+
 			attempt.state = ok
 				? { status: 'complete' }
 				: { status: 'failed', message: 'The provider did not accept the sign-in.' };
@@ -327,6 +337,7 @@ export class OpenCodeAgent implements AgentAdapter {
 	}
 
 	stop(): void {
+		this.providersCache.clear();
 		this.server.stop();
 	}
 }

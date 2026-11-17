@@ -3,6 +3,7 @@ import type { EvidenceStore } from '../../../evidence/evidence.js';
 import { configForOrchestrator } from '../../../models/models.js';
 import { applyDirective, describeDirective, interpretInstructions } from '../../chat/directive.js';
 import { composeGuidelines, readGlobalGuidelines, type GuidelinesInput } from '../../guidelines/guidelines.js';
+import { instructionFilesFor } from '../../guidelines/instruction-scope.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import type { ReviewInventory } from '../inventory.js';
 import { orchestratorSays, publishCoverage, type ReviewRun } from './context.js';
@@ -33,12 +34,12 @@ export async function understandChanges(run: ReviewRun): Promise<void> {
 
 	run.coverage.seed(inventory);
 	if (evidence.revision) announceGuidance(events);
-	await loadGuidance(inventory, evidence, signal, events?.onTool);
 
-	const guidelines = composeGuidelines({
-		global: readGlobalGuidelines().content,
-		repo: await loadRepoGuidelines(evidence, signal, events?.onTool)
-	});
+	const repo = await loadRepoGuidelines(evidence, signal, events?.onTool);
+
+	await loadGuidance(inventory, evidence, repo?.content, signal, events?.onTool);
+
+	const guidelines = composeGuidelines({ global: readGlobalGuidelines().content, repo });
 
 	inventory.guidelines = guidelines?.block ?? null;
 	if (guidelines) events?.onGuidelines?.(guidelines.used);
@@ -147,27 +148,29 @@ async function loadRepoGuidelines(
 	}
 }
 
-/** Reads the target revision's instruction files and finds paths related to the changed sources. */
+/** Reads the target revision's instruction files the repo guidelines allow and finds paths related to the changed sources. */
 async function loadGuidance(
 	inventory: ReviewInventory,
 	evidence: EvidenceStore,
+	repoGuidelines: string | undefined,
 	signal: AbortSignal,
 	onTool?: HarnessEvents['onTool']
 ): Promise<void> {
 	if (!evidence.revision) return;
 
-	await loadInstructionFiles(inventory, evidence, signal, onTool);
+	await loadInstructionFiles(inventory, evidence, repoGuidelines, signal, onTool);
 	inventory.relatedPaths = await findRelatedPaths(inventory, evidence, signal, onTool);
 }
 
-/** The first 80 lines of each instruction file that exists on the target revision. */
+/** The first 80 lines of each instruction file on the target revision that the repo guidelines allow (`instructionFilesFor`). */
 async function loadInstructionFiles(
 	inventory: ReviewInventory,
 	evidence: EvidenceStore,
+	repoGuidelines: string | undefined,
 	signal: AbortSignal,
 	onTool?: HarnessEvents['onTool']
 ): Promise<void> {
-	const paths = await evidence.existingFiles('target', INSTRUCTION_PATHS, signal);
+	const paths = await evidence.existingFiles('target', instructionFilesFor(repoGuidelines, INSTRUCTION_PATHS), signal);
 
 	const reads = paths.map((path) => ({
 		action: 'readFile' as const,

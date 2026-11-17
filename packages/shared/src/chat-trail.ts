@@ -37,6 +37,12 @@ export interface ChatTrailThought extends TrailStepBase {
 	text: string;
 }
 
+/** What the model said it would do next, written between its tool calls. It is not part of the answer. */
+export interface ChatTrailNote extends TrailStepBase {
+	kind: 'note';
+	text: string;
+}
+
 /** Looking for text in the repository's files. */
 export interface ChatTrailSearch extends TrailStepBase {
 	kind: 'search';
@@ -64,7 +70,7 @@ export interface ChatTrailRun extends TrailStepBase {
 	summary?: string;
 }
 
-export type ChatTrailStep = ChatTrailThought | ChatTrailSearch | ChatTrailRead | ChatTrailRun;
+export type ChatTrailStep = ChatTrailThought | ChatTrailNote | ChatTrailSearch | ChatTrailRead | ChatTrailRun;
 
 /** A passage of the repository a reply cites, with its text as it was when the reply was written. */
 export interface ChatCitation {
@@ -85,7 +91,10 @@ export function withTrailStep(trail: readonly ChatTrailStep[], step: ChatTrailSt
 
 /** True while the step is still going. */
 export function isStepRunning(step: ChatTrailStep): boolean {
-	return step.kind === 'thought' ? step.endedAt === undefined : step.status === 'running';
+	if (step.kind === 'thought') return step.endedAt === undefined;
+	if (step.kind === 'note') return false;
+
+	return step.status === 'running';
 }
 
 /** What a reply's links to the repository start with: `[name](#cite:src/a.ts:12-20)`. */

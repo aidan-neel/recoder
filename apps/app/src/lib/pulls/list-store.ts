@@ -54,8 +54,8 @@ interface StartTarget {
 	headSha?: string;
 }
 
-/** What the person asked a review to look at: the words after the pull request, and any images. */
-type ReviewBrief = Pick<CreateReviewInput, 'instructions' | 'images'>;
+/** What the person asked of a review: the words after the pull request, any images, and how fast it runs. */
+type ReviewBrief = Pick<CreateReviewInput, 'instructions' | 'images' | 'speed'>;
 
 export interface ListStore {
 	state: StoreApi<ListData>;
@@ -71,7 +71,7 @@ export interface ListStore {
 	 */
 	loadMore: (repoId: string | null) => Promise<void>;
 	/**
-	 * Queues a review, with the person's brief (what to look at, and images) when there is one; the row shows it
+	 * Queues a review, with the person's brief (what to look at, images, its speed) when there is one; the row shows it
 	 * at once and goes back when the start fails, which rejects with a sentence.
 	 */
 	start: (target: StartTarget, brief?: ReviewBrief) => Promise<Review>;
@@ -81,6 +81,12 @@ export interface ListStore {
 	deleteChat: (id: string) => Promise<void>;
 	/** Tracks a repository and reads the list again; rejects with a sentence. */
 	track: (repo: RepoTarget) => Promise<Repo>;
+	/** Takes a repository out of every list while its Undo is on offer; the server still tracks it. */
+	hideRepo: (repoId: string) => void;
+	/** Puts a hidden repository back. */
+	restoreRepo: (repoId: string) => void;
+	/** Stops tracking a hidden repository on the server and reads the list again; on failure it comes back and this rejects with a sentence. */
+	untrack: (repoId: string) => Promise<void>;
 	setComposeRepo: (repoId: string) => void;
 }
 
@@ -88,7 +94,7 @@ export interface ListStore {
 const REFRESH_MS = 60_000;
 
 /** How many of the newest chats the list reads, for the sidebar. */
-const CHAT_LIMIT = 5;
+export const CHAT_LIMIT = 5;
 
 /** Where the New review screen's last repository is kept. */
 const COMPOSE_REPO_KEY = 'recoder.compose.repo.v1';
@@ -167,8 +173,19 @@ export function createListStore(client: ApiClient): ListStore {
 	let moreEpoch = 0;
 	let watchers = 0;
 	let stopWatching: (() => void) | null = null;
+	/** The repositories the server tracks, and those of them hidden while their Undo is on offer. */
+	let trackedRepos: Repo[] | null = null;
+	const hidden = new Set<string>();
 
-	/** Reads the list, repositories, reviews and chats together; an answer older than the newest request is dropped. */
+	/** Shows the tracked repositories less the hidden ones. */
+	function showRepos(): void {
+		state.setState({ repos: trackedRepos?.filter((repo) => !hidden.has(repo.id)) ?? null });
+	}
+
+	/**
+	 * Reads the list, repositories, reviews and chats. The last three land as soon as they answer, since the list
+	 * waits on the forges and can take seconds; an answer older than the newest request is dropped.
+	 */
 	async function load(query: PullListQuery): Promise<void> {
 		const mine = ++loadSeq;
 
@@ -176,13 +193,18 @@ export function createListStore(client: ApiClient): ListStore {
 
 		state.setState({ refreshing: state.getState().phase === 'ready' });
 
+		const tracked = Promise.all([client.repos(), client.reviews(), client.repoChats(CHAT_LIMIT)]).then(
+			([repos, reviews, chats]) => {
+				if (mine !== loadSeq) return;
+
+				trackedRepos = repos;
+				state.setState({ reviews, chats });
+				showRepos();
+			}
+		);
+
 		try {
-			const [list, repos, reviews, chats] = await Promise.all([
-				client.pulls(query),
-				client.repos(),
-				client.reviews(),
-				client.repoChats(CHAT_LIMIT)
-			]);
+			const [list] = await Promise.all([client.pulls(query), tracked]);
 
 			if (mine !== loadSeq) return;
 
@@ -190,9 +212,6 @@ export function createListStore(client: ApiClient): ListStore {
 				phase: 'ready',
 				list,
 				more: afterReload(query.fresh ? NO_MORE_PAGES : current.more, list),
-				repos,
-				reviews,
-				chats,
 				error: null,
 				offline: false,
 				refreshing: false,
@@ -295,7 +314,8 @@ export function createListStore(client: ApiClient): ListStore {
 					...(target.headSha && { headSha: target.headSha }),
 					...(target.title && { prTitle: target.title }),
 					...(brief.instructions && { instructions: brief.instructions }),
-					...(brief.images?.length && { images: brief.images })
+					...(brief.images?.length && { images: brief.images }),
+					...(brief.speed && { speed: brief.speed })
 				})
 			);
 
@@ -330,11 +350,23 @@ export function createListStore(client: ApiClient): ListStore {
 	}
 
 	async function track(repo: RepoTarget): Promise<Repo> {
-		const tracked = await plainly(() => client.addRepo(repo));
+		const added = await plainly(() => client.addRepo(repo));
 
 		await load({});
 
-		return tracked;
+		return added;
+	}
+
+	async function untrack(repoId: string): Promise<void> {
+		try {
+			await plainly(() => client.removeRepo(repoId));
+			trackedRepos = trackedRepos?.filter((repo) => repo.id !== repoId) ?? null;
+		} finally {
+			hidden.delete(repoId);
+			showRepos();
+		}
+
+		await load({ fresh: true });
 	}
 
 	return {
@@ -343,6 +375,15 @@ export function createListStore(client: ApiClient): ListStore {
 		deleteReview,
 		deleteChat,
 		track,
+		untrack,
+		hideRepo(repoId) {
+			hidden.add(repoId);
+			showRepos();
+		},
+		restoreRepo(repoId) {
+			hidden.delete(repoId);
+			showRepos();
+		},
 		reload,
 		loadMore,
 

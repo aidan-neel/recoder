@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { Field, focusFieldControl } from '../../src/components/form/field';
 import { Input } from '../../src/components/form/input';
 import { LinkField } from '../../src/components/form/link-field';
+import { NumberField } from '../../src/components/form/number-field';
 
 /** No-op change handler for static markup rendering. */
 function ignoreChange(): void {}
@@ -68,7 +69,7 @@ describe('Field', () => {
 		expect(selfNamed).not.toContain('aria-labelledby=');
 	});
 
-	test('keeps native control wiring on Input inside Field', () => {
+	test('keeps native control wiring on Input and NumberField inside Field', () => {
 		const markup = renderToStaticMarkup(
 			<Field label="Repository" htmlFor="repo" error="Repository is required">
 				<Input defaultValue="" />
@@ -79,6 +80,17 @@ describe('Field', () => {
 		expect(markup).toContain('id="repo"');
 		expect(markup).toContain('aria-invalid="true"');
 		expect(markup).toContain('aria-describedby="repo-message"');
+
+		const numberMarkup = renderToStaticMarkup(
+			<Field label="Files per review" htmlFor="files" error="Out of range">
+				<NumberField defaultValue="200" aria-label="Files per review" canIncrement={false} />
+			</Field>
+		);
+
+		expect(numberMarkup).toContain('role="spinbutton"');
+		expect(numberMarkup).toContain('id="files"');
+		expect(numberMarkup).toContain('aria-invalid="true"');
+		expect(numberMarkup).toContain('aria-label="Increase Files per review" disabled=""');
 	});
 
 	test('focuses a non-labelable control on label click only when enabled and not natively associated', () => {

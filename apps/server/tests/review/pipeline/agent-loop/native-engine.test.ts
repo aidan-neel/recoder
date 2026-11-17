@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -63,7 +64,7 @@ function agentOptions(overrides: Partial<JsonAgentOptions<Answer>> = {}): JsonAg
 		stage: 'reviewer',
 		system: '',
 		user: '',
-		config: { provider: 'opencode', model: 'openai/m', baseUrl: '', apiKey: '' },
+		config: { provider: 'opencode', model: 'openai/m', baseUrl: '', apiKey: '', contextWindow: DEFAULT_CONTEXT_WINDOW },
 		budget: new ModelBudget(),
 		evidence: new EvidenceStore(null, buildInventory(diff), 12000),
 		maxTurns: 8,
@@ -91,17 +92,22 @@ test('a tool call from OpenCode reads the review evidence and each model step sp
 	);
 
 	expect(result.value?.results?.[0].isError).toBe(false);
-	expect(result.value?.results?.[0].text).toContain('+new');
+	expect(result.value?.results?.[0].text).toContain('+1|new');
 	expect(tools).toHaveLength(1);
 	expect(budget.used).toBe(2);
 });
 
-test('a read-only agent is not offered run, and a call to it is refused', async () => {
+test('a read-only agent sees run but its call is refused by the role gate', async () => {
 	const target = await startAgent();
 	const run = { tool: 'run', args: { command: 'id' } };
 	const offered = await runNativeAgent(agentOptions({ user: script([[run]]) }), target);
 
-	expect(offered.value?.results).toEqual([{ off: true }]);
+	expect(offered.value?.results).toEqual([
+		{
+			isError: true,
+			text: 'Tool run is not available to your role. Your tools: read_diff, read_file, search, list_files, load_skill.'
+		}
+	]);
 });
 
 test('tools are refused on the last turn even when a step is reported after its tool calls', async () => {
@@ -152,8 +158,24 @@ test('an agent that keeps taking steps past its turns is stopped and asked to an
 	);
 
 	expect(result.value?.done).toBe(true);
-	expect(result.value?.toolsOn).toBe(false);
+	expect(result.value?.toolsOn).toBe(true);
 	expect(budget.used).toBeLessThanOrEqual(5);
+});
+
+test('a model that tries refused tools on its final turn still has room to answer', async () => {
+	const result = await runNativeAgent(
+		agentOptions({
+			user: script([[readDiff], [readDiff], [readDiff], [readDiff], [readDiff]], {
+				finalSteps: [[readDiff], [readDiff]]
+			}),
+			maxTurns: 2
+		}),
+		await startAgent()
+	);
+
+	expect(result.error).toBeUndefined();
+	expect(result.value?.done).toBe(true);
+	expect(result.value?.results?.map((item) => item.isError)).toEqual([true, true]);
 });
 
 test('aborting the review stops the run and deletes its OpenCode session', async () => {

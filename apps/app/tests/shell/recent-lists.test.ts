@@ -3,6 +3,7 @@ import type { RepoChatSummary } from '@recoder/shared';
 
 import { recentChats } from '../../src/lib/shell/recent-chats';
 import { recentReviews } from '../../src/lib/shell/recent-reviews';
+import { AUTO_SETTLE_MS, isSettled, sidebarLists } from '../../src/lib/shell/settle';
 import { review, tracked } from '../fixtures';
 
 const REPOS = [tracked('r1', 'acme/api')];
@@ -15,12 +16,12 @@ describe('the sidebar lists', () => {
 	test('reviews of a removed repo are left out instead of showing its id', () => {
 		const reviews = [review({ id: 'kept' }), review({ id: 'orphan', repoId: 'removed', prNumber: 9 })];
 
-		const { recent } = recentReviews(reviews, REPOS, '');
+		const { open } = recentReviews(reviews, REPOS, '');
 
-		expect(recent.map((row) => [row.reviewId, row.repoName])).toEqual([['kept', 'api']]);
+		expect(open.map((row) => [row.reviewId, row.repoName])).toEqual([['kept', 'api']]);
 	});
 
-	test('reviews of merged and closed pull requests go to settled, not recent', () => {
+	test('reviews of merged and closed pull requests go to ended, not open', () => {
 		const reviews = [
 			review({ id: 'open', prNumber: 1, pullState: 'open' }),
 			review({ id: 'unknown', prNumber: 2 }),
@@ -28,11 +29,11 @@ describe('the sidebar lists', () => {
 			review({ id: 'closed', prNumber: 4, pullState: 'closed' })
 		];
 
-		const { recent, settled } = recentReviews(reviews, REPOS, '');
+		const { open, ended } = recentReviews(reviews, REPOS, '');
 
-		expect(recent.map((row) => row.reviewId).sort()).toEqual(['open', 'unknown']);
+		expect(open.map((row) => row.reviewId).sort()).toEqual(['open', 'unknown']);
 
-		expect(settled.map((row) => [row.reviewId, row.outcome]).sort()).toEqual([
+		expect(ended.map((row) => [row.reviewId, row.outcome]).sort()).toEqual([
 			['closed', 'closed'],
 			['merged', 'merged']
 		]);
@@ -52,17 +53,52 @@ describe('the sidebar lists', () => {
 			})
 		);
 
-		const rows = recentReviews([...active, ...settled], REPOS, '');
+		const rows = sidebarLists(
+			{ ...recentReviews([...active, ...settled], REPOS, ''), chats: [] },
+			{},
+			Date.parse('2026-01-01')
+		);
+
+		const ids = rows.settled.map((entry) => (entry.kind === 'review' ? entry.row.reviewId : entry.row.chatId));
 
 		expect(rows.recent).toHaveLength(8);
 		expect(rows.settled).toHaveLength(12);
-		expect(rows.settled[0].reviewId).toBe('done-11');
-		expect(rows.settled[11].reviewId).toBe('done-0');
+		expect(ids[0]).toBe('done-11');
+		expect(ids[11]).toBe('done-0');
 	});
 
 	test('chats in a removed repo are left out', () => {
 		const rows = recentChats([chat('kept', 'r1'), chat('orphan', 'removed')], REPOS, '');
 
 		expect(rows.map((row) => row.chatId)).toEqual(['kept']);
+	});
+});
+
+describe('settling a sidebar row', () => {
+	const CHANGED = '2026-03-01T12:00:00Z';
+	const changed = Date.parse(CHANGED);
+
+	test('a row settles on its own after three quiet hours', () => {
+		expect(isSettled('a', CHANGED, {}, changed + AUTO_SETTLE_MS - 1)).toBe(false);
+		expect(isSettled('a', CHANGED, {}, changed + AUTO_SETTLE_MS)).toBe(true);
+	});
+
+	test('a running review never settles on its own', () => {
+		expect(isSettled('a', CHANGED, {}, changed + AUTO_SETTLE_MS * 10, true)).toBe(false);
+	});
+
+	test('a row settled by hand comes back once it changes again', () => {
+		const marks = { a: { settled: true, at: changed + 1000 } };
+
+		expect(isSettled('a', CHANGED, marks, changed + 2000)).toBe(true);
+		expect(isSettled('a', '2026-03-01T12:00:05Z', marks, changed + 6000)).toBe(false);
+	});
+
+	test('an unsettled row rests three hours from the moment it was brought back', () => {
+		const back = changed + AUTO_SETTLE_MS * 2;
+		const marks = { a: { settled: false, at: back } };
+
+		expect(isSettled('a', CHANGED, marks, back + AUTO_SETTLE_MS - 1)).toBe(false);
+		expect(isSettled('a', CHANGED, marks, back + AUTO_SETTLE_MS)).toBe(true);
 	});
 });

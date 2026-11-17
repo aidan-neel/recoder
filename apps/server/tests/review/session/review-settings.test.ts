@@ -2,11 +2,13 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { MAX_CONTEXT_WINDOW, MIN_CONTEXT_WINDOW } from '@recoder/shared';
 import { configForOrchestrator } from '../../../src/models/models';
 import {
 	effectiveSubagentCap,
 	getStoredSettings,
 	initReviewSettings,
+	reviewSettingsSchema,
 	saveReviewSettings,
 	setConnection,
 	setReviewOverrides
@@ -60,17 +62,11 @@ test('disconnecting a provider removes its models and the picks that pointed at 
 	expect(getStoredSettings().orchestratorModelId).toBeUndefined();
 });
 
-test('a subagent cap saved before the caps were 3, 8 and 12 loads as the nearest cap that is as generous and is saved that way', () => {
+test('a saved subagent count loads as it is, including counts that are not named picks', () => {
 	const file = join(process.env.RECODER_DATA_DIR!, 'review-config.json');
 
-	for (const [saved, cap] of [
-		[2, 3],
-		[4, 8],
-		[0, 0],
-		[12, 12],
-		['uncapped', 'uncapped']
-	] as const) {
-		writeFileSync(file, JSON.stringify({ subagentCap: saved }));
+	for (const cap of [0, 2, 4, 5, 8, 12, 'uncapped'] as const) {
+		writeFileSync(file, JSON.stringify({ subagentCap: cap }));
 		setReviewOverrides({});
 		initReviewSettings();
 		expect(effectiveSubagentCap()).toBe(cap);
@@ -131,6 +127,30 @@ test('saving the models list keeps OpenCode, Claude Code, Devin and vLLM picks w
 	expect(getStoredSettings().orchestratorModelId).toBeUndefined();
 	expect(getStoredSettings().specialistModelId).toBeUndefined();
 	expect(getStoredSettings().verifierModelId).toBeUndefined();
+});
+
+test('a context window patch merges over the saved windows and null removes a model’s key', () => {
+	saveReviewSettings({ contextWindows: { m: 16_000, n: 8_000 } });
+	expect(getStoredSettings().contextWindows).toEqual({ m: 16_000, n: 8_000 });
+
+	saveReviewSettings({ contextWindows: { m: null, n: 64_000 } });
+	expect(getStoredSettings().contextWindows).toEqual({ n: 64_000 });
+});
+
+test('a context window outside the bounds is refused, and the bounds themselves are kept', () => {
+	expect(reviewSettingsSchema.safeParse({ contextWindows: { m: MIN_CONTEXT_WINDOW - 1 } }).success).toBe(false);
+	expect(reviewSettingsSchema.safeParse({ contextWindows: { m: MAX_CONTEXT_WINDOW + 1 } }).success).toBe(false);
+	expect(reviewSettingsSchema.safeParse({ contextWindows: { m: MIN_CONTEXT_WINDOW } }).success).toBe(true);
+	expect(reviewSettingsSchema.safeParse({ contextWindows: { m: MAX_CONTEXT_WINDOW } }).success).toBe(true);
+});
+
+test('set context windows survive a restart', () => {
+	saveReviewSettings({ contextWindows: { m: 16_000 } });
+
+	setReviewOverrides({});
+	initReviewSettings();
+
+	expect(getStoredSettings().contextWindows).toEqual({ m: 16_000 });
 });
 
 test('verifierModelId and verifierEffort survive a restart and can be cleared back to the Review model', () => {

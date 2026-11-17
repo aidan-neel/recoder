@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import type { Review } from '@recoder/shared';
+import type { PullList, Review } from '@recoder/shared';
 
 import type { ApiClient } from '../../src/lib/api/client';
 import { ApiError } from '../../src/lib/api/http';
-import { createListStore } from '../../src/lib/pulls/list-store';
+import { createListStore, type ListData, type ListStore } from '../../src/lib/pulls/list-store';
 import { createSampleApi } from '../../src/lib/sample/sample-api';
 
 const TARGET = { repoId: 'sample-api', number: 205, title: 'Ready change', headSha: 'abc' };
@@ -64,5 +64,35 @@ describe('starting a review from the list', () => {
 
 		expect(store.state.getState().started[KEY]?.id).toBe(review.id);
 		expect(store.state.getState().starting.size).toBe(0);
+	});
+});
+
+/** Resolves once the store's state passes `check`. */
+function reaches(store: ListStore, check: (data: ListData) => boolean): Promise<void> {
+	return new Promise((resolve) => {
+		if (check(store.state.getState())) resolve();
+
+		store.state.subscribe((data) => {
+			if (check(data)) resolve();
+		});
+	});
+}
+
+describe('loading the list', () => {
+	test('the repositories, reviews and chats land while the pull requests still wait on the forges', async () => {
+		const sample = createSampleApi();
+		const pulls = Promise.withResolvers<PullList>();
+		const store = createListStore({ ...sample, pulls: () => pulls.promise });
+
+		store.reload();
+		await reaches(store, (data) => data.repos !== null);
+
+		expect(store.state.getState()).toMatchObject({ phase: 'loading', list: null });
+		expect(store.state.getState().chats).not.toBeNull();
+
+		pulls.resolve(await sample.pulls());
+		await reaches(store, (data) => data.phase === 'ready');
+
+		expect(store.state.getState().list).not.toBeNull();
 	});
 });

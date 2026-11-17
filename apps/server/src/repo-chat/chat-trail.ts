@@ -11,6 +11,7 @@ import {
 	type RepoChatMessage
 } from '@recoder/shared';
 import { readRepoText } from './repo-context';
+import { appendPart } from './reply-text';
 
 /** A heading a model puts on its own line to title a thought: `**Framing the question**`. */
 const THOUGHT_HEADING = /^\*\*([^*\n]{1,80})\*\*[ \t]*$/;
@@ -55,13 +56,25 @@ export function parseThoughts(reasoning: string): ParsedThought[] {
 	return thoughts;
 }
 
+/** What a tool call showed of itself, from its arguments. */
+export interface ToolStepDetail {
+	path?: string;
+	query?: string;
+	scope?: string;
+	files?: string[];
+	command?: string;
+	startLine?: number;
+	endLine?: number;
+}
+
 /**
  * Writes what a reply reports about its work into the reply's trail: the
- * files it read and the reasoning its model discloses. It adds nothing a
- * source did not report. Each change calls `changed` so the reply can save.
+ * files it read, the tools it called, and the reasoning its model discloses.
+ * It adds nothing a source did not report. Each change calls `changed` so the reply can save.
  */
 export class TrailRecorder {
 	private reasoning = '';
+	private reasoningPart: string | null = null;
 	private readId: string | null = null;
 
 	constructor(
@@ -97,9 +110,12 @@ export class TrailRecorder {
 		});
 	}
 
-	/** Adds reasoning text the model disclosed; the thought it belongs to grows. */
-	addReasoning(delta: string): void {
-		this.reasoning = (this.reasoning + delta).slice(0, MAX_THOUGHT_CHARS * 4);
+	/** Adds reasoning text the model disclosed; the thought it belongs to grows. `part` names the part it streams in. */
+	addReasoning(delta: string, part = ''): void {
+		const startsPart = this.reasoningPart !== null && part !== this.reasoningPart;
+
+		this.reasoningPart = part;
+		this.reasoning = appendPart(this.reasoning, delta, startsPart).slice(0, MAX_THOUGHT_CHARS * 4);
 
 		const thoughts = parseThoughts(this.reasoning);
 
@@ -118,11 +134,78 @@ export class TrailRecorder {
 		});
 	}
 
+	/** Shows what the model says it will do next as a note, which grows in place while the words stream. */
+	writeNote(id: string, text: string): void {
+		const known = this.reply.trail?.find((step) => step.id === id);
+
+		this.put({ id, kind: 'note', text: text.slice(0, MAX_THOUGHT_CHARS), startedAt: known?.startedAt ?? now() });
+	}
+
+	/** Ends a note: the model called the tool it spoke of. */
+	endNote(id: string): void {
+		const open = this.reply.trail?.find((step) => step.id === id);
+
+		if (open?.kind === 'note') this.put({ ...open, endedAt: now() });
+	}
+
+	/** Takes a note back out of the trail: its words turned out to be the answer. */
+	dropNote(id: string): void {
+		this.reply.trail = (this.reply.trail ?? []).filter((step) => step.id !== id);
+		this.changed();
+	}
+
 	/** Ends the thought still going, when the model moves on to its answer or the reply ends. */
 	endThinking(): void {
 		const last = this.reply.trail?.filter((step) => step.kind === 'thought' && step.endedAt === undefined).at(-1);
 
 		if (last) this.put({ ...last, endedAt: now() });
+	}
+
+	/**
+	 * Opens a trail step for one tool call and returns its id. Calls a model makes side by side each get their own
+	 * step, so one finishing never closes another.
+	 */
+	startToolStep(name: string, detail: ToolStepDetail): string {
+		const id = crypto.randomUUID();
+
+		this.put(this.renderedToolStep(id, name, detail, 'running', now()));
+
+		return id;
+	}
+
+	/** Closes one call's step with how the call went. */
+	finishToolStep(id: string, isError: boolean): void {
+		const open = this.reply.trail?.find((step) => step.id === id);
+
+		if (!open || open.kind === 'thought' || open.kind === 'note') return;
+
+		this.put({ ...open, status: isError ? 'error' : 'done', endedAt: now() });
+	}
+
+	private renderedToolStep(
+		id: string,
+		name: string,
+		detail: ToolStepDetail,
+		status: 'running' | 'done' | 'error',
+		startedAt: string
+	): ChatTrailStep {
+		if (name === 'search') {
+			return {
+				id,
+				kind: 'search',
+				query: detail.query ?? '',
+				...(detail.scope ? { scope: detail.scope } : {}),
+				status,
+				files: stepFiles(detail),
+				startedAt
+			};
+		}
+
+		if (name === 'read_file' || name === 'list_files') {
+			return { id, kind: 'read', status, files: stepFiles(detail), startedAt };
+		}
+
+		return { id, kind: 'run', command: detail.command ?? name, status, startedAt };
 	}
 
 	private put(step: ChatTrailStep): void {
@@ -159,6 +242,16 @@ async function citation(repo: Repo, file: ChatTrailFile, signal: AbortSignal): P
 		.slice(0, MAX_SNIPPET_CHARS);
 
 	return { ...file, snippet };
+}
+
+function stepFiles(detail: ToolStepDetail): ChatTrailFile[] {
+	const paths = detail.files ?? (detail.path ? [detail.path] : []);
+
+	return paths.slice(0, MAX_STEP_FILES).map((path, index) => ({
+		path,
+		...(index === 0 && detail.startLine !== undefined ? { startLine: detail.startLine } : {}),
+		...(index === 0 && detail.endLine !== undefined ? { endLine: detail.endLine } : {})
+	}));
 }
 
 function now(): string {

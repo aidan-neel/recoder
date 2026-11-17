@@ -1,17 +1,23 @@
 {
-	"version": 1,
+	"version": 2,
 	"skills": {
 		"better-ui": {
 			"source": "jakubkrehel/skills",
 			"sourceType": "github",
 			"skillPath": "skills/better-ui/SKILL.md",
-			"computedHash": "d05cf568f197e47b15e71e21b19be1897eba2bf187ef7b0a341bc5ffaf3ffd4d"
+			"computedHash": "086bb100281b79da584d6c5355730ce3828f23451b73da8d944b4a5069ff7f03"
 		},
 		"emil-design-eng": {
 			"source": "emilkowalski/skills",
 			"sourceType": "github",
 			"skillPath": "skills/emil-design-eng/SKILL.md",
-			"computedHash": "41b0a4dc1a27164fe297845a6c6850a39e9242c42c9be999967fcee9df2c5974"
+			"computedHash": "d80dbb053bf35f3ef9f3ffe493054b76d93f4ae5e2c85a97ee1222677471a622"
+		},
+		"giga-ui": {
+			"source": "aidan-neel/design",
+			"sourceType": "github",
+			"skillPath": "skills/giga-ui/SKILL.md",
+			"computedHash": "862757dd1b70ca189a2ad5fffe151c9dc40acdc4d0c4938d768484e8b39e0157"
 		}
 	}
 }

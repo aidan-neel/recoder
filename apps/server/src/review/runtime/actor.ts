@@ -126,7 +126,10 @@ export async function executeReviewActor(lease: ReviewLease, signal: AbortSignal
 				await prepareDraftSession(lease.reviewId, command.opener);
 			} else {
 				await withChatCommand(command, () =>
-					startReviewChat(lease.reviewId, command.assignmentId, command.text, command.codeContext)
+					startReviewChat(lease.reviewId, command.assignmentId, command.text, {
+						codeContext: command.codeContext,
+						skills: command.skills
+					})
 				);
 
 				accepted();

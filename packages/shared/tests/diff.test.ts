@@ -64,6 +64,26 @@ describe('parseUnifiedDiff', () => {
 
 		expect(file.path).toBe('my file.ts');
 	});
+
+	test('a removed `-- comment` or an added `++x` inside a hunk is content, so later lines keep their numbers', () => {
+		const [file] = parseUnifiedDiff(
+			'diff --git a/q.sql b/q.sql\n--- a/q.sql\n+++ b/q.sql\n@@ -1,4 +1,4 @@\n one\n--- comment\n+++x\n four\n five'
+		);
+
+		expect(file.hunks[0].lines.map((l) => [l.type, l.oldNo, l.newNo, l.text])).toEqual([
+			['context', 1, 1, 'one'],
+			['del', 2, null, '-- comment'],
+			['add', null, 2, '++x'],
+			['context', 3, 3, 'four'],
+			['context', 4, 4, 'five']
+		]);
+	});
+
+	test('the empty entry after a trailing newline is not a context line', () => {
+		const [file] = parseUnifiedDiff('--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old\n+new\n');
+
+		expect(file.hunks[0].lines.map((l) => l.type)).toEqual(['del', 'add']);
+	});
 });
 
 describe('expandFileDiff', () => {

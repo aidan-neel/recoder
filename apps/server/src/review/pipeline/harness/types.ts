@@ -14,6 +14,7 @@ import type {
 	ReviewGuidelinesUsed,
 	ReviewOutcome,
 	ReviewReasoningEntry,
+	ReviewSpeed,
 	ReviewStage,
 	ReviewTask,
 	SubagentCap,
@@ -73,14 +74,22 @@ export interface AdaptiveReviewInput {
 	instructions?: string | null;
 	/** Images the developer attached to the brief; each reviewer on the Review model reads them with it. */
 	images?: readonly ImageUpload[];
+	/** Names of the repository skills attached to the brief; every agent of the review reads them. */
+	skills?: readonly string[];
 	/** Subagents the review may run in all, from Settings (any count in tests); the shared default when unset. */
-	subagentCap?: SubagentCap | number;
+	subagentCap?: SubagentCap;
 	/** How many tokens the review may spend, from Settings; Medium when unset. Sets how many reviewers run, their turns and the model-call ceiling; which lenses run is `lenses`. */
 	tokenBudget?: TokenBudget;
 	/** Whether low-severity findings are kept, from Settings; dropped when unset. */
 	reportLowSeverity?: boolean;
 	/** False runs every baseline check again instead of reusing an earlier review's result. */
 	baselineCache?: boolean;
+	/**
+	 * `spark` is the fast review: one reviewer (the Low budget's limits) and no subagents, whatever `tokenBudget` and
+	 * `subagentCap` say, no code run, and no wait for a rule ledger that is not cached. The caller runs its models at the
+	 * speed's effort (`REVIEW_SPEED_PLANS`). Standard when unset.
+	 */
+	speed?: ReviewSpeed;
 	/** The lenses reviewers apply (the selection); every lens that fits the slice when unset. */
 	lenses?: readonly LensId[];
 	/** Continue a failed review: skip the units that finished. It must have been saved under the same `lenses`. */

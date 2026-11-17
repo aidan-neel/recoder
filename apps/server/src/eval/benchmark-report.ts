@@ -3,6 +3,7 @@ import type { ModelSettings, ObligationAnswer, ObligationCounts, ReviewFunnel, S
 import { recall, type BenchmarkSummary, type LabeledDefect, type PrScore, type Totals } from './benchmark-score';
 import { labelLines, percent } from './benchmark-labels-report';
 import { matchLines } from './benchmark-matches-report';
+import type { PriceLookup } from '../models/model-prices';
 import { tokenLines } from './benchmark-tokens';
 import { countClasses, type LabeledRun } from './benchmark-labels';
 import type { LowTotals } from './benchmark-lows';
@@ -451,7 +452,8 @@ function missedLines(prs: PrResult[]): string[] {
 	return missed.length ? ['', `Missed in at least one run (${missed.length})`, ...missed] : [];
 }
 
-export function printBenchmark(report: BenchmarkReport): void {
+/** Prints the report for a person; `priceOf` prices its tokens. */
+export function printBenchmark(report: BenchmarkReport, priceOf: PriceLookup): void {
 	const { summary } = report;
 
 	const stability =
@@ -491,7 +493,7 @@ export function printBenchmark(report: BenchmarkReport): void {
 			...groupLines('By category', summary.byCategory),
 			...missedLines(report.prs),
 			...stoppedLines(report.prs),
-			...tokenLines(report.prs.flatMap((pr) => pr.runs)),
+			...tokenLines(report.prs, priceOf),
 			...reviewerSummaryLines(report)
 		].join('\n')
 	);

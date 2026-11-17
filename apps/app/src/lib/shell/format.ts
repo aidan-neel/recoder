@@ -5,6 +5,21 @@ export function author(login: string): { name: string; agent: boolean } {
 	return { name: agent ? login.replace(/\[bot\]$/, '') : login, agent };
 }
 
+/** Formats counts for every call: building a formatter per number cost about a millisecond a page. */
+const COUNT_FORMAT = new Intl.NumberFormat('en-US');
+
+/** A count with thousands separators: `2,418`. */
+export function formatCount(value: number): string {
+	return COUNT_FORMAT.format(value);
+}
+
+const SHORT_COUNT_FORMAT = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+
+/** A count shortened as GitHub shortens its counters: `999`, `1.2k`, `12.3k`, `1.5m`. */
+export function shortCount(value: number): string {
+	return SHORT_COUNT_FORMAT.format(value).toLowerCase();
+}
+
 /** "1 decision", "3 decisions". */
 export function plural(count: number, word: string, many = `${word}s`): string {
 	return `${count} ${count === 1 ? word : many}`;

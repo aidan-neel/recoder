@@ -15,29 +15,7 @@ const BREAKDOWN_ROWS = 5;
 export function UsageSkeleton() {
 	return (
 		<div className="usage-report usage-skeleton" aria-hidden>
-			<div className="usage-overview">
-				<div className="usage-rail">
-					<div className="usage-total">
-						<Skeleton className="usage-skeleton-total" />
-						<Skeleton className="usage-skeleton-meta" />
-					</div>
-					<div className="usage-rail-list">
-						{Array.from({ length: RAIL_ROWS }, (_, index) => (
-							<div key={index} className="usage-rail-row">
-								<Skeleton className="usage-skeleton-dot" />
-								<Skeleton className="usage-skeleton-mark" />
-								<Skeleton className="usage-skeleton-rail-name" />
-								<Skeleton className="usage-skeleton-rail-tokens" />
-								<Skeleton className="usage-skeleton-rail-meta" />
-							</div>
-						))}
-					</div>
-				</div>
-				<div className="usage-plot">
-					<h2 className="usage-block-title">Daily processed tokens</h2>
-					<Skeleton className="usage-skeleton-chart" />
-				</div>
-			</div>
+			<OverviewSkeleton chartTitle="Daily processed tokens" />
 			<UsageBlock title="Totals">
 				<FiguresSkeleton count={FIGURES} />
 			</UsageBlock>
@@ -57,8 +35,37 @@ export function UsageSkeleton() {
 	);
 }
 
+/** Placeholder for the left rail + daily line chart overview block. */
+export function OverviewSkeleton({ chartTitle }: { chartTitle: string }) {
+	return (
+		<div className="usage-overview">
+			<div className="usage-rail">
+				<div className="usage-total">
+					<Skeleton className="usage-skeleton-total" />
+					<Skeleton className="usage-skeleton-meta" />
+				</div>
+				<div className="usage-rail-list">
+					{Array.from({ length: RAIL_ROWS }, (_, index) => (
+						<div key={index} className="usage-rail-row">
+							<Skeleton className="usage-skeleton-dot" />
+							<Skeleton className="usage-skeleton-mark" />
+							<Skeleton className="usage-skeleton-rail-name" />
+							<Skeleton className="usage-skeleton-rail-tokens" />
+							<Skeleton className="usage-skeleton-rail-meta" />
+						</div>
+					))}
+				</div>
+			</div>
+			<div className="usage-plot">
+				<h2 className="usage-block-title">{chartTitle}</h2>
+				<Skeleton className="usage-skeleton-chart" />
+			</div>
+		</div>
+	);
+}
+
 /** A row of `count` figures, each a label over its number. */
-function FiguresSkeleton({ count }: { count: number }) {
+export function FiguresSkeleton({ count }: { count: number }) {
 	return (
 		<div className="usage-figures">
 			{Array.from({ length: count }, (_, index) => (
@@ -72,7 +79,7 @@ function FiguresSkeleton({ count }: { count: number }) {
 }
 
 /** A table's head and `count` rows, each just a name. */
-function RowsSkeleton({ count }: { count: number }) {
+export function RowsSkeleton({ count }: { count: number }) {
 	return (
 		<div className="usage-rows">
 			<div className="usage-head" />

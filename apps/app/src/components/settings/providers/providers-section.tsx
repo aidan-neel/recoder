@@ -50,7 +50,7 @@ function ProvidersPanel() {
 					<p className="provider-detail-empty">Add a provider to review with.</p>
 				)}
 			</Card>
-			<AddProviderDialog open={adding.open} onOpenChange={adding.setOpen} missing={adding.missing} />
+			<AddProviderDialog open={adding.open} onOpenChange={adding.setOpen} onAdded={section.select} />
 			<ProviderModal {...section.providerHost} />
 			<ConfirmDialog
 				open={removing !== null}

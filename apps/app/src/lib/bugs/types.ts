@@ -1,4 +1,4 @@
-import type { DismissalReason, EvidenceClass, FindingDecision, FindingRule } from '@recoder/shared';
+import type { DismissalReason, EvidenceClass, FindingDecision, FindingRule, ReviewSpeed } from '@recoder/shared';
 
 /** How strongly a finding asks for attention. */
 export type BugTone = 'high' | 'medium' | 'low';
@@ -15,7 +15,7 @@ export interface BugProof {
 	base: string | null;
 }
 
-/** A finding of the newest review as the Bugs tab shows it. `suggestion`: a quality finding with a checked fix. */
+/** A finding of the newest review as the Review tab shows it. `suggestion`: a quality finding with a checked fix. */
 export interface BugView {
 	id: string;
 	kind: 'bug' | 'suggestion';
@@ -63,7 +63,7 @@ export interface UnresolvedItem {
 	detail: string;
 }
 
-/** The Bugs tab: the findings of the newest review, and what a person can do with each. */
+/** The Review tab: the findings of the newest review, and what a person can do with each. */
 export interface BugsView {
 	/** `none`: no finished review yet (the run card shows instead). */
 	phase: 'none' | 'loading' | 'ready' | 'failed';
@@ -77,8 +77,18 @@ export interface BugsView {
 	/** Findings of a topic people keep dismissing; shown collapsed and left out of every count. */
 	quieted: BugView[];
 	unresolved: UnresolvedItem[];
-	/** What the review checked and found sound: claims it investigated, and those it cleared. */
-	checked: { claims: number; cleared: number };
+	/**
+	 * What the review checked and found sound: claims it investigated and those
+	 * it cleared, the changed units its brief read in full out of all of them,
+	 * and the candidates it raised and dropped. `units` and `ruledOut` are null
+	 * on reviews that did not record them.
+	 */
+	checked: {
+		claims: number;
+		cleared: number;
+		units: { read: number; total: number } | null;
+		ruledOut: number | null;
+	};
 	/** The forge review the finished findings went up as, once someone posted them; null before. */
 	findingsReview: { state: 'posting' | 'posted' | 'failed'; url: string | null; error: string | null } | null;
 	/** Facts for the line under the tabs. */
@@ -87,6 +97,8 @@ export interface BugsView {
 	/** `6m 40s`. */
 	duration: string | null;
 	modelLabel: string | null;
+	/** How fast the review ran: `spark` says why it may have found less. */
+	speed: ReviewSpeed;
 	/** True when the forge takes comments and a token with write access is connected. */
 	canPost: boolean;
 	/** Ids of the findings with a write in flight. */

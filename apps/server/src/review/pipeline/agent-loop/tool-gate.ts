@@ -1,6 +1,6 @@
 import type { ToolRunner } from '../../../agents/contract.js';
 import { formatToolResults } from '../../../evidence/evidence.js';
-import { toolAction } from '../../../evidence/native-tools.js';
+import { nativeToolNames, toolAction } from '../../../evidence/native-tools.js';
 import type { RetrievalAction, ToolResult } from '../../../evidence/types.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { runDelegation } from './delegation.js';
@@ -75,7 +75,13 @@ export class ToolGate<T> {
 		if (opts.signal.aborted) return refusal('The review was stopped.');
 		if (this.turns.isFinal()) return refusal(FINAL_TURN_NOTE);
 
-		const action = toolAction(name, args, { exec: Boolean(opts.exec), delegate: Boolean(opts.delegate) });
+		const offer = { exec: Boolean(opts.exec), delegate: Boolean(opts.delegate) };
+		const offered = nativeToolNames(offer);
+
+		if (nativeToolNames({ exec: true, delegate: true }).includes(name) && !offered.includes(name))
+			return refusal(`Tool ${name} is not available to your role. Your tools: ${offered.join(', ')}.`);
+
+		const action = toolAction(name, args, offer);
 
 		if (!action) return refusal(`There is no tool named ${name}.`);
 

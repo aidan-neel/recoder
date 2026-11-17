@@ -2,6 +2,7 @@ import { SQL } from 'bun';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { SHARED_SECRET_KEY } from './shared-secret-key';
 
 const root = resolve(import.meta.dir, '../../../..');
 
@@ -55,6 +56,7 @@ export class Replica {
 				PORT: String(port),
 				HOST: '127.0.0.1',
 				RECODER_DATABASE_URL: databaseUrl,
+				RECODER_SECRET_KEY: SHARED_SECRET_KEY,
 				RECODER_INSTANCE_ID: id,
 				RECODER_DATA_DIR: join(directory, 'data'),
 				RECODER_WORKDIR: join(directory, 'work'),

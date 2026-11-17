@@ -2,13 +2,13 @@
 
 import type { Repo } from '@recoder/shared';
 import { Button } from '@recoder/ui';
-import Link from 'next/link';
 
 import { ForgeTile } from '@/components/common/forge-tile';
 import { OFFLINE_TEXT } from '@/lib/api/http';
 import type { AutoReviewSection } from '@/lib/settings/use-auto-review-section';
+import { useAutoReviewSwitch } from '@/lib/settings/use-auto-review-switch';
 import { useWatchRepo, type WatchRepoView } from '@/lib/settings/use-watch-repo';
-import { settingsHref } from '@/lib/shell/routes';
+import { useChrome } from '@/lib/shell/chrome';
 
 import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
 
@@ -17,9 +17,12 @@ import { SwitchRow } from './switch-row';
 /** Reads the page's settings and the tracked repositories again. */
 type Retry = AutoReviewSection['retry'];
 
+const OWN_ONLY = 'Only my repositories';
+
 /** What a repository's row says about its switch. */
 function watchDetail(view: WatchRepoView): string {
-	if (view.disabled) return 'A local clone has no comments to watch';
+	if (view.hold === 'local') return 'A local clone has no comments to watch';
+	if (view.hold === 'notOwned') return 'Not yours, so not watched';
 
 	return view.on ? 'Watched' : 'Not watched';
 }
@@ -39,12 +42,28 @@ function RepositoryRow({ repo }: { repo: Repo }) {
 	);
 }
 
+/** Watch only the repositories the connected account owns, or every tracked one. */
+function OwnReposRow() {
+	const toggle = useAutoReviewSwitch('ownReposOnly');
+
+	return (
+		<SwitchRow
+			name={OWN_ONLY}
+			label={OWN_ONLY}
+			detail={
+				toggle.on ? 'Repositories your GitHub or GitLab account owns' : 'Every tracked repository, organizations’ too'
+			}
+			toggle={toggle}
+		/>
+	);
+}
+
 /** Nothing is tracked yet: repositories are added in Connections. */
 function NoRepositories() {
 	return (
 		<SettingsRow name="No repositories yet" detail="The watcher checks the repositories you track">
-			<Button asChild variant="outline">
-				<Link href={settingsHref('connections')}>Open Connections</Link>
+			<Button variant="outline" onClick={() => useChrome.getState().openSettings('connections')}>
+				Open Connections
 			</Button>
 		</SettingsRow>
 	);
@@ -72,10 +91,14 @@ function RepositoryRows({ repos, reposState, reposError, retry }: RepositoriesGr
 	return repos.map((repo) => <RepositoryRow key={repo.id} repo={repo} />);
 }
 
-/** Automations → Repositories: every tracked repository, each watched unless switched off. */
+/**
+ * Automations → Repositories: whether only your own repositories are watched, then every tracked repository, each
+ * watched unless switched off.
+ */
 export function RepositoriesGroup(props: RepositoriesGroupProps) {
 	return (
 		<SettingsGroup title="Repositories">
+			<OwnReposRow />
 			<RepositoryRows {...props} />
 		</SettingsGroup>
 	);

@@ -1,5 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
+import { DEFAULT_CONTEXT_WINDOW } from '@recoder/shared';
 import {
+	contextWindowFor,
 	configForAgent,
 	configForOrchestrator,
 	configForSubagent,
@@ -75,6 +77,51 @@ test('an unset second or verifier model follows the Review model and its effort,
 test('an effort the model does not offer falls back to the model default', () => {
 	setReviewOverrides({ models, orchestratorModelId: 'sol', orchestratorEffort: 'minimal' });
 	expect(configForOrchestrator().reasoningEffort).toBe('medium');
+});
+
+test('a saved entry carries its reported context window, the user’s set window over it, else the default', () => {
+	const base = {
+		label: 'Sol',
+		model: 'sol',
+		provider: 'openai-compatible' as const,
+		baseUrl: 'http://localhost:8000/v1'
+	};
+
+	setReviewOverrides({ models: [{ ...base, id: 'sol', contextWindow: 32_000 }], orchestratorModelId: 'sol' });
+	expect(configForOrchestrator().contextWindow).toBe(32_000);
+
+	setReviewOverrides({
+		models: [{ ...base, id: 'sol', contextWindow: 32_000 }],
+		orchestratorModelId: 'sol',
+		contextWindows: { sol: 16_000 }
+	});
+
+	expect(configForOrchestrator().contextWindow).toBe(16_000);
+
+	setReviewOverrides({ models: [{ ...base, id: 'sol' }], orchestratorModelId: 'sol' });
+	expect(configForOrchestrator().contextWindow).toBe(DEFAULT_CONTEXT_WINDOW);
+});
+
+test('an agent model carries the window its list reports, with the user’s set window over it', () => {
+	setReviewOverrides({ orchestratorModelId: 'claude-code:claude-haiku-4-5-20251001' });
+	expect(configForOrchestrator()).toMatchObject({ provider: 'claude-code', contextWindow: 200_000 });
+
+	setReviewOverrides({ orchestratorModelId: 'claude-code:opus' });
+	expect(configForOrchestrator().contextWindow).toBe(1_000_000);
+
+	setReviewOverrides({ orchestratorModelId: 'claude-code:opus', contextWindows: { 'claude-code:opus': 400_000 } });
+	expect(configForOrchestrator().contextWindow).toBe(400_000);
+});
+
+test('the context window takes the user’s setting over what the provider reports, over the default', () => {
+	expect(contextWindowFor('m', 32_000)).toEqual({ tokens: 32_000, source: 'reported' });
+
+	setReviewOverrides({ contextWindows: { m: 16_000 } });
+	expect(contextWindowFor('m', 32_000)).toEqual({ tokens: 16_000, source: 'set' });
+
+	setReviewOverrides({});
+	expect(contextWindowFor('m', null)).toEqual({ tokens: DEFAULT_CONTEXT_WINDOW, source: 'default' });
+	expect(contextWindowFor(undefined, 32_000)).toEqual({ tokens: 32_000, source: 'reported' });
 });
 
 test('an OpenCode model routes through OpenCode instead of the first saved model', () => {

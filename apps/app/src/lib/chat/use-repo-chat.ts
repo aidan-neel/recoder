@@ -18,6 +18,7 @@ import { localId } from '../ask/local-id';
 import { shortRepoName } from '../pulls/pull-rows';
 import { pullHref } from '../shell/routes';
 import type { ChatCache } from './chat-cache';
+import { startedReview } from './started-review';
 import { chatRows, isReplying, questionBefore, type Outgoing } from './chat-rows';
 import type { RepoChatView } from './types';
 
@@ -37,18 +38,28 @@ export function useRepoChat(chatId: string): RepoChatView {
 	const chats = useChatCache();
 	const list = useListStore();
 	const repos = useStore(list.state, (data) => data.repos);
+	const reviews = useStore(list.state, (data) => data.reviews);
 	const { loaded, connection, reload } = useFollowedChat(client, chats, chatId);
 	const [outbox, setOutbox] = useState<Outgoing[]>([]);
 	const [stopError, setStopError] = useState<string | null>(null);
 	const chat = loaded.phase === 'ready' ? loaded.chat : null;
 	const messages = useMemo(() => chat?.messages ?? [], [chat]);
 
-	const reviewHref = useCallback(
-		(prNumber: number) => pullHref(client.base, chat?.repoId ?? '', prNumber),
-		[client.base, chat?.repoId]
+	const reviewCard = useCallback(
+		(started: { id: string; prNumber: number }) => {
+			const repoId = chat?.repoId ?? '';
+
+			return startedReview(
+				started,
+				repoId,
+				{ reviews, repos },
+				pullHref(client.base, repoId, started.prNumber, 'review')
+			);
+		},
+		[client.base, chat?.repoId, reviews, repos]
 	);
 
-	const rows = useMemo(() => chatRows(messages, outbox, reviewHref), [messages, outbox, reviewHref]);
+	const rows = useMemo(() => chatRows(messages, outbox, reviewCard), [messages, outbox, reviewCard]);
 
 	const patch = useCallback((key: string, change: Partial<Outgoing>) => {
 		setOutbox((current) => current.map((outgoing) => (outgoing.key === key ? { ...outgoing, ...change } : outgoing)));

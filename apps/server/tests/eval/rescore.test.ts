@@ -143,7 +143,7 @@ function writeSaved(name: string, extra: object = {}): string {
 function printed(report: BenchmarkReport): string[] {
 	const log = spyOn(console, 'log').mockImplementation(() => undefined);
 
-	printBenchmark(report);
+	printBenchmark(report, () => null);
 
 	const lines = String(log.mock.calls[0]?.[0]).split('\n');
 

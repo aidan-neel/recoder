@@ -4,11 +4,16 @@
 	import { Switch } from '@sivir-ui/svelte/components/switch';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import {
-		SUBAGENT_CAPS,
+		DEFAULT_SUBAGENT_CAP,
+		MAX_SUBAGENT_CAP,
+		SUBAGENT_OPTIONS,
 		TOKEN_BUDGETS,
 		TOKEN_BUDGET_PLANS,
 		budgetDescription,
-		subagentCapFrom,
+		isSubagentPreset,
+		subagentCapFromChoice,
+		subagentCapText,
+		subagentChoice,
 		tokenBudgetFrom,
 		type SubagentCap
 	} from '@recoder/shared';
@@ -21,30 +26,38 @@
 		{ key: 'maxFileChars', name: 'Characters per file', desc: 'Longer files are truncated', max: 200_000 }
 	] as const;
 
-	const SUBAGENT_ITEMS = SUBAGENT_CAPS.map((cap) => ({
-		value: String(cap),
-		label: cap === 'uncapped' ? 'Uncapped' : cap ? `Up to ${cap}` : 'Off'
-	}));
-
 	const BUDGET_ITEMS = TOKEN_BUDGETS.map((budget) => ({ value: budget, label: TOKEN_BUDGET_PLANS[budget].label }));
 
 	/** Custom is shown while the cap or an effort is changed by hand; picking a budget takes it away. */
 	const shownBudget = $derived(settingsDraft.shownBudget);
 	const budgetItems = $derived(shownBudget ? BUDGET_ITEMS : [...BUDGET_ITEMS, { value: 'custom', label: 'Custom' }]);
 
-	/** What each cap allows; shown under the control for the current pick. */
-	const SUBAGENT_DESC: Record<SubagentCap, string> = {
-		0: 'Each reviewer works alone. Fewest tokens',
-		3: 'Up to 3 deep dives per review',
-		8: 'Up to 8 deep dives per review',
-		12: 'Up to 12 deep dives per review',
-		uncapped: 'One per open question. Far more tokens and time'
-	};
+	let heldCustom = $state(false);
+	let lastCustom = $state(DEFAULT_SUBAGENT_CAP);
+
+	const choice = $derived(heldCustom ? 'custom' : subagentChoice(settingsDraft.subagentCap));
+	const customCount = $derived(typeof settingsDraft.subagentCap === 'number' ? settingsDraft.subagentCap : lastCustom);
+
+	/** Keep the last Custom count so leaving a named pick can restore it. */
+	function rememberCustom(cap: SubagentCap): void {
+		if (typeof cap === 'number' && !isSubagentPreset(cap)) lastCustom = cap;
+	}
 
 	function setLimit(key: (typeof FIELDS)[number]['key'], max: number, raw: string): void {
 		const n = Math.round(Number(raw));
 
 		if (Number.isFinite(n) && n > 0) settingsDraft.limits = { ...settingsDraft.limits, [key]: Math.min(n, max) };
+	}
+
+	function setCustomCap(raw: string): void {
+		const n = Math.round(Number(raw));
+
+		if (!Number.isFinite(n) || n < 0) return;
+
+		const cap = Math.min(n, MAX_SUBAGENT_CAP);
+
+		settingsDraft.subagentCap = cap;
+		rememberCustom(cap);
 	}
 </script>
 
@@ -63,21 +76,51 @@
 				onValueChange={(value) => {
 					const budget = tokenBudgetFrom(value);
 
-					if (budget) settingsDraft.pickBudget(budget);
+					if (budget) {
+						heldCustom = false;
+						settingsDraft.pickBudget(budget);
+						rememberCustom(settingsDraft.subagentCap);
+					}
 				}}
 			/>
 		</div>
 		<div class="settings-row">
 			<div class="min-w-0 flex-1">
 				<p class="settings-row-name">Subagents</p>
-				<p class="settings-row-desc">{SUBAGENT_DESC[settingsDraft.subagentCap]}</p>
+				<p class="settings-row-desc">{subagentCapText(settingsDraft.subagentCap)}</p>
 			</div>
-			<SegmentedControl
-				label="Subagents"
-				items={SUBAGENT_ITEMS}
-				value={String(settingsDraft.subagentCap)}
-				onValueChange={(value) => (settingsDraft.subagentCap = subagentCapFrom(value))}
-			/>
+			<div class="settings-subagents">
+				<SegmentedControl
+					label="Subagents"
+					items={SUBAGENT_OPTIONS}
+					value={choice}
+					onValueChange={(value) => {
+						if (value === 'custom') {
+							heldCustom = true;
+							settingsDraft.subagentCap = subagentCapFromChoice(value, settingsDraft.subagentCap, lastCustom);
+							rememberCustom(settingsDraft.subagentCap);
+
+							return;
+						}
+
+						heldCustom = false;
+						rememberCustom(settingsDraft.subagentCap);
+						settingsDraft.subagentCap = subagentCapFromChoice(value, settingsDraft.subagentCap);
+					}}
+				/>
+				{#if choice === 'custom'}
+					<div class="settings-number">
+						<Input
+							type="number"
+							min="0"
+							max={MAX_SUBAGENT_CAP}
+							aria-label="Subagent count"
+							value={customCount}
+							onchange={(event) => setCustomCap((event.currentTarget as HTMLInputElement).value)}
+						/>
+					</div>
+				{/if}
+			</div>
 		</div>
 		<div class="settings-row">
 			<div class="min-w-0 flex-1">

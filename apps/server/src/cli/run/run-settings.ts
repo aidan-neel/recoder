@@ -22,7 +22,7 @@ interface RunPick {
 }
 
 /** The subagents a review may run: the caller's count, else its budget's cap. An explicit 0 means none. */
-export function subagentCapOf(tuning: Pick<ReviewTuning, 'budget' | 'subagents'>): SubagentCap | number {
+export function subagentCapOf(tuning: Pick<ReviewTuning, 'budget' | 'subagents'>): SubagentCap {
 	return tuning.subagents ?? TOKEN_BUDGET_PLANS[tuning.budget].subagentCap;
 }
 

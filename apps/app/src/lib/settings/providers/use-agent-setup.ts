@@ -29,7 +29,7 @@ export interface AgentSetup {
  */
 export function useAgentSetup(agentId: string): AgentSetup {
 	const [job, setJob] = useState<AgentSetupJob | null>(null);
-	const [starting, setStarting] = useState(false);
+	const [busy, setBusy] = useState(false);
 	const [requestError, setRequestError] = useState<string | null>(null);
 	const polling = useRef<AbortController | null>(null);
 
@@ -39,7 +39,6 @@ export function useAgentSetup(agentId: string): AgentSetup {
 		const started = await agentSetupApi.start(agentId, step, signal);
 
 		setJob(started);
-		setStarting(false);
 
 		await followSetupJob({
 			job: started,
@@ -49,7 +48,7 @@ export function useAgentSetup(agentId: string): AgentSetup {
 		});
 	}
 
-	const running = starting || job?.status === 'running';
+	const running = busy || job?.status === 'running';
 
 	function start(step: AgentSetupStep): void {
 		if (running) return;
@@ -61,14 +60,14 @@ export function useAgentSetup(agentId: string): AgentSetup {
 		polling.current = controller;
 		setJob(null);
 		setRequestError(null);
-		setStarting(true);
+		setBusy(true);
 
 		run(step, controller.signal)
 			.catch((failure: unknown) => {
 				if (!controller.signal.aborted) setRequestError(failureText(failure));
 			})
 			.finally(() => {
-				if (!controller.signal.aborted) setStarting(false);
+				if (!controller.signal.aborted) setBusy(false);
 			});
 	}
 

@@ -1,5 +1,4 @@
-import type { PullTab } from '../pull/types';
-import { SETTINGS_SECTIONS, type SettingsSection } from '../settings/sections';
+import { PULL_TABS, type PullTab } from '../pull/types';
 
 /**
  * Page addresses. Each takes the client's `base` (`''` live, `'/sample'` for
@@ -27,6 +26,26 @@ export function pullHref(base: string, repoId: string, number: number, tab?: Pul
 	return tab && tab !== 'changes' ? `${path}?tab=${tab}` : path;
 }
 
+/** Old names of tabs that still open them: the Review tab was the Bugs tab. */
+const PULL_TAB_ALIASES: ReadonlyMap<string, PullTab> = new Map([['bugs', 'review']]);
+
+/** The tab a pull request address names (`?tab=review`); Changes when it names none or one the page does not have. */
+export function pullTabOf(value: string | null): PullTab {
+	const tab = PULL_TABS.find((candidate) => candidate === value);
+
+	return tab ?? PULL_TAB_ALIASES.get(value ?? '') ?? 'changes';
+}
+
+/** The tracked repositories, with a way to add more. */
+export function reposHref(base: string): string {
+	return `${base}/repos`;
+}
+
+/** A tracked repository's page: what needs a person there, and how its reviews have gone. */
+export function repoHref(base: string, repoId: string): string {
+	return `${base}/repos/${encodeURIComponent(repoId)}`;
+}
+
 /** The New review screen. */
 export function newReviewHref(base: string): string {
 	return `${base}/new`;
@@ -35,21 +54,4 @@ export function newReviewHref(base: string): string {
 /** A chat with Recoder about a repository. */
 export function chatHref(base: string, chatId: string): string {
 	return `${base}/chats/${encodeURIComponent(chatId)}`;
-}
-
-/** Where Settings' pages live. */
-const SETTINGS_ROOT = '/settings';
-
-/**
- * Settings on `section`, or on its first section. Opening Settings goes
- * straight there, so the sidebar's swap lands on an open section row instead
- * of waiting for a redirect. Live only.
- */
-export function settingsHref(section: SettingsSection = SETTINGS_SECTIONS[0].id): string {
-	return `${SETTINGS_ROOT}/${section}`;
-}
-
-/** True on Settings or one of its sections, where the sidebar lists the sections instead of the app's places. */
-export function isSettingsPath(pathname: string): boolean {
-	return pathname === SETTINGS_ROOT || pathname.startsWith(`${SETTINGS_ROOT}/`);
 }

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { PULL_MERGE_METHODS, type PullStatus } from '@recoder/shared';
+import { requestAccountId } from '../../accounts/enforcement';
 import { forgetPull, freshPullEntry, mergeMethods, pullEntry, pullForge } from '../../forge/pulls/cached';
 import { recordPullState } from '../../forge/pulls/pull-states';
 import { PullHeadMoved } from '../../forge/pulls/status';
@@ -74,7 +75,7 @@ app.post(
 		const result = await pullForge(repo).merge(n, input);
 
 		forgetPull(repo, n);
-		if (result.merged) await recordPullState(repo.id, n, 'merged');
+		if (result.merged) await recordPullState(repo.id, n, 'merged', await requestAccountId(c));
 
 		return c.json(result);
 	})

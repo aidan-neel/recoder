@@ -1,21 +1,31 @@
 'use client';
 
 import { ArrowUp, Square, SquareSlash } from 'lucide-react';
-import { useId, useRef, type ComponentProps, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
+import {
+	useId,
+	useMemo,
+	useRef,
+	type ComponentProps,
+	type KeyboardEvent,
+	type MouseEvent,
+	type ReactNode
+} from 'react';
 
 import { cn } from '../../lib/cn';
 import { Button } from '../button';
 import { Tooltip } from '../overlay/tooltip';
-import type { ComposerCommand } from './composer-commands';
+import type { ComposerCommand, ComposerMenuItem } from './composer-commands';
 import { useComposerFiles } from './composer-files';
 import { useInlineImages } from './composer-images';
-import { commandOptionId, ComposerMenu, focusAtEnd, useCommandMenu, type ComposerMenuSide } from './composer-menu';
+import { ComposerMenu, focusAtEnd, slashOptionId } from './composer-menu';
+import { useSlashMenu } from './composer-slash';
 import type { LinkFacts } from './link-describe';
 import { LinkField } from './link-field';
 import type { InlineImage } from './link-image';
 import { ImageTiles } from './image-chips';
 
 const NO_IMAGES: readonly InlineImage[] = [];
+const NO_SKILLS: readonly ComposerMenuItem[] = [];
 
 /** The line in the composer's bar: why Enter did nothing. Only a refusal shows there, never a hint. */
 export interface ComposerNote {
@@ -46,12 +56,14 @@ interface ComposerProps {
 	spellCheck?: boolean;
 	/** What the field's link embeds show about a pull request. */
 	linkFacts?: LinkFacts;
-	/** The commands "/" offers; none leaves out the "/" button and the menu. */
+	/** The commands "/" offers at the field's start, and after a space anywhere in the text. */
 	commands?: readonly ComposerCommand[];
-	/** Where the "/" menu opens; over the composer by default. */
-	menuSide?: ComposerMenuSide;
-	/** Quiet tools at the bar's start, before the "/" button (`ComposerTool`s). */
+	/** The skills "/" offers beside the commands; a pick puts `/name` in the text. */
+	skills?: readonly ComposerMenuItem[];
+	/** Quiet tools at the bar's start, before the "/" button, which shows while there are commands or skills. */
 	tools?: ReactNode;
+	/** What the message is about, after the "/" button: the repository and pull request pickers. */
+	targets?: ReactNode;
 	/** Controls at the bar's end, before the action: a model menu. */
 	trailing?: ReactNode;
 	/** The images attached so far: tiles over the text, and a chip in the text where each went in. */
@@ -68,7 +80,8 @@ interface ComposerProps {
 
 /**
  * The composer every chat shares: one ringed box with roomy text on top and
- * a bar at its foot. The bar holds quiet tools at its start, then the
+ * a bar at its foot. The bar holds quiet tools at its start, then the "/"
+ * button and what the message is about (`targets`), then the
  * refusal note, then the caller's trailing controls and the send or stop action. The box
  * rings brighter while the field has focus, and a click on its empty parts
  * puts the caret in the field. Enter submits, Shift+Enter starts a new line.
@@ -76,8 +89,10 @@ interface ComposerProps {
  * the caller, and `images` shows what it kept: a row of tiles over the
  * text, and a chip in the text where each image went in. Removing either
  * removes the image (`useInlineImages`).
- * With `commands`, a slash at the start of the field, or the "/" button,
- * opens a list of them; a pick puts its prompt in the field to send. The
+ * With `commands` or `skills`, a `/` typed at the start or after a space,
+ * or the "/" button, opens a list of both at once: a command's pick puts its
+ * prompt in place of what was typed, a skill's puts `/name`, and every
+ * `/name` of a skill shows as an embed. The
  * caller owns the text and the images and decides what a submit does; the
  * composer keeps only where in the text each image's chip sits.
  */
@@ -97,8 +112,9 @@ export function Composer({
 	spellCheck,
 	linkFacts,
 	commands = [],
-	menuSide = 'top',
+	skills = NO_SKILLS,
 	tools,
+	targets,
 	trailing,
 	images = NO_IMAGES,
 	onRemoveImage,
@@ -110,9 +126,10 @@ export function Composer({
 	const field = useRef<HTMLDivElement>(null);
 	const { dropping, ...fileHandlers } = useComposerFiles(onFiles);
 	const menuId = useId();
-	const menu = useCommandMenu({ value, onValueChange, commands, field });
-	const inline = useInlineImages({ value, onValueChange: menu.edit, images, onRemoveImage, field });
-	const activeCommand = menu.open ? menu.matches[menu.active] : undefined;
+	const inline = useInlineImages({ value, onValueChange, images, onRemoveImage, field });
+	const menu = useSlashMenu({ text: inline.text, onTextChange: inline.edit, commands, skills, field });
+	const activeRow = menu.open ? menu.rows[menu.active] : undefined;
+	const skillNames = useMemo(() => new Set(skills.map((skill) => skill.name)), [skills]);
 
 	/** The menu takes its keys first; then Enter submits, unless Shift is held or the text is still being composed. */
 	function onKeyDown(event: KeyboardEvent<HTMLElement>): void {
@@ -144,7 +161,8 @@ export function Composer({
 		focusAtEnd(field);
 	}
 
-	const hasTools = tools !== undefined || commands.length > 0;
+	const hasMenu = commands.length > 0 || skills.length > 0;
+	const hasTools = tools !== undefined || targets !== undefined || hasMenu;
 
 	return (
 		<div
@@ -158,7 +176,7 @@ export function Composer({
 			onMouseDown={focusField}
 			{...fileHandlers}
 		>
-			{commands.length > 0 ? <ComposerMenu menu={menu} id={menuId} side={menuSide} /> : null}
+			<ComposerMenu menu={menu} id={menuId} />
 			<ImageTiles images={images} onRemove={onRemoveImage ? removeImage : undefined} />
 			<LinkField
 				ref={field}
@@ -167,7 +185,7 @@ export function Composer({
 				maxRows={maxRows}
 				aria-label={label}
 				aria-controls={menu.open ? menuId : undefined}
-				aria-activedescendant={activeCommand ? commandOptionId(menuId, activeCommand) : undefined}
+				aria-activedescendant={activeRow ? slashOptionId(menuId, activeRow) : undefined}
 				placeholder={placeholder}
 				spellCheck={spellCheck}
 				autoFocus={autoFocus}
@@ -176,6 +194,7 @@ export function Composer({
 				value={inline.text}
 				linkFacts={linkFacts}
 				images={images}
+				mentions={skillNames}
 				onValueChange={inline.edit}
 				onKeyDown={onKeyDown}
 			/>
@@ -183,9 +202,9 @@ export function Composer({
 				{hasTools ? (
 					<div data-ui="composer-bar-tools">
 						{tools}
-						{commands.length > 0 ? (
+						{hasMenu ? (
 							<ComposerTool
-								label="Commands"
+								label={commands.length > 0 ? 'Commands and skills' : 'Skills'}
 								shortcut="/"
 								aria-haspopup="listbox"
 								aria-expanded={menu.open}
@@ -196,6 +215,7 @@ export function Composer({
 								<SquareSlash />
 							</ComposerTool>
 						) : null}
+						{targets}
 					</div>
 				) : null}
 				<p data-ui="composer-note" role="alert" title={note?.text}>

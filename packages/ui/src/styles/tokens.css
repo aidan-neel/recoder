@@ -52,8 +52,11 @@
 	--primary-hover: #fffcf5;
 	--on-primary: #141312;
 
-	/* Brand marks that keep their own color: Claude Code's orange, in both themes. */
+	/* Brand marks that keep their own color or adapt to the surface. */
 	--brand-claude: #d97757;
+	--brand-opencode: #eeeeee;
+	--brand-opencode-shade: rgba(238, 238, 238, 0.28);
+	--brand-ink: #ffffff;
 
 	/* Status and severity: text on tint. Chroma sits at 70-95% of the sRGB
 	   maximum for each hue (OKLCH), so they read vivid, not muted. In both
@@ -162,6 +165,10 @@
 	--primary: #1d1b18;
 	--primary-hover: #000000;
 	--on-primary: #faf8f4;
+
+	--brand-opencode: #1f1f1f;
+	--brand-opencode-shade: rgba(31, 31, 31, 0.2);
+	--brand-ink: #000000;
 
 	--sev-high: #b3261e;
 	--sev-high-icon: #d6352c;

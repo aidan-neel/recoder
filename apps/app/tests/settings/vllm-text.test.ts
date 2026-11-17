@@ -3,6 +3,7 @@ import { vllmModelId, type ModelEntry, type ModelSettings, type VllmServer } fro
 
 import { missingNote, modelCatalog, rolePick } from '../../src/lib/settings/model-options';
 import { syncLine } from '../../src/lib/settings/vllm-text';
+import { modelSettings } from '../fixtures';
 
 const NOW = 1_000_000_000_000;
 
@@ -36,22 +37,7 @@ function vllmEntry(model: string, unavailable = false): ModelEntry {
 }
 
 function settings(models: ModelEntry[], pick: string): ModelSettings {
-	return {
-		configured: true,
-		baseUrl: '',
-		model: '',
-		apiKeySet: false,
-		sharedModelId: null,
-		orchestratorModelId: vllmModelId('v1', pick),
-		models,
-		subagentCap: 8,
-		tokenBudget: 'medium',
-		reportLowSeverity: true,
-		disabledProviders: [],
-		hiddenModels: [],
-		modelPolicy: { kind: 'choose' },
-		limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 }
-	};
+	return modelSettings({ orchestratorModelId: vllmModelId('v1', pick), models });
 }
 
 describe('a vLLM server’s status line', () => {

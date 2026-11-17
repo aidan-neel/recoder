@@ -3,6 +3,8 @@
 import type { ComposerNote } from '@recoder/ui';
 import { useState } from 'react';
 
+import { formatCount } from '../shell/format';
+
 interface DraftInput {
 	/** Sends the text. The draft empties when it resolves; a rejection keeps the text so nothing typed is lost. */
 	onSend: (text: string) => Promise<void>;
@@ -71,7 +73,7 @@ export function useDraft({ onSend, limit, busy = false }: DraftInput): DraftView
 
 /** The bar's line: over the limit first, then a refusal. */
 function draftNote(overBy: number, error: string | null): ComposerNote | null {
-	if (overBy > 0) return { text: `${overBy.toLocaleString('en-US')} over the limit`, tone: 'danger' };
+	if (overBy > 0) return { text: `${formatCount(overBy)} over the limit`, tone: 'danger' };
 	if (error) return { text: error, tone: 'danger' };
 
 	return null;

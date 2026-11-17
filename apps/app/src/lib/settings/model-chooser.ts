@@ -10,23 +10,17 @@ export interface ChooserGroup {
 	options: ModelOption[];
 }
 
-/** The agent CLI that serves the entry; empty for an endpoint Recoder calls directly. */
-function agentOf(entry: ModelEntry): string {
-	return entry.provider && entry.provider !== 'openai-compatible' ? entry.provider : '';
-}
-
 /**
  * Every model grouped by provider, A to Z, keeping the ones that match all of
  * the search's words. A provider with no match drops out, heading and all.
  */
 export function chooserGroups(entries: ModelEntry[], terms: readonly string[]): ChooserGroup[] {
-	const agents = new Map(entries.map((entry) => [entry.id, agentOf(entry)]));
 	const groups: ChooserGroup[] = [];
 
 	for (const { heading, options } of modelCatalog(entries).groups) {
 		const matches = options.filter((option) => matchesQuery(option, terms));
 
-		if (matches.length > 0) groups.push({ heading, agent: agents.get(matches[0].id) ?? '', options: matches });
+		if (matches.length > 0) groups.push({ heading, agent: matches[0]?.agent ?? '', options: matches });
 	}
 
 	return groups;

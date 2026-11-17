@@ -13,12 +13,16 @@ import type {
 
 import { del, patch, post, put, request, seg } from './http';
 
-/** Model settings as a server answers them: one older than the provider switches leaves `disabledProviders` out. */
-type ServedModelSettings = Omit<ModelSettings, 'disabledProviders'> & { disabledProviders?: string[] };
+/**
+ * Model settings as a server answers them: one older than the provider switches leaves `disabledProviders` out, and
+ * one older than the context windows leaves `contextWindows` out.
+ */
+type ServedModelSettings = Omit<ModelSettings, 'disabledProviders' | 'contextWindows'> &
+	Partial<Pick<ModelSettings, 'disabledProviders' | 'contextWindows'>>;
 
-/** The settings with every provider switched on when the server says nothing of the switches. */
+/** The settings with every provider switched on and no window set when the server says nothing of either. */
 function withSwitches(served: ServedModelSettings): ModelSettings {
-	return { ...served, disabledProviders: served.disabledProviders ?? [] };
+	return { ...served, disabledProviders: served.disabledProviders ?? [], contextWindows: served.contextWindows ?? {} };
 }
 
 /** The agent (OpenCode and the other CLIs), its model providers, and the review models and limits. */

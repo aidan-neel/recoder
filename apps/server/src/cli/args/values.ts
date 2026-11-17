@@ -73,7 +73,7 @@ export function parseWholeNumber(flag: string, value: string, range: WholeNumber
 }
 
 /** `--subagents`: a count, or `uncapped`. */
-export function parseSubagents(value: string | undefined, bounds: WholeNumberBounds): SubagentCap | number | null {
+export function parseSubagents(value: string | undefined, bounds: WholeNumberBounds): SubagentCap | null {
 	if (value === undefined) return null;
 
 	if (value === 'uncapped') return value;

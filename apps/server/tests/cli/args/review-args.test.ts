@@ -193,6 +193,23 @@ describe('--subagents', () => {
 	});
 });
 
+describe('--spark', () => {
+	test('runs the low budget with no subagents and no code, at low effort unless an effort is given', () => {
+		expect(parse('--spark', '--worker-effort', 'high').tuning).toMatchObject({
+			speed: 'spark',
+			budget: 'low',
+			subagents: 0,
+			exec: false,
+			reviewerEffort: 'low',
+			workerEffort: 'high'
+		});
+	});
+
+	test.each(['--budget=high', '--subagents=5', '--no-exec'])('refuses %s, which it already sets', (flag) => {
+		expect(usageMessage('--spark', flag)).toContain('--spark');
+	});
+});
+
 describe('--max-file-chars', () => {
 	test('takes the largest value it allows', () => {
 		expect(parse('--max-file-chars', '200000').tuning.maxFileChars).toBe(200000);

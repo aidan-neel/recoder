@@ -14,7 +14,7 @@ import { briefUnit, type UnitBrief } from './unit-brief.js';
  * `unit-brief.ts`, so answers cached for an older one are never read. The
  * eval's server identity hashes this module as the intent cache's version.
  */
-const INTENT_VERSION = 3;
+const INTENT_VERSION = 5;
 
 const MAX_CLAIMS = 8;
 const MAX_SUMMARY_CHARS = 800;

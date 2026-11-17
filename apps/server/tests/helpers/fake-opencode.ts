@@ -17,7 +17,8 @@ import { fakeBin } from './fake-bin';
  * it (with `lateStart`, the start event only after the step's tool calls, as real OpenCode can; with
  * `sdkEvents`, the session only on the part, as OpenCode 1.x's published event types have it),
  * and the answer carries each tool result. An abort between steps ends the run with
- * `MessageAbortedError`; later prompts in that session answer at once.
+ * `MessageAbortedError`; later prompts in that session answer at once, after the tool calls of the script's
+ * `finalSteps` when it has them (a model that tries its tools on the final turn).
  * Any other prompt streams "Hello" and " world" before replying. Each chat adds a user and a
  * reply message to its session, which can be listed and deleted. `/test/calls`
  * lists every chat request it saw.
@@ -59,10 +60,10 @@ const stepPart = (session, type) => {
 	return Bun.sleep(15);
 };
 
-async function callTool(body, call) {
+async function callTool(session, body, call) {
 	const name = Object.keys(body.tools).find((key) => body.tools[key] === true && key.endsWith('_' + call.tool));
 	if (!name) return { off: true };
-	const res = await fetch(mcp[name.slice(0, -call.tool.length - 1)], { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: call.tool, arguments: call.args } }) });
+	const res = await fetch(mcp[name.slice(0, -call.tool.length - 1)], { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: call.tool, arguments: call.args, _meta: { "ai.opencode/sessionID": session } } }) });
 	const { result } = await res.json();
 	return { isError: result.isError, text: result.content[0].text };
 }
@@ -73,7 +74,7 @@ async function runAgent(session, body, script) {
 	for (const calls of script.steps) {
 		if (!script.lateStart) await stepPart(session, 'step-start');
 		if (script.hang) await new Promise(() => {});
-		for (const call of calls) results.push(await callTool(body, call));
+		for (const call of calls) results.push(await callTool(session, body, call));
 		if (script.lateStart) await stepPart(session, 'step-start');
 		await stepPart(session, 'step-finish');
 		if (aborted.delete(session)) return abortedReply;
@@ -83,9 +84,27 @@ async function runAgent(session, body, script) {
 	return { info: { tokens, structured: { ...script.answer, results } }, parts: [] };
 }
 
+async function answerLater(session, body, text) {
+	const script = scripts[session];
+	const results = [];
+	for (const calls of script.finalSteps ?? []) {
+		await stepPart(session, 'step-start');
+		for (const call of calls) results.push(await callTool(session, body, call));
+		await stepPart(session, 'step-finish');
+		if (aborted.delete(session)) return abortedReply;
+	}
+	if (script.finalSteps) {
+		script.finalSteps = undefined;
+		await stepPart(session, 'step-start');
+		await stepPart(session, 'step-finish');
+	}
+	const toolsOn = Object.keys(body.tools).some((key) => key.startsWith('recoder'));
+	return { info: { tokens, structured: { ...script.answer, prompt: text, toolsOn, ...(results.length ? { results } : {}) } }, parts: [] };
+}
+
 async function chat(session, body, signal) {
 	const text = body.parts[0].text;
-	if (scripts[session]) return { info: { tokens, structured: { ...scripts[session].answer, prompt: text, toolsOn: Object.keys(body.tools).some((key) => key.startsWith('recoder')) } }, parts: [] };
+	if (scripts[session]) return answerLater(session, body, text);
 	if (text.startsWith('{"steps"')) return runAgent(session, body, (scripts[session] = JSON.parse(text)));
 	if (body.format && body.tools.StructuredOutput !== true) return { info: { error: { name: 'StructuredOutputError', data: { message: 'Model did not produce structured output' } } }, parts: [] };
 	if (text === 'auto-only') return body.format ? { info: { error: { name: 'APIError', data: { message: 'only \`"auto"\` is supported for \`tool_choice\`. \`"none"\`, \`"required"\`, and named function choices are not currently supported', statusCode: 400 } } }, parts: [] } : { info: { tokens }, parts: [{ type: 'text', text: '{"ok":true}' }] };

@@ -1,5 +1,7 @@
 import type { Repo, RepoChatMessage } from '@recoder/shared';
 import { queueReview } from '../commands/pipeline';
+import { GhError } from '../forge/cli';
+import { fetchPull } from '../forge/pull-preview';
 import { looksLikeReviewRequest } from '../review/chat/review-request';
 import { db } from '../store';
 
@@ -28,16 +30,16 @@ export function requestedReview(text: string): number | null {
 }
 
 /**
- * Starts a review of the pull request, with the message as its brief, the
+ * Starts a review of the pull request, with the message (if any) as its brief, the
  * same way the New review screen does. When one is already queued or
- * running, the reply points to it instead of starting another. A refusal
- * (no reviewer model set up) becomes the reply's failure, in the words the
- * New review screen shows for it.
+ * running, the reply points to it instead of starting another. A pull request
+ * the forge cannot find, or a refusal (no reviewer model set up), becomes the
+ * reply's failure, so no review is queued for a number that does not exist.
  */
 export async function reviewFromChat(
 	repo: Repo,
 	prNumber: number,
-	brief: string,
+	brief: string | undefined,
 	startedBy?: string
 ): Promise<Pick<RepoChatMessage, 'text' | 'review' | 'failure'>> {
 	const running = (await db.reviews.list()).find(
@@ -49,11 +51,28 @@ export async function reviewFromChat(
 
 	if (running) return { text: `A review of #${prNumber} is already running.`, review: { id: running.id, prNumber } };
 
+	const unreadable = await unreadablePull(repo, prNumber);
+
+	if (unreadable) return { text: '', failure: { reason: unreadable } };
+
 	try {
 		const review = await queueReview({ repoId: repo.id, prNumber, instructions: brief }, startedBy);
 
 		return { text: `Started a review of #${prNumber}.`, review: { id: review.id, prNumber } };
 	} catch (error) {
 		return { text: '', failure: { reason: error instanceof Error ? error.message : 'Could not start the review.' } };
+	}
+}
+
+/** Why the forge cannot give the pull request, or null when it can. */
+async function unreadablePull(repo: Repo, prNumber: number): Promise<string | null> {
+	try {
+		await fetchPull(repo, prNumber, { metadataOnly: true });
+
+		return null;
+	} catch (error) {
+		if (error instanceof GhError && error.kind === 'not-found') return `${repo.name} has no pull request #${prNumber}.`;
+
+		return `Could not read #${prNumber}: ${error instanceof Error ? error.message : 'the forge did not answer.'}`;
 	}
 }

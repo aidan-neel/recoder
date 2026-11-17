@@ -24,6 +24,8 @@ export interface OpenPulls {
 	entries: PullEntry[];
 	/** Where the next page starts, or null on the last page. The forge decides what it means. */
 	nextCursor: string | null;
+	/** Every open pull request the repository has, when the forge says; null when it does not. */
+	total: number | null;
 }
 
 /**

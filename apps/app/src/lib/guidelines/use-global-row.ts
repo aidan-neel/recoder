@@ -6,7 +6,7 @@ import { editLayer, useGuidelinesEditor } from './editor-store';
 import { firstRule, globalSummary, seedText } from './rules';
 import type { GuidelinesEditorSpec } from './use-editor';
 
-/** Everything the "Every review" row shows and does. */
+/** Everything the "Global guidelines" row shows and does. */
 export interface GlobalRowView {
 	/** Its editor is open. */
 	open: boolean;
@@ -23,7 +23,7 @@ export interface GlobalRowView {
 }
 
 /**
- * "Every review": the global layer, saved on this machine and applied to
+ * "Global guidelines": the layer saved on this machine and applied to
  * every repository. Never saved, it holds Recoder's defaults, which the
  * editor opens on so they can be adjusted rather than retyped.
  */

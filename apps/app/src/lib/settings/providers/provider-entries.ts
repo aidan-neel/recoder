@@ -20,9 +20,22 @@ export function providerEntries(agents: readonly AgentStatus[]): ProviderEntry[]
 		.map((agent) => ({ key: providerKey({ kind: 'cli', id: agent.id }), agent }));
 }
 
-/** The agent CLIs that are not installed, which Add provider lists with their install commands. */
+/**
+ * The installable agent CLIs that are not installed yet, in the server's order.
+ * Env-configured adapters (`setup.install === false`, such as `custom-command`)
+ * appear in the Providers rail once configured, never in Add provider.
+ */
 export function missingClis(agents: readonly AgentStatus[]): AgentStatus[] {
-	return agents.filter((agent) => !agent.installed);
+	return agents.filter((agent) => agent.setup.install && !agent.installed);
+}
+
+/**
+ * What one opening of Add provider lists: the installable CLIs that were missing
+ * when it opened (even once installed, so a finished install confirms in place
+ * instead of jumping out of the list) plus any other installable CLI currently missing.
+ */
+export function dialogClis(agents: readonly AgentStatus[], openedMissing: ReadonlySet<string>): AgentStatus[] {
+	return agents.filter((agent) => agent.setup.install && (!agent.installed || openedMissing.has(agent.id)));
 }
 
 /** The model providers the manager is connected to, in its order, each with its switch key. */

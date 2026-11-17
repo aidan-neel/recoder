@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { NATIVE_TOOLS } from '../../evidence/native-tools';
 import type { AgentEvent, ToolOutcome, ToolRunner } from '../contract';
 
@@ -10,17 +10,45 @@ export interface ToolLease {
 	release(): void;
 }
 
-/** The run a slot serves now: the tools it may call, the runner that answers them, and where its events go. */
+/** A shared OpenCode catalog lease, bound to exactly one session before it can call tools. */
+export interface SessionToolLease extends ToolLease {
+	bindSession(id: string): void;
+}
+
+/**
+ * A tool a lease lists by its own definition, rather than by a native tool name.
+ * Adapters still pass names; {@link withMcpToolCatalog} supplies definitions for those names during `openRun`.
+ */
+export interface McpToolDefinition {
+	name: string;
+	description: string;
+	inputSchema: Record<string, unknown>;
+}
+
+/** Definitions bound for the `openRun` that is leasing, so a name lease can list something other than the native tools. */
+const toolCatalog = new AsyncLocalStorage<readonly McpToolDefinition[]>();
+
+/**
+ * Runs `run` with `definitions` as the tools a name lease lists, when every requested name is in the catalog.
+ * A review lease names tools the catalog does not have (`run`, `delegate`), so it still lists the native tools.
+ * Bind this around `openRun` only: a review started while a prompt runs must not inherit the catalog.
+ */
+export function withMcpToolCatalog<T>(definitions: readonly McpToolDefinition[], run: () => T): T {
+	return toolCatalog.run(definitions, run);
+}
+
+/** The run a slot serves now: the tools it may call, the definitions it lists, and where its events go. */
 interface Tenant {
 	tools: ReadonlySet<string>;
+	definitions: readonly McpToolDefinition[];
 	runner: ToolRunner;
 	onEvent: (event: AgentEvent) => void;
 }
 
 /**
- * One MCP server path. A tool call carries no session, so the slot it arrives on is what names the run: each
- * running agent holds a slot of its own, and a finished run's slot serves the next one under a new token, so a
- * process of the finished run that still holds the old URL never reaches the next run's tools.
+ * One MCP server path for one run at a time. A tool call carries no session, so the slot it arrives on names the
+ * run, and a finished run's slot serves the next one under a new token, so a process of the finished run that
+ * still holds the old URL never reaches the next run's tools.
  */
 interface Slot {
 	name: string;
@@ -28,13 +56,39 @@ interface Slot {
 	tenant: Tenant | null;
 }
 
+/**
+ * One MCP server path that many OpenCode sessions share. Its name and tool list depend only on the tool
+ * definitions, so every session given the same tools sees the same tool prefix and the provider can reuse the
+ * cached prompt across them. A call names its run by the session ID OpenCode sends with it.
+ */
+interface Catalog {
+	owner: object;
+	key: string;
+	name: string;
+	token: string;
+	definitions: readonly McpToolDefinition[];
+	sessions: Map<string, Tenant>;
+}
+
+/** What one MCP path offers and which run a `tools/call` on it belongs to. */
+interface Endpoint {
+	offered: readonly McpToolDefinition[];
+	tenantFor(params: RpcMessage['params']): Tenant | null;
+}
+
+/** The `_meta` key OpenCode puts its session ID under on every MCP tool call. */
+const OPENCODE_SESSION_META = 'ai.opencode/sessionID';
+
 interface RpcMessage {
 	id?: unknown;
 	method?: unknown;
-	params?: { name?: unknown; arguments?: unknown; protocolVersion?: unknown };
+	params?: { name?: unknown; arguments?: unknown; protocolVersion?: unknown; _meta?: Record<string, unknown> };
 }
 
 const NO_METHOD = -32601;
+
+/** Hex digits of the definitions digest in a catalog's name; OpenAI caps a tool name at 64 characters. */
+const CATALOG_NAME_HEX = 24;
 
 /** The largest request body a slot reads; a tool call's arguments are a path, a query or a short command. */
 const MAX_REQUEST_BYTES = 1_000_000;
@@ -57,21 +111,24 @@ function toolText({ text, isError }: ToolOutcome): { content: { type: 'text'; te
 export class McpToolHost {
 	private server: ReturnType<typeof Bun.serve> | null = null;
 	private readonly slots: Slot[] = [];
+	private readonly catalogs: Catalog[] = [];
 
 	/**
-	 * Gives a run a slot for `tools`. Calls run in the leasing run's async context, not the server's, so a tool
-	 * that calls a model (a delegated worker) is billed to the run's review and runs on its locked models.
+	 * Gives a run a slot for `tools`: native tool names, or definitions the run carries itself. Calls run in the
+	 * leasing run's async context, not the server's, so a tool that calls a model (a delegated worker) is billed
+	 * to the run's review and runs on its locked models. A name list uses the catalog from {@link withMcpToolCatalog}
+	 * only when that catalog defines every name; otherwise it lists the native tools, which is what a review lease does.
 	 */
-	lease(tools: readonly string[], runner: ToolRunner, onEvent: (event: AgentEvent) => void): ToolLease {
+	lease(
+		tools: readonly string[] | readonly McpToolDefinition[],
+		runner: ToolRunner,
+		onEvent: (event: AgentEvent) => void
+	): ToolLease {
 		const { port } = this.listen();
 		const leased = this.freeSlot();
-		const inRunContext = AsyncLocalStorage.snapshot();
+		const definitions = listedDefinitions(tools);
 
-		const tenant: Tenant = {
-			tools: new Set(tools),
-			runner: (name, args) => inRunContext(() => runner(name, args)),
-			onEvent
-		};
+		const tenant = createTenant(tools, definitions, runner, onEvent);
 
 		leased.tenant = tenant;
 		leased.token = newToken();
@@ -85,9 +142,69 @@ export class McpToolHost {
 		};
 	}
 
+	/**
+	 * OpenCode filters tool definitions by permission. A catalog keeps a stable name and URL while concurrent
+	 * runs bind separate session IDs; releasing one never changes the list or exposes the next run to its ID.
+	 * Each OpenCode server owns its routing namespace; the content digest in the name is independent of that owner.
+	 */
+	leaseSession(
+		tools: readonly string[] | readonly McpToolDefinition[],
+		runner: ToolRunner,
+		onEvent: (event: AgentEvent) => void,
+		owner: object = this
+	): SessionToolLease {
+		const { port } = this.listen();
+
+		const definitions = listedDefinitions(tools)
+			.map((tool) => canonicalDefinition(tool))
+			.sort((a, b) => byCodePoint(a.name, b.name));
+
+		const catalog = this.catalogFor(owner, definitions);
+		const tenant = createTenant(tools, definitions, runner, onEvent);
+		let session: string | undefined;
+		let released = false;
+
+		return {
+			name: catalog.name,
+			url: `http://127.0.0.1:${port}/mcp/${catalog.token}`,
+			bindSession: (id) => {
+				if (released || session !== undefined || !id || catalog.sessions.has(id))
+					throw new Error(`This OpenCode tool lease cannot bind session "${id}".`);
+
+				session = id;
+				catalog.sessions.set(id, tenant);
+			},
+			release: () => {
+				released = true;
+				if (session !== undefined) catalog.sessions.delete(session);
+			}
+		};
+	}
+
 	stop(): void {
 		void this.server?.stop(true);
 		this.server = null;
+	}
+
+	/** The catalog `owner` serves `definitions` from, created on first use. */
+	private catalogFor(owner: object, definitions: readonly McpToolDefinition[]): Catalog {
+		const key = createHash('sha256').update(JSON.stringify(definitions)).digest('hex');
+		const existing = this.catalogs.find((item) => item.owner === owner && item.key === key);
+
+		if (existing) return existing;
+
+		const catalog = {
+			owner,
+			key,
+			name: `recoder_${key.slice(0, CATALOG_NAME_HEX)}`,
+			token: newToken(),
+			definitions,
+			sessions: new Map<string, Tenant>()
+		};
+
+		this.catalogs.push(catalog);
+
+		return catalog;
 	}
 
 	/** A slot no run holds, or a new one when every slot is held. */
@@ -118,17 +235,119 @@ export class McpToolHost {
 
 	private async route(request: Request): Promise<Response> {
 		const token = new URL(request.url).pathname.replace(/^\/mcp\//, '');
-		const slot = this.slots.find((item) => item.token === token);
+		const endpoint = this.endpoint(token);
 
-		if (!slot) return new Response('not found', { status: 404 });
+		if (!endpoint) return new Response('not found', { status: 404 });
 		if (request.method !== 'POST') return new Response(null, { status: 405 });
 
 		const message = await readMessage(request);
 
 		if (!message) return new Response('bad request', { status: 400 });
 
-		return answer(slot, message);
+		return answer(endpoint, message);
 	}
+
+	private endpoint(token: string): Endpoint | null {
+		const slot = this.slots.find((item) => item.token === token);
+
+		if (slot) return { offered: slot.tenant?.definitions ?? [], tenantFor: () => slot.tenant };
+
+		const catalog = this.catalogs.find((item) => item.token === token);
+
+		if (!catalog) return null;
+
+		return { offered: catalog.definitions, tenantFor: (params) => catalogTenant(catalog, params) };
+	}
+}
+
+/** The run a shared catalog's call belongs to: the one bound to the session ID OpenCode sent, if any. */
+function catalogTenant(catalog: Catalog, params: RpcMessage['params']): Tenant | null {
+	const session = params?._meta?.[OPENCODE_SESSION_META];
+
+	if (typeof session !== 'string') return null;
+
+	return catalog.sessions.get(session) ?? null;
+}
+
+/** Capture each run's billing and model context even when the HTTP listener belongs to another run. */
+function createTenant(
+	tools: readonly string[] | readonly McpToolDefinition[],
+	definitions: readonly McpToolDefinition[],
+	runner: ToolRunner,
+	onEvent: (event: AgentEvent) => void
+): Tenant {
+	const inRunContext = AsyncLocalStorage.snapshot();
+
+	return {
+		tools: new Set(requestedNames(tools)),
+		definitions,
+		runner: (name, args) => inRunContext(() => runner(name, args)),
+		onEvent
+	};
+}
+
+/** The names a lease permits, whether it was given names or definitions. */
+function requestedNames(tools: readonly string[] | readonly McpToolDefinition[]): string[] {
+	return tools.flatMap((tool) => (typeof tool === 'string' ? [tool] : [tool.name]));
+}
+
+/**
+ * What `tools/list` returns. Definitions passed in are listed as given. Names list the catalog when it covers
+ * every name, and the native tools otherwise, in native order, so a review lease is unchanged.
+ */
+function listedDefinitions(tools: readonly string[] | readonly McpToolDefinition[]): McpToolDefinition[] {
+	const first = tools[0];
+
+	if (first !== undefined && typeof first === 'object') {
+		return tools.flatMap((tool) => (typeof tool === 'object' ? [copyDefinition(tool)] : []));
+	}
+
+	return definitionsForNames(tools.flatMap((tool) => (typeof tool === 'string' ? [tool] : [])));
+}
+
+function definitionsForNames(names: readonly string[]): McpToolDefinition[] {
+	const active = toolCatalog.getStore();
+
+	if (active && names.every((name) => active.some((tool) => tool.name === name))) {
+		return names.flatMap((name) => {
+			const found = active.find((tool) => tool.name === name);
+
+			return found ? [copyDefinition(found)] : [];
+		});
+	}
+
+	return NATIVE_TOOLS.filter((tool) => names.includes(tool.name)).map(copyDefinition);
+}
+
+/** Object key order must not change a catalog's identity or serialized schemas. */
+function canonicalValue(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(canonicalValue);
+	if (value && typeof value === 'object') return canonicalObject(value);
+
+	return value;
+}
+
+function canonicalObject(value: object): Record<string, unknown> {
+	return Object.fromEntries(
+		Object.entries(value)
+			.sort(([a], [b]) => byCodePoint(a, b))
+			.map(([key, item]) => [key, canonicalValue(item)])
+	);
+}
+
+/** A locale-free order, so a catalog's digest is the same on every machine. */
+function byCodePoint(a: string, b: string): number {
+	if (a === b) return 0;
+
+	return a < b ? -1 : 1;
+}
+
+function canonicalDefinition(tool: McpToolDefinition): McpToolDefinition {
+	return { ...copyDefinition(tool), inputSchema: canonicalObject(tool.inputSchema) };
+}
+
+function copyDefinition(tool: McpToolDefinition): McpToolDefinition {
+	return { name: tool.name, description: tool.description, inputSchema: tool.inputSchema };
 }
 
 /** A random path token, so only the process given a slot's URL can reach it. */
@@ -151,8 +370,8 @@ async function readMessage(request: Request): Promise<RpcMessage | null> {
 	}
 }
 
-/** Answers one MCP request for a slot. Notifications have no id and get no body. */
-async function answer(slot: Slot, message: RpcMessage): Promise<Response> {
+/** Answers one MCP request for an endpoint. Notifications have no id and get no body. */
+async function answer(endpoint: Endpoint, message: RpcMessage): Promise<Response> {
 	const { id, method, params } = message;
 
 	if (id === undefined) return new Response(null, { status: 202 });
@@ -168,15 +387,17 @@ async function answer(slot: Slot, message: RpcMessage): Promise<Response> {
 	if (method === 'ping') return result(id, {});
 
 	if (method === 'tools/list') {
-		const offered = NATIVE_TOOLS.filter((tool) => slot.tenant?.tools.has(tool.name));
-
 		return result(id, {
-			tools: offered.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }))
+			tools: endpoint.offered.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }))
 		});
 	}
 
-	if (method === 'tools/call')
-		return result(id, toolText(await callTool(slot.tenant, String(params?.name ?? ''), params?.arguments)));
+	if (method === 'tools/call') {
+		return result(
+			id,
+			toolText(await callTool(endpoint.tenantFor(params), String(params?.name ?? ''), params?.arguments))
+		);
+	}
 
 	return Response.json({ jsonrpc: '2.0', id, error: { code: NO_METHOD, message: 'Method not found' } });
 }

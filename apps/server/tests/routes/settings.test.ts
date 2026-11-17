@@ -104,7 +104,7 @@ describe('review settings', () => {
 		expect(configForSubagent()).toMatchObject({ model: 'new-model', reasoningEffort: 'high' });
 	});
 
-	test('the subagent cap persists across reload and rejects other values', async () => {
+	test('the subagent cap persists across reload and accepts a count that is not a named pick', async () => {
 		expect((await (await app.request('/api/settings/models')).json()).subagentCap).toBe(8);
 
 		const patch = await app.request('/api/settings/models', {
@@ -119,14 +119,17 @@ describe('review settings', () => {
 		initReviewSettings();
 		expect(effectiveSubagentCap()).toBe(0);
 
-		const bad = await app.request('/api/settings/models', {
+		const custom = await app.request('/api/settings/models', {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ subagentCap: 5 })
 		});
 
-		expect(bad.status).toBe(400);
-		expect(effectiveSubagentCap()).toBe(0);
+		expect(custom.status).toBe(200);
+		expect((await custom.json()).subagentCap).toBe(5);
+		setReviewOverrides({});
+		initReviewSettings();
+		expect(effectiveSubagentCap()).toBe(5);
 	});
 
 	test('a token budget saves with the cap and efforts it sets, survives a restart, and a file from before budgets reads as Medium', async () => {

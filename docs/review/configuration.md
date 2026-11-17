@@ -20,6 +20,12 @@ Saved model settings win. These variables are the fallback, read by `effectiveRe
 
 **RECODER_REVIEW_MODEL**: Model id on that endpoint. Used only when no model entry is saved. Default empty.
 
+## Context window
+
+Every model runs with a context window: the most tokens (prompt and output) one request to it may spend. A window is set per model in Settings and saved in `contextWindows` in the settings file, keyed by the model id a pick uses (`opencode:openai/gpt-6.1-terra`, a saved entry's id, `vllm:<server>/<model>`, `claude-code:opus`). A patch (`PUT`/`PATCH /api/settings/models`) merges its `contextWindows` map into the saved one; a `null` value removes that model's key. A value must be an integer between 16000 and 1000000; anything else is refused. `GET /api/settings/models` returns the saved map as `contextWindows`, and each entry of `models` carries the user's value as `contextWindowSet` next to the reported `contextWindow`, so the picker can show the two apart.
+
+`contextWindowFor` in `apps/server/src/models/models.ts` resolves the window every `ModelConfig` carries: the user's setting for the model wins, then the window its provider, agent CLI or catalog reports (a saved entry's own `contextWindow`, the agent's model list, a vLLM capture, a hosted catalog), else `DEFAULT_CONTEXT_WINDOW` (128000) from `packages/shared/src/models.ts`. A reported or saved window that is not a positive number counts as unset. The review pipeline reads the resolved window to size prompts.
+
 ## Review limits
 
 Read by `effectiveReviewEnv`. A saved value wins. A value that is not a positive number falls back to the default.

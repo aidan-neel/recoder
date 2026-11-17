@@ -39,7 +39,7 @@ function hasUnsaved(state: Pick<EditorStore, 'open' | 'sessions'>): boolean {
 	return !!session && session.text !== session.original;
 }
 
-/** The guidelines editors on Settings → Guidelines. Module state, so an open editor survives a visit to another section. */
+/** The guidelines editors on the Guidelines page and Settings → Recoder. Module state, so an open editor survives a visit to another page. */
 export const useGuidelinesEditor = create<EditorStore>((set, get) => {
 	let openings = 0;
 

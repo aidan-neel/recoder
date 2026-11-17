@@ -34,7 +34,6 @@ import {
 	reviewerValidationError
 } from '../reviewer.js';
 import {
-	answersQuestions,
 	lensSelectionNote,
 	reviewerSystemPrompt,
 	reviewerUserPrompt,
@@ -71,6 +70,8 @@ export interface PoolContext extends ReviewerPromptContext {
 	images: readonly ImageUpload[];
 	/** Dependency setup and baseline check results as they stand when a reviewer starts; the checks finish mid-review. */
 	setupNotes: () => string;
+	/** Setup snapshot shared by every unit; later baseline results follow the assignment. */
+	sharedSetupNotes?: string;
 	/** How many subagents each reviewer may ask for, its share of the review's cap; 0 when subagents are off. */
 	subagentRequests: number;
 	/** The review's token budget limits; reviewers and subagents get their turns from here. */
@@ -240,6 +241,7 @@ function delegateFor(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolCon
 		exec: Boolean(ctx.exec),
 		label: item.title,
 		changedFiles: ctx.inventory.files.filter((file) => !file.excludeReason).map((file) => file.path),
+		skills: ctx.skills,
 		setupNotes: ctx.setupNotes,
 		onTool: (tool) => ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role: 'worker' }),
 		onLog: (message) => ctx.events?.onLog?.(message, meta)
@@ -315,7 +317,7 @@ function askReviewer(
 		validationError: (raw) => reviewerValidationError(raw, defaultCategory),
 		salvage: (raw) => salvageReviewerOutput(raw, defaultCategory),
 		checkFinal: finalCheck(subagent, lenses, exec),
-		responseSchema: (finalTurn) => reviewerResponseSchema(exec, finalTurn, categories, Boolean(delegate)),
+		responseSchema: (finalTurn) => reviewerResponseSchema(exec, finalTurn, Boolean(delegate)),
 		timeLimit: item.purpose
 			? { finalTurnAfterMs: REVIEW_POLICY.secondLookFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.secondLookMaxMs }
 			: { finalTurnAfterMs: REVIEW_POLICY.reviewerFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.reviewerMaxMs },
@@ -337,9 +339,8 @@ function systemPrompt(item: ReviewUnit, subagent: boolean, ctx: PoolContext, del
 		return subagentSystemPrompt(ctx.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0) + selected;
 	}
 
-	return reviewerSystemPrompt(item.lenses ?? [], ctx.exec, ctx.directive, {
+	return reviewerSystemPrompt(ctx.exec, ctx.directive, {
 		subagents: ctx.subagentRequests,
-		unsettled: ctx.subagentRequests > 0 && answersQuestions(item),
 		delegate
 	});
 }
@@ -377,15 +378,25 @@ export function unitPrompt(
 	note = ''
 ): string {
 	const declarations = ctx.changeModel ? unitContextParts(ctx.changeModel, item.scope) : null;
+	const setup = ctx.setupNotes();
+	const sharedSetup = ctx.sharedSetupNotes ?? setup;
 
 	capturePrompt(ctx.received, item, ctx.inventory, declarations, patch);
 
 	return (
-		reviewerUserPrompt(item, { turns, calls: ctx.budget.remaining() }, ctx, declarations?.text ?? '', heading) +
-		(ctx.setupNotes() ? `\n\n${ctx.setupNotes()}` : '') +
+		reviewerUserPrompt(
+			item,
+			{ turns, calls: ctx.budget.remaining() },
+			ctx,
+			declarations?.text ?? '',
+			heading,
+			sharedSetup,
+			ctx.subagentRequests > 0
+		) +
+		(setup !== sharedSetup ? `\n\n${setup}` : '') +
 		note +
 		unreadHunks(item, patch) +
-		'\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' +
+		'\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed; +N|added and  N|context use new-side numbers, -N|removed uses old-side numbers):\n' +
 		formatToolResults(patch)
 	);
 }

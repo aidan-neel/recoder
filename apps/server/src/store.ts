@@ -5,9 +5,9 @@ import {
 	type ProgressSummaries,
 	type ProgressSummary,
 	type Repo,
-	type Review,
 	type ReviewProgress
 } from '@recoder/shared';
+import { reviewCollection } from './storage/review-list';
 import { sqlite as getDb } from './storage/sqlite';
 import { collection as createCollection, closeStorage, postgres, sharedDiffs } from './storage/backend';
 import { progressWrites, metricWrites } from './storage/persistence-queue';
@@ -30,7 +30,7 @@ export async function closeStore(): Promise<void> {
 }
 export const db = {
 	repos: createCollection<Repo>('repos'),
-	reviews: createCollection<Review>('reviews'),
+	reviews: reviewCollection(),
 	runs: createCollection<CommandRun>('runs'),
 	repoChats: createCollection<StoredRepoChat>('repo_chats')
 };
@@ -107,7 +107,7 @@ export const reviewProgress = {
 	summaries: async (): Promise<ProgressSummaries> => {
 		const running: ProgressSummaries = {};
 
-		for (const review of await db.reviews.list()) {
+		for (const review of await db.reviews.summaries()) {
 			if (review.status !== 'queued' && review.status !== 'running') continue;
 
 			const progress = await reviewProgress.get(review.id);

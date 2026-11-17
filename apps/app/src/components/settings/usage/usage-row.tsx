@@ -1,6 +1,8 @@
 import { ChartTip, formatCompact, formatShare, Tooltip } from '@recoder/ui';
 import { ChevronRight } from 'lucide-react';
+import type { ReactNode } from 'react';
 
+import type { RowTip } from '@/lib/usage/report-shared';
 import { formatWhole } from '@/lib/usage/usage-model';
 import { rowTip, type UsageRow } from '@/lib/usage/usage-rows';
 
@@ -23,13 +25,55 @@ interface UsageRowViewProps {
 
 /**
  * One row: what it is over a line as long as its share, split in the chart's
- * colors, then its sessions, calls, share, cost and tokens. Resting on the row (or
- * focusing it) opens a tip with its split and its tokens by kind. A person's
- * row opens their view.
+ * colors, then its sessions, calls, share, cost and tokens.
  */
 export function UsageRowView({ row, widest, hasSessions, hasCalls, hasCost, onSelectPerson }: UsageRowViewProps) {
+	return (
+		<ReportTableRow row={row} widest={widest} tip={rowTip(row)} onSelectPerson={onSelectPerson}>
+			{hasSessions ? (
+				<div role="cell" className="usage-cell usage-cell-figure usage-cell-quiet">
+					{row.sessions === null ? null : formatWhole(row.sessions)}
+				</div>
+			) : null}
+			{hasCalls ? (
+				<div role="cell" className="usage-cell usage-cell-figure usage-cell-quiet">
+					{row.calls === null ? null : formatCompact(row.calls)}
+				</div>
+			) : null}
+			<div role="cell" className="usage-cell usage-cell-figure usage-cell-quiet">
+				{formatShare(row.share)}
+			</div>
+			{hasCost ? (
+				<div role="cell" className="usage-cell usage-cell-figure">
+					{row.cost ? <CostText cost={row.cost} /> : null}
+				</div>
+			) : null}
+			<div role="cell" className="usage-cell usage-cell-figure">
+				{formatCompact(row.tokens)}
+			</div>
+		</ReportTableRow>
+	);
+}
+
+interface NamedShareRow {
+	name: string;
+	lead: UsageRow['lead'];
+	share: number;
+	parts: UsageRow['parts'];
+	personId: string | null;
+}
+
+interface ReportTableRowProps {
+	row: NamedShareRow;
+	widest: number;
+	tip: RowTip;
+	onSelectPerson?: (accountId: string) => void;
+	children: ReactNode;
+}
+
+/** Shared breakdown row shell with tooltip, leading name + share bar, figure cells, and person chevron. */
+export function ReportTableRow({ row, widest, tip, onSelectPerson, children }: ReportTableRowProps) {
 	const personId = row.personId && onSelectPerson ? row.personId : null;
-	const tip = rowTip(row);
 
 	return (
 		<Tooltip
@@ -41,27 +85,7 @@ export function UsageRowView({ row, widest, hasSessions, hasCalls, hasCost, onSe
 				<div role="cell" className="usage-cell usage-cell-name">
 					<RowName row={row} widest={widest} personId={personId} onSelectPerson={onSelectPerson} />
 				</div>
-				{hasSessions ? (
-					<div role="cell" className="usage-cell usage-cell-figure usage-cell-quiet">
-						{row.sessions === null ? null : formatWhole(row.sessions)}
-					</div>
-				) : null}
-				{hasCalls ? (
-					<div role="cell" className="usage-cell usage-cell-figure usage-cell-quiet">
-						{row.calls === null ? null : formatCompact(row.calls)}
-					</div>
-				) : null}
-				<div role="cell" className="usage-cell usage-cell-figure usage-cell-quiet">
-					{formatShare(row.share)}
-				</div>
-				{hasCost ? (
-					<div role="cell" className="usage-cell usage-cell-figure">
-						{row.cost ? <CostText cost={row.cost} /> : null}
-					</div>
-				) : null}
-				<div role="cell" className="usage-cell usage-cell-figure">
-					{formatCompact(row.tokens)}
-				</div>
+				{children}
 				{onSelectPerson ? (
 					<div role="cell" className="usage-cell usage-cell-go">
 						{personId ? <ChevronRight aria-hidden /> : null}
@@ -73,7 +97,7 @@ export function UsageRowView({ row, widest, hasSessions, hasCalls, hasCost, onSe
 }
 
 interface RowNameProps {
-	row: UsageRow;
+	row: NamedShareRow;
 	widest: number;
 	personId: string | null;
 	onSelectPerson?: (accountId: string) => void;
@@ -103,7 +127,7 @@ function RowName({ row, widest, personId, onSelectPerson }: RowNameProps) {
 }
 
 /** The row's share as a line under its name, as long as its share of the widest row and split by the chart's lines. */
-function ShareLine({ row, widest }: { row: UsageRow; widest: number }) {
+function ShareLine({ row, widest }: { row: NamedShareRow; widest: number }) {
 	return (
 		<span className="usage-share" style={{ width: `${widest > 0 ? (row.share / widest) * 100 : 0}%` }} aria-hidden>
 			{row.parts.map((part) => (

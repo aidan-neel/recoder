@@ -6,7 +6,7 @@ import type { SaveState } from '@/lib/settings/use-save-state';
 import { SettingsRow } from '@/components/settings/settings-group';
 
 /** What an on/off row needs from the hook that saves it. */
-export interface SwitchView {
+interface SwitchView {
 	on: boolean;
 	state: SaveState;
 	/** Saves the new value the moment the switch moves. */

@@ -24,6 +24,8 @@ export interface RepoChatMessage {
 	review?: { id: string; prNumber: number };
 	/** The images the person attached to their message. */
 	images?: StoredImage[];
+	/** The names of the repository skills the person attached to their message. */
+	skills?: string[];
 	/** What a reply did before it answered: its reasoning and the files it read. Only what the model reports. */
 	trail?: ChatTrailStep[];
 	/** The passages of the repository the reply's citation links name. */
@@ -51,6 +53,8 @@ export interface StartRepoChatInput {
 	text: string;
 	/** Images for the first message, at most `MAX_IMAGES`. */
 	images?: ImageUpload[];
+	/** Names of repository skills to attach, at most `MAX_MESSAGE_SKILLS`. */
+	skills?: string[];
 }
 
 /** `POST /api/chats/:id/messages`: the next message, with any images. */
@@ -58,6 +62,8 @@ export interface SendRepoChatInput {
 	text: string;
 	/** At most `MAX_IMAGES`. */
 	images?: ImageUpload[];
+	/** Names of repository skills to attach, at most `MAX_MESSAGE_SKILLS`. */
+	skills?: string[];
 }
 
 /**

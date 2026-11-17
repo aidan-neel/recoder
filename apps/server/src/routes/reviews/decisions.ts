@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { DISMISSAL_REASONS, type Finding, type FindingDecision, type FindingDecisionInput } from '@recoder/shared';
+import { requestAccountId } from '../../accounts/enforcement';
 import {
 	forgetDecision,
 	learnFromDecision,
@@ -51,13 +52,14 @@ async function decisionTarget(c: Context): Promise<(DecidedFinding & { reviewId:
 	};
 }
 
-/** The decision as saved: what the person chose, without an empty note, stamped now. */
-function decisionOf(input: FindingDecisionInput): FindingDecision {
+/** The decision as saved: what the person chose, without an empty note, stamped now with who chose it. */
+function decisionOf(input: FindingDecisionInput, decidedBy: string): FindingDecision {
 	return {
 		state: input.state,
 		...(input.state === 'dismissed' ? { reason: input.reason } : {}),
 		...(input.note ? { note: input.note } : {}),
-		decidedAt: new Date().toISOString()
+		decidedAt: new Date().toISOString(),
+		decidedBy
 	};
 }
 
@@ -117,7 +119,7 @@ app.put('/:id/findings/:findingId/decision', async (c) => {
 
 	if (target instanceof Response) return target;
 
-	const decision = decisionOf(body);
+	const decision = decisionOf(body, await requestAccountId(c));
 
 	await decideInOneCommit(
 		() => saveDecision(target.reviewId, target.finding.id, decision),
