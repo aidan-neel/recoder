@@ -170,8 +170,12 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     layout). The Ask pane beside the tab is the chat with Recoder: its thread
     scrolls above the composer docked at the pane's foot, and a sent message
     and its reply stay in view until the reader scrolls up. A reply's
-    Thinking line starts folded (a click opens its steps), and while the
-    answer streams the entire reply shimmers in white; there is no caret.
+    Thinking line starts folded (a click opens its steps). While it works, the
+    newest thought sweeps on one line under it; when the answer begins, that
+    line fades out where the answer's first line fades in, on the same
+    baseline. The answer goes out a few words at a time at a pace that keeps
+    up with the stream, each word fading in from a 2px blur, and a code span
+    or link only once it is whole; there is no caret.
   - **Review**: one row a bug, the worst first, split by hairlines. Shut, a row
     is the title over its badges: severity (or Suggestion), category, evidence
     class, file and line, and whether an earlier review reported it. Open, it
