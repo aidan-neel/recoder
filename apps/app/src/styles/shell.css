@@ -512,3 +512,8 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+
+/* A recent review's standing ("2 bugs", "Failed") is the row's one fact, so it reads a step above the meta beside it. */
+.recent-status {
+	color: var(--text-muted);
+}

@@ -9,12 +9,15 @@ import { pullsHref } from '@/lib/shell/routes';
 
 import { Page } from './page';
 
-/** An address with no page behind it: a banner at the top of the page. The sidebar stays, with a way back to the list. */
+/**
+ * An address with no page behind it: the bar says so, and a banner at the top of the page gives the way back to
+ * the list. The sidebar stays.
+ */
 export function PageMissing() {
 	const { base } = useApi();
 
 	return (
-		<Page>
+		<Page start={<span className="page-bar-title">Not found</span>}>
 			<div className="flex flex-col px-(--page-gutter) py-5">
 				<StatusNotice
 					variant="banner"

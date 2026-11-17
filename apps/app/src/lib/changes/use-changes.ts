@@ -7,7 +7,7 @@ import { useSession, useSessionData } from '../pull/pull-session';
 import { loaded } from '../pull/session-state';
 import { withKey, withoutKey } from '../shell/key-set';
 import { treeOrder, treeRows } from './file-tree';
-import { guideParts, openBugsByFile } from './guide';
+import { guideParts, openBugsByFile, openSuggestionsByFile } from './guide';
 import type { FileTreeView, GuidePart, ViewedFilesView } from './types';
 import { isViewedAt, toggleViewed, viewedKey, writeViewed } from './viewed-files';
 
@@ -98,6 +98,14 @@ export function useFileTree(): FileTreeView {
 export function useGuide(): GuidePart[] {
 	const assignments = useSessionData((data) => data.progress?.assignments);
 	const bugs = useBugsByFile();
+	const review = useSessionData((data) => data.review);
 
-	return useMemo(() => guideParts(assignments, bugs), [assignments, bugs]);
+	return useMemo(
+		() =>
+			guideParts(assignments, {
+				bugs,
+				suggestions: openSuggestionsByFile(review?.status === 'passed' ? review.findings : [])
+			}),
+		[assignments, bugs, review]
+	);
 }

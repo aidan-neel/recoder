@@ -38,6 +38,8 @@ interface MergeButtonProps {
 	pull: string;
 	/** The base branch the merge lands on. */
 	base: string;
+	/** True when no finding is open and no review runs: the button is then the page's primary; otherwise an outline. */
+	settled: boolean;
 }
 
 /**
@@ -49,7 +51,7 @@ interface MergeButtonProps {
  * hover. A merged or closed pull request, whose state the title's badges
  * already name, and one Recoder cannot merge at all show nothing.
  */
-export function MergeButton({ view, pull, base }: MergeButtonProps) {
+export function MergeButton({ view, pull, base, settled }: MergeButtonProps) {
 	const [confirming, setConfirming] = useState(false);
 
 	if (view.block === 'merged' || view.block === 'closed' || view.block === 'unavailable' || !view.method) return null;
@@ -86,6 +88,7 @@ export function MergeButton({ view, pull, base }: MergeButtonProps) {
 	return (
 		<>
 			<SplitButton
+				variant={settled ? 'primary' : 'outline'}
 				disabled={view.phase === 'merging'}
 				status={view.phase === 'merging' ? 'pending' : 'idle'}
 				onClick={() => setConfirming(true)}

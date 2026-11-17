@@ -1,12 +1,23 @@
 'use client';
 
-import { ArrowUpRight, Check, GitCommitHorizontal, TriangleAlert, X } from 'lucide-react';
+import { ArrowUpRight, Check, CircleSlash, GitCommitHorizontal, TriangleAlert, X } from 'lucide-react';
 
 import { Spinner } from '../spinner';
 
 /** Every state an item can be in, from a severity to a decided outcome or a running task. */
 export type GlyphKind =
-	'high' | 'medium' | 'low' | 'question' | 'ok' | 'sent' | 'dismissed' | 'failed' | 'outdated' | 'spinner' | 'idle';
+	| 'high'
+	| 'medium'
+	| 'low'
+	| 'question'
+	| 'ok'
+	| 'sent'
+	| 'dismissed'
+	| 'failed'
+	| 'cancelled'
+	| 'outdated'
+	| 'spinner'
+	| 'idle';
 
 /** The drawing inside one glyph face. Severities and idle draw a dot; decided states draw a small icon on a tint. */
 export function GlyphFace({ kind }: { kind: GlyphKind }) {
@@ -25,6 +36,9 @@ export function GlyphFace({ kind }: { kind: GlyphKind }) {
 
 		case 'failed':
 			return <TriangleAlert size={13} strokeWidth={2} />;
+
+		case 'cancelled':
+			return <CircleSlash size={13} strokeWidth={2} />;
 
 		case 'outdated':
 			return <GitCommitHorizontal size={14} strokeWidth={2} />;

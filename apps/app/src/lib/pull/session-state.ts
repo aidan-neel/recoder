@@ -40,6 +40,8 @@ export interface SessionData {
 	posting: boolean;
 	/** The newest review in full, once read; it follows the review's live events. */
 	review: Review | null;
+	/** The finished review before the one that runs now, kept so its findings stay readable until the new one lands. */
+	previousReview: Review | null;
 	reviewLoad: 'none' | 'loading' | 'ready' | 'failed';
 	reviewError: string | null;
 	progress: ReviewProgress | null;
@@ -82,6 +84,7 @@ export function initialSession(viewed: Record<string, string>): SessionData {
 		conversation: IDLE,
 		posting: false,
 		review: null,
+		previousReview: null,
 		reviewLoad: 'none',
 		reviewError: null,
 		progress: null,

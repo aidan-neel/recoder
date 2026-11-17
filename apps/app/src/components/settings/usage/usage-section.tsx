@@ -28,7 +28,12 @@ function UsageBody() {
 	if (isEmpty(section.report)) {
 		return (
 			<div className="page-notice">
-				<StatusNotice variant="section" heading="h2" title={`No usage in the last ${section.report.days} days`} />
+				<StatusNotice
+					variant="section"
+					heading="h2"
+					title={`No usage in the last ${section.report.days} days`}
+					detail="Tokens, cost and model calls show here once a review or a chat runs."
+				/>
 			</div>
 		);
 	}

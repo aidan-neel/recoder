@@ -52,6 +52,28 @@ function firstDecisionHeld() {
 	return { client, held };
 }
 
+describe('a saved decision', () => {
+	test('reads the list again, so the sidebar and the pull request list count what the page counts', async () => {
+		let reads = 0;
+
+		const client: ApiClient = {
+			...createSampleApi(),
+			reviews: async () => {
+				reads += 1;
+
+				return [];
+			}
+		};
+
+		const { actions } = actionsOn(client);
+
+		await actions.accept(BUG);
+		await Promise.resolve();
+
+		expect(reads).toBeGreaterThan(0);
+	});
+});
+
 describe('deciding on a finding while an earlier decision is in flight', () => {
 	test('an earlier decision that fails after a newer one leaves the newer decision on screen', async () => {
 		const { client, held } = firstDecisionHeld();

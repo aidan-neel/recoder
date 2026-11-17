@@ -5,8 +5,9 @@ import { PanelLeft, Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { useChrome } from '@/lib/shell/chrome';
-import { toggleSidebar } from '@/lib/shell/sidebar-toggle';
+import { keepTooltipShutOnCarry, toggleSidebar } from '@/lib/shell/sidebar-toggle';
 import { useShell } from '@/lib/shell/use-shell';
+import { useSidebarShown } from '@/lib/shell/use-sidebar-shown';
 
 import { PanelResizer } from '@/components/common/panel-resizer';
 
@@ -32,7 +33,7 @@ export function Sidebar({ model }: { model: ReactNode }) {
 						<Search />
 					</Button>
 				</Tooltip>
-				<Tooltip content="Hide sidebar" shortcut="[">
+				<Tooltip content="Hide sidebar" shortcut="[" onFocus={keepTooltipShutOnCarry}>
 					<Button variant="ghost" size="icon" aria-label="Hide sidebar" data-sidebar-toggle onClick={toggleSidebar}>
 						<PanelLeft />
 					</Button>
@@ -45,11 +46,11 @@ export function Sidebar({ model }: { model: ReactNode }) {
 }
 
 /**
- * The sidebar's box, inert while hidden. It alone follows the open state, so
+ * The sidebar's box, inert while hidden: a column beside the page, or on a narrow window a drawer over it. It alone follows the open state, so
  * a toggle re-renders it and nothing inside it.
  */
 function SidebarPanel({ children }: { children: ReactNode }) {
-	const open = useChrome((state) => state.sidebarOpen);
+	const open = useSidebarShown();
 
 	return (
 		<aside className="sidebar" aria-label="Recoder" inert={!open} data-sidebar-part="panel" data-chrome>

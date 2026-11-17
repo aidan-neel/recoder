@@ -18,6 +18,8 @@ interface BugCardProps {
 	view: BugsView;
 	open: boolean;
 	onToggle: (id: string) => void;
+	/** True for a finding of the review before the one that runs now: its case stays readable, with nothing to act on. */
+	stale?: boolean;
 }
 
 /** The conversation about one bug, under its actions. It loads only once the person asks. */
@@ -36,14 +38,21 @@ function BugAsk({ bugId }: { bugId: string }) {
 /**
  * One finding, a row of the list. Shut, it is its title over its facts as
  * badges. Open, it is the whole case: the explanation, the proof, the fix and
- * what to do with it. It re-renders only when its own bug or state changes.
+ * what to do with it; a stale one keeps the case and drops the actions. It
+ * re-renders only when its own bug or state changes.
  */
-export const BugCard = memo(function BugCard({ bug, view, open, onToggle }: BugCardProps) {
+export const BugCard = memo(function BugCard({ bug, view, open, onToggle, stale }: BugCardProps) {
 	const bodyId = useId();
 	const [asking, setAsking] = useState(false);
 
 	return (
-		<article id={`bug-${bug.id}`} className="bug-item" data-open={open || undefined} data-bug={bug.id}>
+		<article
+			id={`bug-${bug.id}`}
+			className="bug-item"
+			data-open={open || undefined}
+			data-stale={stale || undefined}
+			data-bug={bug.id}
+		>
 			<button
 				type="button"
 				className="bug-head"
@@ -58,8 +67,8 @@ export const BugCard = memo(function BugCard({ bug, view, open, onToggle }: BugC
 			{open ? (
 				<div id={bodyId} className="bug-body">
 					<BugEvidence bug={bug} />
-					<BugActions bug={bug} view={view} asking={asking} onAskToggle={() => setAsking(!asking)} />
-					{asking ? <BugAsk bugId={bug.id} /> : null}
+					{stale ? null : <BugActions bug={bug} view={view} asking={asking} onAskToggle={() => setAsking(!asking)} />}
+					{asking && !stale ? <BugAsk bugId={bug.id} /> : null}
 				</div>
 			) : null}
 		</article>

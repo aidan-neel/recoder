@@ -9,7 +9,7 @@ import type { RecentReview, SettledReview } from './types';
 function standing(review: ReviewListItem): Pick<RecentReview, 'state' | 'label'> {
 	if (review.status === 'queued') return { state: 'queued', label: 'Queued' };
 	if (review.status === 'running') return { state: 'running', label: 'Reviewing' };
-	if (isCancelled(review)) return { state: 'failed', label: 'Cancelled' };
+	if (isCancelled(review)) return { state: 'cancelled', label: 'Cancelled' };
 	if (review.status === 'failed') return { state: 'failed', label: 'Failed' };
 
 	const { bugs, suggestions } = openCounts(review);

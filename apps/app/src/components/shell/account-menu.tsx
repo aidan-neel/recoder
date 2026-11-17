@@ -1,33 +1,24 @@
 'use client';
 
-import type { ThemeChoice } from '@recoder/shared';
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
-	DropdownMenuRadioGroup,
-	DropdownMenuRadioItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 	ForgeMark,
 	Pill
 } from '@recoder/ui';
-import { ChevronDown, Keyboard, LogOut, Monitor, Moon, Plus, Settings, Sun } from 'lucide-react';
-import type { ComponentType } from 'react';
+import { ChevronDown, Keyboard, LogOut, Plus, Settings } from 'lucide-react';
 
 import { useAccountMenu, type AccountMenuView } from '@/lib/account/use-account-menu';
 import { forgeLabel } from '@/lib/connections/forges';
+import { useApi } from '@/lib/api/client';
 import { useChrome } from '@/lib/shell/chrome';
-import { useTheme } from '@/lib/shell/theme';
+import { isLiveApp } from '@/lib/shell/routes';
 
 import { LinkForgeDialog } from '@/components/account/link-forge-dialog';
 import { Avatar } from '@/components/common/avatar';
-
-const THEMES: { choice: ThemeChoice; label: string; icon: ComponentType<{ className?: string }> }[] = [
-	{ choice: 'light', label: 'Light', icon: Sun },
-	{ choice: 'dark', label: 'Dark', icon: Moon },
-	{ choice: 'system', label: 'Match the system', icon: Monitor }
-];
 
 /** The name the account row shows before a forge is signed in. */
 const LOCAL_ACCOUNT = 'Recoder';
@@ -72,20 +63,15 @@ function ForgeRows({ view, onOpen }: { view: AccountMenuView; onOpen: () => void
 	);
 }
 
-/** The account row and its menu: the forges linked, settings, the shortcuts, the theme and sign out. */
+/**
+ * The account row and its menu: the forges linked, settings, the shortcuts and sign out. The sample's menu keeps
+ * only what it has: no forges to link and no settings to open.
+ */
 export function AccountMenu({ account }: { account: string | null }) {
-	const theme = useTheme((state) => state.choice);
-	const setTheme = useTheme((state) => state.set);
 	const setShortcutsOpen = useChrome((state) => state.setShortcutsOpen);
 	const openSettings = useChrome((state) => state.openSettings);
 	const view = useAccountMenu(account ?? LOCAL_ACCOUNT);
-
-	/** The menu hands back the chosen row's value as text; only a known theme is set. */
-	function chooseTheme(value: string): void {
-		const chosen = THEMES.find((entry) => entry.choice === value);
-
-		if (chosen) setTheme(chosen.choice);
-	}
+	const live = isLiveApp(useApi().base);
 
 	return (
 		<>
@@ -99,26 +85,17 @@ export function AccountMenu({ account }: { account: string | null }) {
 				</DropdownMenuTrigger>
 				<DropdownMenuContent className="w-[220px]">
 					<RoleHead view={view} />
-					<ForgeRows view={view} onOpen={() => openSettings('connections')} />
-					<DropdownMenuItem icon={<Settings />} shortcut="mod+," onSelect={() => openSettings()}>
-						Settings
-					</DropdownMenuItem>
+					{live ? (
+						<>
+							<ForgeRows view={view} onOpen={() => openSettings('connections')} />
+							<DropdownMenuItem icon={<Settings />} shortcut="mod+," onSelect={() => openSettings()}>
+								Settings
+							</DropdownMenuItem>
+						</>
+					) : null}
 					<DropdownMenuItem icon={<Keyboard />} shortcut="?" onSelect={() => setShortcutsOpen(true)}>
 						Keyboard shortcuts
 					</DropdownMenuItem>
-					<DropdownMenuSeparator />
-					<DropdownMenuRadioGroup value={theme} onValueChange={chooseTheme}>
-						{THEMES.map(({ choice, label, icon: Icon }) => (
-							<DropdownMenuRadioItem
-								key={choice}
-								value={choice}
-								icon={<Icon />}
-								onSelect={(event) => event.preventDefault()}
-							>
-								{label}
-							</DropdownMenuRadioItem>
-						))}
-					</DropdownMenuRadioGroup>
 					{view.canSignOut ? (
 						<>
 							<DropdownMenuSeparator />

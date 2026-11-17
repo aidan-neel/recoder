@@ -33,6 +33,7 @@ function phaseOf(review: Review | null, load: 'none' | 'loading' | 'ready' | 'fa
 export function useBugsView(): BugsView {
 	const session = useSession();
 	const review = useSessionData((data) => data.review);
+	const previousReview = useSessionData((data) => data.previousReview);
 	const load = useSessionData((data) => data.reviewLoad);
 	const error = useSessionData((data) => data.reviewError);
 	const votes = useSessionData((data) => data.votes);
@@ -44,6 +45,14 @@ export function useBugsView(): BugsView {
 	const phase = phaseOf(review, load);
 
 	const lists = useMemo(() => (review?.status === 'passed' ? bugLists(review, votes) : NO_LISTS), [review, votes]);
+
+	const previous = useMemo(() => {
+		if (!previousReview) return null;
+
+		const { open, headSha, reviewedAt } = bugLists(previousReview, votes);
+
+		return { open, headSha, reviewedAt };
+	}, [previousReview, votes]);
 
 	const promptFor = useCallback(
 		(id: string) => {
@@ -61,6 +70,7 @@ export function useBugsView(): BugsView {
 			phase,
 			error: phase === 'failed' ? error : null,
 			...lists,
+			previous,
 			findingsReview: review?.findingsReview
 				? {
 						state: review.findingsReview.state,
@@ -81,7 +91,7 @@ export function useBugsView(): BugsView {
 			vote: actions.vote,
 			fixPrompt: promptFor
 		}),
-		[phase, error, lists, review, model, canPost, pending, actions, postingAll, promptFor]
+		[phase, error, lists, previous, review, model, canPost, pending, actions, postingAll, promptFor]
 	);
 }
 

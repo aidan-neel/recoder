@@ -15,6 +15,7 @@ import type { StreamHandlers } from '../api/event-stream';
 import { SAMPLE_DIFFS } from './sample-diff';
 import { sampleSeed, type SamplePull, type SampleSeed } from './sample-pulls';
 import { SAMPLE_PULL } from './sample-review';
+import { finishedPlan } from './sample-run';
 
 /** The files every sample pull request but the main one changes: the start of the main diff. */
 const SMALL_DIFF = 3;
@@ -69,10 +70,24 @@ export function createSampleWorld() {
 		return { ...reviewListItem(review), pullState: findPull(review.repoId, review.prNumber).status.state };
 	}
 
-	function progressOf(id: string): ReviewProgress {
-		data();
+	/** The files of a pull request's diff: the full sample diff for the sample pull request, a short one for the rest. */
+	function diffOf(repoId: string, number: number): FileDiff[] {
+		return number === SAMPLE_PULL.number && repoId === 'sample-api' ? SAMPLE_DIFFS : SAMPLE_DIFFS.slice(0, SMALL_DIFF);
+	}
 
-		return progress.get(id) ?? emptyReviewProgress(id);
+	/**
+	 * A review's progress. A review that finished before the sample opened never ran here, so it gets the plan a
+	 * run would have left: the Changes tab's guide reads it.
+	 */
+	function progressOf(id: string): ReviewProgress {
+		const kept = progress.get(id);
+
+		if (kept) return kept;
+
+		const review = data().reviews.find((item) => item.id === id);
+		const paths = review?.status === 'passed' ? diffOf(review.repoId, review.prNumber).map((file) => file.path) : [];
+
+		return { ...emptyReviewProgress(id), ...(paths.length > 0 && { assignments: finishedPlan(paths) }) };
 	}
 
 	/** Puts the review in the list in place of its old copy, or adds it. */
@@ -154,9 +169,7 @@ export function createSampleWorld() {
 		diff(repoId: string, number: number): FileDiff[] {
 			findPull(repoId, number);
 
-			return number === SAMPLE_PULL.number && repoId === 'sample-api'
-				? SAMPLE_DIFFS
-				: SAMPLE_DIFFS.slice(0, SMALL_DIFF);
+			return diffOf(repoId, number);
 		},
 
 		/** Follows a review: the snapshot comes first, a moment later, as the server sends it. */

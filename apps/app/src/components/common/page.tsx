@@ -13,7 +13,7 @@ interface PageProps {
 /** One page beside the sidebar: a 44px bar, then the page's own content, which lays out and scrolls itself. */
 export function Page({ start, end, children }: PageProps) {
 	return (
-		<main className="page">
+		<main className="page" id="page" tabIndex={-1}>
 			<header className="page-bar" data-chrome>
 				<SidebarReveal />
 				<div className="page-bar-side">{start}</div>

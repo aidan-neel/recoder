@@ -25,6 +25,32 @@
 	background: var(--bg-canvas);
 	container-type: inline-size;
 }
+.page:focus {
+	outline: none;
+}
+/* The way past the sidebar's rows for a keyboard: off screen until it takes focus, then a chip in the corner. */
+.skip-link {
+	position: fixed;
+	z-index: 200;
+	top: 8px;
+	left: 8px;
+	padding: 4px 9px;
+	border-radius: var(--radius-control);
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-menu);
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	translate: 0 -200%;
+}
+.skip-link:focus-visible {
+	outline: 2px solid var(--focus-color);
+	outline-offset: 0;
+	translate: 0 0;
+}
+/* The scrim behind the sidebar's drawer; only narrow windows show it (narrow.css). */
+.sidebar-scrim {
+	display: none;
+}
 /* The bar's rule is a border inside its 44px, so the controls centre between the top and the rule. */
 .page-bar {
 	display: flex;

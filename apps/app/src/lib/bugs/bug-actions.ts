@@ -159,7 +159,10 @@ export function createBugActions(context: SessionContext) {
 		if (writes) decisionWrites.set(id, { ...writes, saved });
 	}
 
-	/** When `turn` is the finding's newest write, it shows the decision the server holds and ends the queue. */
+	/**
+	 * When `turn` is the finding's newest write, it shows the decision the server holds and ends the queue. The
+	 * list is read again then, so the sidebar and the pull request list count what the page now counts.
+	 */
 	function showIfNewest(id: string, turn: number): void {
 		const writes = decisionWrites.get(id);
 
@@ -167,6 +170,7 @@ export function createBugActions(context: SessionContext) {
 
 		decisionWrites.delete(id);
 		setDecision(id, writes.saved);
+		context.list.reload();
 	}
 
 	/** Shows the decision at once and saves it; a failure puts back the decision the server last confirmed. */

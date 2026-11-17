@@ -14,6 +14,14 @@ export const GUIDELINES_HREF = '/guidelines';
 /** The sample: the same screens answered from memory, for a first look with nothing connected. */
 export const SAMPLE_HREF = '/sample';
 
+/**
+ * True for the live app. The sample has no Automations, Guidelines or Settings of its own, so its shell leaves
+ * them out instead of sending a visitor to the live pages and their sign-in.
+ */
+export function isLiveApp(base: string): boolean {
+	return base === '';
+}
+
 /** The pull request list. */
 export function pullsHref(base: string): string {
 	return base || '/';

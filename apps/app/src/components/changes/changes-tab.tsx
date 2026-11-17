@@ -11,6 +11,7 @@ import type { GuidePart } from '@/lib/changes/types';
 import { useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
 import { scrollToFile, useCurrentFile } from '@/lib/changes/use-current-file';
 import { usePullDiffView } from '@/lib/pull/pull-session';
+import { useRunView } from '@/lib/run/use-run';
 import { pullHref } from '@/lib/shell/routes';
 import { useKeys } from '@/lib/shell/use-keys';
 
@@ -69,6 +70,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 	const tree = useFileTree();
 	const viewed = useViewedFiles();
 	const guide = useGuide();
+	const run = useRunView();
 	const bugs = useBugsView();
 	const scroller = useRef<HTMLDivElement | null>(null);
 	const files = diff.phase === 'ready' ? diff.value.files : null;
@@ -130,7 +132,9 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 					{mode === 'guide' && guide.length === 0 ? (
 						<div className="strip" data-tone="neutral" role="status">
 							<span className="strip-text">
-								The guide comes with a review: it groups the files in the order to read them.
+								{run.phase === 'passed'
+									? 'This review kept no guide. A guide groups the files in the order to read them.'
+									: 'The guide comes with a review: it groups the files in the order to read them.'}
 							</span>
 						</div>
 					) : null}

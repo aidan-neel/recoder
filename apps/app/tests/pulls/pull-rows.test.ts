@@ -57,13 +57,16 @@ describe('rowStatus', () => {
 		});
 	});
 
-	test('a failed review reads as failed, but a cancelled one as never reviewed', () => {
+	test('a failed review reads as failed, but a cancelled one as not reviewed, with when it was stopped', () => {
 		expect(rowStatus({ item: item(), review: review({ status: 'failed', summary: 'Checkout timed out.' }) })).toEqual({
 			kind: 'review-failed'
 		});
 
-		expect(rowStatus({ item: item(), review: review({ status: 'failed', summary: REVIEW_CANCELLED }) })).toEqual({
-			kind: 'not-reviewed'
+		const cancelled = review({ status: 'failed', summary: REVIEW_CANCELLED });
+
+		expect(rowStatus({ item: item(), review: cancelled })).toEqual({
+			kind: 'not-reviewed',
+			cancelledAt: cancelled.updatedAt
 		});
 	});
 
@@ -83,8 +86,12 @@ describe('rowStatus', () => {
 	});
 
 	test('no review, or only a draft session, reads as not reviewed', () => {
-		expect(rowStatus({ item: item(), review: null })).toEqual({ kind: 'not-reviewed' });
-		expect(rowStatus({ item: item(), review: review({ status: 'draft' }) })).toEqual({ kind: 'not-reviewed' });
+		expect(rowStatus({ item: item(), review: null })).toEqual({ kind: 'not-reviewed', cancelledAt: null });
+
+		expect(rowStatus({ item: item(), review: review({ status: 'draft' }) })).toEqual({
+			kind: 'not-reviewed',
+			cancelledAt: null
+		});
 	});
 
 	test('a clean review of an older head is outdated', () => {

@@ -17,26 +17,38 @@ export function openBugsByFile(findings: Finding[]): Map<string, number> {
 	return counts;
 }
 
+/** Open suggestions (quality findings) per file: the part of `openBugsByFile` that is no bug. */
+export function openSuggestionsByFile(findings: Finding[]): Map<string, number> {
+	return openBugsByFile(findings.filter((finding) => finding.kind === 'quality'));
+}
+
+/** Open findings per file, all of them and the suggestions among them. */
+export interface FileFindings {
+	bugs: ReadonlyMap<string, number>;
+	suggestions: ReadonlyMap<string, number>;
+}
+
 /**
  * The review plan's parts in plan order, each with its files and the open
  * findings in them. Empty until the review planned. Later copies of an
  * assignment replace earlier ones.
  */
-export function guideParts(
-	assignments: ReviewAssignment[] | undefined,
-	bugs: ReadonlyMap<string, number>
-): GuidePart[] {
+export function guideParts(assignments: ReviewAssignment[] | undefined, found: FileFindings): GuidePart[] {
 	const latest = [...new Map((assignments ?? []).map((assignment) => [assignment.id, assignment])).values()];
 
 	return latest.filter(isPart).map((assignment) => {
 		const paths = [...new Set(assignment.scope.map((scope) => scope.path))];
+
+		const countIn = (counts: ReadonlyMap<string, number>) =>
+			paths.reduce((sum, path) => sum + (counts.get(path) ?? 0), 0);
 
 		return {
 			id: assignment.id,
 			title: assignment.title,
 			reason: assignment.reason,
 			paths,
-			bugs: paths.reduce((sum, path) => sum + (bugs.get(path) ?? 0), 0)
+			bugs: countIn(found.bugs),
+			suggestions: countIn(found.suggestions)
 		};
 	});
 }

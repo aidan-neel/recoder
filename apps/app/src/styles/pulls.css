@@ -47,18 +47,39 @@
 }
 
 /*
- * A row: the mark, the title over its facts, then status and size in fixed slots so columns line up. The size
- * ends on the gutter, under the bar's last control; the menu stands in its place while the row is pointed at.
+ * A row: the mark, the title over its facts, then the one fact, the size and the menu, each in a lane of its own
+ * so columns line up and nothing gives way to anything else.
  */
 .pull-row {
 	position: relative;
 	display: grid;
 	min-height: 60px;
 	align-items: center;
-	grid-template-columns: 16px minmax(0, 1fr) auto 104px;
+	grid-template-columns: 16px minmax(0, 1fr) auto 88px var(--size-icon-md);
 	gap: 0 14px;
 	padding: 0 12px;
+	border-radius: var(--radius-row);
 	--row-button-radius: var(--radius-row);
+}
+/*
+ * The row the keyboard is on wears the pointer's fill, plus a short bar on its leading edge that tells it from
+ * the row under the pointer. The fill and the bar are the focus mark, so the link's own ring stands down.
+ */
+.pull-row:has([data-row-link]:focus-visible) {
+	background: var(--bg-hover);
+}
+.pull-row:has([data-row-link]:focus-visible)::after {
+	position: absolute;
+	top: 16px;
+	left: 0;
+	width: 2px;
+	height: 28px;
+	border-radius: 0 2px 2px 0;
+	background: var(--text-primary);
+	content: '';
+}
+.pull-row [data-ui='row-button'][data-cover]:focus-visible::after {
+	box-shadow: none;
 }
 /* The hairline between rows hides under the highlight, so a hovered row reads as one surface. */
 .pull-row + .pull-row::before {
@@ -128,19 +149,33 @@
 .pill-link:hover [data-ui='pill'] {
 	background-color: color-mix(in srgb, var(--pill-fg) 22%, transparent);
 }
+/* "Cancelled 4 hours ago", before the Review button of a pull request whose last review a person stopped. */
+.pull-row-status {
+	align-items: center;
+	gap: 10px;
+}
+.pull-row-cancelled {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--text-subtle);
+	white-space: nowrap;
+}
+.pull-row-cancelled svg {
+	width: 13px;
+	height: 13px;
+	flex-shrink: 0;
+}
+/* A pull request with no lines changed has no size, so the size and the menu name their lanes. */
 .pull-row .diff-stat {
-	justify-content: flex-end;
-	transition: opacity var(--dur-hover) ease-out;
-}
-.pull-row .diff-stat,
-.pull-row-menu {
-	grid-row: 1;
 	grid-column: 4;
+	justify-content: flex-end;
 }
 .pull-row-menu {
+	grid-column: 5;
 	justify-self: end;
 }
-/* The menu button waits until the row is pointed at, focused, or its menu is open; the size steps aside for it. */
+/* The menu button waits in its lane until the row is pointed at, focused, or its menu is open. */
 .pull-row-menu [data-ui='button'] {
 	opacity: 0;
 	transition:
@@ -153,21 +188,8 @@
 .pull-row-menu [data-ui='button'][data-state='open'] {
 	opacity: 1;
 }
-@media (hover: hover) {
-	.pull-row:hover .diff-stat,
-	.pull-row:focus-within .diff-stat,
-	.pull-row:has(.pull-row-menu [data-state='open']) .diff-stat {
-		opacity: 0;
-	}
-}
-/* Without a pointer to reveal it, the menu keeps a slot of its own after the size. */
+/* Without a pointer to reveal it, the menu shows all the time. */
 @media (hover: none) {
-	.pull-row {
-		grid-template-columns: 16px minmax(0, 1fr) auto 104px var(--size-icon-md);
-	}
-	.pull-row-menu {
-		grid-column: 5;
-	}
 	.pull-row-menu [data-ui='button'] {
 		opacity: 1;
 	}

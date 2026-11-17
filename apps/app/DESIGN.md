@@ -68,7 +68,21 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   hears "Has high-severity bugs"); the open one filled in place, folding like
   the lists under it; the recent chats and reviews; Settled; and at the foot
   the model reviews run with, the shortcuts and the theme switch. `[` shows or
-  hides it. Settings open from the account menu and with ⌘,.
+  hides it. Settings open from the account menu and with ⌘,. A review a
+  person cancelled wears a quiet slashed circle, never the failure triangle.
+  The sample has no Automations, Guidelines or Settings, so its sidebar,
+  account menu, palette and ⌘, leave them out instead of leading to the live
+  app's sign-in. The first Tab stop on every page is "Skip to content", which
+  moves focus past the sidebar's rows to the page.
+- **Narrow windows**: under 1024px the sidebar is a drawer over the page,
+  opened by the bar's button or `[` and shut by its scrim, Escape or going to
+  another page; it always starts shut. The tab row keeps its tabs and
+  buttons and the review's facts drop to a line under it. Under 760px the
+  file tree steps out of Changes and the Ask pane moves under the Summary.
+  Under 640px a list row stacks its title (which wraps), its meta line, then
+  its fact and size; the pull request's title wraps over its buttons, with
+  the merge button filling their line; the bar keeps the last two crumbs and
+  icon actions. Nothing is cut off.
 - **Sidebar body**: everything between the head and the foot scrolls as one
   region, so the head and foot never move and no list is squeezed shut; with
   room to spare, Settled sits at the bottom. A right click anywhere on it, or
@@ -100,7 +114,13 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   up across pages.
 - **Pull request list**: one row a pull request. A row shows the title, the
   branch, the author, the size of the change and one fact: what the newest
-  review found, that a review is running, or that there is none. Filters:
+  review found, that a review is running, or that there is none (with
+  "Cancelled 4 hours ago" before the Review button when a person stopped the
+  last one). The fact, the size and the row's menu each keep a lane of their
+  own, so hovering a row never hides its size. The row under the pointer and
+  the row `j` and `k` are on wear the same fill; the keyboard's adds a short
+  bar on its leading edge, which is its focus mark. Open findings are worded
+  one way wherever they are counted: "2 bugs, 1 suggestion". Filters:
   all, needs review, has bugs, ready, and one repository when more than one
   is tracked. A repository that failed to load says so in a strip above the
   rows. A fact about the review (reviewing, its bugs, or that it failed) is a
@@ -194,9 +214,14 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     terminal box, a trace, or a rule quoted word for word with its source as
     badges), the suggested fix behind a disclosure line, and its actions:
     post it on the pull request, copy a fix prompt for the coding agent,
-    accept it, or dismiss it with a reason. The tab row carries the review's
-    own facts as badges (commit, when, model, duration), posting the review
-    and Review again. While a review is queued, runs or is paused, there is
+    accept it, or dismiss it with a reason; accepting and dismissing both
+    answer with a toast that undoes them. The post button keeps one width for
+    both its labels and the link to the posted comment comes after the last
+    action, so no button moves when a bug is posted. The tab reads in one
+    800px column on the header's gutter, so a bug's chevron, its evidence and
+    its votes end on one edge at any window width. The tab row carries the
+    review's own facts as badges (commit, when, model, duration), posting the
+    review and Review again. While a review is queued, runs or is paused, there is
     no box: its four steps are rows in the bugs' row language (the same
     hairlines, title, badge row and chevron lane), with a 16px glyph lane
     before the name: a check once done, a spinner while it runs, a ring while
@@ -212,13 +237,18 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     start` row with the reason as a badge; a paused one puts `Paused` first
     on the step it holds. The tab row then holds the commit and model badges,
     Pause (ghost; Resume, primary, once paused) and Cancel (outline); the
-    clock stays in the tab. A failed, out-of-date, cancelled or missing
+    clock stays in the tab. Under the steps, the findings of the review
+    before this one stay to read, named "Previous review" with its commit and
+    time, stepped back and with nothing to act on, until the new review
+    replaces them. A failed, out-of-date, cancelled or missing
     review gets a banner with its next step (Try again, Review). Old
     `?tab=bugs` links open this tab.
   - **Commits**.
     The merge strip under the title shows checks and mergeability and holds the
     merge button. It merges at the head commit the page shows, and never with
-    admin rights. Its checks open under it as a grid of rows (glyph and name;
+    admin rights. The button is cream only when no finding is open and no
+    review runs; otherwise it is an outline, so the page's one primary is the
+    next step. Its checks open under it as a grid of rows (glyph and name;
     the forge link shows on hover) in a scroll area capped at about eight
     rows: failed first, then running, then passed, with skipped checks folded
     into one "N skipped" row.
@@ -235,6 +265,11 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   the name on the left, with a detail line under it only when the line
   passes the subtext rule (see Copy), and the control on the right. A row
   saves on change and shows where the save stands beside the control.
+  In Models, a provider's box shows or hides all its models (a dash when
+  only some show, and a press then shows them all) and each model has a box
+  of its own. In a provider's details, a model provider's usage windows sit
+  side by side under its row, in the meta size, so they read as that
+  provider's own.
 - **Usage** (admin) is figures and charts, not settings, so like Telemetry it
   has no cards: a 920px column of titled blocks (`UsageBlock`)
   grouped by space and hairlines, 48px apart. The range is a select in the

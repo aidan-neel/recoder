@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { RepoChatSummary } from '@recoder/shared';
+import { REVIEW_CANCELLED, type RepoChatSummary } from '@recoder/shared';
 
 import { recentChats } from '../../src/lib/shell/recent-chats';
 import { recentReviews } from '../../src/lib/shell/recent-reviews';
@@ -13,6 +13,20 @@ function chat(id: string, repoId: string): RepoChatSummary {
 }
 
 describe('the sidebar lists', () => {
+	test('a review a person cancelled is its own state, not a failure', () => {
+		const reviews = [
+			review({ id: 'failed', prNumber: 1, status: 'failed', summary: 'Checkout timed out.' }),
+			review({ id: 'cancelled', prNumber: 2, status: 'failed', summary: REVIEW_CANCELLED })
+		];
+
+		const { open } = recentReviews(reviews, REPOS, '');
+
+		expect(Object.fromEntries(open.map((row) => [row.reviewId, row.state]))).toEqual({
+			failed: 'failed',
+			cancelled: 'cancelled'
+		});
+	});
+
 	test('reviews of a removed repo are left out instead of showing its id', () => {
 		const reviews = [review({ id: 'kept' }), review({ id: 'orphan', repoId: 'removed', prNumber: 9 })];
 
