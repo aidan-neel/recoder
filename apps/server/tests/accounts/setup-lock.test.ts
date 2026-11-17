@@ -190,7 +190,7 @@ describe('POST /api/auth/setup', () => {
 		expect(limited.headers.get('retry-after')).toBe('60');
 		expect(limited.headers.get('set-cookie')).toBeNull();
 
-		jest.advanceTimersByTime(MINUTE_MS + 1);
+		jest.setSystemTime(Date.now() + MINUTE_MS + 1);
 
 		expect((await unlock(TAILNET_PEER, code)).status).toBe(200);
 	});
