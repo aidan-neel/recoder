@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { env } from '../env.js';
@@ -81,6 +81,37 @@ function keptPath(path: string, dataDir: string, workDir: string): string[] {
 }
 
 /**
+ * The sandbox PATH: the checkout's virtualenv first, so `python` and the tools
+ * setup installed there win, then the host's kept entries, then the cache's
+ * `bin` for the `python` link `linkPython` adds.
+ */
+function sandboxPath(kept: string[], checkout: string, cacheDir: string): string {
+	const host = kept.length ? kept : ['/usr/local/bin', '/usr/bin', '/bin'];
+
+	return [join(checkout, '.venv', 'bin'), ...host, join(cacheDir, 'bin')].join(':');
+}
+
+/**
+ * Gives the sandbox a `python` when its PATH has only `python3`, as on macOS:
+ * repos and agents call `python`, and a missing one fails a run that would work.
+ */
+export function linkPython(layout: SandboxLayout): void {
+	const PATH = layout.env.PATH;
+
+	if (Bun.which('python', { PATH })) return;
+
+	const python3 = Bun.which('python3', { PATH });
+
+	if (!python3) return;
+
+	const link = join(layout.cacheDir, 'bin', 'python');
+
+	mkdirSync(dirname(link), { recursive: true });
+	rmSync(link, { force: true });
+	symlinkSync(python3, link);
+}
+
+/**
  * The environment a sandboxed command starts with: every tool's cache points
  * into the per-checkout cache. On macOS pnpm keeps its own version instead of
  * switching to the one a repo pins, because pnpm 12 can't open its store lock
@@ -89,11 +120,11 @@ function keptPath(path: string, dataDir: string, workDir: string): string[] {
  * check before `pnpm run` is off: a shared install records another checkout's
  * paths, so pnpm would call it stale and reinstall offline.
  */
-function sandboxEnv(path: string[], cacheDir: string, darwin: boolean, rustup: string | null): Record<string, string> {
+function sandboxEnv(path: string, cacheDir: string, darwin: boolean, rustup: string | null): Record<string, string> {
 	const cache = (name: string) => join(cacheDir, name);
 
 	return {
-		PATH: path.join(':') || '/usr/local/bin:/usr/bin:/bin',
+		PATH: path,
 		HOME: darwin ? cache('home') : '/tmp/home',
 		TMPDIR: darwin ? cache('tmp') : '/tmp',
 		LANG: darwin ? 'en_US.UTF-8' : 'C.UTF-8',
@@ -193,6 +224,6 @@ export function sandboxLayout(checkout: string, host: HostPaths = {}): SandboxLa
 		toolchains: [...toolchains].sort((a, b) => a.length - b.length),
 		readOnly: sharedObjects(root, workDir),
 		masked,
-		env: sandboxEnv(kept, cacheDir, darwin, isDir(rustup) ? rustup : null)
+		env: sandboxEnv(sandboxPath(kept, root, cacheDir), cacheDir, darwin, isDir(rustup) ? rustup : null)
 	};
 }

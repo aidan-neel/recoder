@@ -13,7 +13,7 @@ export const SETUP_FAILURE =
 /**
  * More output of a run that never reached its assertion: an import a bundler
  * could not load, a script that does not exist, or a package download the
- * offline sandbox could not resolve.
+ * sandbox without network could not resolve.
  */
 const SETUP_STOPPED =
 	/Failed to (?:resolve import|load url)|error: Script not found|Missing script:|could not determine executable to run|DNSResolveFailed|ENOTFOUND|EAI_AGAIN/;

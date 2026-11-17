@@ -2,11 +2,31 @@ import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { admitCommand, hostPriorityPrefix, resolveTier, type SandboxTier } from './host-load.js';
 import { overlayArgv, prepareOverlays } from './overlay.js';
-import { inside, type SandboxLayout } from './sandbox-layout.js';
+import { inside, linkPython, type SandboxLayout } from './sandbox-layout.js';
 
 export { sandboxLayout, type SandboxLayout } from './sandbox-layout.js';
 
+/**
+ * What a sandboxed command can reach over the network, worded for the agents' prompts. Seatbelt lets every command
+ * reach the internet while it blocks this machine's own addresses and sockets. bubblewrap can only share the host's
+ * network, which would expose the server (it has no sign-in) and every other local service, so under it only the
+ * dependency install is online.
+ */
+export const SANDBOX_NETWORK =
+	process.platform === 'darwin' ? 'internet access, but not this machine’s own services' : 'no network';
+
+/**
+ * Seatbelt rules that keep the network but cut off the host: `localhost` matches every address of this machine
+ * (loopback, LAN, VPN), and unix sockets are denied except the one macOS resolves names through.
+ */
+const SEATBELT_HOST_UNREACHABLE = [
+	'(deny network-outbound (remote ip "localhost:*"))',
+	'(deny network-outbound (remote unix-socket))',
+	'(allow network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))'
+];
+
 export interface RunOptions {
+	/** Under bubblewrap, share the host's network (the dependency install). Seatbelt always has the network. */
 	network?: boolean;
 	/** Counted from when the command starts, after any wait for a free slot; a function is read at that moment. */
 	timeoutMs: number | (() => number);
@@ -104,14 +124,14 @@ function ancestors(paths: string[]): string[] {
  * The Seatbelt equivalent of `bwrapArgs`. The last matching rule wins, so
  * broad denies come first and the narrower allows and masks after them.
  */
-function seatbeltProfile(layout: SandboxLayout, opts: { network?: boolean } = {}): string {
+function seatbeltProfile(layout: SandboxLayout): string {
 	const subpaths = (dirs: string[]) => dirs.map((dir) => `(subpath ${sbpl(dir)})`).join(' ');
 	const git = join(layout.checkout, '.git');
 
 	const rules = [
 		'(version 1)',
 		'(allow default)',
-		opts.network ? '' : '(deny network*)',
+		...SEATBELT_HOST_UNREACHABLE,
 		layout.hidden.length ? `(deny file-read* file-write* ${subpaths(layout.hidden)})` : '',
 		`(allow file-read* ${subpaths([...layout.toolchains, ...(layout.readOnly ?? []), layout.checkout, layout.cacheDir])})`,
 		`(allow file-read-metadata ${ancestors([
@@ -174,12 +194,20 @@ export function execUnavailableReason(): Promise<string | null> {
 	return probe;
 }
 
+/** Where `sandbox-exec` is, found on the server's PATH: a command's own PATH may not hold /usr/bin. */
+function sandboxExecPath(): string | null {
+	return Bun.which('sandbox-exec') ?? (existsSync('/usr/bin/sandbox-exec') ? '/usr/bin/sandbox-exec' : null);
+}
+
+/** Starts a command under the network rules every command gets, so a macOS that rejects them reports it here. */
 async function probeSeatbelt(): Promise<string | null> {
-	const bin = Bun.which('sandbox-exec') ?? (existsSync('/usr/bin/sandbox-exec') ? '/usr/bin/sandbox-exec' : null);
+	const bin = sandboxExecPath();
 
 	if (!bin) return 'Running code needs `sandbox-exec`, which this macOS install is missing.';
 
-	return probeSandbox('sandbox-exec', [bin, '-p', '(version 1)(allow default)(deny network*)', '/usr/bin/true']);
+	const profile = ['(version 1)', '(allow default)', ...SEATBELT_HOST_UNREACHABLE].join('\n');
+
+	return probeSandbox('sandbox-exec', [bin, '-p', profile, '/usr/bin/true']);
 }
 
 /** Start a trivial sandboxed command: null when it runs, otherwise why `name` could not start a sandbox. */
@@ -287,16 +315,9 @@ function sandboxArgv(layout: SandboxLayout, command: string, network: boolean | 
 		];
 	}
 
-	return [
-		'sandbox-exec',
-		'-p',
-		seatbeltProfile(layout, { network }),
-		shell(),
-		'-c',
-		'eval "$1" 2>&1',
-		'recoder',
-		command
-	];
+	const sandboxExec = sandboxExecPath() ?? 'sandbox-exec';
+
+	return [sandboxExec, '-p', seatbeltProfile(layout), shell(), '-c', 'eval "$1" 2>&1', 'recoder', command];
 }
 
 /** SIGKILL a process group, if it is still there. */
@@ -340,9 +361,9 @@ function notStarted(output: string, timedOut: boolean): RunResult {
 /**
  * Run a reviewer command against a PR checkout inside the sandbox: bubblewrap
  * on Linux, Seatbelt (`sandbox-exec`) on macOS. Every command gets its own
- * session and process group, no network (setup's dependency install is the one
- * exception) and a cleared environment. Seatbelt has no PID namespace, so there
- * the command leads its own process group and a kill reaches its children.
+ * session and process group and a cleared environment; `SANDBOX_NETWORK` says
+ * what it can reach. Seatbelt has no PID namespace, so there the command leads
+ * its own process group and a kill reaches its children.
  * After it exits, stray children get a moment to drain the pipes before the
  * reads stop and whatever it left behind is killed. It first waits for a host
  * slot (see `host-load.ts`); the timeout and `elapsedMs` cover only the run.
@@ -373,6 +394,7 @@ async function execute(
 	outputChars: number
 ): Promise<RunResult> {
 	mkdirSync(layout.cacheDir, { recursive: true });
+	linkPython(layout);
 	prepareOverlays(layout.overlays);
 	if (!statSync(layout.checkout).isDirectory()) throw new Error('review checkout is missing');
 

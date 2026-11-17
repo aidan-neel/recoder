@@ -76,7 +76,7 @@ const prepared = new WeakMap<ExecWorkspace, Promise<PrepReport>>();
 /**
  * Prepares the packages the review changed, once per checkout: runs each
  * one's generation commands, then its runner on one test file, in prep slots,
- * offline, inside the review's deadline. Later callers on the same checkout
+ * inside the review's deadline. Later callers on the same checkout
  * share the result; one cut short by cancellation is dropped so the next
  * caller runs it again. Then every investigator run is settled against the
  * profiles: see `settleWith`.

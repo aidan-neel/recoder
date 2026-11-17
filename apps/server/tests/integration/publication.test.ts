@@ -13,6 +13,7 @@ import {
 } from '../../src/storage/postgres-publication';
 import { PostgresCoordinator } from '../../src/review/runtime/coordinator';
 import { assertOwnership, OwnershipLostError, withLease } from '../../src/review/runtime/ownership';
+import { SHARED_SECRET_KEY } from './shared-secret-key';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
 const schema = `publication_${crypto.randomUUID().replaceAll('-', '')}`;
