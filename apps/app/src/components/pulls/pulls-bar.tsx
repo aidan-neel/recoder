@@ -1,11 +1,9 @@
 'use client';
 
-import { Button, Input, Keycap, Select, Tooltip, type SelectOption } from '@recoder/ui';
-import { RefreshCw, Search } from 'lucide-react';
-import { useRef, type KeyboardEvent } from 'react';
+import { Button, Select, Tooltip, type SelectOption } from '@recoder/ui';
+import { RefreshCw } from 'lucide-react';
 
 import type { RepoOption } from '@/lib/pulls/types';
-import { useKeys } from '@/lib/shell/use-keys';
 
 import { RepoLabel } from '@/components/common/repo-label';
 
@@ -41,47 +39,6 @@ export function RepoScope({ repos, repoId, onChange }: RepoScopeProps) {
 			value={repoId ?? ALL_REPOS}
 			onValueChange={(value) => onChange(value === ALL_REPOS ? null : value)}
 			options={options}
-		/>
-	);
-}
-
-interface PullsFindProps {
-	query: string;
-	onQueryChange: (query: string) => void;
-	/** Opens the pull request the text names, when it names one. */
-	onSubmit: () => void;
-}
-
-/** The field in the bar: typing narrows the list, and Enter opens a pasted link. `/` focuses it. */
-export function PullsFind({ query, onQueryChange, onSubmit }: PullsFindProps) {
-	const field = useRef<HTMLInputElement | null>(null);
-
-	useKeys({ '/': () => field.current?.focus() });
-
-	/** Enter opens what the text names; Escape clears the text first, then leaves the field. */
-	function onKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
-		if (event.key === 'Enter') onSubmit();
-
-		if (event.key === 'Escape' && query) {
-			event.stopPropagation();
-			onQueryChange('');
-		}
-	}
-
-	return (
-		<Input
-			ref={field}
-			className="pulls-find"
-			type="search"
-			aria-label="Filter pull requests, or paste a link"
-			placeholder="Filter, or paste a pull request link"
-			autoComplete="off"
-			spellCheck={false}
-			leading={<Search aria-hidden />}
-			trailing={query ? undefined : <Keycap k="/" />}
-			value={query}
-			onChange={(event) => onQueryChange(event.target.value)}
-			onKeyDown={onKeyDown}
 		/>
 	);
 }

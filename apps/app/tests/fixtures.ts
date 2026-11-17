@@ -1,7 +1,15 @@
-import type { AgentStatus, DiffHunk, ModelSettings, Repo, ReviewListItem } from '@recoder/shared';
+import type {
+	AgentStatus,
+	DiffHunk,
+	ModelSettings,
+	PullListItem,
+	PullStatus,
+	Repo,
+	ReviewListItem
+} from '@recoder/shared';
 
 /** The head commit the fixtures' pull requests and reviews share. */
-export const HEAD = 'head1';
+const HEAD = 'head1';
 
 /** Model settings with nothing picked or configured beyond the defaults, overridden by `patch`. */
 export function modelSettings(patch: Partial<ModelSettings> = {}): ModelSettings {
@@ -67,6 +75,36 @@ export function review(change: Partial<ReviewListItem> = {}): ReviewListItem {
 		updatedAt: '',
 		findings: [],
 		...change
+	};
+}
+
+/** Open pull request #7 of repo `r1` at the fixtures' head, mergeable with passing checks and no review; `status` overrides its forge status. */
+export function openPull(status: Partial<PullStatus> = {}): PullListItem {
+	return {
+		repoId: 'r1',
+		pull: {
+			number: 7,
+			title: 'Change',
+			url: 'https://github.com/acme/api/pull/7',
+			author: 'ana',
+			base: 'main',
+			headRef: 'feature',
+			headSha: HEAD,
+			additions: 1,
+			deletions: 1,
+			changedFiles: 1,
+			createdAt: ''
+		},
+		status: {
+			state: 'open',
+			draft: false,
+			mergeability: 'clean',
+			updatedAt: '2026-10-13T09:00:00.000Z',
+			checks: { passed: 2, failed: 0, pending: 0 },
+			commits: 1,
+			...status
+		},
+		review: null
 	};
 }
 
