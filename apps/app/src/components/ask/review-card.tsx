@@ -2,7 +2,7 @@
 
 import { Card, RowButton } from '@recoder/ui';
 import { ChevronRight } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/components/common/link';
 
 import type { StartedReview } from '@/lib/ask/types';
 

@@ -1,9 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { useApi } from '@/lib/api/client';
+import { replaceAddress } from '@/lib/shell/navigation';
 import { pullHref } from '@/lib/shell/routes';
 
 import { PageMissing } from '@/components/common/page-missing';
@@ -15,7 +15,6 @@ import { PageMissing } from '@/components/common/page-missing';
  */
 export function ReviewRedirect({ id }: { id: string }) {
 	const client = useApi();
-	const router = useRouter();
 	const [missing, setMissing] = useState(false);
 
 	useEffect(() => {
@@ -23,7 +22,7 @@ export function ReviewRedirect({ id }: { id: string }) {
 
 		client.review(id).then(
 			(review) => {
-				if (current) router.replace(pullHref(client.base, review.repoId, review.prNumber, 'review'));
+				if (current) replaceAddress(pullHref(client.base, review.repoId, review.prNumber, 'review'));
 			},
 			() => {
 				if (current) setMissing(true);
@@ -33,7 +32,7 @@ export function ReviewRedirect({ id }: { id: string }) {
 		return () => {
 			current = false;
 		};
-	}, [client, id, router]);
+	}, [client, id]);
 
 	return missing ? <PageMissing /> : null;
 }

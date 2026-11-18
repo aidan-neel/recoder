@@ -2,7 +2,7 @@
 
 import { Button, Pill, Spinner, type ButtonStatus, type PillTone } from '@recoder/ui';
 import { CircleSlash } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/components/common/link';
 
 import { findingsLabel, plural } from '@/lib/shell/format';
 import type { PullRowStatus } from '@/lib/pulls/types';

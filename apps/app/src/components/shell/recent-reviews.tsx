@@ -2,7 +2,7 @@
 
 import { SkeletonRows, StatusGlyph, type GlyphKind } from '@recoder/ui';
 import { GitPullRequest } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname } from '@/lib/shell/navigation';
 
 import { useSessionCache } from '@/lib/api/client';
 import { shortAge } from '@/lib/shell/age';

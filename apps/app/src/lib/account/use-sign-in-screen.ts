@@ -1,7 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-
+import { replaceAddress } from '../shell/navigation';
 import { pullsHref } from '../shell/routes';
 import { useTokenDialog, type TokenDialog } from '../connections/use-token-dialog';
 import { refreshForges, useAccount } from './account-store';
@@ -20,11 +19,9 @@ export interface SignInScreenView {
  * lands on the pull request list with the forge connected, so the repository picker is ready.
  */
 export function useSignInScreen(): SignInScreenView {
-	const router = useRouter();
-
 	const finish = (): void => {
 		refreshForges();
-		router.replace(pullsHref(''));
+		replaceAddress(pullsHref(''));
 	};
 
 	const token = useTokenDialog(() => {

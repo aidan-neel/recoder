@@ -2,8 +2,8 @@
 
 import { Button, StatusNotice, StatusNoticeDetails } from '@recoder/ui';
 import { RotateCcw } from 'lucide-react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link } from './link';
+import { usePathname } from '@/lib/shell/navigation';
 
 import { useApi } from '@/lib/api/client';
 import { pullsHref } from '@/lib/shell/routes';

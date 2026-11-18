@@ -2,7 +2,7 @@
 
 import { Button, StatusNotice } from '@recoder/ui';
 import { RotateCcw, SearchX } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/components/common/link';
 
 import { OfflineNotice } from '@/components/common/offline-notice';
 import { useApi } from '@/lib/api/client';

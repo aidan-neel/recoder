@@ -2,7 +2,7 @@
 
 import { Button, StatusNotice } from '@recoder/ui';
 import { MessageSquareOff, RotateCcw } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/components/common/link';
 
 import { useApi } from '@/lib/api/client';
 import type { RepoChatView } from '@/lib/chat/types';

@@ -2,7 +2,7 @@
 
 import { Button, Modal, ModalClose, ModalContent, ModalTitle, Tooltip } from '@recoder/ui';
 import { ChevronRight, X } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname } from '@/lib/shell/navigation';
 import { useEffect, type ReactNode } from 'react';
 
 import { useIsAdmin } from '@/lib/account/use-is-admin';

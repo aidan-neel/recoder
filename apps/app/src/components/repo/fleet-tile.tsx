@@ -14,7 +14,7 @@ import {
 	Tooltip
 } from '@recoder/ui';
 import { CircleMinus, Ellipsis } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/components/common/link';
 
 import { useApi } from '@/lib/api/client';
 import type { PullRowStatus } from '@/lib/pulls/types';
@@ -191,7 +191,7 @@ function Foot({ foot }: { foot: FleetFoot }) {
 
 	return (
 		<RowButton asChild className="fleet-next">
-			<Link href={foot.row.href} prefetch={false}>
+			<Link href={foot.row.href}>
 				<span className="fleet-next-number">#{foot.row.number}</span>
 				<span className="fleet-next-title">{foot.row.title}</span>
 				<NextStatus status={foot.row.status} />
@@ -210,7 +210,7 @@ export function FleetTile({ tile, onStop, onRetry }: FleetTileProps) {
 			<header className="fleet-tile-head">
 				<ForgeMark provider={tile.provider} />
 				<RowButton asChild cover className="fleet-tile-name">
-					<Link href={tile.href} prefetch>
+					<Link href={tile.href}>
 						{tile.owner ? (
 							<>
 								<span className="fleet-tile-owner">{tile.owner}</span>

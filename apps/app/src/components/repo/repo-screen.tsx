@@ -2,7 +2,7 @@
 
 import { Button, Tooltip } from '@recoder/ui';
 import { ArrowUpRight, MessageSquare, Plus } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/components/common/link';
 
 import { useRepoPage } from '@/lib/repo/use-repo-page';
 import type { RepoPageView } from '@/lib/repo/types';

@@ -2,7 +2,7 @@
 
 import { ChartTip, HoverList, Meter, RowButton, Tooltip } from '@recoder/ui';
 import { BookOpen, ChevronRight, Clock } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/components/common/link';
 
 import type { HotspotRow, RepoPageData, ReviewChart as ReviewChartView } from '@/lib/repo/types';
 import { plural } from '@/lib/shell/format';

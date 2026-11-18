@@ -4,7 +4,7 @@ import { useApi } from '@/lib/api/client';
 import { useWarmCommits } from '@/lib/pull/pull-session';
 import { PULL_TABS, type PullPageView, type PullTab } from '@/lib/pull/types';
 import { useRunView } from '@/lib/run/use-run';
-import { replaceSearch } from '@/lib/shell/navigation';
+import { replaceAddress } from '@/lib/shell/navigation';
 import { pullHref } from '@/lib/shell/routes';
 import { useKeys } from '@/lib/shell/use-keys';
 
@@ -39,7 +39,7 @@ export function PullTabs({ repoId, number, tab, counts }: PullTabsProps) {
 	const { base } = useApi();
 	const review = reviewTabMark(useRunView());
 	const hrefOf = (target: PullTab) => pullHref(base, repoId, number, target);
-	const open = (target: PullTab) => replaceSearch(hrefOf(target));
+	const open = (target: PullTab) => replaceAddress(hrefOf(target));
 	const warmCommits = useWarmCommits();
 
 	useKeys({

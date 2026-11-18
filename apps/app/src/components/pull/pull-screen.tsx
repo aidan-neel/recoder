@@ -14,7 +14,7 @@ import type { PullTab } from '@/lib/pull/types';
 import { usePullTab } from '@/lib/pull/use-pull-tab';
 import { isLive } from '@/lib/run/run-phase';
 import { useRunView } from '@/lib/run/use-run';
-import { replaceSearch } from '@/lib/shell/navigation';
+import { replaceAddress } from '@/lib/shell/navigation';
 import { pullHref, pullsHref, repoHref } from '@/lib/shell/routes';
 
 import { BugsTab } from '@/components/bugs/bugs-tab';
@@ -97,7 +97,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	/** Opens the Changes tab in the guide's reading order. */
 	function openGuide(): void {
 		setMode('guide');
-		replaceSearch(pullHref(base, repoId, number, 'changes'));
+		replaceAddress(pullHref(base, repoId, number, 'changes'));
 	}
 
 	const tools: Record<PullTab, ReactNode> = {

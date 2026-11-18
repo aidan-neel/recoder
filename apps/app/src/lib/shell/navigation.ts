@@ -1,44 +1,94 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 
-type Navigate = (href: string) => void;
-
-/** A full page load: what a link does before the shell has given its router. */
-function load(href: string): void {
-	window.location.assign(href);
-}
-
-let current: Navigate = load;
+import { SAMPLE_HREF } from './routes';
 
 /**
- * Goes to a page from code that runs outside React, such as a toast's
- * button. Inside the shell it is a client navigation; before the shell
- * mounts it loads the page.
+ * Where the app is, read from the browser's own address. The app renders in
+ * the browser only, so a page change is a history entry and a render: no
+ * request to the server that serves the app, in development or production.
+ * Next patches the history calls and keeps its own router on the same
+ * address, so back, forward and a reload behave as on any page.
  */
+
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void): () => void {
+	listeners.add(listener);
+	window.addEventListener('popstate', listener);
+
+	return () => {
+		listeners.delete(listener);
+		window.removeEventListener('popstate', listener);
+	};
+}
+
+/** Tells every reader the address changed; the history calls fire no event of their own. */
+function announce(): void {
+	for (const listener of [...listeners]) listener();
+}
+
+/** True for a path of the sample, which has its own shell and client. */
+function inSample(pathname: string): boolean {
+	return pathname === SAMPLE_HREF || pathname.startsWith(`${SAMPLE_HREF}/`);
+}
+
+/**
+ * True for an address the shell on screen cannot show: another site, or the
+ * other side of the line between the live app and the sample. The browser
+ * loads those.
+ */
+export function leavesApp(href: string): boolean {
+	const target = new URL(href, window.location.href);
+
+	return target.origin !== window.location.origin || inSample(target.pathname) !== inSample(window.location.pathname);
+}
+
+/** Goes to a page: the screen for it renders at once, and Back returns here. */
 export function navigate(href: string): void {
-	current(href);
+	if (leavesApp(href)) {
+		window.location.assign(href);
+
+		return;
+	}
+
+	const target = new URL(href, window.location.href);
+
+	if (target.href === window.location.href) return;
+
+	window.history.pushState(null, '', target);
+	announce();
 }
 
-/**
- * Moves the page on screen to other search params, such as another tab. The
- * browser's own history call skips the server round trip a router navigation
- * makes on a dynamic route, and Next still updates `useSearchParams` from it.
- */
-export function replaceSearch(href: string): void {
+/** Swaps the address in place, such as for another tab or a redirect: Back skips the one it replaced. */
+export function replaceAddress(href: string): void {
+	if (leavesApp(href)) {
+		window.location.replace(href);
+
+		return;
+	}
+
 	window.history.replaceState(null, '', href);
+	announce();
 }
 
-/** The shell lends its router to `navigate` while it is mounted. */
-export function useNavigator(): void {
-	const router = useRouter();
+/** The path of the address on screen. */
+export function usePathname(): string {
+	return useSyncExternalStore(
+		subscribe,
+		() => window.location.pathname,
+		() => '/'
+	);
+}
 
-	useEffect(() => {
-		current = (href) => router.push(href);
+/** The search params of the address on screen. */
+export function useSearchParams(): URLSearchParams {
+	const search = useSyncExternalStore(
+		subscribe,
+		() => window.location.search,
+		() => ''
+	);
 
-		return () => {
-			current = load;
-		};
-	}, [router]);
+	return useMemo(() => new URLSearchParams(search), [search]);
 }

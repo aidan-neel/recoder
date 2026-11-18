@@ -1,8 +1,8 @@
 'use client';
 
 import { ForgeMark, HoverList, RowButton } from '@recoder/ui';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link } from '@/components/common/link';
+import { usePathname } from '@/lib/shell/navigation';
 import { useCallback } from 'react';
 
 import { useOverviewCache } from '@/lib/api/client';
@@ -49,7 +49,7 @@ function RepoItem({ repo, active }: { repo: SidebarRepo; active: boolean }) {
 
 	return (
 		<RowButton asChild data-nav data-active={active || undefined} className="nav-item">
-			<Link href={repo.href} prefetch aria-current={active ? 'page' : undefined} {...intent}>
+			<Link href={repo.href} aria-current={active ? 'page' : undefined} {...intent}>
 				<ForgeMark provider={repo.provider} className="nav-forge" />
 				<span className="nav-label">{repo.name}</span>
 				{repo.alert ? <span className="nav-alert" role="img" aria-label="Has high-severity bugs" /> : null}

@@ -2,8 +2,8 @@
 
 import { HoverList, RowButton } from '@recoder/ui';
 import { BookOpen, Clock, FolderGit2, GitPullRequest, Plus } from 'lucide-react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link } from '@/components/common/link';
+import { usePathname } from '@/lib/shell/navigation';
 import type { ComponentType } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -21,8 +21,8 @@ interface NavRow {
 
 /**
  * What a place reads first, started once the pointer rests on its row so the
- * page opens filled rather than on its skeleton. The stores load on demand:
- * the route's prefetch has already fetched their code.
+ * page opens filled rather than on its skeleton. The stores load on demand,
+ * from code the app already has.
  */
 const WARM: Partial<Record<Place, () => void>> = {
 	automations: () => void import('@/lib/settings/use-auto-review-section').then((module) => module.loadAutomations()),

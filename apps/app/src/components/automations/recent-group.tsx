@@ -3,7 +3,7 @@
 import type { Repo } from '@recoder/shared';
 import { HoverList, RowButton } from '@recoder/ui';
 import { ChevronRight } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from '@/components/common/link';
 
 import { useRecentActivity, type RecentRow } from '@/lib/settings/use-activity';
 

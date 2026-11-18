@@ -2,13 +2,13 @@
 
 import { Button, SkeletonRows } from '@recoder/ui';
 import { CornerDownLeft, TriangleAlert } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 
 import type { PullListView, PullRow, PullTarget } from '@/lib/pulls/types';
 import { useOpenPull } from '@/lib/pulls/use-open-pull';
 import { usePullList } from '@/lib/pulls/use-pull-list';
 import { useSessionCache } from '@/lib/api/client';
+import { navigate } from '@/lib/shell/navigation';
 import { errorToast } from '@/lib/shell/notify';
 import { useAction } from '@/lib/shell/use-action';
 
@@ -81,7 +81,6 @@ function OpenRow({ label, onOpen, status }: OpenRowProps) {
  * attention. The field narrows the list and opens a pasted link.
  */
 export function PullsScreen() {
-	const router = useRouter();
 	const sessions = useSessionCache();
 	const view = usePullList();
 	const opener = useOpenPull();
@@ -106,7 +105,7 @@ export function PullsScreen() {
 			opener.open(view.query).then(
 				(href) => {
 					view.setQuery('');
-					router.push(href);
+					navigate(href);
 				},
 				(error: unknown) => {
 					errorToast(reason(error, 'That pull request did not open.'));
