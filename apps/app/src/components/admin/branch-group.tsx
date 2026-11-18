@@ -9,7 +9,7 @@ import {
 	CommandItem,
 	CommandList,
 	ConfirmDialog,
-	Skeleton,
+	SkeletonBox,
 	type CommandHint
 } from '@recoder/ui';
 import { Check, ChevronDown, GitBranch } from 'lucide-react';
@@ -123,7 +123,7 @@ function BranchRows({
 	if (list.view === 'loading') {
 		return LOADING_ROWS.map((row) => (
 			<div key={row} className="branch-row-skeleton" aria-hidden>
-				<Skeleton />
+				<SkeletonBox />
 			</div>
 		));
 	}

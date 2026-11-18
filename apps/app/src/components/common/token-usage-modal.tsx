@@ -10,7 +10,7 @@ import {
 	ModalBody,
 	ModalContent,
 	ModalTitle,
-	Skeleton,
+	SkeletonBox,
 	StackedBar,
 	StatusNotice
 } from '@recoder/ui';
@@ -88,22 +88,22 @@ function TokenUsageSkeleton() {
 	return (
 		<div className="token-usage-body" aria-busy="true" aria-label="Loading token usage">
 			<div className="token-usage-head">
-				<Skeleton className="h-8 w-36 rounded-md" />
-				<Skeleton className="h-4 w-28" />
+				<SkeletonBox className="h-8 w-36 rounded-md" />
+				<SkeletonBox className="h-4 w-28" />
 			</div>
 			<div className="token-usage-section">
-				<Skeleton className="h-2 w-full rounded-full" />
+				<SkeletonBox className="h-2 w-full rounded-full" />
 				<div className="flex gap-4">
-					<Skeleton className="h-3.5 w-20" />
-					<Skeleton className="h-3.5 w-24" />
-					<Skeleton className="h-3.5 w-20" />
+					<SkeletonBox className="h-3.5 w-20" />
+					<SkeletonBox className="h-3.5 w-24" />
+					<SkeletonBox className="h-3.5 w-20" />
 				</div>
 			</div>
 			<div className="token-usage-section">
-				<Skeleton className="h-3.5 w-16" />
+				<SkeletonBox className="h-3.5 w-16" />
 				<div className="token-usage-models">
-					<Skeleton className="h-12 w-full" />
-					<Skeleton className="h-12 w-full" />
+					<SkeletonBox className="h-12 w-full" />
+					<SkeletonBox className="h-12 w-full" />
 				</div>
 			</div>
 		</div>

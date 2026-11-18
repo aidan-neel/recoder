@@ -1,7 +1,7 @@
 'use client';
 
 import type { UpdateStatus } from '@recoder/shared';
-import { Button, Collapsible, CollapsibleContent, Skeleton } from '@recoder/ui';
+import { Button, Collapsible, CollapsibleContent, SkeletonBox } from '@recoder/ui';
 
 import { useUpdateStrip, type UpdateStrip as UpdateStripView } from '@/lib/update/use-update-strip';
 
@@ -36,8 +36,8 @@ function StripBody({ strip }: { strip: UpdateStripView }) {
 		return (
 			<div className="update-line">
 				<div className="update-text">
-					<Skeleton className="update-skeleton-name" />
-					<Skeleton className="update-skeleton-detail" />
+					<SkeletonBox className="update-skeleton-name" />
+					<SkeletonBox className="update-skeleton-detail" />
 				</div>
 			</div>
 		);

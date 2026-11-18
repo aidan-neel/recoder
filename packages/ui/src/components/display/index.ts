@@ -13,7 +13,7 @@ export { Pill, type PillTone } from './pill';
 export { ResizeHandle } from './resize-handle';
 export { RowButton } from './row-button';
 export { ScrollArea } from './scroll-area';
-export { Skeleton, SkeletonRows, SkeletonText } from './skeleton';
+export { forgetSkeletonShapes, Skeleton, SkeletonBox, SkeletonProvider, SkeletonRows, SkeletonText } from './skeleton';
 export { StatusGlyph, type GlyphKind } from './status-glyph';
 export { StatusNotice, StatusNoticeDetails } from './status-notice';
 export { SwapText } from './swap-text';

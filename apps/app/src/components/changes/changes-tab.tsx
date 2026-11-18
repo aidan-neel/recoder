@@ -7,6 +7,7 @@ import { useMemo, useRef } from 'react';
 import { useApi } from '@/lib/api/client';
 import type { BugView } from '@/lib/bugs/types';
 import { useBugsView } from '@/lib/bugs/use-bugs';
+import { LOADING_DIFF } from '@/lib/changes/loading-diff';
 import type { GuidePart } from '@/lib/changes/types';
 import { useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
 import { scrollToFile, useCurrentFile } from '@/lib/changes/use-current-file';
@@ -47,14 +48,18 @@ function inOrder(files: FileDiff[], order: string[]): FileDiff[] {
 	return order.flatMap((path) => byPath.get(path) ?? []);
 }
 
-/** Bars where the file cards will stand while the diff loads. */
+function ignore(): void {}
+
+/** Stand-in file cards while the diff loads: the skeleton is measured from them, header and lines of code. */
 function DiffSkeleton() {
 	return (
-		<div className="changes-skeleton" aria-hidden>
-			<Skeleton />
-			<Skeleton />
-			<Skeleton />
-		</div>
+		<Skeleton loading>
+			<div className="changes-stack">
+				{LOADING_DIFF.map((file) => (
+					<FileCard key={file.path} file={file} viewed={false} onToggleViewed={ignore} bugs={NO_BUGS} bugsHref="#" />
+				))}
+			</div>
+		</Skeleton>
 	);
 }
 
@@ -123,7 +128,12 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 						onOpenPart={(part) => part.paths[0] && scrollToFile(scroller.current, part.paths[0])}
 					/>
 				) : (
-					<FileTree tree={tree} current={current} onOpenFile={(path) => scrollToFile(scroller.current, path)} />
+					<FileTree
+						tree={tree}
+						loading={diff.phase === 'loading'}
+						current={current}
+						onOpenFile={(path) => scrollToFile(scroller.current, path)}
+					/>
 				)}
 				<PanelResizer panel="changes" label="Resize file tree" />
 			</aside>

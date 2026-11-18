@@ -358,14 +358,3 @@
 .guide-row .tree-name {
 	white-space: normal;
 }
-
-.changes-skeleton {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-.changes-skeleton > div {
-	height: 180px;
-	border-radius: var(--radius-row);
-	box-shadow: inset 0 0 0 1px var(--line-card);
-}

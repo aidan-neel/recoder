@@ -1,13 +1,13 @@
 'use client';
 
-import { Button, Tooltip } from '@recoder/ui';
+import { Button, Skeleton, Tooltip } from '@recoder/ui';
 import { ArrowUpRight, MessageSquare, Plus } from 'lucide-react';
-import { Link } from '@/components/common/link';
 
 import { useRepoPage } from '@/lib/repo/use-repo-page';
 import type { RepoPageView } from '@/lib/repo/types';
 
 import { Crumbs } from '@/components/common/crumbs';
+import { Link } from '@/components/common/link';
 import { Page } from '@/components/common/page';
 
 import { RepoHeader } from './repo-header';
@@ -65,17 +65,19 @@ export function RepoScreen({ repoId }: { repoId: string }) {
 			end={view.phase === 'missing' ? null : <RepoActions view={view} />}
 		>
 			<div className="page-scroll">
-				{view.phase === 'loading' ? <RepoSkeleton /> : null}
 				{view.phase === 'missing' || view.phase === 'failed' ? <RepoNotice view={view} /> : null}
-				{data ? (
-					<div className="repo-page">
-						<RepoHeader repo={data.repo} figures={data.figures} />
-						<div className="repo-columns">
-							<RepoMain view={view} data={data} />
-							<RepoSide data={data} />
+				<Skeleton id="repo-page" loading={view.phase === 'loading'}>
+					{view.phase === 'loading' ? <RepoSkeleton /> : null}
+					{data ? (
+						<div className="repo-page">
+							<RepoHeader repo={data.repo} figures={data.figures} />
+							<div className="repo-columns">
+								<RepoMain view={view} data={data} />
+								<RepoSide data={data} />
+							</div>
 						</div>
-					</div>
-				) : null}
+					) : null}
+				</Skeleton>
 			</div>
 		</Page>
 	);

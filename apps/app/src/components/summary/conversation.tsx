@@ -1,10 +1,11 @@
 'use client';
 
 import type { PullComment } from '@recoder/shared';
-import { Markdown, Pill, SkeletonRows, type PillTone } from '@recoder/ui';
+import { Markdown, Pill, Skeleton, type PillTone } from '@recoder/ui';
 
 import type { PullConversationView } from '@/lib/pull/types';
 import { author } from '@/lib/shell/format';
+import { LOADING_CONVERSATION } from '@/lib/summary/loading-summary';
 
 import { ChatComposer } from '@/components/ask/chat-composer';
 import { Age } from '@/components/common/age';
@@ -53,9 +54,9 @@ function Entry({ entry }: { entry: PullComment }) {
 	);
 }
 
-/** The entries, or why there are none yet. */
+/** The entries, or why there are none yet. While they load, the skeleton is measured from stand-in comments. */
 function Timeline({ view }: { view: PullConversationView }) {
-	if (view.phase === 'loading') return <SkeletonRows count={2} height={56} glyph />;
+	const loading = view.phase === 'loading';
 
 	if (view.phase === 'failed') {
 		return (
@@ -65,14 +66,16 @@ function Timeline({ view }: { view: PullConversationView }) {
 		);
 	}
 
-	if (view.entries.length === 0) return <p className="timeline-note">Nobody has commented yet.</p>;
+	if (!loading && view.entries.length === 0) return <p className="timeline-note">Nobody has commented yet.</p>;
 
 	return (
-		<div className="timeline">
-			{view.entries.map((entry) => (
-				<Entry key={entry.id} entry={entry} />
-			))}
-		</div>
+		<Skeleton id="pull-conversation" loading={loading}>
+			<div className="timeline">
+				{(loading ? LOADING_CONVERSATION : view.entries).map((entry) => (
+					<Entry key={entry.id} entry={entry} />
+				))}
+			</div>
+		</Skeleton>
 	);
 }
 

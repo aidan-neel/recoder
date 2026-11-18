@@ -1,6 +1,6 @@
 'use client';
 
-import { Toaster, TooltipProvider } from '@recoder/ui';
+import { SkeletonProvider, Toaster, TooltipProvider } from '@recoder/ui';
 import { MotionConfig } from 'motion/react';
 import { useEffect, type ReactNode } from 'react';
 
@@ -44,19 +44,21 @@ export function AppShell({ model, children }: AppShellProps) {
 
 	return (
 		<MotionConfig reducedMotion="user">
-			<TooltipProvider>
-				<a href="#page" className="skip-link">
-					Skip to content
-				</a>
-				<Frame>
-					<Sidebar model={model} />
-					{children}
-				</Frame>
-				<CommandPalette />
-				<ShortcutsModal />
-				<SettingsModal />
-				<Toaster />
-			</TooltipProvider>
+			<SkeletonProvider>
+				<TooltipProvider>
+					<a href="#page" className="skip-link">
+						Skip to content
+					</a>
+					<Frame>
+						<Sidebar model={model} />
+						{children}
+					</Frame>
+					<CommandPalette />
+					<ShortcutsModal />
+					<SettingsModal />
+					<Toaster />
+				</TooltipProvider>
+			</SkeletonProvider>
 		</MotionConfig>
 	);
 }

@@ -7,7 +7,7 @@ import {
 	EASE_IN,
 	EASE_OUT,
 	RowButton,
-	Skeleton,
+	SkeletonBox,
 	StatusNotice,
 	useMotionVariants
 } from '@recoder/ui';
@@ -47,11 +47,11 @@ function emptyTitle(scope: FleetScope, query: string): string {
 function TileSkeleton() {
 	return (
 		<Card className="fleet-tile" aria-hidden>
-			<Skeleton className="h-[18px] w-[132px]" />
-			<Skeleton className="fleet-figures-skeleton" />
-			<Skeleton className="fleet-bars-skeleton" />
+			<SkeletonBox className="h-[18px] w-[132px]" />
+			<SkeletonBox className="fleet-figures-skeleton" />
+			<SkeletonBox className="fleet-bars-skeleton" />
 			<div className="fleet-foot">
-				<Skeleton className="h-4 w-[210px]" />
+				<SkeletonBox className="h-4 w-[210px]" />
 			</div>
 		</Card>
 	);

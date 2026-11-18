@@ -27,7 +27,7 @@ interface PillProps {
  */
 export function Pill({ tone = 'neutral', face = 'text', icon, title, children, className }: PillProps) {
 	return (
-		<span data-ui="pill" data-tone={tone} data-face={face} title={title} className={cn(className)}>
+		<span data-ui="pill" skullet-block="" data-tone={tone} data-face={face} title={title} className={cn(className)}>
 			{icon}
 			<span data-ui="pill-text">{children}</span>
 		</span>

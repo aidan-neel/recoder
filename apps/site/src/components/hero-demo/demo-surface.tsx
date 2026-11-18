@@ -1,6 +1,6 @@
 'use client';
 
-import { preloadHighlighter, TooltipProvider } from '@recoder/ui';
+import { preloadHighlighter, SkeletonProvider, TooltipProvider } from '@recoder/ui';
 import { MotionConfig, useReducedMotion } from 'motion/react';
 import { useCallback, useLayoutEffect, useState } from 'react';
 
@@ -62,16 +62,18 @@ export function DemoSurface({ scale, frame }: DemoSurfaceProps) {
 
 	return (
 		<MotionConfig transformPagePoint={pagePoint}>
-			<TooltipProvider>
-				<DemoFrame shown={view.shown}>
-					<ApiProvider key={view.loop} client={view.api}>
-						<div className="app-frame">
-							<Sidebar model={<ModelChip label="Sample model" state="ready" />} />
-							{view.screen === 'list' ? <PullsScreen /> : <PullOnTab {...DEMO_PULL} tab={view.screen} />}
-						</div>
-					</ApiProvider>
-				</DemoFrame>
-			</TooltipProvider>
+			<SkeletonProvider>
+				<TooltipProvider>
+					<DemoFrame shown={view.shown}>
+						<ApiProvider key={view.loop} client={view.api}>
+							<div className="app-frame">
+								<Sidebar model={<ModelChip label="Sample model" state="ready" />} />
+								{view.screen === 'list' ? <PullsScreen /> : <PullOnTab {...DEMO_PULL} tab={view.screen} />}
+							</div>
+						</ApiProvider>
+					</DemoFrame>
+				</TooltipProvider>
+			</SkeletonProvider>
 		</MotionConfig>
 	);
 }

@@ -15,10 +15,11 @@ import {
 	RowButton
 } from '@recoder/ui';
 import { Check, Ellipsis } from 'lucide-react';
-import { Link } from '@/components/common/link';
 import { Fragment, type ComponentType, type ReactNode } from 'react';
 
 import { useIntent } from '@/lib/shell/intent';
+
+import { Link } from '@/components/common/link';
 
 import type { RowAction } from './recent-actions';
 
@@ -70,7 +71,7 @@ function RowShell({ title, actions, onIntent, className, active, tools, children
 			<ContextMenuTrigger>
 				<div className={className} data-recent data-active={active || undefined} {...intent}>
 					{children}
-					<div className="recent-tools">
+					<div className="recent-tools" skullet-ignore="">
 						{tools}
 						<DropdownMenu>
 							<DropdownMenuTrigger>

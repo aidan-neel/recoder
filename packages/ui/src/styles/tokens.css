@@ -106,10 +106,8 @@
 	--dur-menu: 120ms;
 	--dur-swap: 140ms;
 	--dur-shimmer: 1.6s;
-	--dur-skeleton: 1.4s;
-	/* The skeleton light passes this many times (about 10s), then rests, so a hung load stops moving. */
-	--skeleton-passes: 7;
-	/* A skeleton stays invisible this long, so a fast load never flashes one. */
+	--dur-meter: 1.4s;
+	/* A loading state stays unseen this long, so a fast load never flashes one; the kit's skeletons hold as long. */
 	--skeleton-delay: 120ms;
 	/* A quiet "still working" note waits this long, so a fast answer never shows it. */
 	--late-delay: 400ms;

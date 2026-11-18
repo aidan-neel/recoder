@@ -1,7 +1,7 @@
 'use client';
 
 import type { AgentProvider } from '@recoder/shared';
-import { HoverList, Input, Keycap, RowButton, ScrollArea, Skeleton } from '@recoder/ui';
+import { HoverList, Input, Keycap, RowButton, ScrollArea, SkeletonBox } from '@recoder/ui';
 import { Check, ChevronRight, Search } from 'lucide-react';
 
 import { modelCount, type PickGroup } from '@/lib/settings/provider-options';
@@ -82,11 +82,11 @@ function PickSkeleton() {
 	return (
 		<div role="status" aria-label="Loading providers" className="provider-pick-list">
 			<div className="provider-pick-heading">
-				<Skeleton />
+				<SkeletonBox />
 			</div>
 			{SKELETON_WIDTHS.map((width) => (
 				<div key={width} className="provider-pick-row">
-					<Skeleton style={{ width }} />
+					<SkeletonBox style={{ width }} />
 				</div>
 			))}
 		</div>

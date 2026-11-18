@@ -469,9 +469,25 @@ Motion explains a change and never makes the person wait.
 - Things that do not move: the open tab, the chosen segment and the active
   nav row are filled in place, never slid there. Keyboard moves (j/k, tabs 1
   to 4) swap content at once. A pressed button shades and never shrinks.
-  Lists load with skeletons shaped like the content and swap in place with no
-  entrance animation. A page paints once, fully formed: no half renders and
-  no content that jumps after the first paint.
+  A page paints once, fully formed: no half renders and no content that
+  jumps after the first paint.
+- Loading is Skullet's (`Skeleton`, `SkeletonBox`, `SkeletonRows` and
+  `SkeletonText` in the kit). A screen wraps its content in `Skeleton` and,
+  while it loads, renders the same components from stand-in data
+  (`lib/<feature>/loading-*.ts`); Skullet lays that out unseen and draws a
+  bar over every line and control, so the skeleton has the content's own
+  geometry. With an `id` it remembers the shape the content had, and the
+  next load draws that. Content then takes the skeleton's place whole, in
+  one 140ms crossfade. Where the content cannot be laid out (a settings
+  group, a chart, one value), `SkeletonRows`, `SkeletonText` and
+  `SkeletonBox` stand at its exact size. Never draw a bar by hand.
+- A click changes the page in the same frame. The app renders in the browser
+  only, so `Link` and `navigate` (`components/common/link.tsx`,
+  `lib/shell/navigation.ts`) change the address with the History API and the
+  screen for it renders at once from `components/shell/screens.tsx`; nothing
+  waits on the server that serves the app. Never import `next/link` or
+  `next/navigation`. A screen that has no data yet shows its skeleton; it
+  never holds the old page.
 - Durations and easings come from the kit tokens (`--dur-*`, `--motion-*`,
   `--ease-menu`) and the kit's motion presets (`DURATION`). Hover and the
   menu highlight take 50ms. Nothing on a keyboard path runs longer than about

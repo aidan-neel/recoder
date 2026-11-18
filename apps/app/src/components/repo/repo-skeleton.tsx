@@ -1,4 +1,6 @@
-import { Skeleton, SkeletonRows } from '@recoder/ui';
+import { SkeletonBox, SkeletonRows } from '@recoder/ui';
+
+import { LoadingPullRows } from '@/components/pulls/pull-list';
 
 import { RepoSection } from './repo-section';
 
@@ -17,25 +19,25 @@ export function RepoSkeleton() {
 		<div className="repo-page repo-skeleton" aria-hidden>
 			<div className="repo-head">
 				<div className="page-title repo-title">
-					<Skeleton className="repo-skeleton-title" />
+					<SkeletonBox className="repo-skeleton-title" />
 				</div>
 				<div className="repo-facts">
-					<Skeleton className="repo-skeleton-pill" />
-					<Skeleton className="repo-skeleton-pill" />
+					<SkeletonBox className="repo-skeleton-pill" />
+					<SkeletonBox className="repo-skeleton-pill" />
 				</div>
 			</div>
 			<div className="repo-figures">
 				{Array.from({ length: FIGURES }, (_, index) => (
 					<div key={index} className="repo-figure">
-						<Skeleton className="repo-skeleton-label" />
-						<Skeleton className="repo-skeleton-figure" />
+						<SkeletonBox className="repo-skeleton-label" />
+						<SkeletonBox className="repo-skeleton-figure" />
 					</div>
 				))}
 			</div>
 			<div className="repo-columns">
 				<div className="repo-main">
 					<RepoSection title="Needs you">
-						<SkeletonRows count={OPEN_ROWS} height={60} glyph className="pull-list-skeleton" />
+						<LoadingPullRows count={OPEN_ROWS} showRepo={false} />
 					</RepoSection>
 					<RepoSection title="Recently merged">
 						<SkeletonRows
@@ -49,7 +51,7 @@ export function RepoSkeleton() {
 				</div>
 				<div className="repo-side">
 					<RepoSection title="Reviews, 30 days" className="repo-chart-section">
-						<Skeleton className="repo-skeleton-chart" />
+						<SkeletonBox className="repo-skeleton-chart" />
 					</RepoSection>
 					<RepoSection title="Where bugs land">
 						<SkeletonRows

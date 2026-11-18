@@ -151,7 +151,7 @@
 }
 
 /* The loading row's glyph is the mark's size, so its bar starts where the title lands. */
-.suggestion-row > [data-ui='skeleton']:first-child {
+.suggestion-row > [skullet-bar]:first-child {
 	width: 14px;
 	height: 14px;
 }

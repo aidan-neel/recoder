@@ -1,6 +1,6 @@
 'use client';
 
-import { HoverList, Input } from '@recoder/ui';
+import { HoverList, Input, SkeletonRows } from '@recoder/ui';
 import { Check, ChevronRight, Search } from 'lucide-react';
 import { useRef, type CSSProperties } from 'react';
 
@@ -9,10 +9,18 @@ import { useKeys } from '@/lib/shell/use-keys';
 
 interface FileTreeProps {
 	tree: FileTreeView;
+	/** True while the diff loads: the tree stands as rows of bars. */
+	loading: boolean;
 	/** The file being read in the diff. */
 	current: string | null;
 	onOpenFile: (path: string) => void;
 }
+
+/** How many rows of bars stand in while the diff loads. */
+const LOADING_ROWS = 8;
+
+/** A tree row's height in px, so the bars stand on the rows' lines. */
+const ROW_HEIGHT = 28;
 
 /** A row's indent, as the CSS variable the row's padding reads. */
 function depthStyle(depth: number): CSSProperties {
@@ -75,9 +83,10 @@ function FileRow({ row, current, onOpen }: FileRowProps) {
 /**
  * The changed files as a tree beside the diff. A click scrolls the diff to
  * the file; the row of the file being read is marked as the diff scrolls.
- * The field narrows the tree to matching paths; `t` focuses it.
+ * The field narrows the tree to matching paths; `t` focuses it. While the
+ * diff loads, rows of bars stand in for the tree.
  */
-export function FileTree({ tree, current, onOpenFile }: FileTreeProps) {
+export function FileTree({ tree, loading, current, onOpenFile }: FileTreeProps) {
 	const field = useRef<HTMLInputElement | null>(null);
 
 	useKeys({ t: () => field.current?.focus() });
@@ -95,16 +104,25 @@ export function FileTree({ tree, current, onOpenFile }: FileTreeProps) {
 				value={tree.filter}
 				onChange={(event) => tree.setFilter(event.target.value)}
 			/>
-			<HoverList className="tree" itemSelector="[data-tree-row]" selectedSelector="[data-current]">
-				{tree.rows.map((row) =>
-					row.kind === 'folder' ? (
-						<FolderRow key={`folder:${row.id}`} row={row} onToggle={() => tree.toggleFolder(row.id)} />
-					) : (
-						<FileRow key={`file:${row.id}`} row={row} current={row.id === current} onOpen={() => onOpenFile(row.id)} />
-					)
-				)}
-				{tree.rows.length === 0 ? <p className="tree-empty">No file matches.</p> : null}
-			</HoverList>
+			{loading ? (
+				<SkeletonRows count={LOADING_ROWS} height={ROW_HEIGHT} lines={1} className="tree" />
+			) : (
+				<HoverList className="tree" itemSelector="[data-tree-row]" selectedSelector="[data-current]">
+					{tree.rows.map((row) =>
+						row.kind === 'folder' ? (
+							<FolderRow key={`folder:${row.id}`} row={row} onToggle={() => tree.toggleFolder(row.id)} />
+						) : (
+							<FileRow
+								key={`file:${row.id}`}
+								row={row}
+								current={row.id === current}
+								onOpen={() => onOpenFile(row.id)}
+							/>
+						)
+					)}
+					{tree.rows.length === 0 ? <p className="tree-empty">No file matches.</p> : null}
+				</HoverList>
+			)}
 		</>
 	);
 }

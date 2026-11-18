@@ -9,7 +9,7 @@ import {
 	HoverList,
 	RowButton,
 	ScrollArea,
-	Skeleton,
+	SkeletonBox,
 	StatusGlyph,
 	type GlyphKind
 } from '@recoder/ui';
@@ -56,7 +56,7 @@ const SUMMARY_ICONS = { ok: CircleCheck, bad: CircleX, wait: CircleDashed };
  * the button that opens the list under the facts; without checks, nothing.
  */
 export function ChecksToggle({ view }: { view: PullChecksView }) {
-	if (view.phase === 'loading') return <Skeleton className="merge-fact-skeleton" />;
+	if (view.phase === 'loading') return <SkeletonBox className="merge-fact-skeleton" />;
 	if (view.phase === 'none') return null;
 
 	if (view.phase === 'failed') {
