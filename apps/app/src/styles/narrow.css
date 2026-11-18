@@ -83,10 +83,7 @@
 	}
 }
 
-/*
- * Under 760px two columns no longer fit side by side: the diff keeps the page and the file tree steps out, and
- * the Summary's Ask pane moves under the reading, the two scrolling as one.
- */
+/* Under 760px two columns no longer fit side by side: the diff keeps the page and the file tree steps out. */
 @media (max-width: 759px) {
 	.changes {
 		grid-template-columns: minmax(0, 1fr);
@@ -94,25 +91,8 @@
 	.changes-side {
 		display: none;
 	}
-	.summary {
-		flex-direction: column;
-		overflow-y: auto;
-	}
-	.summary > .reading {
-		flex: none;
-		overflow: visible;
-	}
-	.summary-column {
-		padding-right: var(--page-gutter);
-	}
 	.fleet {
 		padding: 20px var(--page-gutter) 48px;
-	}
-	.ask-pane {
-		width: 100%;
-		min-height: 420px;
-		border-top: 1px solid var(--line-subtle);
-		border-left: 0;
 	}
 	/* A banner's actions take a line of their own under its words. */
 	[data-ui='status-notice'][data-variant='banner'] [data-ui='status-notice-body'] {

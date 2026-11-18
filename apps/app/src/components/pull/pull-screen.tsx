@@ -130,7 +130,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 
 	const bodies: Record<PullTab, ReactNode> = {
 		changes: <ChangesTab repoId={repoId} number={number} mode={mode} />,
-		summary: <SummaryTab repoId={repoId} onOpenGuide={openGuide} />,
+		summary: <SummaryTab onOpenGuide={openGuide} />,
 		review: <BugsTab />,
 		commits: <CommitsTab />
 	};

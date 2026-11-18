@@ -1,7 +1,28 @@
 /* ───────── Docs ───────── */
-/* Docs paint fully formed: no entrance motion. */
+/*
+ * A page arrives top-down (the kit's `data-enter='stagger'`, a little further
+ * than in the app: docs are read, not worked in). Past the fourth block a
+ * section rises in as it scrolls into view instead, once; a browser without
+ * scroll timelines shows it as it is.
+ */
+.docs-column {
+	--enter-rise: 10px;
+}
+@supports (animation-timeline: view()) {
+	.docs-column > .docs-section:nth-child(n + 5) {
+		animation: docs-reveal linear both;
+		animation-timeline: view();
+		animation-range: entry 0% entry 40%;
+	}
+}
+@keyframes docs-reveal {
+	from {
+		opacity: 0;
+		transform: translateY(16px);
+	}
+}
 
-/* The page bar stays at the top of the window while the page scrolls under it. */
+/* The page bar stays at the top of the card while the page scrolls under it. */
 .doc-bar {
 	position: sticky;
 	top: 0;
@@ -16,6 +37,26 @@
 	border-bottom: 1px solid var(--line-subtle);
 	border-radius: var(--radius-card) var(--radius-card) 0 0;
 	background: var(--bg-canvas);
+}
+/* How far through the page the reader is: a line along the bar's foot that fills as the page scrolls. */
+@supports (animation-timeline: scroll()) {
+	.doc-bar::after {
+		position: absolute;
+		right: 0;
+		bottom: -1px;
+		left: 0;
+		height: 1px;
+		background: var(--accent-text);
+		content: '';
+		transform-origin: left;
+		animation: docs-progress linear both;
+		animation-timeline: scroll(nearest block);
+	}
+}
+@keyframes docs-progress {
+	from {
+		transform: scaleX(0);
+	}
 }
 .doc-bar-crumbs {
 	display: flex;
@@ -88,6 +129,51 @@
 	line-height: 24px;
 	letter-spacing: -0.01em;
 	color: var(--text-primary);
+	border-radius: 4px;
+}
+/* A heading links to its own section: a faint # comes up in the margin beside it on hover. */
+.docs-anchor {
+	position: relative;
+	border-radius: var(--radius-chip);
+	color: inherit;
+	outline: none;
+	text-decoration: none;
+}
+.docs-anchor::before {
+	position: absolute;
+	top: 0;
+	left: -20px;
+	width: 20px;
+	color: var(--text-faint);
+	content: '#';
+	font-weight: 500;
+	opacity: 0;
+	transform: translateX(4px);
+	transition:
+		opacity var(--dur-hover) ease-out,
+		transform var(--dur-swap) var(--ease-out);
+}
+.docs-anchor:hover::before,
+.docs-anchor:focus-visible::before {
+	opacity: 1;
+	transform: none;
+}
+.docs-anchor:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+/* The section a link lands on lights up for a moment, so the eye finds where it arrived. */
+.docs-section:target > .docs-heading {
+	animation: docs-arrive 1.6s var(--ease-out);
+}
+@keyframes docs-arrive {
+	from {
+		background-color: color-mix(in oklab, var(--accent-text) 18%, transparent);
+		box-shadow: 0 0 0 6px color-mix(in oklab, var(--accent-text) 18%, transparent);
+	}
+	to {
+		background-color: transparent;
+		box-shadow: 0 0 0 6px transparent;
+	}
 }
 
 /* ───────── Prose ───────── */
@@ -153,8 +239,47 @@
 .docs-prose :where(li):last-child {
 	margin-bottom: 0;
 }
-.docs-prose :where(ol > li)::marker {
+/* Numbered steps: each number in a small ring, joined to the next by a hairline down the left. */
+.docs-prose ol {
+	padding-left: 0;
+	counter-reset: docs-step;
+	list-style: none;
+}
+.docs-prose ol > li {
+	position: relative;
+	margin: 0;
+	padding: 0 0 14px 34px;
+	counter-increment: docs-step;
+}
+.docs-prose ol > li:last-child {
+	padding-bottom: 0;
+}
+.docs-prose ol > li::before {
+	position: absolute;
+	top: 1px;
+	left: 0;
+	display: grid;
+	width: 22px;
+	height: 22px;
+	place-items: center;
+	border-radius: 50%;
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+	color: var(--text-primary);
+	content: counter(docs-step);
+	font-size: 11.5px;
 	font-variant-numeric: tabular-nums;
+	font-weight: 500;
+	line-height: 1;
+}
+.docs-prose ol > li:not(:last-child)::after {
+	position: absolute;
+	top: 27px;
+	bottom: 3px;
+	left: 11px;
+	width: 1px;
+	background: var(--line-card);
+	content: '';
 }
 
 /* A note: a rule on the left, no box and no icon. */
@@ -257,11 +382,12 @@
 }
 
 /* ───────── Pager ───────── */
+/* Two cards, the way back and the way on; hovered, a card lifts a shade and its arrow leans the way it goes. */
 .docs-pager {
-	display: flex;
-	justify-content: space-between;
-	gap: 16px;
-	padding-top: 20px;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+	padding-top: 24px;
 	border-top: 1px solid var(--line-subtle);
 }
 .docs-pager-link {
@@ -269,12 +395,21 @@
 	min-width: 0;
 	flex-direction: column;
 	gap: 2px;
-	border-radius: var(--radius-control);
+	padding: 12px 14px;
+	border-radius: var(--radius-card);
+	box-shadow: 0 0 0 1px var(--line-card);
 	outline: none;
+	transition:
+		background-color var(--dur-hover) ease-out,
+		box-shadow var(--dur-hover) ease-out;
+}
+.docs-pager-link:hover {
+	background-color: var(--bg-raised);
+	box-shadow: 0 0 0 1px var(--line-strong);
 }
 .docs-pager-link[data-side='next'] {
+	grid-column: 2;
 	align-items: flex-end;
-	margin-left: auto;
 }
 .docs-pager-link:focus-visible {
 	box-shadow: var(--focus-ring);
@@ -298,10 +433,16 @@
 	height: 14px;
 	flex-shrink: 0;
 	color: var(--text-muted);
-	transition: color var(--dur-hover) ease-out;
+	transition:
+		color var(--dur-hover) ease-out,
+		transform var(--dur-swap) var(--ease-out);
 }
 .docs-pager-link:hover svg {
 	color: var(--text-primary);
+	transform: translateX(-3px);
+}
+.docs-pager-link[data-side='next']:hover svg {
+	transform: translateX(3px);
 }
 
 /* Narrow screens: the bar holds the section menu and one copy icon. */

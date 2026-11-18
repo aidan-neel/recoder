@@ -1,9 +1,19 @@
 'use client';
 
-import { Button, Card, DURATION, EASE_OUT, RowButton, SkeletonBox, StatusNotice, useMotionVariants } from '@recoder/ui';
+import {
+	Button,
+	Card,
+	DURATION,
+	EASE_OUT,
+	RowButton,
+	SkeletonBox,
+	StatusNotice,
+	useEntrance,
+	useMotionVariants,
+	type EntranceProps
+} from '@recoder/ui';
 import { PlusIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
-import { useState, type CSSProperties } from 'react';
 
 import type { FleetScope } from '@/lib/repo/fleet';
 import { useReposPage, type ReposPageView } from '@/lib/repo/use-repos-page';
@@ -21,11 +31,6 @@ const TILE: Variants = {
 	gone: { opacity: 0, scale: 0.97, transition: { duration: DURATION.menuOut, ease: EASE_OUT } },
 	shown: { opacity: 1, scale: 1, transition: { duration: DURATION.disclose, ease: EASE_OUT } }
 };
-
-/** A tile's place in the first reveal, which sets how long it waits before it rises in. */
-function enterStyle(index: number): CSSProperties {
-	return { '--enter-index': index } as CSSProperties;
-}
 
 /** How many placeholder tiles stand in while the tracked repositories load. */
 const LOADING_TILES = 3;
@@ -85,9 +90,8 @@ function FleetHead({ view }: { view: ReposPageView }) {
 
 interface FleetGridProps {
 	view: ReposPageView;
-	/** Whether the tiles rise in: only the page's first grid does, and it keeps doing so until its entrance ends. */
-	firstReveal: boolean;
-	onRevealed: () => void;
+	/** The tiles' entrance, which only the page's first grid plays. */
+	entrance: EntranceProps;
 }
 
 /**
@@ -95,19 +99,17 @@ interface FleetGridProps {
  * stopped fades before the others close the gap, one that is added or brought back by Undo fades in, and another
  * scope or other filter text swaps the grid at once, like any list.
  */
-function FleetGrid({ view, firstReveal, onRevealed }: FleetGridProps) {
+function FleetGrid({ view, entrance }: FleetGridProps) {
 	const variants = useMotionVariants(TILE);
-	const [entering] = useState(firstReveal);
 	const unfiltered = view.scope === 'all' && view.query.trim() === '';
 
 	return (
-		<div className="fleet-grid" data-entering={entering || undefined} onAnimationEnd={onRevealed}>
+		<div className="fleet-grid" {...entrance}>
 			<AnimatePresence initial={false}>
-				{view.tiles.map((tile, index) => (
+				{view.tiles.map((tile) => (
 					<motion.div
 						key={tile.id}
 						className="fleet-cell"
-						style={enterStyle(index)}
 						variants={variants}
 						initial="gone"
 						animate="shown"
@@ -117,18 +119,14 @@ function FleetGrid({ view, firstReveal, onRevealed }: FleetGridProps) {
 					</motion.div>
 				))}
 			</AnimatePresence>
-			{unfiltered ? (
-				<div className="fleet-cell" style={enterStyle(view.tiles.length)}>
-					<ConnectTile onConnect={() => view.setAdding(true)} />
-				</div>
-			) : null}
+			{unfiltered ? <ConnectTile onConnect={() => view.setAdding(true)} /> : null}
 		</div>
 	);
 }
 
 /** The scopes over the tiles, or what the scope and the filter text leave to say with no tile to show. */
 function Fleet({ view }: { view: ReposPageView }) {
-	const [revealed, setRevealed] = useState(false);
+	const entrance = useEntrance('stagger');
 	const query = view.query.trim();
 	const nothing = view.tiles.length === 0 && (view.scope !== 'all' || query !== '');
 
@@ -140,12 +138,7 @@ function Fleet({ view }: { view: ReposPageView }) {
 					<StatusNotice variant="section" heading="h2" title={emptyTitle(view.scope, query)} />
 				</div>
 			) : (
-				<FleetGrid
-					key={`${view.scope}\n${view.query}`}
-					view={view}
-					firstReveal={!revealed}
-					onRevealed={() => setRevealed(true)}
-				/>
+				<FleetGrid key={`${view.scope}\n${view.query}`} view={view} entrance={entrance} />
 			)}
 		</>
 	);

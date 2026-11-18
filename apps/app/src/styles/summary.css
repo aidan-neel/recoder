@@ -1,8 +1,5 @@
-/* ───────── Summary: the reading on the left, the Ask pane on the right ───────── */
-/*
- * Each side scrolls on its own. The reading starts on the header's text edge, and every block in it keeps one
- * 760px measure, so the banner, the lede, the walkthrough and the comment field all end on the same edge.
- */
+/* ───────── Summary: one reading across the page ───────── */
+/* The reading runs on the header's gutters, on both sides, as the Review tab's does. */
 .summary {
 	display: flex;
 	min-width: 0;
@@ -16,10 +13,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 32px;
-	padding: 24px 32px 48px var(--page-gutter);
-}
-.summary-column > * {
-	max-width: 760px;
+	padding: 24px var(--page-gutter) 48px;
 }
 
 /* The overview: the review's account as the lede, its findings as badges, the author's words as a quote. */
@@ -241,13 +235,4 @@
 .avatar[data-recoder] {
 	background: var(--primary);
 	color: var(--on-primary);
-}
-
-/* With a file open beside the conversation, the conversation takes the reading room and the reading steps aside. */
-.file-host[data-open] .summary > .reading {
-	display: none;
-}
-.file-host[data-open] .ask-pane {
-	width: 100%;
-	border-left-width: 0;
 }

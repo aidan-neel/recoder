@@ -15,10 +15,6 @@
 .reading-column[data-width='narrow'] {
 	max-width: 800px;
 }
-/* The Review tab reads in one 800px column on the header's gutter, so a bug's controls end where its evidence does. */
-.reading-column[data-width='bugs'] {
-	max-width: calc(800px + 2 * var(--page-gutter));
-}
 
 .bug-item {
 	border-bottom: 1px solid var(--line-subtle);

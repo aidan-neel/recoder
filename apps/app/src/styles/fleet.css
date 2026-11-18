@@ -31,7 +31,10 @@
 	width: 200px;
 }
 
+/* The tiles rise 6px as they arrive, a little further than a row, since they stand taller. */
 .fleet-grid {
+	--enter-rise: 6px;
+
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 	gap: 16px;
@@ -39,28 +42,6 @@
 .fleet-cell {
 	display: grid;
 	min-width: 0;
-}
-/* On the first reveal the tiles rise in 40ms apart; past the eighth they come in together, so the wait stays short. */
-.fleet-grid[data-entering] .fleet-cell {
-	animation: fleet-enter var(--dur-disclose) var(--ease-out) backwards;
-	animation-delay: calc(min(var(--enter-index), 8) * 40ms);
-}
-@keyframes fleet-enter {
-	from {
-		opacity: 0;
-		transform: translateY(6px);
-	}
-}
-@media (prefers-reduced-motion: reduce) {
-	.fleet-grid[data-entering] .fleet-cell {
-		animation-name: fleet-fade;
-		animation-delay: 0ms;
-	}
-}
-@keyframes fleet-fade {
-	from {
-		opacity: 0;
-	}
 }
 
 /* A tile: its name, its figures, a month of reviews, and the pull request to open next under a hairline. */

@@ -4,7 +4,7 @@ import { ForgeMark, HoverList, NavPill, RowButton } from '@recoder/ui';
 import { ArrowUpRightIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 
 import type { NavPage } from '~/lib/docs';
 import { REPO_URL } from '~/lib/site';
@@ -43,12 +43,59 @@ function PageRow({ page, active }: { page: NavPage; active: boolean }) {
 	);
 }
 
-/** The open page's sections on a track under its row. The one the reader is in is marked as the page scrolls. */
+/**
+ * Keeps the track's marker on the section the reader is in, hidden above the
+ * first one. It lands in place on the first paint and slides from then on;
+ * it moves again when the track reflows (a font arriving, a width change).
+ */
+function useTrackMarker(current: string | null) {
+	const track = useRef<HTMLUListElement>(null);
+	const marker = useRef<HTMLLIElement>(null);
+
+	useLayoutEffect(() => {
+		const list = track.current;
+		const bar = marker.current;
+
+		if (!list || !bar) return;
+
+		/** Puts the marker over the current link, or fades it out when there is none. */
+		function place(): void {
+			if (!list || !bar) return;
+
+			const link = list.querySelector<HTMLElement>('[aria-current]');
+
+			bar.style.opacity = link ? '1' : '0';
+
+			if (!link) return;
+
+			bar.style.transform = `translateY(${link.offsetTop}px)`;
+			bar.style.height = `${link.offsetHeight}px`;
+		}
+
+		place();
+
+		const frame = requestAnimationFrame(() => bar.setAttribute('data-placed', ''));
+		const observer = new ResizeObserver(place);
+
+		observer.observe(list);
+
+		return () => {
+			cancelAnimationFrame(frame);
+			observer.disconnect();
+		};
+	}, [current]);
+
+	return { track, marker };
+}
+
+/** The open page's sections on a track under its row. A marker slides to the one the reader is in as the page scrolls. */
 function SectionList({ sections }: { sections: NavPage['sections'] }) {
 	const current = useCurrentSection(sections.map((section) => section.id));
+	const { track, marker } = useTrackMarker(current);
 
 	return (
-		<ul className="site-sections">
+		<ul ref={track} className="site-sections">
+			<li ref={marker} className="site-section-marker" role="presentation" aria-hidden />
 			{sections.map((section) => (
 				<li key={section.id}>
 					<a

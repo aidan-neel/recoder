@@ -1,45 +1,4 @@
-/* ───────── Ask: the pane beside the reading, the thread, and its composer ───────── */
-/* A 20px gutter inside the pane, so the composer's right edge meets the header's. */
-.ask-pane {
-	display: flex;
-	width: clamp(320px, 34%, 460px);
-	flex-shrink: 0;
-	flex-direction: column;
-	border-left: 1px solid var(--line-subtle);
-}
-.ask-pane-head {
-	display: flex;
-	height: 44px;
-	flex-shrink: 0;
-	align-items: center;
-	padding: 0 20px;
-	border-bottom: 1px solid var(--line-subtle);
-}
-.ask-pane-title {
-	color: var(--text-primary);
-	font-size: var(--font-size-label);
-	font-weight: 500;
-	line-height: 18px;
-}
-.ask-pane-scroll {
-	min-height: 0;
-	flex: 1;
-	overflow-y: auto;
-}
-/* The thread sits on the composer: short, it starts at the foot; long, it scrolls up from there. */
-.ask-pane-thread {
-	display: flex;
-	min-height: 100%;
-	flex-direction: column;
-	justify-content: flex-end;
-	gap: 16px;
-	padding: 16px 20px 8px;
-}
-.ask-pane-foot {
-	flex-shrink: 0;
-	padding: 8px 20px 20px;
-}
-
+/* ───────── Ask: a thread about a bug, and its composer ───────── */
 .ask-thread {
 	display: flex;
 	flex-direction: column;

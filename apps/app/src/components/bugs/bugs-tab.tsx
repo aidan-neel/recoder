@@ -134,7 +134,7 @@ export function BugsTab() {
 
 	return (
 		<div className="reading">
-			<div className="reading-column" data-width="bugs">
+			<div className="reading-column">
 				{isLive(run.phase) ? (
 					<>
 						<RunSteps run={run} />

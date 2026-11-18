@@ -1,8 +1,8 @@
 /* ───────── Page ───────── */
 /*
- * The site wears the app's skin, which holds the app in one frame that never
- * scrolls. The site's page scrolls: the sidebar stays put on the chrome, and
- * the page's canvas card moves beside it.
+ * The site wears the app's skin and its inset frame: the sidebar sits on the
+ * chrome and the page's canvas card stays put beside it, 8px in from the
+ * window, while the page scrolls inside the card. A phone scrolls the window.
  */
 .app-skin body {
 	overflow: visible;
@@ -15,7 +15,7 @@ body {
 }
 .site-shell {
 	display: flex;
-	min-height: 100dvh;
+	height: 100dvh;
 }
 [data-ui='card'].site-card {
 	display: flex;
@@ -23,6 +23,8 @@ body {
 	flex: 1;
 	flex-direction: column;
 	margin: 8px 8px 8px 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
 	background-color: var(--bg-canvas);
 	box-shadow: 0 0 0 1px var(--line-subtle);
 }
@@ -36,16 +38,13 @@ body {
 }
 
 /* ───────── Sidebar ───────── */
-/* The app's sidebar: its width, its lanes and its rows, fixed in place while the page scrolls. */
+/* The app's sidebar: its width, its lanes and its rows, on the chrome beside the card. */
 .site-sidebar {
-	position: sticky;
-	top: 0;
 	display: flex;
 	width: var(--sidebar-width);
-	height: 100dvh;
+	height: 100%;
 	flex: none;
 	flex-direction: column;
-	align-self: flex-start;
 	padding: 0 10px 10px;
 }
 .site-wordmark {
@@ -105,18 +104,32 @@ body {
 	padding: 0 8px 6px;
 }
 
-/* The open page's sections hang on a track under its row; the one in view takes the track's bright stretch. */
+/* The open page's sections hang on a track under its row; a bright stretch of it slides to the one in view. */
 .site-sections {
+	position: relative;
 	margin: 3px 0 5px 14px;
 	border-left: 1px solid var(--line-card);
+}
+.site-section-marker {
+	position: absolute;
+	top: 0;
+	left: -1px;
+	width: 1px;
+	background: var(--text-primary);
+	opacity: 0;
+	pointer-events: none;
+}
+.site-section-marker[data-placed] {
+	transition:
+		transform 260ms var(--ease-out),
+		height 260ms var(--ease-out),
+		opacity var(--dur-hover) ease-out;
 }
 .site-section {
 	display: flex;
 	min-height: 26px;
 	align-items: center;
-	margin-left: -1px;
 	padding: 3px 8px 3px 12px;
-	border-left: 1px solid transparent;
 	color: var(--text-muted);
 	font-size: 12.5px;
 	line-height: 16px;
@@ -127,7 +140,6 @@ body {
 	color: var(--text-primary);
 }
 .site-section[aria-current] {
-	border-left-color: var(--text-primary);
 	color: var(--text-primary);
 	font-weight: 500;
 }
@@ -161,13 +173,15 @@ body {
  */
 @media (max-width: 900px) {
 	.site-shell {
+		height: auto;
+		min-height: 100dvh;
 		flex-direction: column;
 	}
 	[data-ui='card'].site-card {
 		margin: 0 8px 8px;
+		overflow: visible;
 	}
 	.site-sidebar {
-		position: static;
 		display: grid;
 		width: 100%;
 		height: auto;
