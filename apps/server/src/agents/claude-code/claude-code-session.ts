@@ -1,4 +1,4 @@
-import { readdirSync, rmSync } from 'node:fs';
+import { readdirSync, realpathSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ImageUpload } from '@recoder/shared';
 import { addedTurns, promptText, type ChatConversation, type HeldTranscript } from '../../models/llm/conversation';
@@ -39,7 +39,8 @@ export interface SessionRequest {
 
 /**
  * The transcripts the CLI saves for the sessions Recoder starts. Each lives in the CLI's config dir, under a
- * folder named for the working directory: every non-alphanumeric character of the path becomes `-`. Nothing but
+ * folder named for the working directory as the CLI sees it, with symlinks resolved (macOS temp dirs sit behind
+ * one): every non-alphanumeric character of the path becomes `-`. Nothing but
  * Recoder runs the CLI in that directory, so every file in the folder is Recoder's. The files hold the review's
  * prompts, and a fork copies its parent's whole transcript, so each is deleted once no call will resume it.
  */
@@ -49,7 +50,7 @@ export class SessionFiles {
 
 	constructor(env: Env, cwd: string) {
 		this.config = claudeConfigDir(env);
-		this.folder = join(this.config, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'));
+		this.folder = join(this.config, 'projects', realpathSync(cwd).replace(/[^a-zA-Z0-9]/g, '-'));
 	}
 
 	/** Best effort: delete one session's transcript and the file history the CLI keeps beside it. */

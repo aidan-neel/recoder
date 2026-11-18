@@ -194,7 +194,7 @@ test('a second look that starts after the review deadline has passed still runs 
 	process.env.RECODER_RESIDUAL = '1';
 
 	try {
-		stubReview(1200);
+		stubReview(policy.analysisDeadlineMs + 50);
 
 		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 });
 

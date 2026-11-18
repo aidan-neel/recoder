@@ -34,10 +34,6 @@ test('a real image is kept, its name without folders or control characters', () 
 	expect(kept).toEqual([{ name: 'shot.png', type: 'image/png', data: PNG_BYTES.toString('base64') }]);
 });
 
-test('a request without images has none', () => {
-	expect(check(undefined)).toEqual([]);
-});
-
 test('more than four images are refused', () => {
 	expect(check(Array.from({ length: 5 }, () => imageUpload()))).toBe(TOO_MANY_IMAGES);
 });

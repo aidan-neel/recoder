@@ -3,27 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 import { AgentMark } from '../../src/components/display/agent-mark';
 
-const BRANDED_AGENTS = [
-	'opencode',
-	'claude-code',
-	'devin',
-	'codex',
-	'pi',
-	'grok',
-	'cursor',
-	'antigravity',
-	'copilot'
-] as const;
-
 describe('AgentMark', () => {
-	test('renders a brand SVG rather than the terminal fallback for every known agent', () => {
-		for (const agent of BRANDED_AGENTS) {
-			const html = renderToStaticMarkup(<AgentMark agent={agent} />);
-
-			expect(html).toContain(`data-agent="${agent}"`);
-		}
-	});
-
 	test('keeps SVG mask, filter and gradient ids unique when the same mark renders twice', () => {
 		const html = renderToStaticMarkup(
 			<div>

@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, jest, test } from 'bun:test';
 import { applyProgressMessage, emptyReviewProgress, taskSummary, type Review } from '@recoder/shared';
 import { app } from '../../../src/app';
 import { db, reviewProgress } from '../../../src/store';
@@ -12,6 +12,7 @@ import {
 	trackReviewTask
 } from '../../../src/review/session/events';
 import { chatCompletion, resetLlmLimiter } from '../../../src/models/llm';
+import { EVENT_HEARTBEAT_MS } from '../../../src/routes/reviews/event-payload';
 import { testReview } from '../../helpers/review';
 
 /** Bun's fetch keeps the socket open after `reader.cancel()`, so aborting is what actually disconnects. */
@@ -202,6 +203,8 @@ test('a real HTTP subscription survives idle periods and still delivers review a
 	const controller = new AbortController();
 	let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
+	jest.useFakeTimers();
+
 	try {
 		const response = await fetch(new URL(`/api/reviews/${id}/events`, server.url), {
 			signal: AbortSignal.any([controller.signal, AbortSignal.timeout(18000)])
@@ -217,9 +220,18 @@ test('a real HTTP subscription survives idle periods and still delivers review a
 					.trim()
 			);
 
+		/** The next event once a heartbeat interval passes with nothing sent, on a fake clock instead of waited out. */
+		const readAfterIdle = () => {
+			const next = read();
+
+			jest.advanceTimersByTime(EVENT_HEARTBEAT_MS);
+
+			return next;
+		};
+
 		expect((await read()).type).toBe('snapshot');
-		expect(await read()).toMatchObject({ type: 'heartbeat', status: 'running' });
-		expect(await read()).toMatchObject({ type: 'heartbeat', status: 'running' });
+		expect(await readAfterIdle()).toMatchObject({ type: 'heartbeat', status: 'running' });
+		expect(await readAfterIdle()).toMatchObject({ type: 'heartbeat', status: 'running' });
 		expect(listenerCount(id)).toBe(1);
 		await db.reviews.set({ ...review, status: 'passed' });
 		emitReviewEvent(id, { type: 'done', message: 'Complete' });
@@ -242,9 +254,11 @@ test('a real HTTP subscription survives idle periods and still delivers review a
 		});
 
 		expect((await read()).data.chatMessage.text).toBe('Still connected.');
+		jest.useRealTimers();
 		await disconnect(controller);
 		expect(listenerCount(id)).toBe(0);
 	} finally {
+		jest.useRealTimers();
 		controller.abort();
 		await reader?.cancel().catch(() => {});
 		server.stop(true);

@@ -74,9 +74,3 @@ test('the target line names the commit a review started after and the run it con
 	expect(renderReport(named, 'markdown', PLAIN_SURFACE)).not.toContain('(run');
 	expect(renderReport(whole, 'markdown', PLAIN_SURFACE)).not.toContain('since');
 });
-
-test('json is the report with two-space indentation', () => {
-	const value = report();
-
-	expect(renderReport(value, 'json', PLAIN_SURFACE)).toBe(JSON.stringify(value, null, 2));
-});

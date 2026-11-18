@@ -1,7 +1,7 @@
 import { afterEach } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { resetLlmLimiter } from '../../../src/models/llm';
 import type { AdaptiveReviewInput } from '../../../src/review/pipeline/harness/types';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
@@ -253,37 +253,56 @@ export function stubFindings(findings: unknown[], onVerifier?: () => void): void
 	}) as unknown as typeof fetch;
 }
 
+/** A `git fast-import` data command holding `text`. */
+function importData(text: string): string {
+	return `data ${Buffer.byteLength(text)}\n${text}\n`;
+}
+
+/** A `git fast-import` commit of `files` on `main`, on top of the commit the same stream made before it. */
+function importCommit(message: string, files: Record<string, string>): string {
+	const committer = `committer t <t@t> ${Math.floor(Date.now() / 1000)} +0000`;
+	const changes = Object.entries(files).map(([path, content]) => `M 100644 inline ${path}\n${importData(content)}`);
+
+	return `commit refs/heads/main\n${committer}\n${importData(message)}${changes.join('')}\n`;
+}
+
+/** Feeds `stream` to `git fast-import` in `root`; throws with stderr when git fails. */
+function fastImport(root: string, stream: string): void {
+	const result = Bun.spawnSync(['git', 'fast-import', '--quiet'], {
+		cwd: root,
+		stdin: Buffer.from(stream),
+		stdout: 'pipe',
+		stderr: 'pipe'
+	});
+
+	if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+}
+
 /**
  * A git repo whose base commit has `src/a.ts` = "old" and whose head commit
- * changes it to "new", with extra files written before each commit.
+ * changes it to "new", with extra files in each commit. Both commits come from
+ * one `git fast-import`: four git processes a repo, where staging and
+ * committing each commit takes nine. The obligation tests alone make over sixty
+ * repos, and `obligations/triggers.test.ts` ran 8.5s with nine and 6.5s with four.
  */
 export async function twoCommitRepo(
 	root: string,
 	files: { base?: Record<string, string>; head?: Record<string, string> } = {}
 ): Promise<{ targetSha: string; headSha: string }> {
-	const run = (args: string[]) => git(root, args);
+	git(root, ['init', '-q', '-b', 'main']);
+	await appendFile(join(root, '.git/config'), '[user]\n\tname = Test\n\temail = test@example.com\n');
 
-	const write = async (entries: Record<string, string>) => {
-		for (const [path, content] of Object.entries(entries)) {
-			await mkdir(dirname(join(root, path)), { recursive: true });
-			await writeFile(join(root, path), content);
-		}
-	};
+	fastImport(
+		root,
+		importCommit('base', { 'src/a.ts': 'old\n', ...files.base }) +
+			importCommit('head', { 'src/a.ts': 'new\n', ...files.head })
+	);
 
-	run(['init', '-q', '-b', 'main']);
-	run(['config', 'user.name', 'Test']);
-	run(['config', 'user.email', 'test@example.com']);
-	await write({ 'src/a.ts': 'old\n', ...files.base });
-	run(['add', '.']);
-	run(['commit', '-q', '-m', 'base']);
+	git(root, ['reset', '-q', '--hard']);
 
-	const targetSha = run(['rev-parse', 'HEAD']);
+	const [targetSha, headSha] = git(root, ['rev-parse', 'HEAD~1', 'HEAD']).split('\n');
 
-	await write({ 'src/a.ts': 'new\n', ...files.head });
-	run(['add', '.']);
-	run(['commit', '-q', '-m', 'head']);
-
-	return { targetSha, headSha: run(['rev-parse', 'HEAD']) };
+	return { targetSha, headSha };
 }
 
 /** A base whose test script passes, so the review's baseline checks show its code can run and bugs are verified. */

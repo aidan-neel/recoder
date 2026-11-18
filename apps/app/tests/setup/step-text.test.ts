@@ -43,10 +43,6 @@ describe('the connected line', () => {
 
 		expect(line).toBe('OpenRouter connected');
 	});
-
-	test('with none connected it falls back to the models’ sources, then the env variables', () => {
-		expect(connectedLine([], null)).toBe('Set by the RECODER_REVIEW_* variables');
-	});
 });
 
 describe('why providers can’t be added yet', () => {

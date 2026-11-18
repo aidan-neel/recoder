@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,10 +7,17 @@ import { env } from '../../src/env';
 import { locateRepo, refspecFor } from '../../src/forge/providers';
 import { execUnavailableReason, runSandboxed, sandboxLayout } from '../../src/sandbox/exec-sandbox';
 import { prepareSandbox } from '../../src/sandbox/sandbox';
-import { localForgeFixture } from '../helpers/local-forge';
+import { localForgeFixture, type LocalForgeFixture } from '../helpers/local-forge';
 
 const available = (await execUnavailableReason()) === null;
 const originalWorkDir = env.RECODER_WORKDIR;
+
+/** The repository every test clones from; each test has a work dir of its own, so none finds another's shared copy. */
+let origin: LocalForgeFixture;
+
+beforeAll(async () => {
+	origin = await localForgeFixture();
+});
 
 beforeEach(async () => {
 	env.RECODER_WORKDIR = await mkdtemp(join(tmpdir(), 'recoder-shared-git-'));
@@ -22,7 +29,7 @@ afterEach(() => {
 
 /** Two checkouts of the same pull request, the way two reviews of it are prepared. */
 async function twoCheckouts() {
-	const { repo, pull7Head } = await localForgeFixture();
+	const { repo, pull7Head } = origin;
 	const { provider, slug } = locateRepo(repo.url);
 
 	const prepare = () =>
@@ -74,7 +81,7 @@ test.skipIf(!available)(
 );
 
 test('a repo whose shared copy cannot be made is cloned on its own', async () => {
-	const { repo, pull7Head } = await localForgeFixture();
+	const { repo, pull7Head } = origin;
 	const { provider, slug } = locateRepo(repo.url);
 	const gitDir = join(env.RECODER_WORKDIR, 'shared', 'git');
 

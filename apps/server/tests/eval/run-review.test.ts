@@ -21,7 +21,16 @@ const STORED = {
 	}))
 };
 
-/** A Recoder server that takes 200ms to answer a start request, and serves stored metrics for `review-stored` only. */
+/** Settled once the fake server has a start request, so a test can act while the request is still pending. */
+const startReceived = Promise.withResolvers<void>();
+
+/** Settled by a test to let the fake server answer the start requests it holds. */
+const startAnswered = Promise.withResolvers<void>();
+
+/**
+ * A Recoder server that holds a start request until `startAnswered` settles, and serves stored metrics for
+ * `review-stored` only.
+ */
 const server = Bun.serve({
 	port: 0,
 	async fetch(request) {
@@ -31,8 +40,9 @@ const server = Bun.serve({
 			const id = `review-${started.length + 1}`;
 
 			started.push(id);
+			startReceived.resolve();
 
-			await Bun.sleep(200);
+			await startAnswered.promise;
 
 			return Response.json({ id, status: 'queued' });
 		}
@@ -61,17 +71,26 @@ test('a stop that arrives while a start request is pending cancels that review o
 	const target = { base, timeoutMs: 60_000, baselineCache: true, inPlace: false };
 
 	void runReview(target, { repoId: 'repo', pr: 1, index: 1, label: 'pr 1' });
-	await Bun.sleep(50);
+	await startReceived.promise;
 	expect(cancelled).toEqual([]);
 
-	await stopReviews(base);
+	const stopped = stopReviews(base);
+
+	startAnswered.resolve();
+	await stopped;
 
 	expect(started).toHaveLength(1);
 	expect(cancelled).toEqual(['review-1']);
 
-	void runReview(target, { repoId: 'repo', pr: 2, index: 1, label: 'pr 2' });
-	await Bun.sleep(300);
-	expect(started).toHaveLength(1);
+	let startsAfterStop = 0;
+
+	void runReview(target, { repoId: 'repo', pr: 2, index: 1, label: 'pr 2' }, () => {
+		startsAfterStop++;
+
+		return new Promise<never>(() => undefined);
+	});
+
+	expect(startsAfterStop).toBe(0);
 });
 
 test("a finished review's reviewer is read from the server's stored metrics; a server without the route records none", async () => {

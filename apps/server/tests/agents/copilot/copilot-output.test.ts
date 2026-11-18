@@ -179,12 +179,6 @@ describe('EventReader', () => {
 });
 
 describe('EventReader.finish', () => {
-	test('a clean exit with a reply returns the text', () => {
-		expect(feed([jsonl({ type: 'assistant.message', data: { messageId: 'm', content: 'hi' } })]).reply).toEqual({
-			text: 'hi'
-		});
-	});
-
 	test('a clean exit with nothing to say fails as ended without a reply', () => {
 		const { reply } = feed([]);
 

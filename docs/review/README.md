@@ -51,7 +51,7 @@ These come from `AGENTS.md` and from conventions visible in the code.
 - Add a stage test next to the stage you change, in `apps/server/tests/review/pipeline/`. Name the `stoppedAt` reason a new drop records, and keep `DropStage` in `packages/shared/src/review.ts` in step.
 - Use bun only.
 
-Checks before you finish: `bun run --filter @recoder/server check`, `test` and `lint`, then `bun run deadcode` from the root.
+Checks while you work: `bun run --filter @recoder/server check`, `test` and `lint`. Before you finish: `bun run verify` from the root, which runs those for every package you touched plus `deadcode`, and is what CI runs.
 
 ## Do not
 

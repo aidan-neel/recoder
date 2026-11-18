@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { chmod, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -24,26 +24,30 @@ echo "checked $(date +%s%N) $*"
 exit \${CHECKER_EXIT:-0}
 `;
 
+/**
+ * One repo for the whole file: making it and installing into it costs each test a quarter of a second. A test's
+ * reviews are its own checkouts, named after `testNumber`, and every test starts with an empty check cache.
+ */
 let fx: SharedInstallFixture | null = null;
+let testNumber = 0;
 
 /** Sandbox work slows each check down, and a loaded machine more still, past the runner's 5s default. */
 const SANDBOX_TIMEOUT_MS = 60_000;
 
 beforeEach(async () => {
+	testNumber++;
 	await rm(baselineCacheDir(), { recursive: true, force: true });
 });
 
-afterEach(async () => {
+afterAll(async () => {
 	if (fx) await removeOverlayDirs(fx.base);
-
-	fx = null;
 });
 
 /** A review of the fixture repo that has installed, with a `checker` command on PATH. */
 async function review(name: string, edit?: (checkout: string) => Promise<void> | void) {
 	fx ??= await sharedInstallFixture();
 
-	const made = await fx.review(name, edit);
+	const made = await fx.review(`test${testNumber}-${name}`, edit);
 
 	await writeFile(join(fx.base, 'bin/checker'), CHECKER);
 	await chmod(join(fx.base, 'bin/checker'), 0o755);

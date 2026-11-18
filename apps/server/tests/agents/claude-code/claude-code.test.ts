@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TokenUsage } from '@recoder/shared';
 import { ClaudeCodeAgent } from '../../../src/agents/claude-code/claude-code';
@@ -51,11 +51,21 @@ describe('ClaudeCodeAgent.detect', () => {
 });
 
 /**
- * A `claude` that adds a line to `auth-calls` beside itself and sleeps `FAKE_AUTH_DELAY` seconds before `auth
- * status`, then runs the next `claude` on PATH, the fake from {@link fakeClaude}, for everything else.
+ * A `claude` that adds a line to `auth-calls` beside itself before `auth status`, sleeps `FAKE_AUTH_DELAY` seconds
+ * and, when `FAKE_AUTH_HOLD` names a file, waits until that file exists (ten seconds at most, so a failed test
+ * leaves nothing running). It then runs the next `claude` on PATH, the fake from {@link fakeClaude}, as it does
+ * for everything else.
  */
 const SLOW_AUTH = `#!/bin/sh
-if [ "$1" = "auth" ]; then echo >> "$(dirname "$0")/auth-calls"; sleep "$FAKE_AUTH_DELAY"; fi
+if [ "$1" = "auth" ]; then
+	echo >> "$(dirname "$0")/auth-calls"
+	sleep "$FAKE_AUTH_DELAY"
+	waits=0
+	while [ -n "$FAKE_AUTH_HOLD" ] && [ ! -e "$FAKE_AUTH_HOLD" ] && [ "$waits" -lt 400 ]; do
+		sleep 0.025
+		waits=$((waits + 1))
+	done
+fi
 PATH="\${PATH#*:}" exec claude "$@"
 `;
 
@@ -64,18 +74,33 @@ const slowAuthDirs: string[] = [];
 
 afterAll(() => Promise.all(slowAuthDirs.map((dir) => rm(dir, { recursive: true, force: true }))));
 
+/** An agent on the slow-auth fake, with what a test steers and watches it through. */
+interface SlowAuthAgent {
+	agent: ClaudeCodeAgent;
+	env: Record<string, string>;
+	/** The file the fake adds a line to for each `auth status` call it starts. */
+	calls: string;
+	/** A file that is not there: an `auth status` started with `FAKE_AUTH_HOLD` set to it waits for {@link letGo}. */
+	hold: string;
+}
+
 /**
  * An agent running the slow-auth fake, and the environment it holds: the agent reads it at each spawn, so a test
- * changes `FAKE_AUTH_DELAY` and `FAKE_CLAUDE_SIGNED_IN` on it between checks.
+ * changes `FAKE_AUTH_DELAY`, `FAKE_AUTH_HOLD` and `FAKE_CLAUDE_SIGNED_IN` on it between checks.
  */
-async function slowAuthAgent(): Promise<{ agent: ClaudeCodeAgent; env: Record<string, string>; calls: string }> {
-	const fake = await fakeClaude({ FAKE_AUTH_DELAY: '0' });
+async function slowAuthAgent(): Promise<SlowAuthAgent> {
+	const fake = await fakeClaude({ FAKE_AUTH_DELAY: '0', FAKE_AUTH_HOLD: '' });
 	const [slowDir = ''] = (await fakeBin('claude', SLOW_AUTH)).env.PATH.split(':', 1);
 	const env = { ...fake, PATH: `${slowDir}:${fake.PATH}` };
 
 	slowAuthDirs.push(...env.PATH.split(':', 2));
 
-	return { agent: new ClaudeCodeAgent(env), env, calls: join(slowDir, 'auth-calls') };
+	return { agent: new ClaudeCodeAgent(env), env, calls: join(slowDir, 'auth-calls'), hold: join(slowDir, 'hold') };
+}
+
+/** Lets every `auth status` call waiting on `hold` go on. */
+async function letGo(hold: string): Promise<void> {
+	await writeFile(hold, '');
 }
 
 /** Sets how long the fake's `auth status` takes and whether it finds the CLI signed in. */
@@ -100,17 +125,20 @@ async function settledSignIn(agent: ClaudeCodeAgent, signedIn: boolean): Promise
 
 describe('ClaudeCodeAgent sign-in check', () => {
 	test('a slow check answers with the last sign-in, then the status takes what the CLI found', async () => {
-		const { agent, env } = await slowAuthAgent();
+		const { agent, env, hold } = await slowAuthAgent();
 
 		setAuth(env, 0, true);
 		await agent.detect();
-		setAuth(env, 2.5, false);
+		setAuth(env, 0, false);
+		env.FAKE_AUTH_HOLD = hold;
 
 		const started = Date.now();
 		const answered = await agent.detect(true);
 
 		expect(Date.now() - started).toBeLessThan(2_200);
 		expect(answered).toMatchObject({ signedIn: true, authMethod: 'claude.ai' });
+
+		await letGo(hold);
 		expect(await settledSignIn(agent, false)).toBe(false);
 	}, 10_000);
 
@@ -125,18 +153,21 @@ describe('ClaudeCodeAgent sign-in check', () => {
 	}, 10_000);
 
 	test('a check after signing in skips the call that asked before, whose late answer never lands', async () => {
-		const { agent, env, calls } = await slowAuthAgent();
+		const { agent, env, calls, hold } = await slowAuthAgent();
 
 		setAuth(env, 0, false);
 		await agent.detect();
-		setAuth(env, 2, false);
+		env.FAKE_AUTH_HOLD = hold;
 
 		const before = agent.detect(true);
 
 		await authCallsStarted(calls, 2);
+		env.FAKE_AUTH_HOLD = '';
 		setAuth(env, 0, true);
 
 		expect(await agent.detect(true)).toMatchObject({ signedIn: true });
+
+		await letGo(hold);
 		expect(await before).toMatchObject({ signedIn: true });
 		expect((await agent.detect()).signedIn).toBe(true);
 	}, 10_000);

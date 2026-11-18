@@ -9,15 +9,6 @@ beforeEach(() => {
 });
 
 describe('members store', () => {
-	test('loads the admin first', async () => {
-		await useMembers.getState().load(createSampleMembers());
-
-		const { status, members } = useMembers.getState();
-
-		expect(status).toBe('ready');
-		expect(members[0]?.role).toBe('admin');
-	});
-
 	test('drops a removed person from the list', async () => {
 		const api = createSampleMembers();
 

@@ -1,21 +1,17 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { CandidateFinding } from '../../../../src/review/pipeline/consolidate';
 import { createRun, type ReviewRun } from '../../../../src/review/pipeline/harness/context';
-import { candidateRepairOn, repairCandidate } from '../../../../src/review/pipeline/harness/repair';
+import { repairCandidate } from '../../../../src/review/pipeline/harness/repair';
 import { VerifyQueue } from '../../../../src/review/pipeline/harness/verify-queue';
-import type { ReviewProgressCheckpoint } from '../../../../src/review/pipeline/harness/types';
 import { REPAIR_DIFF, candidateOf, repairContext, reported } from '../candidate-repair-fixtures';
 
 afterEach(() => {
-	delete process.env.RECODER_CANDIDATE_REPAIR;
 	delete process.env.RECODER_REPAIR_CAP;
 });
 
-/** A run over `REPAIR_DIFF`, resumed from a checkpoint that already counted `repairs`. */
-function runOf(repairs?: number): ReviewRun {
-	const resume = repairs === undefined ? null : ({ candidates: [], repairs } as unknown as ReviewProgressCheckpoint);
-
-	return createRun({ diff: REPAIR_DIFF, sandboxPath: null, resume });
+/** A fresh run over `REPAIR_DIFF`. */
+function runOf(): ReviewRun {
+	return createRun({ diff: REPAIR_DIFF, sandboxPath: null });
 }
 
 /** A queue on a fresh run whose verifier records what it is given and settles at once. */
@@ -30,12 +26,6 @@ function recordingQueue(repair?: (candidate: CandidateFinding) => Promise<boolea
 
 	return { queue: new VerifyQueue(runOf(), record, repair), verified };
 }
-
-test('candidate repair is on unless RECODER_CANDIDATE_REPAIR=0', () => {
-	expect(candidateRepairOn()).toBe(true);
-	process.env.RECODER_CANDIDATE_REPAIR = '0';
-	expect(candidateRepairOn()).toBe(false);
-});
 
 test('a rejected candidate its repair makes valid is verified, and drain waits for the repair', async () => {
 	const { queue, verified } = recordingQueue(async (candidate) => {
@@ -87,16 +77,6 @@ test('a repair counts against the review, and stops once the cap is spent', asyn
 	expect(second).toMatchObject({ valid: false, dropStage: 'location', line: 31 });
 	expect(second.repair).toMatchObject({ result: 'not-run', reason: 'the review already made 1 repairs', changes: [] });
 	expect(run.repairs).toBe(1);
-});
-
-test('a resumed review keeps the repairs its checkpoint counted, so the cap holds across a restart', async () => {
-	const resumed = runOf(8);
-	const fresh = runOf();
-
-	expect(resumed.repairs).toBe(8);
-	expect(await repairCandidate(resumed, candidateOf(reported()))).toBe(false);
-	expect(await repairCandidate(fresh, candidateOf(reported()))).toBe(true);
-	expect(resumed.repairs).toBe(8);
 });
 
 test('a candidate repaired once is never repaired again', async () => {

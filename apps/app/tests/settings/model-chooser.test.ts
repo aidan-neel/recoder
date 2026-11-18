@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ModelEntry } from '@recoder/shared';
 
-import { chooserGroups, shownCount, withShown } from '../../src/lib/settings/model-chooser';
-import { modelCatalog } from '../../src/lib/settings/model-options';
+import { chooserGroups, withShown } from '../../src/lib/settings/model-chooser';
 import { queryTerms } from '../../src/lib/shell/search';
 
 function entry(id: string, source: string): ModelEntry {
@@ -37,12 +36,6 @@ describe('model chooser', () => {
 		const [group] = chooserGroups([{ ...entry('local/model', 'Local'), provider: 'openai-compatible' }], []);
 
 		expect(group.agent).toBe('');
-	});
-
-	test('counts the models the pickers still offer', () => {
-		const { options } = modelCatalog(entries).groups[1];
-
-		expect(shownCount(options, new Set([options[0].id]))).toBe(1);
 	});
 
 	test('hides and shows ids in a sorted list without repeats', () => {

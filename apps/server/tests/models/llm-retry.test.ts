@@ -90,7 +90,7 @@ test('a stream that goes silent is cut off and retried instead of hanging', asyn
 	});
 
 	process.env.RECODER_LLM_RETRIES = '2';
-	process.env.RECODER_LLM_IDLE_MS = '1500';
+	process.env.RECODER_LLM_IDLE_MS = '1000';
 
 	try {
 		const started = Date.now();

@@ -1,8 +1,8 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, beforeAll, expect, test } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { RepoOverview, SkillSummary } from '@recoder/shared';
+import type { Repo, RepoOverview, SkillSummary } from '@recoder/shared';
 import { app } from '../../src/app';
 import { saveAutoReviewSettings } from '../../src/forge/watch/settings';
 import { db } from '../../src/store';
@@ -21,8 +21,15 @@ async function writeSkill(dir: string, name: string, description: string): Promi
 	await writeFile(path, `---\nname: ${name}\ndescription: ${description}\n---\nBody\n`);
 }
 
+/** One repository on disk for the whole file: the skills tests only read it. */
+let skillsRepo: Repo;
+
+beforeAll(async () => {
+	skillsRepo = await repoWithSkillsOnDisk();
+});
+
 /** The forge fixture with `shared` and `main-only` on main, and `shared` changed and `head-only` added on pull 7. */
-async function repoWithSkills() {
+async function repoWithSkillsOnDisk(): Promise<Repo> {
 	const { repo } = await localForgeFixture();
 	const dir = fileURLToPath(repo.url);
 
@@ -39,7 +46,12 @@ async function repoWithSkills() {
 	git(dir, ['update-ref', 'refs/pull/7/head', 'HEAD']);
 	git(dir, ['checkout', '-q', 'main']);
 
-	return db.repos.set(repo);
+	return repo;
+}
+
+/** The file's repository with skills, tracked under an id of its own so nothing kept for one test answers another. */
+function repoWithSkills(): Promise<Repo> {
+	return db.repos.set({ ...skillsRepo, id: crypto.randomUUID() });
 }
 
 async function skillsOf(path: string): Promise<{ status: number; skills: SkillSummary[] }> {

@@ -3,7 +3,7 @@
 	"private": true,
 	"version": "0.2.1",
 	"type": "module",
-	"packageManager": "bun@1.3.14",
+	"packageManager": "bun@1.4.4",
 	"workspaces": [
 		"apps/*",
 		"packages/*"
@@ -19,6 +19,7 @@
 		"test": "turbo test",
 		"lint": "turbo lint",
 		"deadcode": "knip && jscpd",
+		"verify": "turbo run check lint build deadcode --continue && turbo run test --continue && turbo run test:ha",
 		"dev:site": "bun --filter @recoder/site dev",
 		"recoder": "bun apps/server/src/cli/main.ts"
 	},

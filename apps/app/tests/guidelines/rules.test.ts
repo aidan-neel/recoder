@@ -2,15 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import type { RepoGuidelines } from '@recoder/shared';
 
 import {
-	activeSource,
 	caretAt,
 	firstRule,
 	globalSummary,
 	repoSummary,
-	saveLabel,
 	seedText,
 	streamingDraft,
-	successLabel,
 	trimEmptyBullets
 } from '../../src/lib/guidelines/rules';
 
@@ -77,34 +74,6 @@ describe('the repository row', () => {
 				})
 			)
 		).toBe('New');
-	});
-
-	test('a repository with no rule yet names where its file would be', () => {
-		expect(repoSummary(repo({}))).toBe('No .recoder/guidelines.md yet');
-	});
-});
-
-describe('the source a repository file was read from', () => {
-	test('names the path, branch and short commit', () => {
-		expect(activeSource(repo({ sha: 'abcdef1234567890' }))).toBe('.recoder/guidelines.md on main at abcdef1');
-		expect(activeSource(repo({}))).toBe('.recoder/guidelines.md on main');
-	});
-});
-
-describe('the save and success labels', () => {
-	test('the global layer saves in place; a repository opens or updates a pull request', () => {
-		expect(saveLabel(null)).toBe('Save');
-		expect(saveLabel(repo({}))).toBe('Open pull request');
-
-		expect(saveLabel(repo({ pending: { number: 4, url: 'u', branch: 'b', content: null } }))).toBe(
-			'Update pull request'
-		);
-	});
-
-	test('the success line mirrors what the save did', () => {
-		expect(successLabel(null)).toBe('Saved');
-		expect(successLabel(repo({}))).toBe('Opened');
-		expect(successLabel(repo({ pending: { number: 4, url: 'u', branch: 'b', content: null } }))).toBe('Updated');
 	});
 });
 

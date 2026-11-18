@@ -1,11 +1,12 @@
 name: Helm
 
 on:
-  push:
+  pull_request:
     paths:
       - 'charts/**'
       - '.github/workflows/helm.yml'
-  pull_request:
+  push:
+    branches: [main]
     paths:
       - 'charts/**'
       - '.github/workflows/helm.yml'
@@ -15,18 +16,23 @@ permissions:
 
 concurrency:
   group: helm-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
+    name: validate (Helm ${{ matrix.helm }})
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     strategy:
+      fail-fast: false
       matrix:
         helm: [v3.22.1, v4.2.4]
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - uses: azure/setup-helm@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: ${{ matrix.helm }}
       - run: helm lint --strict charts/recoder -f charts/recoder/tests/values.yaml

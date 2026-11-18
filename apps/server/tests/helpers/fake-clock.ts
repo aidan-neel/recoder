@@ -4,8 +4,8 @@ import { afterEach, beforeEach, jest } from 'bun:test';
 const FLUSH_ROUNDS = 500;
 
 /**
- * For a test file: every test runs on bun's fake clock. Advancing it moves `Date.now` on Bun 1.4 but not on 1.3.14,
- * the version CI pins, so a test that needs `Date.now` to pass a deadline sets the system time instead.
+ * For a test file: every test runs on bun's fake clock. Advancing it moves `Date.now` on Bun 1.4 but not on 1.3,
+ * so a test that needs `Date.now` to pass a deadline sets the system time instead and holds on both.
  */
 export function useFakeClock(): void {
 	beforeEach(() => jest.useFakeTimers());

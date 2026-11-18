@@ -6,6 +6,16 @@ import { withUsageMetrics } from '../../src/models/metrics';
 
 useTempStore('prefix-metrics-');
 
+/** What each step reports, so its prompt ends at once instead of waiting out the grace period for late usage. */
+const STEP_TOKENS = {
+	inputTokens: 10,
+	outputTokens: 2,
+	totalTokens: 12,
+	cachedInputTokens: null,
+	cacheWriteInputTokens: null,
+	reasoningOutputTokens: null
+};
+
 test('every step retains its session prefix hashes across later prompts and durable storage', async () => {
 	const prefix = { tools: '0123456789abcdef', system: 'fedcba9876543210', opening: '1122334455667788' };
 
@@ -17,6 +27,7 @@ test('every step retains its session prefix hashes across later prompts and dura
 
 			usage.promptStarted(event);
 			usage.stepStarted(`step-${turn}`);
+			usage.stepFinished(STEP_TOKENS, `step-${turn}`);
 			await usage.finishPrompt(undefined);
 		}
 	});
