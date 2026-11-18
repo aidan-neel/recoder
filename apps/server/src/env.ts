@@ -17,12 +17,13 @@ const reviewVariantSchema = z.preprocess(
 );
 
 /**
- * The tools a review's reviewers and subagents get, an experiment (`RECODER_REVIEWER_TOOLS`). Unset, they have
- * every tool. `read` leaves them the reads and searches: no shell, no scratch files and no workers. `none` gives
+ * The tools a review's reviewers and subagents get (`RECODER_REVIEWER_TOOLS`). `none`, the default, gives
  * reviewers no tool at all: each answers in one call from the patch of its slice and the context the harness
- * gathered, and the review sends no subagent, since a subagent exists to follow a question with tools.
+ * gathered, and the review sends no subagent, since a subagent exists to follow a question with tools. A review
+ * then rests on what the harness hands the model, not on how well the model drives an agent loop. `read` gives
+ * them the reads and searches: no shell, no scratch files and no workers. `all` gives them every tool.
  */
-const REVIEWER_TOOLS = ['read', 'none'] as const;
+const REVIEWER_TOOLS = ['none', 'read', 'all'] as const;
 
 type ReviewerTools = (typeof REVIEWER_TOOLS)[number];
 
@@ -181,10 +182,10 @@ export function configuredSecretKey(): Buffer | undefined {
 }
 
 /**
- * The tools this review's reviewers get (`RECODER_REVIEWER_TOOLS`), or null for every tool when it is unset. Read
- * per review, so a test can switch it; a value that names no setting throws rather than run with every tool.
+ * The tools this review's reviewers get (`RECODER_REVIEWER_TOOLS`): none when it is unset. Read per review, so a
+ * test can switch it; a value that names no setting throws rather than run with a setting nobody chose.
  */
-export function reviewerTools(): ReviewerTools | null {
+export function reviewerTools(): ReviewerTools {
 	const value = process.env.RECODER_REVIEWER_TOOLS;
 	const parsed = reviewerToolsSchema.safeParse(value);
 
@@ -192,5 +193,5 @@ export function reviewerTools(): ReviewerTools | null {
 		throw new Error(`RECODER_REVIEWER_TOOLS is "${value}"; it must be one of ${REVIEWER_TOOLS.join(', ')}`);
 	}
 
-	return parsed.data ?? null;
+	return parsed.data ?? 'none';
 }

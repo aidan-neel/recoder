@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAdaptiveReview } from '../../../src/review/pipeline/harness';
+import { lanesAvailable } from '../../../src/sandbox/checkout-lanes';
 import { execUnavailableReason } from '../../../src/sandbox/exec-sandbox';
 import {
 	DIFF,
@@ -217,6 +218,33 @@ test.skipIf((await execUnavailableReason()) !== null)(
 			'package.json': JSON.stringify({ scripts: { test: 'false && bun test' } }),
 			'src/a.test.ts': "import { expect, test } from 'bun:test';\n\ntest('adds', () => expect(1 + 1).toBe(2));\n"
 		})
+);
+
+test.skipIf((await execUnavailableReason()) !== null || !lanesAvailable())(
+	'a bug is verified once the smoke run shows the code running, while the only check is still running',
+	async () => {
+		useTestModel(4);
+
+		const root = await mkdtemp(join(tmpdir(), 'recoder-verify-early-'));
+		const untilVerified = 'until [ -e "$TMPDIR/verified" ]; do sleep 0.05; done';
+
+		const base = {
+			'package.json': JSON.stringify({ scripts: { test: `${untilVerified} && bun test` } }),
+			'src/a.test.ts': "import { expect, test } from 'bun:test';\n\ntest('adds', () => expect(1 + 1).toBe(2));\n"
+		};
+
+		try {
+			const result = await reviewWithFakeModel(root, base, {
+				findings: ['Real bug.'],
+				realCommand: 'touch "$TMPDIR/verified"; grep -c missing src/a.ts'
+			});
+
+			expect(result.findings[0].verification).toMatchObject({ status: 'verified', method: 'run' });
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	},
+	30_000
 );
 
 test.skipIf((await execUnavailableReason()) !== null)(

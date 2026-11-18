@@ -50,7 +50,7 @@ async function reviewersUnder(setting: string | undefined) {
 			concern: 'callers',
 			question: 'Who calls it?',
 			scope: [{ path: 'pkg0/index.ts', hunkIds: [] }],
-			why: ''
+			why: 'The callers are outside this slice.'
 		};
 
 		return modelReply({ message: 'ok', ...NOTHING, subagents: unit ? [ask] : [] });
@@ -61,7 +61,7 @@ async function reviewersUnder(setting: string | undefined) {
 	return { reviewers: [...calls.values()], subagentCalls };
 }
 
-test('reviewers without tools each answer in one call from a message that holds their whole slice', async () => {
+test('reviewers without tools each answer in one call from a message that holds their whole slice, and the subagents they ask for are not sent', async () => {
 	const { reviewers, subagentCalls } = await reviewersUnder('none');
 
 	expect(reviewers).toHaveLength(5);

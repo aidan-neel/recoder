@@ -6,6 +6,9 @@ import { TOKEN_BUDGET_PLANS, type TokenBudget } from '@recoder/shared';
 import { runAdaptiveReview } from '../../../src/review/pipeline/harness';
 import { budgetLimits } from '../../../src/review/session/review-policy';
 import { NOTHING, addedFile, messagesOf, modelReply, restoreAfterEach, unitOf, useTestModel } from './harness-fixtures';
+import { envFlag } from '../../helpers/env-flag';
+
+envFlag('RECODER_REVIEWER_TOOLS', 'all');
 
 restoreAfterEach();
 

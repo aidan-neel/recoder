@@ -17,6 +17,9 @@ import {
 	unitOf,
 	useTwoModels
 } from './harness-fixtures';
+import { envFlag } from '../../helpers/env-flag';
+
+envFlag('RECODER_REVIEWER_TOOLS', 'all');
 
 restoreAfterEach();
 

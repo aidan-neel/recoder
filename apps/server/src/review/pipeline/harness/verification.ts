@@ -32,9 +32,9 @@ import {
 	type VerifierNotes
 } from '../verify.js';
 import { isMutationFinding } from '../verify/runs.js';
-import { ranCode } from './baseline-run.js';
 import { publishBudget, publishCandidates, type ReviewRun } from './context.js';
 import { checkPatches } from './patch-check.js';
+import type { BackgroundChecks } from './sandbox-setup.js';
 import type { HarnessEvents, TaskFn } from './types.js';
 import { candidateRepairOn, repairCandidate } from './repair.js';
 import { diffChanges, type DiffChanges } from './run-outcome.js';
@@ -56,7 +56,7 @@ interface VerifyContext {
 	inventory: ReviewInventory;
 	/** The PR checkout, where convention examples are looked up; null without one. */
 	checkout: string | null;
-	/** Why bugs in this review are not run, once the baseline checks have finished; null when one of them passed. */
+	/** Why bugs in this review are not run, known once the sandbox shows whether the code runs; null when it does. */
 	cannotRun: () => Promise<string | null>;
 	/** The review's sandbox, where a run-proved bug is run again on the merge-base tree; null when code cannot run. */
 	workspace: ExecWorkspace | null;
@@ -72,11 +72,10 @@ const VERIFIER_EXAMPLE =
  * Opens the review's verifier queue before the reviewers start, so each
  * candidate is verified as soon as its reviewer reports it, or once its one
  * repair makes a rejected candidate valid. Candidates a resumed review hasn't
- * verified join at once. `checks` resolves when the baseline checks finish.
+ * verified join at once. `sandbox` resolves when the sandbox is prepared,
+ * which may be after the reviewers started.
  */
-export function startVerification(run: ReviewRun, checks: () => Promise<void>): void {
-	const sharedSetupNotes = (run.sharedSetupNotes ??= run.setupNotes);
-
+export function startVerification(run: ReviewRun, sandbox: Promise<BackgroundChecks>): void {
 	const ctx: VerifyContext = {
 		evidence: run.evidence,
 		budget: run.budget,
@@ -85,7 +84,7 @@ export function startVerification(run: ReviewRun, checks: () => Promise<void>): 
 		events: run.events,
 		task: run.task,
 		notes: () => ({
-			sharedSetupNotes,
+			sharedSetupNotes: run.sharedSetupNotes,
 			setupNotes: run.setupNotes,
 			intent: intentBlock(run.intent),
 			skills: run.skills
@@ -94,7 +93,7 @@ export function startVerification(run: ReviewRun, checks: () => Promise<void>): 
 		ledger: run.ledger,
 		inventory: run.inventory,
 		checkout: run.input.revision?.checkoutPath ?? null,
-		cannotRun: whyCodeCannotRun(run, checks),
+		cannotRun: whyCodeCannotRun(run, sandbox),
 		workspace: run.workspace,
 		mergeBaseSha: run.input.revision?.mergeBaseSha ?? null,
 		changes: () => diffChanges(run.inventory, run.changeModel)
@@ -117,22 +116,24 @@ export function startVerification(run: ReviewRun, checks: () => Promise<void>): 
 /**
  * A verifier can only prove a bug where the repository's own code runs, so a
  * review runs bugs only when one baseline check (type check, lint or tests)
- * passed or ran passing tests ({@link ranCode}), or when package prep's smoke
- * run reached its assertions. Asked once, after the checks finish; the answer
- * is kept.
+ * passed or ran passing tests (`ranCode` in `baseline-run.ts`), or when
+ * package prep's smoke run reached its assertions. Asked once and the answer
+ * is kept. It comes as soon as the sandbox shows the code running: when the
+ * smoke run reached its assertions, or with the first check that ran, not
+ * after the slowest one.
  */
-function whyCodeCannotRun(run: ReviewRun, checks: () => Promise<void>): () => Promise<string | null> {
+function whyCodeCannotRun(run: ReviewRun, sandbox: Promise<BackgroundChecks>): () => Promise<string | null> {
 	let answer: Promise<string | null> | undefined;
 
 	const decide = async (): Promise<string | null> => {
 		if (!run.workspace) return `code cannot run in this review (${run.execReason ?? 'no sandbox'})`;
 
-		await checks();
+		const checks = await sandbox;
 
-		if (!run.baseline.length) return 'no type check, lint or test command was found to run here';
-		if (run.smokeReached || run.baseline.some(ranCode)) return null;
+		if (!checks.commands.length) return 'no type check, lint or test command was found to run here';
+		if (run.smokeReached || (await checks.ranCode)) return null;
 
-		return `none of this repository's checks passed here (${run.baseline.map((check) => check.command).join(', ')})`;
+		return `none of this repository's checks passed here (${checks.commands.join(', ')})`;
 	};
 
 	return () => (answer ??= decide());
@@ -298,15 +299,22 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 
 	ctx.task(taskId, label, 'running', attempt > 1 ? `${doing}, second attempt` : doing, meta);
 
-	const outcome = await runVerifier(candidate, spec, ctx, cfg, { taskId, label, meta });
+	const agentId = newAgentId();
 
-	if (typeof outcome !== 'string') {
-		await settle(candidate, outcome, ctx, cfg, { taskId, label, meta });
+	try {
+		const outcome = await runVerifier(candidate, spec, ctx, cfg, { taskId, label, meta, agentId });
 
-		return true;
+		if (typeof outcome !== 'string') {
+			await settle(candidate, outcome, ctx, cfg, { taskId, label, meta });
+
+			return true;
+		}
+
+		candidate.verification = stampedVerification({ status: 'unverified', reason: `Not verified: ${outcome}.` }, cfg);
+	} finally {
+		ctx.workspace?.release(agentId);
 	}
 
-	candidate.verification = stampedVerification({ status: 'unverified', reason: `Not verified: ${outcome}.` }, cfg);
 	ctx.task(taskId, label, 'partial', 'Could not verify', meta);
 
 	return false;
@@ -330,10 +338,9 @@ async function runVerifier(
 	{ system, user, exec, mutation, turns }: VerifierSpec,
 	ctx: VerifyContext,
 	cfg: ModelConfig,
-	{ taskId, label, meta }: VerifierTask
+	{ taskId, label, meta, agentId }: VerifierTask & { agentId: string }
 ): Promise<VerifierRunOutcome | string> {
 	const owner = { assignmentId: taskId, role: 'verifier' };
-	const agentId = newAgentId();
 	let retrievals = 0;
 
 	try {

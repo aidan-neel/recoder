@@ -3,9 +3,12 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execUnavailableReason, sandboxLayout } from '../../src/sandbox/exec-sandbox';
+import { lanesAvailable } from '../../src/sandbox/checkout-lanes';
 import { ExecWorkspace } from '../../src/sandbox/exec-workspace';
 
 const available = (await execUnavailableReason()) === null;
+/** Whether each agent gets its own copy of the checkout here, which the tests of those copies need. */
+const copies = available && lanesAvailable();
 const bases: string[] = [];
 
 afterEach(async () => {
@@ -113,4 +116,51 @@ test.skipIf(!available)('a call whose review aborted while it waited in the queu
 	expect(await onBase).toEqual({ unavailable: 'Not run: the review was aborted.' });
 	expect((await first).exitCode).toBe(0);
 	expect(existsSync(join(checkout, 'ran.txt'))).toBe(false);
+});
+
+test.skipIf(!available)('an agent can replace a scratch file it wrote before', async () => {
+	const { ws } = await workspace();
+
+	expect(await ws.writeFile('repro.ts', 'first', undefined, 'a')).toEqual({ ok: true });
+	expect(await ws.writeFile('repro.ts', 'second', undefined, 'a')).toEqual({ ok: true });
+
+	expect((await ws.run('cat repro.ts', 10_000, undefined, 'a')).output).toBe('second');
+});
+
+test.skipIf(!copies)('commands of different agents run at the same time, each in its own copy', async () => {
+	const { ws, checkout } = await workspace();
+
+	const waiting = ws.run(
+		'until [ -e "$TMPDIR/other-started" ]; do sleep 0.05; done; echo left > built.txt; cat a.txt',
+		10_000,
+		undefined,
+		'a'
+	);
+
+	const other = await ws.run('touch "$TMPDIR/other-started"; test -e built.txt', 10_000, undefined, 'b');
+
+	expect(await waiting).toMatchObject({ exitCode: 0, output: 'original\n' });
+	expect(other.exitCode).toBe(1);
+	expect(existsSync(join(checkout, 'built.txt'))).toBe(false);
+});
+
+test.skipIf(!copies)("what a prepare command leaves is in every agent's copy from then on", async () => {
+	const { ws } = await workspace();
+
+	await ws.writeFile('repro.ts', 'mine', undefined, 'a');
+	expect((await ws.run('test -e generated.txt', 10_000, undefined, 'a')).exitCode).toBe(1);
+
+	await ws.prepare('echo made > generated.txt', 10_000);
+
+	expect((await ws.run('cat generated.txt repro.ts', 10_000, undefined, 'a')).output).toBe('made\nmine');
+});
+
+test.skipIf(!copies)('an agent that is released starts again from the checkout', async () => {
+	const { ws } = await workspace();
+
+	await ws.writeFile('repro.ts', 'mine', undefined, 'a');
+	await ws.run('echo left > built.txt', 10_000, undefined, 'a');
+	ws.release('a');
+
+	expect((await ws.run('ls repro.ts built.txt', 10_000, undefined, 'a')).exitCode).not.toBe(0);
 });

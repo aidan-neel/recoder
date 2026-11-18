@@ -12,6 +12,9 @@ import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import { closeStore, db, reviewMetrics } from '../../../../src/store';
 import { useFakeOpenCode } from '../../../helpers/fake-opencode';
 import { testReview } from '../../../helpers/review';
+import { envFlag } from '../../../helpers/env-flag';
+
+envFlag('RECODER_REVIEWER_TOOLS', 'all');
 
 interface Answer {
 	done: boolean;

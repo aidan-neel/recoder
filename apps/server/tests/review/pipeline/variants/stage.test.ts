@@ -24,6 +24,9 @@ import {
 	useTestModel
 } from '../harness-fixtures';
 import { restoreEnvAfterEach } from '../../../helpers/env';
+import { envFlag } from '../../../helpers/env-flag';
+
+envFlag('RECODER_REVIEWER_TOOLS', 'all');
 
 restoreAfterEach();
 restoreEnvAfterEach(['RECODER_REVIEW_VARIANT']);

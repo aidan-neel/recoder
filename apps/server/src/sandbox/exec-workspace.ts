@@ -4,7 +4,10 @@ import { runSandboxed, sandboxLayout, type RunResult, type SandboxLayout } from 
 import { sanitizeRepoPath } from '../evidence/evidence.js';
 import type { ExecutionOutcome } from '../evidence/types.js';
 import { BaseTree } from './base-tree.js';
-import { installKey, packageManifests } from './install-inputs.js';
+import { CheckoutLanes, lanesAvailable } from './checkout-lanes.js';
+import { packageScripts, readCommitTree, type CommitTree } from './commit-tree.js';
+import { installKey } from './install-inputs.js';
+import { overwriteFile, placeFiles, removeFiles, writeNewFile } from './scratch-files.js';
 import {
 	JS_LOCKFILES,
 	removeLayers,
@@ -14,14 +17,20 @@ import {
 	type SetupStep
 } from './workspace-setup.js';
 
+export type { CommitTree } from './commit-tree.js';
+
 /**
- * One review's execution environment: the PR checkout inside bubblewrap.
- * Commands run one at a time (agents share the checkout), start only after
- * dependency setup finishes, and never outlive the review deadline. Tracked
- * files are restored after each command so one agent's edits never leak into
- * another's evidence. Scratch files belong to the agent that wrote them: they
- * are on disk only while that agent's own command runs, so no other agent's
- * run, test glob or verdict can pick them up.
+ * One review's execution environment: the PR checkout inside the OS sandbox.
+ * Commands start only after dependency setup finishes and never outlive the
+ * review deadline. Tracked files are restored after each command, and scratch
+ * files belong to the agent that wrote them, so one agent's edits and files
+ * never reach another's run, test glob or verdict.
+ *
+ * Where the host can copy a tree cheaply ({@link lanesAvailable}), each agent
+ * runs in its own copy of the prepared checkout, so the commands of different
+ * agents run at the same time and its scratch files stay on disk there.
+ * Elsewhere agents share the checkout: commands run one at a time, and an
+ * agent's scratch files are on disk only while its own command runs.
  */
 
 /** Interpreters a reviewer might reach for to run a repro, in the order they are listed. */
@@ -40,14 +49,6 @@ export interface CheckInputs {
 	dependencies: string;
 	/** The version of every tool on the sandbox PATH, plus the host's platform. */
 	tools: string;
-}
-
-/** The head commit's tracked files, read from git; nothing in the checkout runs. */
-export interface CommitTree {
-	/** Every tracked file's path and size in bytes. */
-	sizes: Map<string, number>;
-	/** A tracked file's content, or null when it cannot be read. */
-	read(path: string): Promise<string | null>;
 }
 
 /** A run of an investigator's command, with what it reached once the review's packages were prepared. */
@@ -75,8 +76,10 @@ export class ExecWorkspace {
 	deadlineAt = Number.POSITIVE_INFINITY;
 	private queue: Promise<unknown> = Promise.resolve();
 	private setupDone: Promise<SetupReport> | null = null;
-	/** Each agent's scratch files, path → content, placed only around that agent's runs. */
+	/** Each agent's scratch files, path → content: what its copy holds, or what is placed around its runs. */
 	private readonly scratch = new Map<string, Map<string, string>>();
+	/** The agents' private copies of the checkout; null where they share it. */
+	private readonly lanes: CheckoutLanes | null;
 	/** The merge-base copy, built the first time a command runs on it. */
 	private baseTree: BaseTree | null = null;
 	/** Lets go of the shared installs and stores this review holds. */
@@ -94,6 +97,7 @@ export class ExecWorkspace {
 		private readonly share?: { scope: string; baseSha: string }
 	) {
 		this.layout = layout ?? sandboxLayout(checkout);
+		this.lanes = lanesAvailable() ? new CheckoutLanes(this.layout, (work) => this.exclusive(work)) : null;
 	}
 
 	/** What the harness ran in the checkout before the checks; a stored check result is reused only after the same. */
@@ -175,30 +179,54 @@ export class ExecWorkspace {
 		return this.setupDone;
 	}
 
-	/** Run one reviewer command after setup, with `owner`'s scratch files in place. */
+	/**
+	 * Run one command after setup, with `owner`'s scratch files in place: in the owner's copy of the checkout when
+	 * it has one, otherwise in the checkout itself, after every command queued there before it.
+	 */
 	async run(command: string, timeoutMs: number, signal?: AbortSignal, owner = ''): Promise<RunResult> {
 		await this.setupDone?.catch(() => undefined);
 
-		const work = async () => {
-			const limit = this.timeout(timeoutMs);
-
-			if (limit <= 0) return notRun('Not run: the review is out of time.', true);
-
-			const files = this.scratch.get(owner) ?? new Map<string, string>();
+		const run = async (layout: SandboxLayout) => {
+			if (this.timeout(timeoutMs) <= 0) return notRun('Not run: the review is out of time.', true);
 
 			try {
-				const placed = await this.place(files, signal);
-
-				if (placed) return notRun(`Not run: could not write scratch file ${placed}.`, false);
-
-				return await runSandboxed(this.layout, command, { timeoutMs: () => this.timeout(timeoutMs), signal });
+				return await runSandboxed(layout, command, { timeoutMs: () => this.timeout(timeoutMs), signal });
 			} finally {
-				await this.remove([...files.keys()]);
-				await this.restoreTracked();
+				await this.restoreTracked(layout.checkout);
 			}
 		};
 
-		return this.exclusive(work, { signal, instead: () => notRun(ABORTED, false) });
+		const shared = async () => {
+			const files = this.scratch.get(owner) ?? new Map<string, string>();
+
+			try {
+				const unplaced = await placeFiles(this.layout, files, signal);
+
+				return unplaced ? notRun(`Not run: could not write scratch file ${unplaced}.`, false) : await run(this.layout);
+			} finally {
+				await removeFiles(this.layout, [...files.keys()]);
+			}
+		};
+
+		return this.inLaneOr(owner, signal, run, shared);
+	}
+
+	/**
+	 * Runs a command that prepares the checkout for every agent, such as code generation or a smoke run. What it
+	 * leaves behind is part of the checkout from then on, so the agents' copies are made again before their next use.
+	 */
+	async prepare(command: string, timeoutMs: number, signal?: AbortSignal): Promise<RunResult> {
+		try {
+			return await this.run(command, timeoutMs, signal);
+		} finally {
+			this.lanes?.invalidate();
+		}
+	}
+
+	/** Lets go of what `owner` holds once it is done: its scratch files and its copy of the checkout. */
+	release(owner: string): void {
+		this.scratch.delete(owner);
+		this.lanes?.release(owner);
 	}
 
 	/**
@@ -255,13 +283,13 @@ export class ExecWorkspace {
 			const files = this.scratch.get(owner) ?? new Map<string, string>();
 
 			try {
-				const placed = await this.place(files, signal, tree.sandbox);
+				const placed = await placeFiles(tree.sandbox, files, signal);
 
 				if (placed) return { unavailable: `could not write scratch file ${placed}` };
 
 				return await runSandboxed(tree.sandbox, command, { timeoutMs: () => this.timeout(timeoutMs), signal });
 			} finally {
-				await this.remove([...files.keys()], tree.sandbox);
+				await removeFiles(tree.sandbox, [...files.keys()]);
 				await tree.restore().catch(() => undefined);
 			}
 		};
@@ -270,10 +298,11 @@ export class ExecWorkspace {
 	}
 
 	/**
-	 * Create or overwrite one of `owner`'s scratch files. It is test-written and
-	 * removed at once so a bad path fails here, then kept host-side until the
-	 * owner runs a command. Writes happen inside the sandbox, so a symlink
-	 * planted in the checkout cannot redirect them to the host.
+	 * Create or overwrite one of `owner`'s scratch files. In the owner's copy of
+	 * the checkout the file stays where it is written. In a shared checkout it
+	 * is test-written and removed at once so a bad path fails here, then kept
+	 * host-side until the owner runs a command. Writes happen inside the
+	 * sandbox, so a symlink planted in the checkout cannot redirect them to the host.
 	 */
 	async writeFile(
 		path: string,
@@ -294,19 +323,22 @@ export class ExecWorkspace {
 			return { ok: false, error: 'path is tracked in the PR; write a new scratch file instead' };
 		await this.setupDone?.catch(() => undefined);
 
-		const work = async () => {
-			const written = await this.writeNew(clean, content, signal);
+		const files = this.scratch.get(owner) ?? new Map<string, string>();
 
-			if (written.exitCode === 0) await this.remove([clean]);
+		const kept = (layout: SandboxLayout) =>
+			files.has(clean) ? overwriteFile(layout, clean, content, signal) : writeNewFile(layout, clean, content, signal);
+
+		const tried = async () => {
+			const written = await writeNewFile(this.layout, clean, content, signal);
+
+			if (written.exitCode === 0) await removeFiles(this.layout, [clean]);
 
 			return written;
 		};
 
-		const result = await this.exclusive(work, { signal, instead: () => notRun(ABORTED, false) });
+		const result = await this.inLaneOr(owner, signal, kept, tried);
 
 		if (result.exitCode !== 0) return { ok: false, error: result.output.trim().slice(0, 400) || 'write failed' };
-
-		const files = this.scratch.get(owner) ?? new Map<string, string>();
 
 		files.set(clean, content);
 		this.scratch.set(owner, files);
@@ -315,64 +347,24 @@ export class ExecWorkspace {
 	}
 
 	/** `package.json` scripts across the repo (skipping vendored dirs), as `dir: name → command` lines. */
-	async scripts(limit = 60): Promise<string[]> {
-		const listed = await this.git(['ls-tree', '-r', '--name-only', this.headSha]);
-		const manifests = packageManifests(listed.stdout.split('\n'));
-
-		const lines: string[] = [];
-
-		for (const path of manifests) {
-			const shown = await this.git(['show', `${this.headSha}:${path}`]);
-			let scripts: unknown;
-
-			try {
-				scripts = (JSON.parse(shown.stdout) as { scripts?: unknown }).scripts;
-			} catch {
-				continue;
-			}
-
-			if (!scripts || typeof scripts !== 'object') continue;
-
-			const dir = path === 'package.json' ? '.' : path.slice(0, -'/package.json'.length);
-
-			for (const [name, command] of Object.entries(scripts as Record<string, unknown>)) {
-				if (typeof command !== 'string') continue;
-				lines.push(`${dir}: ${name} → ${command.slice(0, 160)}`);
-				if (lines.length >= limit) return lines;
-			}
-		}
-
-		return lines;
+	scripts(limit = 60): Promise<string[]> {
+		return packageScripts((args) => this.git(args), this.headSha, limit);
 	}
 
 	/** The head commit's tracked files and their sizes, with a reader for their content. */
-	async commitTree(): Promise<CommitTree> {
-		const listed = await this.git(['ls-tree', '-r', '-l', '-z', this.headSha]);
-		const sizes = new Map<string, number>();
-
-		for (const entry of listed.stdout.split('\0')) {
-			const match = /^\S+ blob \S+\s+(\d+)\t(.+)$/s.exec(entry);
-
-			if (match) sizes.set(match[2]!, Number(match[1]));
-		}
-
-		const read = async (path: string) => {
-			const shown = await this.git(['show', `${this.headSha}:${path}`]);
-
-			return shown.code === 0 ? shown.stdout : null;
-		};
-
-		return { sizes, read };
+	commitTree(): Promise<CommitTree> {
+		return readCommitTree((args) => this.git(args), this.headSha);
 	}
 
-	/** Remove any scratch file a crashed run left behind, restore tracked ones and drop the merge-base copy. Safe to call more than once. */
+	/** Remove any scratch file a crashed run left behind, restore tracked ones and drop the agents' copies and the merge-base copy. Safe to call more than once. */
 	async cleanup(): Promise<void> {
 		const files = [...this.scratch.values()].flatMap((owned) => [...owned.keys()]);
 
 		this.scratch.clear();
+		this.lanes?.removeAll();
 
 		await this.exclusive(async () => {
-			await this.remove(files);
+			await removeFiles(this.layout, files);
 			await this.restoreTracked();
 			await this.baseTree?.remove().catch(() => undefined);
 		});
@@ -400,46 +392,31 @@ export class ExecWorkspace {
 		return tree.prepare();
 	}
 
-	/** Writes each scratch file under `layout`; returns the first path that could not be written. */
-	private async place(
-		files: Map<string, string>,
-		signal?: AbortSignal,
-		layout: SandboxLayout = this.layout
-	): Promise<string | null> {
-		for (const [path, content] of files) {
-			if ((await this.writeNew(path, content, signal, layout)).exitCode !== 0) return path;
-		}
-
-		return null;
-	}
-
 	/**
-	 * Writes a file that must not exist yet. An untracked file already there
-	 * (installed dependencies, build output) is refused, because scratch files
-	 * are removed after every run.
+	 * Runs `work` in `owner`'s copy of the checkout, with the owner's scratch files there. A command with no
+	 * owner, and every command on a host that cannot copy the checkout, runs `shared` instead, in the checkout
+	 * itself, in its turn.
 	 */
-	private writeNew(
-		path: string,
-		content: string,
-		signal?: AbortSignal,
-		layout: SandboxLayout = this.layout
+	private async inLaneOr(
+		owner: string,
+		signal: AbortSignal | undefined,
+		work: (layout: SandboxLayout) => Promise<RunResult>,
+		shared: () => Promise<RunResult>
 	): Promise<RunResult> {
-		const target = quote(path);
+		const inTurn = () => this.exclusive(shared, { signal, instead: () => notRun(ABORTED, false) });
 
-		return runSandboxed(
-			layout,
-			`if [ -e ${target} ] || [ -L ${target} ]; then echo 'path already exists in the checkout; write a new scratch file instead' >&2; exit 1; fi; mkdir -p -- "$(dirname -- ${target})" && cat > ${target}`,
-			{ timeoutMs: 10_000, stdin: content, signal, tier: 'light' }
-		);
-	}
+		if (!owner || !this.lanes) return inTurn();
 
-	private async remove(paths: string[], layout: SandboxLayout = this.layout): Promise<void> {
-		if (!paths.length) return;
+		const ran = await this.lanes.use(owner, async (lane) => {
+			if (signal?.aborted) return notRun(ABORTED, false);
 
-		await runSandboxed(layout, `rm -f -- ${paths.map(quote).join(' ')}`, {
-			timeoutMs: 10_000,
-			tier: 'light'
-		}).catch(() => undefined);
+			const files = lane.fresh ? (this.scratch.get(owner) ?? new Map<string, string>()) : new Map<string, string>();
+			const unplaced = await placeFiles(lane.layout, files, signal);
+
+			return unplaced ? notRun(`Not run: could not write scratch file ${unplaced}.`, false) : work(lane.layout);
+		});
+
+		return ran ?? inTurn();
 	}
 
 	private timeout(requested: number): number {
@@ -456,17 +433,17 @@ export class ExecWorkspace {
 		return next;
 	}
 
-	/** Undo edits to tracked files (commands may format, build or patch in place). */
-	private async restoreTracked(): Promise<void> {
-		const status = await this.git(['status', '--porcelain', '--untracked-files=no']);
+	/** Undo edits to tracked files under `root` (commands may format, build or patch in place). */
+	private async restoreTracked(root: string = this.checkout): Promise<void> {
+		const status = await this.git(['status', '--porcelain', '--untracked-files=no'], root);
 
 		if (status.code === 0 && !status.stdout.trim()) return;
-		await this.git(['checkout', '--force', this.headSha, '--', '.']);
+		await this.git(['checkout', '--force', this.headSha, '--', '.'], root);
 	}
 
-	private async git(args: string[]): Promise<{ code: number; stdout: string }> {
+	private async git(args: string[], cwd: string = this.checkout): Promise<{ code: number; stdout: string }> {
 		const proc = Bun.spawn(['git', ...args], {
-			cwd: this.checkout,
+			cwd,
 			stdout: 'pipe',
 			stderr: 'ignore',
 			stdin: 'ignore',
@@ -485,8 +462,4 @@ const ABORTED = 'Not run: the review was aborted.';
 /** A run that never started, shaped like one that did. */
 export function notRun(output: string, timedOut: boolean): RunResult {
 	return { exitCode: null, output, truncated: false, timedOut, elapsedMs: 0 };
-}
-
-function quote(value: string): string {
-	return `'${value.replace(/'/g, `'\\''`)}'`;
 }

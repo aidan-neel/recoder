@@ -12,6 +12,8 @@ export interface SandboxLayout {
 	sharedDir: string;
 	/** Where overlay layers live; hidden from the sandbox like the rest of the work dir. */
 	layersDir: string;
+	/** Where each agent's private copy of the checkout lives; a command sees only the copy it runs in. */
+	lanesDir: string;
 	/** Shared directories shown read-only at a path in the checkout or cache, with writes kept in a private layer. Set by setup. */
 	overlays: OverlayMount[];
 	/** Host directories replaced by an empty tmpfs, parents before children. */
@@ -219,6 +221,7 @@ export function sandboxLayout(checkout: string, host: HostPaths = {}): SandboxLa
 		cacheDir,
 		sharedDir: join(workDir, 'shared'),
 		layersDir: join(workDir, 'cache', `${basename(root)}.layers`),
+		lanesDir: join(workDir, 'cache', `${basename(root)}.lanes`),
 		overlays: [],
 		hidden,
 		toolchains: [...toolchains].sort((a, b) => a.length - b.length),

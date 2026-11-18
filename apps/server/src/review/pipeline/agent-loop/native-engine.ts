@@ -149,12 +149,12 @@ class NativeRun<T> {
 	}
 
 	/**
-	 * The tools the CLI lists for the model. Every tool by default, whatever the agent may call, since the gate
-	 * refuses the rest; under a reviewer tool setting only the ones this agent may call, so a model is never shown
-	 * a tool it has no use for.
+	 * The tools the CLI lists for the model. With every tool on, all of them, whatever this agent may call, since
+	 * the gate refuses the rest; otherwise only the ones this agent may call, so a model is never shown a tool it
+	 * has no use for.
 	 */
 	private listedTools(): ToolOffer {
-		if (!reviewerTools()) return { exec: true, delegate: true };
+		if (reviewerTools() === 'all') return { exec: true, delegate: true };
 
 		return { exec: Boolean(this.opts.exec), delegate: Boolean(this.opts.delegate) };
 	}

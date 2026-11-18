@@ -51,7 +51,7 @@ import { workerDelegate } from '../workers/worker.js';
 import { COVERAGE_ROLE, recordFor, updateAssignment } from './assignments.js';
 import { readScopedPatch, unreadHunks, type ScopedPatch } from './opening-patch.js';
 import { capturePrompt, type Received } from './received.js';
-import { openingPatchChars } from './reviewer-tools.js';
+import { openingPatchChars, reviewersRunCode } from './reviewer-tools.js';
 import { applyUnitResult } from './unit-result.js';
 import type { HarnessEvents, TaskFn } from './types.js';
 
@@ -72,7 +72,11 @@ export interface PoolContext extends ReviewerPromptContext {
 	exec: boolean;
 	/** The brief's images, which reviewers on the Review model read with their first prompt; subagents do not. */
 	images: readonly ImageUpload[];
-	/** Dependency setup and baseline check results as they stand when a reviewer starts; the checks finish mid-review. */
+	/**
+	 * Dependency setup and baseline check results as they stand when a reviewer starts; the checks finish
+	 * mid-review. Empty for reviewers that run no code: they start before the sandbox is prepared, and what its
+	 * notes held would depend on how fast it was.
+	 */
 	setupNotes: () => string;
 	/** Setup snapshot shared by every unit; later baseline results follow the assignment. */
 	sharedSetupNotes?: string;
@@ -274,12 +278,12 @@ function askReviewer(
 	const maxTurns = subagent ? ctx.limits.subagentTurns : ctx.limits.reviewerTurns;
 	const defaultCategory = categories[0] ?? 'correctness';
 
-	const tools = reviewerTools();
+	const runsCode = reviewersRunCode();
 
 	/** A second look only reads: verification runs every candidate it reports, so its turns go to finding them. */
-	const exec = Boolean(ctx.exec) && !item.purpose && !tools;
+	const exec = Boolean(ctx.exec) && !item.purpose && runsCode;
 
-	const delegate = subagent || tools ? undefined : delegateFor(item, records, ctx);
+	const delegate = subagent || !runsCode ? undefined : delegateFor(item, records, ctx);
 
 	return runJsonAgent({
 		stage: item.purpose ? 'second-look' : subagent ? 'subagent' : 'reviewer',

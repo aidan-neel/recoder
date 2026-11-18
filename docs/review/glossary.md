@@ -32,7 +32,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Assignment.** One agent's job: one reviewer over its slice, or one subagent. Type `ReviewAssignment` in `packages/shared/src/progress.ts`.
 
-**Subagent.** An extra agent a reviewer hands a deep dive to, to settle one question. State in `SubagentState` in `apps/server/src/review/pipeline/subagents.ts`. The cap is `SubagentCap` (a count from 0 to 99, or `'uncapped'`) in `packages/shared/src/models.ts`; `'uncapped'` is a string so it survives JSON. Settings named picks are 3 and 6; any other count is Custom.
+**Subagent.** An extra agent a reviewer hands a deep dive to, to settle one question. None is sent under the default `RECODER_REVIEWER_TOOLS=none`, where a reviewer has no tools and answers in one call. State in `SubagentState` in `apps/server/src/review/pipeline/subagents.ts`. The cap is `SubagentCap` (a count from 0 to 99, or `'uncapped'`) in `packages/shared/src/models.ts`; `'uncapped'` is a string so it survives JSON. Settings named picks are 3 and 6; any other count is Custom.
 
 **Token budget.** The Low, Medium or High pick that sets how many tokens a review may spend: the number of reviewers (1 on Low, 2 or 3 on Medium, 4 on High), the subagent cap (3, 8 or 12), both reasoning efforts, turns per reviewer and subagent and the model-call ceiling. Type `TokenBudget` in `packages/shared/src/models.ts`; settings in `packages/shared/src/token-budget.ts`; limits `ReviewLimits` in `apps/server/src/review/session/review-policy.ts`. Custom is what the apps show when the cap or an effort no longer matches the saved budget; it is never saved. See [pipeline.md](pipeline.md#token-budget).
 

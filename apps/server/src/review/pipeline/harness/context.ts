@@ -46,7 +46,7 @@ import { FINISHED } from './assignments.js';
 import { applyDiffLimits } from './diff-limits.js';
 import type { PoolContext } from './pool.js';
 import { emptyReceived, receivedOf, recordingReads, reviewContext, type Received } from './received.js';
-import { shapedForReviewerTools } from './reviewer-tools.js';
+import { reviewersRunCode, shapedForReviewerTools } from './reviewer-tools.js';
 import type { AdaptiveReviewInput, BaselineResult, HarnessEvents, TaskFn } from './types.js';
 import type { VerifyQueue } from './verify-queue.js';
 
@@ -410,8 +410,8 @@ export function poolContext(run: ReviewRun): PoolContext {
 		recommended: run.recommended,
 		exec: Boolean(run.workspace),
 		images: input.images ?? [],
-		sharedSetupNotes: (run.sharedSetupNotes ??= run.setupNotes),
-		setupNotes: () => run.setupNotes,
+		sharedSetupNotes: reviewersRunCode() ? run.sharedSetupNotes : '',
+		setupNotes: () => (reviewersRunCode() ? run.setupNotes : ''),
 		directive: run.directive,
 		subagentRequests: requestsPerReviewer(run),
 		limits: run.limits,

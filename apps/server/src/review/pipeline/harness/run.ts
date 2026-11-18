@@ -18,6 +18,7 @@ import { deriveObligationsStage, runUnitsWithObligations } from '../obligations/
 import { recordLearnedHistory } from './history-record.js';
 import { intentStage } from './intent-stage.js';
 import { repoInventoryStage } from './repo-inventory-stage.js';
+import { reviewersRunCode } from './reviewer-tools.js';
 import { runUnitPool } from './pool.js';
 import { detectorStage, diagnosticStage, ruleLedgerStage } from './quality-stage.js';
 import { checksInTime, prepareSandbox, startSetup, waitForBackground } from './sandbox-setup.js';
@@ -105,7 +106,10 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 		ruleLedgerStage(run)
 	]);
 
-	const checks = await prepareSandbox(run, setup);
+	const sandbox = prepareSandbox(run, setup);
+	const checks = sandbox.then((prepared) => prepared.done);
+
+	if (reviewersWaitForSandbox(run)) await sandbox;
 
 	await context;
 	await variantStage(run);
@@ -113,11 +117,11 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	run.events?.onStage?.('reviewing');
 	if (run.controller.signal.aborted) throw new ReviewAbortedError('review aborted');
 
-	startVerification(run, checks);
+	startVerification(run, sandbox);
 
 	const detectors = detectorStage(run);
 	let closed = false;
-	const diagnostics = checks().then(() => (closed ? undefined : diagnosticStage(run, () => closed, detectors)));
+	const diagnostics = checks.then(() => (closed ? undefined : diagnosticStage(run, () => closed, detectors)));
 
 	const finishedAtStart = finishedIds(run);
 	const units = run.units.filter((unit) => !finishedAtStart.has(unit.id));
@@ -149,6 +153,15 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	publishBudget(run);
 
 	return completeReview(run, consolidated);
+}
+
+/**
+ * Whether the reviewers start only once the sandbox is prepared: when they run code in it themselves, or when
+ * obligation investigators, which do, share their pool. Reviewers that only read start at once, and the sandbox
+ * is prepared behind them for the verifiers.
+ */
+function reviewersWaitForSandbox(run: ReviewRun): boolean {
+	return reviewersRunCode() || Boolean(run.obligations);
 }
 
 /** Stops an install still running after an early exit, then removes the sandbox. */
