@@ -128,7 +128,7 @@
 :where([data-ui='code-block'][data-copy][data-layout='single-line']) [data-ui='code-block-content'] {
 	padding-right: 44px;
 }
-/* Copy sits at the top right, centred on a one-line block; it shows on hover or focus, and while it confirms. */
+/* Copy sits at the top right; it shows on hover or focus, and while it confirms. */
 [data-ui='code-block-copy'] {
 	position: absolute;
 	top: 7px;
@@ -136,9 +136,15 @@
 	opacity: 0;
 	transition: opacity var(--dur-hover) ease-out;
 }
+/* On a one-line block it sits on a strip of the block's fill at the right edge, so a long line slides under it. */
 :where([data-ui='code-block'][data-layout='single-line']) [data-ui='code-block-copy'] {
-	top: 50%;
-	translate: 0 -50%;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	display: flex;
+	align-items: center;
+	padding: 0 7px 0 4px;
+	background: var(--bg-code);
 }
 :where([data-ui='code-block']:hover) [data-ui='code-block-copy'],
 [data-ui='code-block-copy']:focus-within,
@@ -149,6 +155,50 @@
 	[data-ui='code-block-copy'] {
 		opacity: 1;
 	}
+}
+
+/* A head row names the code ("Terminal", a file name) and holds the copy button, which then always shows. */
+[data-ui='code-block-head'] {
+	display: flex;
+	height: 34px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 0 3px 0 12px;
+	border-bottom: 1px solid var(--line-card);
+	background: var(--bg-panel);
+}
+[data-ui='code-block-title'] {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 7px;
+	overflow: hidden;
+	color: var(--text-muted);
+	font-family: var(--font-ui);
+	font-size: var(--font-size-meta);
+	font-weight: 500;
+	line-height: 16px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+[data-ui='code-block-title'] svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+/* Line numbers or shell prompts: a quiet column that scrolls with the code and is never selected. */
+:where([data-ui='code-block'][data-gutter]) [data-ui='code-block-content'] {
+	display: flex;
+	gap: 14px;
+}
+[data-ui='code-block-gutter'] {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	user-select: none;
 }
 
 /* Code inside the kit's blocks never takes the inline-code chip (`.ai-voice code`). */
