@@ -2,10 +2,10 @@
 
 import { Card, RowButton } from '@recoder/ui';
 import { ChevronRight } from 'lucide-react';
-import Link from 'next/link';
 
 import type { StartedReview } from '@/lib/ask/types';
 
+import { Link } from '@/components/common/link';
 import { PullMark } from '@/components/common/pull-mark';
 import { StatusPill } from '@/components/pulls/pull-status';
 

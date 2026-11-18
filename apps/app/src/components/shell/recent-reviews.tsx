@@ -1,11 +1,12 @@
 'use client';
 
-import { SkeletonRows, StatusGlyph, type GlyphKind } from '@recoder/ui';
+import { Skeleton, StatusGlyph, type GlyphKind } from '@recoder/ui';
 import { GitPullRequest } from 'lucide-react';
-import { usePathname } from 'next/navigation';
 
 import { useSessionCache } from '@/lib/api/client';
 import { shortAge } from '@/lib/shell/age';
+import { LOADING_REVIEWS } from '@/lib/shell/loading-reviews';
+import { usePathname } from '@/lib/shell/navigation';
 import { useSettleMarks } from '@/lib/shell/settle';
 import { useSidebarFolds } from '@/lib/shell/sidebar-folds';
 import type { RecentReview } from '@/lib/shell/types';
@@ -27,12 +28,6 @@ const GLYPHS: Record<RecentReview['state'], GlyphKind> = {
 	cancelled: 'cancelled'
 };
 
-/** How many placeholder rows stand in while the reviews load. */
-const LOADING_ROWS = 4;
-
-/** A review card's height in px: a 16px repository line, a 20px title and a 16px foot inside 8px of padding, so the cards replace their placeholders in place. */
-const RECENT_CARD_HEIGHT = 72;
-
 interface RecentReviewsProps {
 	reviews: RecentReview[];
 	loading: boolean;
@@ -41,6 +36,7 @@ interface RecentReviewsProps {
 /**
  * The newest review of each open pull request that is not settled, so the
  * last few stay one click away. With none, the section is left out. Its title folds it away.
+ * While they load, the skeleton is drawn from stand-in cards.
  */
 export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 	const pathname = usePathname();
@@ -54,19 +50,13 @@ export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 
 	if (!loading && reviews.length === 0) return null;
 
+	const shown = loading ? LOADING_REVIEWS : reviews;
+
 	return (
 		<SidebarSection title="Reviews" open={open} onOpenChange={(next) => setOpen('reviews', next)} className="recent">
-			{loading ? (
-				<SkeletonRows
-					count={LOADING_ROWS}
-					height={RECENT_CARD_HEIGHT}
-					lines={2}
-					className="recent-list"
-					rowClassName="recent-skeleton"
-				/>
-			) : (
+			<Skeleton id="recent-reviews" loading={loading}>
 				<div className="recent-list">
-					{reviews.map((review) => (
+					{shown.map((review) => (
 						<RecentCard
 							key={review.reviewId}
 							href={review.href}
@@ -92,7 +82,7 @@ export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 						/>
 					))}
 				</div>
-			)}
+			</Skeleton>
 		</SidebarSection>
 	);
 }

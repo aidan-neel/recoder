@@ -1,8 +1,9 @@
 'use client';
 
 import type { PullCommit } from '@recoder/shared';
-import { Button, CopyButton, HoverList, RowButton, SkeletonRows, StatusNotice } from '@recoder/ui';
+import { Button, CopyButton, HoverList, RowButton, Skeleton, StatusNotice } from '@recoder/ui';
 
+import { LOADING_COMMITS } from '@/lib/commits/loading-commits';
 import { usePullCommitsView } from '@/lib/pull/pull-session';
 import { author } from '@/lib/shell/format';
 
@@ -46,14 +47,13 @@ function CommitRow({ commit }: { commit: PullCommit }) {
 	);
 }
 
-/** The Commits tab: every commit of the pull request, oldest first. */
+/** The Commits tab: every commit of the pull request, oldest first. While they load, the skeleton is drawn from stand-in commits. */
 export function CommitsTab() {
 	const commits = usePullCommitsView();
 
 	return (
 		<div className="reading">
 			<div className="reading-column">
-				{commits.phase === 'loading' ? <SkeletonRows count={6} height={52} glyph /> : null}
 				{commits.phase === 'failed' ? (
 					<div className="page-notice">
 						<StatusNotice
@@ -69,13 +69,22 @@ export function CommitsTab() {
 						<StatusNotice title="This pull request has no commits." />
 					</div>
 				) : null}
-				{commits.phase === 'ready' && commits.value.length > 0 ? (
-					<HoverList as="ol" className="commit-list" itemSelector="[data-commit]">
-						{commits.value.map((commit) => (
-							<CommitRow key={commit.sha} commit={commit} />
-						))}
-					</HoverList>
-				) : null}
+				<Skeleton id="pull-commits" loading={commits.phase === 'loading'}>
+					{commits.phase === 'loading' ? (
+						<ol className="commit-list">
+							{LOADING_COMMITS.map((commit) => (
+								<CommitRow key={commit.sha} commit={commit} />
+							))}
+						</ol>
+					) : null}
+					{commits.phase === 'ready' && commits.value.length > 0 ? (
+						<HoverList as="ol" className="commit-list" itemSelector="[data-commit]">
+							{commits.value.map((commit) => (
+								<CommitRow key={commit.sha} commit={commit} />
+							))}
+						</HoverList>
+					) : null}
+				</Skeleton>
 			</div>
 		</div>
 	);

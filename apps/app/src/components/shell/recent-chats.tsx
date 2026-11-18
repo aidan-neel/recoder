@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname } from '@/lib/shell/navigation';
 
 import { useChatCache } from '@/lib/api/client';
 import { shortAge } from '@/lib/shell/age';

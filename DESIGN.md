@@ -166,14 +166,13 @@ kit keeps them in `packages/ui/src/styles/tokens.css` and `motion/presets.ts`.
 | `menu` | 130ms fade in from 0.95 scale and 2px blur, with no rise; 80ms out | The same, plus a 3px rise (`--motion-menu-y`) |
 | `modal` | 150ms fade in from 0.95 scale and 2px blur, with no rise; 70ms out | The same, plus a 3px rise (`--motion-modal-y`) |
 | `tooltip` | 100ms fade in from 0.95 scale, with no blur and no rise; 80ms out | Sivir's own |
-| `enter` | None. Content replaces its skeleton in place with no fade, rise or stagger | Same |
+| `enter` | Content replaces its skeleton whole, in one 140ms crossfade (`DURATION.swap`), with no rise and no stagger. A load that beat the skeleton, or one that lands while the person scrolls or types, swaps with no fade | None. Content replaces its skeleton in place with no fade, rise or stagger |
 | `toast` | Rises 10px over 150ms, and drops 10px as it leaves | Rises from below over 320ms, and leaves over 240ms |
-| `shimmer` | Text: a 1.6s opacity swell; the label rests dim and lights to full once a pass. Skeleton: a light sweeps across every 1.4s for 7 passes (about 10s), then the bar rests | Text: a 1.6s linear sweep of light. Skeleton: a light sweeps across every 1.4s and never rests |
-| `skeleton` | Each bar is hidden for its first 120ms (`--skeleton-delay`), then fades in over 140ms, so data that lands sooner never flashes one. In apps/app a full page load waits 240ms from the first paint, and a skeleton once seen stays about 250ms before content replaces it | Each bar is hidden for its first 200ms, then shows with no fade |
+| `shimmer` | Text: a 1.6s opacity swell; the label rests dim and lights to full once a pass. Skeleton: Skullet sweeps one light across the page every 2s, so every bar on screen is lit by the same band; it holds still under reduced motion | Text: a 1.6s linear sweep of light. Skeleton: a light sweeps across every 1.4s and never rests |
+| `skeleton` | Skullet draws it. A measured skeleton stays unseen for its first 120ms, so data that lands sooner never flashes one; a lone bar is hidden for 120ms (`--skeleton-delay`), then fades in over 140ms | Each bar is hidden for its first 200ms, then shows with no fade |
 | `spinner` | 0.9s linear | Same |
 | `reduced-motion` | CSS transitions snap to 1ms; the motion presets keep only their fade, 80ms at most; spinners stay | Transitions snap to 1ms; spinners stay |
 
 apps/app and apps/web keep a toast up for 5s, an error for 6s, or 10s when
-it has a button. apps/app also times its skeletons per loading episode, waits
-longer on a full page load, and keeps a skeleton it has shown on screen long
-enough to read; its `DESIGN.md` has the rules.
+it has a button. apps/app draws every skeleton with Skullet, measured from
+the content it stands for; its `DESIGN.md` has the rules.

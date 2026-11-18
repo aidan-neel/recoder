@@ -1,8 +1,7 @@
 'use client';
 
-import { Toaster, TooltipProvider } from '@recoder/ui';
+import { SkeletonProvider, Toaster, TooltipProvider } from '@recoder/ui';
 import { MotionConfig } from 'motion/react';
-import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -11,7 +10,7 @@ import { isLiveApp, newReviewHref } from '@/lib/shell/routes';
 import { toggleSidebar } from '@/lib/shell/sidebar-toggle';
 import { followSystemTheme } from '@/lib/shell/theme';
 import { useKeys } from '@/lib/shell/use-keys';
-import { useNavigator } from '@/lib/shell/navigation';
+import { navigate, usePathname } from '@/lib/shell/navigation';
 
 import { SettingsModal } from '@/components/settings/settings-modal';
 
@@ -31,35 +30,35 @@ interface AppShellProps {
  * keys that work anywhere.
  */
 export function AppShell({ model, children }: AppShellProps) {
-	const router = useRouter();
 	const { base } = useApi();
 
-	useNavigator();
 	useEffect(() => followSystemTheme(), []);
 
 	useKeys({
 		'mod+k': () => useChrome.getState().setPaletteOpen(!useChrome.getState().paletteOpen),
 		'mod+,': () => (isLiveApp(base) ? toggleSettings() : false),
 		'[': () => toggleSidebar(),
-		c: () => router.push(newReviewHref(base)),
+		c: () => navigate(newReviewHref(base)),
 		'?': () => useChrome.getState().setShortcutsOpen(true)
 	});
 
 	return (
 		<MotionConfig reducedMotion="user">
-			<TooltipProvider>
-				<a href="#page" className="skip-link">
-					Skip to content
-				</a>
-				<Frame>
-					<Sidebar model={model} />
-					{children}
-				</Frame>
-				<CommandPalette />
-				<ShortcutsModal />
-				<SettingsModal />
-				<Toaster />
-			</TooltipProvider>
+			<SkeletonProvider>
+				<TooltipProvider>
+					<a href="#page" className="skip-link">
+						Skip to content
+					</a>
+					<Frame>
+						<Sidebar model={model} />
+						{children}
+					</Frame>
+					<CommandPalette />
+					<ShortcutsModal />
+					<SettingsModal />
+					<Toaster />
+				</TooltipProvider>
+			</SkeletonProvider>
 		</MotionConfig>
 	);
 }

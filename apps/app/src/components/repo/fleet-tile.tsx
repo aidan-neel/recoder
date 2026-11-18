@@ -10,11 +10,10 @@ import {
 	ForgeMark,
 	Pill,
 	RowButton,
-	Skeleton,
+	SkeletonBox,
 	Tooltip
 } from '@recoder/ui';
 import { CircleMinus, Ellipsis } from 'lucide-react';
-import Link from 'next/link';
 
 import { useApi } from '@/lib/api/client';
 import type { PullRowStatus } from '@/lib/pulls/types';
@@ -23,6 +22,7 @@ import { plural } from '@/lib/shell/format';
 import { AUTOMATIONS_HREF, isLiveApp } from '@/lib/shell/routes';
 
 import { Age } from '@/components/common/age';
+import { Link } from '@/components/common/link';
 import { StatusPill } from '@/components/pulls/pull-status';
 
 import { ReviewBar } from './review-bar';
@@ -98,7 +98,7 @@ function BugFact({ tile }: Pick<FleetTileProps, 'tile'>) {
 
 /** The tile's figures on one baseline: its open pull requests large, then what waits and what the reviews found. */
 function Figures({ tile }: Pick<FleetTileProps, 'tile'>) {
-	if (tile.open === null) return <Skeleton className="fleet-figures-skeleton" />;
+	if (tile.open === null) return <SkeletonBox className="fleet-figures-skeleton" />;
 
 	return (
 		<p className="fleet-figures tabular">
@@ -118,7 +118,7 @@ function Figures({ tile }: Pick<FleetTileProps, 'tile'>) {
 function Activity({ tile, onRetry }: Pick<FleetTileProps, 'tile' | 'onRetry'>) {
 	const { overview } = tile;
 
-	if (overview.phase === 'loading') return <Skeleton className="fleet-bars-skeleton" />;
+	if (overview.phase === 'loading') return <SkeletonBox className="fleet-bars-skeleton" />;
 
 	if (overview.phase === 'failed') {
 		return (
@@ -191,7 +191,7 @@ function Foot({ foot }: { foot: FleetFoot }) {
 
 	return (
 		<RowButton asChild className="fleet-next">
-			<Link href={foot.row.href} prefetch={false}>
+			<Link href={foot.row.href}>
 				<span className="fleet-next-number">#{foot.row.number}</span>
 				<span className="fleet-next-title">{foot.row.title}</span>
 				<NextStatus status={foot.row.status} />
@@ -210,7 +210,7 @@ export function FleetTile({ tile, onStop, onRetry }: FleetTileProps) {
 			<header className="fleet-tile-head">
 				<ForgeMark provider={tile.provider} />
 				<RowButton asChild cover className="fleet-tile-name">
-					<Link href={tile.href} prefetch>
+					<Link href={tile.href}>
 						{tile.owner ? (
 							<>
 								<span className="fleet-tile-owner">{tile.owner}</span>

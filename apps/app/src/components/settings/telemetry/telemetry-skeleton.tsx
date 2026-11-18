@@ -1,4 +1,4 @@
-import { Skeleton } from '@recoder/ui';
+import { SkeletonBox } from '@recoder/ui';
 
 import { UsageBlock } from '../usage/usage-block';
 import { FiguresSkeleton, OverviewSkeleton, RowsSkeleton } from '../usage/usage-skeleton';
@@ -19,7 +19,7 @@ export function TelemetrySkeleton() {
 				<FiguresSkeleton count={FINDING_FIGURES} />
 			</UsageBlock>
 			<UsageBlock title="Findings by severity">
-				<Skeleton className="usage-skeleton-bar" />
+				<SkeletonBox className="usage-skeleton-bar" />
 			</UsageBlock>
 			<UsageBlock title="Breakdown">
 				<RowsSkeleton count={BREAKDOWN_ROWS} />

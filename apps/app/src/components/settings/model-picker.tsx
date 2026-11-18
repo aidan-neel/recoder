@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReasoningEffort } from '@recoder/shared';
-import { Button, Select, Skeleton, SwapText } from '@recoder/ui';
+import { Button, Select, SkeletonBox, SwapText } from '@recoder/ui';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -35,7 +35,7 @@ function triggerLabel(picker: ModelPickerView): ReactNode {
 
 	if (picker.offline) return <span className="model-trigger-quiet">{NO_PICK}</span>;
 
-	return <Skeleton style={{ width: 88 }} />;
+	return <SkeletonBox style={{ width: 88 }} />;
 }
 
 interface EffortSelectProps {

@@ -1,7 +1,7 @@
 'use client';
 
 import type { UsageWindow } from '@recoder/shared';
-import { Meter, Pill, Skeleton, type MeterTone } from '@recoder/ui';
+import { Meter, Pill, SkeletonBox, type MeterTone } from '@recoder/ui';
 
 import { useProviderLimits, type LimitsView } from '@/lib/settings/providers/use-provider-limits';
 import { span } from '@/lib/shell/format';
@@ -94,8 +94,8 @@ function UsageSkeleton() {
 		<ul className="usage-windows" aria-hidden>
 			{Array.from({ length: SKELETON_WINDOWS }, (_, index) => (
 				<li key={index} className="usage-window">
-					<Skeleton className="usage-skeleton-label" />
-					<Skeleton className="usage-skeleton-track" />
+					<SkeletonBox className="usage-skeleton-label" />
+					<SkeletonBox className="usage-skeleton-track" />
 				</li>
 			))}
 		</ul>

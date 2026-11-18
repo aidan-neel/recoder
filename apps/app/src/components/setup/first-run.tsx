@@ -1,11 +1,11 @@
 'use client';
 
 import { Card, SwapText } from '@recoder/ui';
-import Link from 'next/link';
 
 import { SAMPLE_HREF } from '@/lib/shell/routes';
 import { useFirstRun } from '@/lib/setup/use-first-run';
 
+import { Link } from '@/components/common/link';
 import { Page } from '@/components/common/page';
 import { RepoBrowser } from '@/components/connections/repo-browser';
 import { ProviderModal } from '@/components/settings/providers/provider-modal';

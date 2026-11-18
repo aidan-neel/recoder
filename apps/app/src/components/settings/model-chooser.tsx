@@ -10,7 +10,7 @@ import {
 	CollapsibleTrigger,
 	Input,
 	ScrollArea,
-	Skeleton
+	SkeletonBox
 } from '@recoder/ui';
 import { ChevronDown, Search } from 'lucide-react';
 import { useId } from 'react';
@@ -133,7 +133,7 @@ export function ModelChooser() {
 	if (chooser.view === 'loading') {
 		return (
 			<SettingsGroup title="Available models">
-				<Skeleton className="chooser-loading" />
+				<SkeletonBox className="chooser-loading" />
 			</SettingsGroup>
 		);
 	}

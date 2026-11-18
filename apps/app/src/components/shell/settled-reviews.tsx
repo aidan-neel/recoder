@@ -2,7 +2,7 @@
 
 import { HoverList, RowButton } from '@recoder/ui';
 import { ChevronDown, GitMerge, GitPullRequest, GitPullRequestClosed, MessageSquare, Undo2 } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname } from '@/lib/shell/navigation';
 import { useState } from 'react';
 
 import { useChatCache, useSessionCache } from '@/lib/api/client';

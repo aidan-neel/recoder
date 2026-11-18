@@ -7,12 +7,14 @@ import { useMemo, useRef } from 'react';
 import { useApi } from '@/lib/api/client';
 import type { BugView } from '@/lib/bugs/types';
 import { useBugsView } from '@/lib/bugs/use-bugs';
+import { LOADING_DIFF } from '@/lib/changes/loading-diff';
 import type { GuidePart } from '@/lib/changes/types';
 import { useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
 import { scrollToFile, useCurrentFile } from '@/lib/changes/use-current-file';
 import { usePullDiffView } from '@/lib/pull/pull-session';
 import { useRunView } from '@/lib/run/use-run';
 import { pullHref } from '@/lib/shell/routes';
+import { useAfterPaint } from '@/lib/shell/use-after-paint';
 import { useKeys } from '@/lib/shell/use-keys';
 
 import { PanelResizer } from '@/components/common/panel-resizer';
@@ -47,14 +49,21 @@ function inOrder(files: FileDiff[], order: string[]): FileDiff[] {
 	return order.flatMap((path) => byPath.get(path) ?? []);
 }
 
-/** Bars where the file cards will stand while the diff loads. */
+function ignore(): void {}
+
+/**
+ * Stand-in file cards while the diff loads: the skeleton is measured from them, header and lines of code. They
+ * mount a frame after the tab does, so the click that opened the page paints without their cost.
+ */
 function DiffSkeleton() {
 	return (
-		<div className="changes-skeleton" aria-hidden>
-			<Skeleton />
-			<Skeleton />
-			<Skeleton />
-		</div>
+		<Skeleton loading>
+			<div className="changes-stack">
+				{LOADING_DIFF.map((file) => (
+					<FileCard key={file.path} file={file} viewed={false} onToggleViewed={ignore} bugs={NO_BUGS} bugsHref="#" />
+				))}
+			</div>
+		</Skeleton>
 	);
 }
 
@@ -73,6 +82,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 	const run = useRunView();
 	const bugs = useBugsView();
 	const scroller = useRef<HTMLDivElement | null>(null);
+	const painted = useAfterPaint();
 	const files = diff.phase === 'ready' ? diff.value.files : null;
 	const current = useCurrentFile(scroller, files);
 	const byFile = useMemo(() => bugsByFile(bugs.open), [bugs.open]);
@@ -123,7 +133,12 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 						onOpenPart={(part) => part.paths[0] && scrollToFile(scroller.current, part.paths[0])}
 					/>
 				) : (
-					<FileTree tree={tree} current={current} onOpenFile={(path) => scrollToFile(scroller.current, path)} />
+					<FileTree
+						tree={tree}
+						loading={diff.phase === 'loading'}
+						current={current}
+						onOpenFile={(path) => scrollToFile(scroller.current, path)}
+					/>
 				)}
 				<PanelResizer panel="changes" label="Resize file tree" />
 			</aside>
@@ -138,7 +153,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 							</span>
 						</div>
 					) : null}
-					{diff.phase === 'loading' ? <DiffSkeleton /> : null}
+					{diff.phase === 'loading' && painted ? <DiffSkeleton /> : null}
 					{diff.phase === 'failed' ? (
 						<div className="page-notice">
 							<StatusNotice

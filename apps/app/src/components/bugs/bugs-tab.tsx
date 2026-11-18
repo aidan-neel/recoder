@@ -6,9 +6,11 @@ import { useEffect, useState } from 'react';
 
 import type { BugsView } from '@/lib/bugs/types';
 import { useBugsView } from '@/lib/bugs/use-bugs';
+import { usePullPageView } from '@/lib/pull/pull-session';
 import { isLive } from '@/lib/run/run-phase';
 import { useRunView } from '@/lib/run/use-run';
 import { useKeys } from '@/lib/shell/use-keys';
+import { useReviewArriving } from '@/lib/summary/use-review-arriving';
 
 import { Age } from '@/components/common/age';
 import { RunBanner } from '@/components/pull/run-banner';
@@ -116,11 +118,15 @@ function PreviousFindings({ view, open, onToggle }: PreviousFindingsProps) {
  * which stay to read until the new one lands; a review that failed,
  * is out of date or is not there yet says so in a banner with its next step.
  * `j` and `k` step through the cards; Enter opens the one focus rests on.
+ * Until the page and the review's record arrive, rows of bars stand in, so
+ * the tab never says there is no review before it knows.
  */
 export function BugsTab() {
 	const view = useBugsView();
 	const run = useRunView();
 	const [open, toggle] = useOpenBugs(view);
+	const reviewArriving = useReviewArriving();
+	const arriving = usePullPageView().phase === 'loading' || reviewArriving;
 	const settled = run.phase === 'passed' && !run.outdated;
 	const clean = view.phase === 'ready' && view.open.length === 0 && settled;
 
@@ -134,10 +140,11 @@ export function BugsTab() {
 						<RunSteps run={run} />
 						<PreviousFindings view={view} open={open} onToggle={toggle} />
 					</>
-				) : (
+				) : null}
+				{!isLive(run.phase) && !arriving ? (
 					<RunBanner run={run} bugs={view.phase === 'ready' ? view.open.length : null} />
-				)}
-				{view.phase === 'loading' ? <SkeletonRows count={3} height={52} glyph lines={1} /> : null}
+				) : null}
+				{view.phase === 'loading' || arriving ? <SkeletonRows count={3} height={52} glyph lines={1} /> : null}
 				{view.phase === 'failed' ? (
 					<div className="page-notice">
 						<StatusNotice

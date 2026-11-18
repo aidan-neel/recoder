@@ -398,12 +398,6 @@
 .recent-chats .recent-list {
 	padding-bottom: 0;
 }
-/* A placeholder card on the same lanes as the card that replaces it. */
-.recent-skeleton {
-	padding: 0 10px;
-	border-radius: var(--radius-card);
-	background: rgb(var(--wash-rgb) / 0.035);
-}
 .recent-title {
 	overflow: hidden;
 	color: var(--text-secondary);

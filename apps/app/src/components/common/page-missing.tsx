@@ -2,7 +2,7 @@
 
 import { Button, StatusNotice } from '@recoder/ui';
 import { SearchX } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from './link';
 
 import { useApi } from '@/lib/api/client';
 import { pullsHref } from '@/lib/shell/routes';

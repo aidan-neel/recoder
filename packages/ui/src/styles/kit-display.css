@@ -185,7 +185,7 @@
 		transition: background-color var(--dur-toggle) ease-out;
 	}
 	[data-ui='meter'][data-state='indeterminate'] > [data-ui='meter-fill'] {
-		animation: ui-meter-slide var(--dur-skeleton) cubic-bezier(0.65, 0, 0.35, 1) infinite;
+		animation: ui-meter-slide var(--dur-meter) cubic-bezier(0.65, 0, 0.35, 1) infinite;
 	}
 
 	/* ───────── Collapsible: the chevron that leads a trigger hangs its ink on the trigger's edge ───────── */
@@ -241,7 +241,7 @@
 		flex-direction: column;
 		gap: 8px;
 	}
-	[data-ui='skeleton-row-bars'] > [data-ui='skeleton'] + [data-ui='skeleton'] {
+	[data-ui='skeleton-row-bars'] > [skullet-bar] + [skullet-bar] {
 		height: 10px;
 	}
 

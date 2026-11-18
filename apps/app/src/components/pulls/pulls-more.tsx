@@ -1,10 +1,12 @@
 'use client';
 
-import { Button, SkeletonRows } from '@recoder/ui';
+import { Button } from '@recoder/ui';
 import { TriangleAlert } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 import type { PullListView } from '@/lib/pulls/types';
+
+import { LoadingPullRows } from './pull-list';
 
 /** How many placeholder rows stand in while the next page loads. */
 const LOADING_ROWS = 3;
@@ -45,7 +47,7 @@ export function PullsMore({ more, rowCount }: { more: PullListView['more']; rowC
 
 	return (
 		<>
-			{more.loading ? <SkeletonRows count={LOADING_ROWS} height={60} glyph className="pull-list-skeleton" /> : null}
+			{more.loading ? <LoadingPullRows count={LOADING_ROWS} /> : null}
 			{more.error !== null ? (
 				<div className="strip" role="status">
 					<TriangleAlert aria-hidden />

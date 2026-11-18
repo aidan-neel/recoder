@@ -1,8 +1,9 @@
 'use client';
 
-import { HoverList } from '@recoder/ui';
+import { HoverList, Skeleton } from '@recoder/ui';
 import { useRef } from 'react';
 
+import { LOADING_PULL_ROWS } from '@/lib/pulls/loading-rows';
 import type { PullRow as PullRowView } from '@/lib/pulls/types';
 import { useKeys } from '@/lib/shell/use-keys';
 
@@ -16,6 +17,29 @@ interface PullListProps {
 	onWarm?: (row: PullRowView) => void;
 	/** False leaves each row's repository out, on a page that is about one repository. */
 	showRepo?: boolean;
+}
+
+/** A stand-in row starts no review. */
+function ignore(): void {}
+
+interface LoadingPullRowsProps {
+	/** How many rows to stand in. */
+	count: number;
+	/** False leaves each row's repository out, as the list they stand in for does. */
+	showRepo?: boolean;
+}
+
+/** The skeleton of `count` pull request rows, measured from real rows nobody sees. */
+export function LoadingPullRows({ count, showRepo }: LoadingPullRowsProps) {
+	return (
+		<Skeleton loading>
+			<ul className="pull-list">
+				{LOADING_PULL_ROWS.slice(0, count).map((row) => (
+					<PullRow key={row.key} row={row} starting={false} onReview={ignore} showRepo={showRepo} />
+				))}
+			</ul>
+		</Skeleton>
+	);
 }
 
 /** The link of every row, top to bottom. */

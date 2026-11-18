@@ -63,3 +63,90 @@ export function newReviewHref(base: string): string {
 export function chatHref(base: string, chatId: string): string {
 	return `${base}/chats/${encodeURIComponent(chatId)}`;
 }
+
+/** The screen an address opens, with the parts of the address that screen reads. */
+export type Route =
+	| { screen: 'pulls' | 'new' | 'repos' | 'automations' | 'guidelines' | 'missing' }
+	| { screen: 'repo'; repoId: string }
+	| { screen: 'pull'; repoId: string; number: number }
+	| { screen: 'chat'; chatId: string }
+	| { screen: 'review'; reviewId: string };
+
+/** A pull request number as an address writes it: digits, and never zero. */
+const PULL_NUMBER = /^[1-9]\d*$/;
+
+/** The parts of a path after `base`, decoded; null for a path outside `base` or one that does not decode. */
+function partsOf(pathname: string, base: string): string[] | null {
+	if (pathname !== base && !pathname.startsWith(`${base}/`)) return null;
+
+	try {
+		return pathname.slice(base.length).split('/').filter(Boolean).map(decodeURIComponent);
+	} catch {
+		return null;
+	}
+}
+
+/** The screen the parts name; `live` adds the pages the sample does not have. */
+function screenOf(parts: string[], live: boolean): Route | null {
+	const [place = '', first, second] = parts;
+
+	switch (`${place}/${parts.length}`) {
+		case '/0':
+			return { screen: 'pulls' };
+		case 'new/1':
+			return { screen: 'new' };
+		case 'repos/1':
+			return { screen: 'repos' };
+		case 'repos/2':
+			return { screen: 'repo', repoId: first };
+		case 'pulls/3':
+			return PULL_NUMBER.test(second) ? { screen: 'pull', repoId: first, number: Number(second) } : null;
+		case 'chats/2':
+			return { screen: 'chat', chatId: first };
+		case 'review/2':
+			return live ? { screen: 'review', reviewId: first } : null;
+		case 'automations/1':
+			return live ? { screen: 'automations' } : null;
+		case 'guidelines/1':
+			return live ? { screen: 'guidelines' } : null;
+		default:
+			return null;
+	}
+}
+
+/**
+ * The screen a path opens under `base`. Every address is read here, in the
+ * browser, so a page change needs no server; a path that names no screen is
+ * the missing page.
+ */
+export function routeOf(pathname: string, base: string): Route {
+	const parts = partsOf(pathname, base);
+
+	return (parts && screenOf(parts, isLiveApp(base))) ?? { screen: 'missing' };
+}
+
+/** What the browser tab says for a screen, before the app's name. */
+export function titleOf(route: Route): string {
+	switch (route.screen) {
+		case 'pulls':
+			return 'Pull requests';
+		case 'new':
+			return 'New review';
+		case 'repos':
+			return 'Repositories';
+		case 'repo':
+			return 'Repository';
+		case 'pull':
+			return `#${route.number}`;
+		case 'chat':
+			return 'Chat';
+		case 'review':
+			return 'Review';
+		case 'automations':
+			return 'Automations';
+		case 'guidelines':
+			return 'Guidelines';
+		case 'missing':
+			return 'Not found';
+	}
+}

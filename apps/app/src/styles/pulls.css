@@ -226,9 +226,3 @@
 .pulls-end {
 	height: 1px;
 }
-.pull-list-skeleton {
-	margin: 0 -12px;
-}
-.pull-list-skeleton [data-ui='skeleton-row'] {
-	padding: 0 12px;
-}

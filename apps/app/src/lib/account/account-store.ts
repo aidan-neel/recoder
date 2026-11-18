@@ -1,4 +1,5 @@
 import type { Account, AuthState } from '@recoder/shared';
+import { forgetSkeletonShapes } from '@recoder/ui';
 import { create } from 'zustand';
 
 import type { AuthApi } from '../api/accounts';
@@ -100,8 +101,10 @@ export function refreshForges(): void {
 	void useConnections.getState().loadRepos();
 }
 
+/** Signs out, and drops the skeleton shapes this browser remembered, so nothing of the account's pages stays behind. */
 async function signOut(): Promise<void> {
 	await source?.signOut();
+	forgetSkeletonShapes();
 	await reload();
 }
 

@@ -15,10 +15,11 @@ import {
 	RowButton
 } from '@recoder/ui';
 import { Check, Ellipsis } from 'lucide-react';
-import Link from 'next/link';
 import { Fragment, type ComponentType, type ReactNode } from 'react';
 
 import { useIntent } from '@/lib/shell/intent';
+
+import { Link } from '@/components/common/link';
 
 import type { RowAction } from './recent-actions';
 
@@ -70,7 +71,7 @@ function RowShell({ title, actions, onIntent, className, active, tools, children
 			<ContextMenuTrigger>
 				<div className={className} data-recent data-active={active || undefined} {...intent}>
 					{children}
-					<div className="recent-tools">
+					<div className="recent-tools" skullet-ignore="">
 						{tools}
 						<DropdownMenu>
 							<DropdownMenuTrigger>
@@ -109,7 +110,7 @@ export function RecentRow({ href, active, mark, title, trailing, actions, onInte
 	return (
 		<RowShell title={title} actions={actions} onIntent={onIntent} className="recent-entry" active={active}>
 			<RowButton asChild data-active={active || undefined} className="recent-item">
-				<Link href={href} prefetch aria-current={active ? 'page' : undefined}>
+				<Link href={href} aria-current={active ? 'page' : undefined}>
 					{mark}
 					<span className="recent-title">{title}</span>
 					{trailing}
@@ -159,7 +160,7 @@ export function RecentCard({ href, active, title, repo, age, foot, actions, onIn
 				<span className="recent-age">{age}</span>
 			</span>
 			<RowButton asChild cover className="recent-card-title">
-				<Link href={href} prefetch aria-current={active ? 'page' : undefined}>
+				<Link href={href} aria-current={active ? 'page' : undefined}>
 					{title}
 				</Link>
 			</RowButton>

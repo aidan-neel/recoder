@@ -1,14 +1,14 @@
 'use client';
 
-import { Button, SkeletonRows } from '@recoder/ui';
+import { Button, Skeleton } from '@recoder/ui';
 import { CornerDownLeft, TriangleAlert } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 
 import type { PullListView, PullRow, PullTarget } from '@/lib/pulls/types';
 import { useOpenPull } from '@/lib/pulls/use-open-pull';
 import { usePullList } from '@/lib/pulls/use-pull-list';
 import { useSessionCache } from '@/lib/api/client';
+import { navigate } from '@/lib/shell/navigation';
 import { errorToast } from '@/lib/shell/notify';
 import { useAction } from '@/lib/shell/use-action';
 
@@ -17,7 +17,7 @@ import { FindField } from '@/components/common/find-field';
 import { Page } from '@/components/common/page';
 
 import { PullFilterMenu } from './pull-filter';
-import { PullList } from './pull-list';
+import { LoadingPullRows, PullList } from './pull-list';
 import { RefreshButton, RepoScope } from './pulls-bar';
 import { PullsMore } from './pulls-more';
 import { PullsNotice } from './pulls-notice';
@@ -81,7 +81,6 @@ function OpenRow({ label, onOpen, status }: OpenRowProps) {
  * attention. The field narrows the list and opens a pasted link.
  */
 export function PullsScreen() {
-	const router = useRouter();
 	const sessions = useSessionCache();
 	const view = usePullList();
 	const opener = useOpenPull();
@@ -106,7 +105,7 @@ export function PullsScreen() {
 			opener.open(view.query).then(
 				(href) => {
 					view.setQuery('');
-					router.push(href);
+					navigate(href);
 				},
 				(error: unknown) => {
 					errorToast(reason(error, 'That pull request did not open.'));
@@ -146,10 +145,12 @@ export function PullsScreen() {
 							</span>
 						) : null}
 					</div>
-					{loading ? <SkeletonRows count={LOADING_ROWS} height={60} glyph className="pull-list-skeleton" /> : null}
-					{!loading && view.rows.length > 0 ? (
-						<PullList rows={view.rows} starting={view.starting} onReview={review} onWarm={warm} />
-					) : null}
+					<Skeleton id="pulls" loading={loading}>
+						{loading ? <LoadingPullRows count={LOADING_ROWS} /> : null}
+						{!loading && view.rows.length > 0 ? (
+							<PullList rows={view.rows} starting={view.starting} onReview={review} onWarm={warm} />
+						) : null}
+					</Skeleton>
 					{!loading ? <PullsMore more={view.more} rowCount={view.rows.length} /> : null}
 					{!loading && view.rows.length === 0 && pasted ? (
 						<OpenRow label={pasted} onOpen={openPasted} status={opening.status} />

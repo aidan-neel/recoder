@@ -1,6 +1,6 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from '../shell/navigation';
 
 const PERSON_PARAM = 'person';
 

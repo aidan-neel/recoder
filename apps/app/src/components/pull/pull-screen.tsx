@@ -1,7 +1,7 @@
 'use client';
 
 import type { PullPage } from '@recoder/shared';
-import { Button } from '@recoder/ui';
+import { Button, Skeleton } from '@recoder/ui';
 import { ArrowUpRight } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
@@ -9,12 +9,13 @@ import { useApi } from '@/lib/api/client';
 import { useBugsView } from '@/lib/bugs/use-bugs';
 import { useViewedFiles } from '@/lib/changes/use-changes';
 import { forgeLabel } from '@/lib/connections/forges';
+import { LOADING_PULL_PAGE } from '@/lib/pull/loading-page';
 import { PullSessionProvider, useMergeView, usePullChecksView, usePullPageView } from '@/lib/pull/pull-session';
 import type { PullTab } from '@/lib/pull/types';
 import { usePullTab } from '@/lib/pull/use-pull-tab';
 import { isLive } from '@/lib/run/run-phase';
 import { useRunView } from '@/lib/run/use-run';
-import { replaceSearch } from '@/lib/shell/navigation';
+import { replaceAddress } from '@/lib/shell/navigation';
 import { pullHref, pullsHref, repoHref } from '@/lib/shell/routes';
 
 import { BugsTab } from '@/components/bugs/bugs-tab';
@@ -31,7 +32,6 @@ import { SummaryTab } from '@/components/summary/summary-tab';
 import { ChecksList } from './checks';
 import { MergeActions, MergeFacts } from './merge-facts';
 import { PullHeader } from './pull-header';
-import { PullPageSkeleton } from './pull-skeleton';
 import { PullNotice } from './pull-notice';
 import { PullTabs } from './pull-tabs';
 import { ReviewButton } from './run-banner';
@@ -86,7 +86,28 @@ function PullChecksList() {
 	return <ChecksList view={usePullChecksView()} />;
 }
 
-/** The page inside its session: the bar, the header with its merge facts, the tabs and the open tab. */
+/** The header while the page loads: a stand-in page with a button and a merge fact, for the skeleton to measure. */
+function LoadingHeader() {
+	return (
+		<PullHeader
+			page={LOADING_PULL_PAGE}
+			actions={<Button variant="outline">Review</Button>}
+			merge={
+				<div className="merge-facts">
+					<span className="merge-fact">3 checks passed</span>
+				</div>
+			}
+		>
+			{null}
+		</PullHeader>
+	);
+}
+
+/**
+ * The page inside its session: the bar, the header with its merge facts, the tabs and the open tab. The tabs
+ * come from the address, so they stand from the first frame; while the page loads, the header is a skeleton
+ * measured from a stand-in page and the open tab shows its own.
+ */
 function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	const { base } = useApi();
 	const view = usePullPageView();
@@ -97,7 +118,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	/** Opens the Changes tab in the guide's reading order. */
 	function openGuide(): void {
 		setMode('guide');
-		replaceSearch(pullHref(base, repoId, number, 'changes'));
+		replaceAddress(pullHref(base, repoId, number, 'changes'));
 	}
 
 	const tools: Record<PullTab, ReactNode> = {
@@ -140,17 +161,22 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 					</>
 				}
 			>
-				{view.phase === 'loading' ? <PullPageSkeleton /> : null}
 				{view.phase === 'not-found' || view.phase === 'failed' ? (
 					<div className="page-notice">
 						<PullNotice view={view} />
 					</div>
 				) : null}
-				{page ? (
+				{page || view.phase === 'loading' ? (
 					<>
-						<PullHeader page={page} actions={<PullActions page={page} />} merge={<PullMergeFacts page={page} />}>
-							<PullChecksList />
-						</PullHeader>
+						<Skeleton id="pull-head" loading={!page} className="pull-head-frame">
+							{page ? (
+								<PullHeader page={page} actions={<PullActions page={page} />} merge={<PullMergeFacts page={page} />}>
+									<PullChecksList />
+								</PullHeader>
+							) : (
+								<LoadingHeader />
+							)}
+						</Skeleton>
 						<div className="pull-tabs-row">
 							<PullTabs repoId={repoId} number={number} tab={tab} counts={view.counts} />
 							<div className="pull-tools">{tools[tab]}</div>

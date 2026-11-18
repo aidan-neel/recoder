@@ -85,7 +85,10 @@ this. Treat a lint error as a bug, not a suggestion.
   - Web styles: `apps/web/src/app.css` imports the parts in
     `apps/web/src/styles/`.
   - App `apps/app/src/`: routes in `app/` (`(live)` for the real server,
-    `sample/` for the built-in sample), components in `components/<feature>/`
+    `sample/` for the built-in sample; each is one catch-all page, and
+    `lib/shell/routes.ts` with `components/shell/screens.tsx` picks the
+    screen in the browser, so a new page is a new `Route` there, not a new
+    `page.tsx`), components in `components/<feature>/`
     (`shell`, `pulls`, `pull`, `repo`, `changes`, `summary`, `bugs`, `commits`, `ask`,
     `compose`, `automations`, `guidelines`, `settings`, `admin`, `connections`,
     `setup`, `common`), logic in `lib/<feature>/` (the same names, plus `review`, `run`

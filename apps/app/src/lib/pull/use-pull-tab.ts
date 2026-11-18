@@ -1,6 +1,6 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from '../shell/navigation';
 
 import { pullTabOf } from '../shell/routes';
 import type { PullTab } from './types';

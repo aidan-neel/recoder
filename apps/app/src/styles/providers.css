@@ -43,7 +43,7 @@
 	align-items: flex-end;
 	padding: 0 10px 6px;
 }
-.provider-pick-heading [data-ui='skeleton'] {
+.provider-pick-heading [skullet-bar] {
 	width: 52px;
 	height: 10px;
 	margin-bottom: 3px;

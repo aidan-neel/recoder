@@ -38,60 +38,25 @@
 		color: var(--text-primary);
 	}
 
-	/* ───────── Skeleton: hidden for --skeleton-delay, a short fade in, then a light passes over it for about 10s ───────── */
-	/*
-	 * The fade starts slow, so a skeleton the content replaces a few frames in stays faint
-	 * instead of flashing. It animates opacity only, so the compositor runs it.
-	 */
-	[data-ui='skeleton'] {
-		position: relative;
-		height: 12px;
-		overflow: hidden;
-		border-radius: var(--radius-chip);
-		background-color: color-mix(in oklab, var(--bg-menu), var(--line-tab));
-		animation: ui-skeleton-hold var(--dur-swap) ease-in var(--skeleton-delay) backwards;
+	/* ───────── Skeleton: Skullet draws the bars from the content they stand for; this is their color, light and corner ───────── */
+	:root {
+		--skullet-base: color-mix(in oklab, var(--bg-menu), var(--line-tab));
+		--skullet-highlight: var(--line-tab);
+		--skullet-radius: var(--radius-chip);
+		--skullet-speed: fast;
 	}
 	/*
-	 * The light is a layer five bars wide, a band every two bar widths, that the compositor
-	 * slides by transform, so the shimmer never repaints. Each pass moves it two bands, so
-	 * the loop is seamless. It runs --skeleton-passes times, then fades out, and the bar rests
-	 * flat on the light's middle tone so it stays visible on raised cards.
+	 * A lone bar: a line of small text tall and as wide as its box, until a class says otherwise. It stays unseen
+	 * for --skeleton-delay and then fades in, so a value that lands a few frames in never flashes a bar.
 	 */
-	[data-ui='skeleton']::after {
-		position: absolute;
-		top: 0;
-		bottom: 0;
-		left: -400%;
-		width: 500%;
-		background: repeating-linear-gradient(90deg, var(--bg-menu) 0%, var(--line-tab) 20%, var(--bg-menu) 40%);
-		content: '';
-		pointer-events: none;
-		animation:
-			ui-shimmer var(--dur-skeleton) linear var(--skeleton-passes),
-			ui-shimmer-rest var(--dur-toggle) ease-out calc(var(--dur-skeleton) * var(--skeleton-passes) - var(--dur-toggle))
-				forwards;
+	[skullet-bar] {
+		height: 12px;
+		border-radius: var(--skullet-radius);
+		animation: ui-skeleton-hold var(--dur-swap) ease-in var(--skeleton-delay) backwards;
 	}
 	@keyframes ui-skeleton-hold {
 		from {
 			opacity: 0;
-		}
-	}
-	@keyframes ui-shimmer {
-		from {
-			transform: translateX(0);
-		}
-		to {
-			transform: translateX(80%);
-		}
-	}
-	@keyframes ui-shimmer-rest {
-		to {
-			opacity: 0;
-		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		[data-ui='skeleton']::after {
-			display: none;
 		}
 	}
 

@@ -1,11 +1,11 @@
 'use client';
 
 import { HoverList, RowButton } from '@recoder/ui';
-import Link from 'next/link';
 
 import type { MergedRow, RepoPageData, RepoPageView } from '@/lib/repo/types';
 
 import { Age } from '@/components/common/age';
+import { Link } from '@/components/common/link';
 import { PullMark } from '@/components/common/pull-mark';
 import { PullList } from '@/components/pulls/pull-list';
 
@@ -20,7 +20,7 @@ function Merged({ rows }: { rows: MergedRow[] }) {
 			{rows.map((row) => (
 				<li key={row.key} data-repo-row className="repo-row">
 					<RowButton asChild cover>
-						<Link href={row.href} prefetch className="repo-row-link">
+						<Link href={row.href} className="repo-row-link">
 							<PullMark state="merged" />
 							<span className="repo-row-title">{row.title}</span>
 							<span className="repo-row-number">#{row.number}</span>

@@ -84,16 +84,9 @@
 	flex: 1;
 }
 
-/* While the page loads: bars as tall as the title and the facts, so nothing moves when they arrive. */
-.pull-head-skeleton {
-	display: flex;
-	flex-direction: column;
-}
-.pull-head-skeleton > :nth-child(1) {
-	margin: 4px 0;
-}
-.pull-head-skeleton > :nth-child(2) {
-	margin-top: 12px;
+/* The header inside its skeleton's frame keeps its height when the page is short of room. */
+.pull-head-frame {
+	flex-shrink: 0;
 }
 
 /* ───────── Merge facts: the checks and the conflicts after the facts, as quiet text past a hairline ───────── */

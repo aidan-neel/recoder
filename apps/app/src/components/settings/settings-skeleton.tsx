@@ -1,4 +1,4 @@
-import { Card, Skeleton, SkeletonRows } from '@recoder/ui';
+import { Card, SkeletonBox, SkeletonRows } from '@recoder/ui';
 
 /** Widths for the name and detail bars of a row, cycled so the rows do not look stamped. */
 const ROW_WIDTHS = [
@@ -20,7 +20,7 @@ export function SettingsSkeleton({ groups }: { groups: readonly number[] }) {
 			{groups.map((rows, index) => (
 				<div key={index} className="settings-group">
 					<div className="settings-group-head">
-						<Skeleton style={{ width: 96 }} />
+						<SkeletonBox style={{ width: 96 }} />
 					</div>
 					<Card>
 						<SkeletonRows count={rows} height={SETTINGS_ROW_HEIGHT} widths={ROW_WIDTHS} rowClassName="settings-row" />

@@ -11,7 +11,7 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-	Skeleton
+	SkeletonBox
 } from '@recoder/ui';
 import { ChevronDown, ChevronRight, Zap } from 'lucide-react';
 
@@ -60,7 +60,7 @@ function ModelMenu({ speed }: { speed?: SpeedChoice }) {
 	const pickers: Record<ComposerRole, ModelPickerView> = { orchestrator: review, specialist: subagent };
 
 	if (review.offline) return speed ? <SpeedMenu choice={speed} /> : null;
-	if (!review.label) return <Skeleton className="composer-models-loading" />;
+	if (!review.label) return <SkeletonBox className="composer-models-loading" />;
 
 	const models = `${review.label.text} reviewer, ${subagent.label?.text ?? 'loading'} subagent`;
 

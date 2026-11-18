@@ -1,7 +1,7 @@
 'use client';
 
 import type { GuidelinesOverview } from '@recoder/shared';
-import { Button, Skeleton, SkeletonText } from '@recoder/ui';
+import { Button, SkeletonBox, SkeletonText } from '@recoder/ui';
 
 import { useLearnedRules } from '@/lib/guidelines/use-learned-rules';
 import { useRepoRow, type RepoRowError } from '@/lib/guidelines/use-repo-row';
@@ -36,7 +36,7 @@ function LoadingRow({ id, name }: { id: string; name: string }) {
 			name={name}
 			summary={<SkeletonText count={1} widths={[summaryWidth(id)]} lineHeight={SUMMARY_LINE_HEIGHT} />}
 			open={false}
-			action={<Skeleton className="guidelines-action-skeleton" />}
+			action={<SkeletonBox className="guidelines-action-skeleton" />}
 		/>
 	);
 }

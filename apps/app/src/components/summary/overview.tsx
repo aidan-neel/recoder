@@ -1,11 +1,12 @@
 'use client';
 
-import { ClampedText, Markdown, Pill, SkeletonText } from '@recoder/ui';
+import { ClampedText, Markdown, Pill, Skeleton } from '@recoder/ui';
 
 import type { BugsView, SummaryView } from '@/lib/bugs/types';
 import type { RunView } from '@/lib/run/types';
 import { author } from '@/lib/shell/format';
 import { severityCounts } from '@/lib/summary/bug-tones';
+import { LOADING_SUMMARY } from '@/lib/summary/loading-summary';
 
 import { Age } from '@/components/common/age';
 
@@ -18,7 +19,7 @@ interface OverviewProps {
 	bugs: BugsView;
 	/** The pull request author's login; null before the page loads. */
 	by: string | null;
-	/** True until the review's record arrives: the overview stands as its skeleton. */
+	/** True until the review's record arrives: the overview stands as a skeleton measured from a stand-in account. */
 	loading: boolean;
 }
 
@@ -29,21 +30,34 @@ interface OverviewProps {
  * author text show as written, never cut but behind Show more.
  */
 export function Overview({ summary, run, bugs, by, loading }: OverviewProps) {
-	if (loading) return <OverviewSkeleton />;
-	if (!summary.analysis && !summary.description) return null;
+	if (!loading && !summary.analysis && !summary.description) return null;
+
+	const shown = loading ? LOADING_SUMMARY : summary;
 
 	return (
-		<section className="summary-overview" aria-label="Overview">
-			{summary.analysis ? (
-				<>
-					<ClampedText lines={4} className="summary-lede">
-						<Markdown>{summary.analysis}</Markdown>
-					</ClampedText>
-					<OverviewFacts run={run} bugs={bugs} />
-				</>
-			) : null}
-			{summary.description ? <Description text={summary.description} by={by} /> : null}
-		</section>
+		<Skeleton id="summary-overview" loading={loading}>
+			<section className="summary-overview" aria-label="Overview">
+				{shown.analysis ? (
+					<>
+						<ClampedText lines={4} className="summary-lede">
+							<Markdown>{shown.analysis}</Markdown>
+						</ClampedText>
+						{loading ? <LoadingFacts /> : <OverviewFacts run={run} bugs={bugs} />}
+					</>
+				) : null}
+				{shown.description ? <Description text={shown.description} by={by} /> : null}
+			</section>
+		</Skeleton>
+	);
+}
+
+/** The facts' line while the review's record loads: a badge and the commit, for the skeleton to measure. */
+function LoadingFacts() {
+	return (
+		<div className="summary-facts">
+			<Pill>2 high</Pill>
+			<span className="summary-reviewed">Reviewed 0000000 an hour ago</span>
+		</div>
 	);
 }
 
@@ -82,16 +96,6 @@ function Description({ text, by }: { text: string; by: string | null }) {
 			<ClampedText lines={3}>
 				<Markdown>{text}</Markdown>
 			</ClampedText>
-		</div>
-	);
-}
-
-/** Bars where the lede and its badges will stand, exactly as tall, so nothing moves when they arrive. */
-function OverviewSkeleton() {
-	return (
-		<div className="summary-overview" aria-hidden>
-			<SkeletonText count={3} lineHeight={24} />
-			<SkeletonText count={1} lineHeight={20} widths={['220px']} />
 		</div>
 	);
 }

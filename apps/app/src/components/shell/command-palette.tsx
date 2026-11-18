@@ -23,7 +23,6 @@ import {
 	ShieldUser,
 	SunMoon
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState, type ComponentType } from 'react';
 
 import { useIsAdmin } from '@/lib/account/use-is-admin';
@@ -32,6 +31,7 @@ import type { PullRow, PullTarget } from '@/lib/pulls/types';
 import { useOpenPull } from '@/lib/pulls/use-open-pull';
 import { useRowEntries } from '@/lib/pulls/use-rows';
 import { useChrome } from '@/lib/shell/chrome';
+import { navigate } from '@/lib/shell/navigation';
 import { errorToast } from '@/lib/shell/notify';
 import { AUTOMATIONS_HREF, GUIDELINES_HREF, isLiveApp, newReviewHref, pullsHref, reposHref } from '@/lib/shell/routes';
 import { useTheme } from '@/lib/shell/theme';
@@ -84,7 +84,6 @@ function PullItem({ row, onOpen }: { row: PullRow; onOpen: (href: string) => voi
  * and so are the places and the theme.
  */
 export function CommandPalette() {
-	const router = useRouter();
 	const { base } = useApi();
 	const open = useChrome((state) => state.paletteOpen);
 	const setOpen = useChrome((state) => state.setPaletteOpen);
@@ -102,17 +101,18 @@ export function CommandPalette() {
 	/** Leaves the palette for a page. */
 	function go(href: string): void {
 		setOpen(false);
-		router.push(href);
+		navigate(href);
 	}
 
 	/** Opens the pull request the text names; a refusal stays on screen as a toast. */
 	function openPasted(): void {
 		setOpen(false);
 
-		opener.open(query).then(
-			(href) => router.push(href),
-			(error: unknown) => errorToast(error instanceof Error ? error.message : 'That pull request did not open.')
-		);
+		opener
+			.open(query)
+			.then(navigate, (error: unknown) =>
+				errorToast(error instanceof Error ? error.message : 'That pull request did not open.')
+			);
 	}
 
 	/** The live app's own pages and its Settings; the sample has none of them, so its palette leaves them out. */

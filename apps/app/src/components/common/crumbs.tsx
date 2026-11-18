@@ -1,5 +1,5 @@
 import { ChevronRight } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from './link';
 import { Fragment } from 'react';
 
 /** One part of a breadcrumb. A part with no `href` is plain text; the last part names the page. */

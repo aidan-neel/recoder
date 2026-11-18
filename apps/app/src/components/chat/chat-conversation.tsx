@@ -1,6 +1,6 @@
 'use client';
 
-import { Skeleton, SkeletonText, StatusNotice } from '@recoder/ui';
+import { SkeletonBox, SkeletonText, StatusNotice } from '@recoder/ui';
 
 import { useFollowEnd } from '@/lib/ask/use-follow-end';
 import type { RepoChatView } from '@/lib/chat/types';
@@ -65,7 +65,7 @@ export function ChatSkeleton() {
 	return (
 		<div className="chat-scroll" aria-hidden>
 			<div className="chat-column chat-thread chat-skeleton">
-				<Skeleton className="chat-skeleton-question" />
+				<SkeletonBox className="chat-skeleton-question" />
 				<SkeletonText lineHeight={22} />
 			</div>
 		</div>

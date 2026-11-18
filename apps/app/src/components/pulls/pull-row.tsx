@@ -9,7 +9,6 @@ import {
 	RowButton
 } from '@recoder/ui';
 import { ArrowUpRight, Ellipsis, Link2, RotateCw } from 'lucide-react';
-import Link from 'next/link';
 import { memo, useCallback } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -21,6 +20,7 @@ import { pullHref } from '@/lib/shell/routes';
 
 import { Age } from '@/components/common/age';
 import { DiffStat } from '@/components/common/diff-stat';
+import { Link } from '@/components/common/link';
 import { PullMark } from '@/components/common/pull-mark';
 import { RepoLabel } from '@/components/common/repo-label';
 
@@ -83,7 +83,7 @@ export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent
 			<div className="pull-row-text">
 				<div className="pull-row-title">
 					<RowButton asChild cover>
-						<Link href={row.href} prefetch data-row-link>
+						<Link href={row.href} data-row-link>
 							{row.title}
 						</Link>
 					</RowButton>
