@@ -5,11 +5,12 @@ import type { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import type { SetupReport } from '../../../sandbox/workspace-setup.js';
 import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
-import { runBaselineChecks } from './baseline-run.js';
+import { ranCode, runBaselineChecks } from './baseline-run.js';
 import { installedTool, pickBaselineChecks } from './baseline-checks.js';
 import { extendDeadlines, type ReviewRun } from './context.js';
 import { describePrep, packagePrepEnabled, preparePackages, type PrepReport } from './package-prep.js';
-import { diffPaths } from './run-outcome.js';
+import { reviewersRunCode } from './reviewer-tools.js';
+import { diffPaths, unresolved } from './run-outcome.js';
 import type { BaselineResult, HarnessEvents, TaskFn } from './types.js';
 
 /** The dependency install, started early, and the time its commands spent waiting for a sandbox slot. */
@@ -30,28 +31,55 @@ export function startSetup(run: ReviewRun): PendingSetup {
 	return { report, wait };
 }
 
+/** The baseline checks of a prepared sandbox, which run behind the reviewers. */
+export interface BackgroundChecks {
+	/** The commands that were picked to run. */
+	commands: string[];
+	/** Resolves once every check has finished and `run.baseline` holds the results. */
+	done: Promise<void>;
+	/** True as soon as one check shows the repository's code running here; false once all finished and none did. */
+	ranCode: Promise<boolean>;
+}
+
+/** The checks of a review with no sandbox, or one whose sandbox could not be prepared. */
+const NO_CHECKS: BackgroundChecks = { commands: [], done: Promise.resolve(), ranCode: Promise.resolve(false) };
+
+/**
+ * Prepares the sandbox the way {@link prepareChecks} does. It never rejects, so a review whose reviewers start
+ * without waiting for it can hold the promise: a sandbox that fails to prepare is logged and leaves the review
+ * with no checks, and its bugs unrun.
+ */
+export function prepareSandbox(run: ReviewRun, setup: PendingSetup): Promise<BackgroundChecks> {
+	return prepareChecks(run, setup).catch((err): BackgroundChecks => {
+		run.events?.onLog?.(`Sandbox preparation failed: ${err instanceof Error ? err.message : String(err)}`);
+
+		return NO_CHECKS;
+	});
+}
+
 /**
  * Waits for the install, then starts the changed packages' type check, lint
  * and tests in the background, so reviewers begin while they run. Reviewers
  * and verifiers that start once the checks are done see their results in
- * `setupNotes`; the detectors wait for them. The checks are returned as a
- * function, so awaiting this doesn't wait for them. Preparing the
- * environment is not analysis, so the install time is given back to the
- * reviewers: up to a cap, plus all of the time spent queued behind other
- * reviews' sandbox commands, which no cap should charge to this review.
+ * `setupNotes`; the detectors wait for them. Awaiting this doesn't wait for
+ * the checks. Preparing the environment is not analysis, so the install time
+ * is given back to the review: up to a cap, plus all of the time spent queued
+ * behind other reviews' sandbox commands, which no cap should charge to this review.
  */
-export async function prepareSandbox(run: ReviewRun, setup: PendingSetup): Promise<() => Promise<void>> {
+async function prepareChecks(run: ReviewRun, setup: PendingSetup): Promise<BackgroundChecks> {
 	const { events, workspace } = run;
 
-	if (!workspace) return () => Promise.resolve();
+	if (!workspace) return NO_CHECKS;
 
-	for (const record of run.assignments) {
-		if (record.status !== 'queued') continue;
-		record.currentOperation = 'Waiting for setup';
-		events?.onAssignment?.({ ...record });
+	if (reviewersRunCode()) {
+		for (const record of run.assignments) {
+			if (record.status !== 'queued') continue;
+			record.currentOperation = 'Waiting for setup';
+			events?.onAssignment?.({ ...record });
+		}
+
+		events?.onStage?.('checks');
 	}
-
-	events?.onStage?.('checks');
 
 	const prepStarted = reviewNow();
 	const report = await setup.report;
@@ -62,12 +90,15 @@ export async function prepareSandbox(run: ReviewRun, setup: PendingSetup): Promi
 	const prep = packagePrepEnabled() ? await prepareChanged(run, workspace, report, changed, setup.wait) : [];
 
 	run.setupNotes = describeSandbox(report, [], runtimes, checks, prep);
+	run.sharedSetupNotes ??= run.setupNotes;
 
 	const elapsed = Math.max(0, reviewNow() - prepStarted);
 	const queued = Math.min(setup.wait.waitedMs, elapsed);
 	const prepMs = Math.min(REVIEW_POLICY.maxPrepExtensionMs, elapsed - queued) + queued;
 
 	if (prepMs > 0) extendDeadlines(run, prepMs);
+
+	const shown = Promise.withResolvers<boolean>();
 
 	const done = runBaselineChecks(checks, {
 		evidence: run.evidence,
@@ -76,15 +107,19 @@ export async function prepareSandbox(run: ReviewRun, setup: PendingSetup): Promi
 		signal: run.controller.signal,
 		events,
 		task: run.task,
-		cache: run.input.baselineCache
+		cache: run.input.baselineCache,
+		onResult: (result) => {
+			if (ranCode(result)) shown.resolve(true);
+		}
 	})
 		.catch((): BaselineResult[] => [])
 		.then((baseline) => {
 			run.baseline = baseline;
 			run.setupNotes = describeSandbox(report, baseline, runtimes, [], prep);
+			shown.resolve(false);
 		});
 
-	return () => done;
+	return { commands: checks, done, ranCode: shown.promise };
 }
 
 /**
@@ -268,6 +303,8 @@ async function prepareChanged(
 			return null;
 		})
 	);
+
+	run.smokeReached = report?.steps.some((step) => step.outcome !== undefined && !unresolved(step.outcome)) ?? false;
 
 	const generated = report?.steps.filter((step) => step.kind === 'generate' && step.exitCode === 0) ?? [];
 

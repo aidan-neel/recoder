@@ -1,5 +1,6 @@
 import type { AgentAdapter, AgentReply, AgentRun } from '../../../agents/contract.js';
-import { nativeToolNames } from '../../../evidence/native-tools.js';
+import { reviewerTools } from '../../../env.js';
+import { nativeToolNames, type ToolOffer } from '../../../evidence/native-tools.js';
 import { extractJsonValue } from '../../../models/json-extract.js';
 import { isRateLimitError, isTransientLlmError } from '../../../models/llm/errors.js';
 import {
@@ -147,6 +148,17 @@ class NativeRun<T> {
 		recordLlmSuccess(this.endpoint);
 	}
 
+	/**
+	 * The tools the CLI lists for the model. With every tool on, all of them, whatever this agent may call, since
+	 * the gate refuses the rest; otherwise only the ones this agent may call, so a model is never shown a tool it
+	 * has no use for.
+	 */
+	private listedTools(): ToolOffer {
+		if (reviewerTools() === 'all') return { exec: true, delegate: true };
+
+		return { exec: Boolean(this.opts.exec), delegate: Boolean(this.opts.delegate) };
+	}
+
 	private async open(): Promise<AgentRun> {
 		const { opts } = this;
 
@@ -154,7 +166,7 @@ class NativeRun<T> {
 			model: opts.config.model,
 			reasoningEffort: opts.config.reasoningEffort,
 			system: forNativeTools(opts.system) + (this.toolsOn ? NATIVE_REPLY_RULES : TOOLLESS_REPLY_RULES) + CHAT_STYLE,
-			tools: toolTurns(opts) > 0 ? nativeToolNames({ exec: true, delegate: true }) : [],
+			tools: toolTurns(opts) > 0 ? nativeToolNames(this.listedTools()) : [],
 			runTool: this.gate.run,
 			onEvent: this.relay.onEvent,
 			signal: opts.signal,

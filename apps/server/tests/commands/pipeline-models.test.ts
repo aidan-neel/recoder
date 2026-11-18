@@ -16,6 +16,9 @@ import {
 	type FakeRequest
 } from '../helpers/fake-reviewer';
 import { localForgeFixture } from '../helpers/local-forge';
+import { envFlag } from '../helpers/env-flag';
+
+envFlag('RECODER_REVIEWER_TOOLS', 'all');
 
 const cleanups = resetAfterEach();
 

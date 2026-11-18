@@ -1,5 +1,7 @@
 import type { BriefQuestion, ImageUpload, ReviewAssignment } from '@recoder/shared';
+import { reviewerTools } from '../../../env.js';
 import { formatToolResults, type EvidenceStore } from '../../../evidence/evidence.js';
+import type { ToolOffer } from '../../../evidence/native-tools.js';
 import {
 	configForOrchestrator,
 	configForSubagent,
@@ -47,7 +49,9 @@ import type { UnitRequest } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
 import { workerDelegate } from '../workers/worker.js';
 import { COVERAGE_ROLE, recordFor, updateAssignment } from './assignments.js';
+import { readScopedPatch, unreadHunks, type ScopedPatch } from './opening-patch.js';
 import { capturePrompt, type Received } from './received.js';
+import { openingPatchChars, reviewersRunCode } from './reviewer-tools.js';
 import { applyUnitResult } from './unit-result.js';
 import type { HarnessEvents, TaskFn } from './types.js';
 
@@ -68,7 +72,11 @@ export interface PoolContext extends ReviewerPromptContext {
 	exec: boolean;
 	/** The brief's images, which reviewers on the Review model read with their first prompt; subagents do not. */
 	images: readonly ImageUpload[];
-	/** Dependency setup and baseline check results as they stand when a reviewer starts; the checks finish mid-review. */
+	/**
+	 * Dependency setup and baseline check results as they stand when a reviewer starts; the checks finish
+	 * mid-review. Empty for reviewers that run no code: they start before the sandbox is prepared, and what its
+	 * notes held would depend on how fast it was.
+	 */
 	setupNotes: () => string;
 	/** Setup snapshot shared by every unit; later baseline results follow the assignment. */
 	sharedSetupNotes?: string;
@@ -92,9 +100,6 @@ export interface PoolContext extends ReviewerPromptContext {
 	/** Called after each unit settles, to save a checkpoint. */
 	onFinished?: () => void;
 }
-
-/** Tool results for the scoped patch a reviewer starts with. */
-export type ScopedPatch = Awaited<ReturnType<EvidenceStore['executeRound']>>;
 
 const REVIEWER_EXAMPLE =
 	'{"message":"No issues in the queue split.","findings":[],"examinedHunks":[],"gaps":[],"blockers":[],"subagents":[],"unsettled":[],"answered":[],"recommendedChecks":[]}';
@@ -154,7 +159,7 @@ export async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], 
 	queueAssignment(item, records, ctx, model);
 
 	try {
-		const initialEvidence = await readScopedPatch(item, role, ctx);
+		const initialEvidence = await readScopedPatch(item, role, ctx, openingPatchChars(cfg.contextWindow));
 		const result = await askReviewer(item, records, ctx, cfg, initialEvidence);
 
 		if (!result.value) {
@@ -207,20 +212,6 @@ export function queueAssignment(item: ReviewUnit, records: ReviewAssignment[], c
 		queuedAt,
 		queueReason: 'Waiting for a reviewer slot'
 	});
-}
-
-/**
- * The first bounded patch page for every scoped file, supplied up front instead of
- * spending a model round asking for it. Every file gets a result (truncated once
- * the round budget is spent), so none silently drops out past the per-turn action limit.
- */
-export function readScopedPatch(item: ReviewUnit, role: string, ctx: PoolContext): Promise<ScopedPatch> {
-	return ctx.evidence.executeRound(
-		item.scope.map((entry) => ({ action: 'readDiff', path: entry.path, hunkIds: entry.hunkIds })),
-		ctx.signal,
-		(tool) => ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role }),
-		item.scope.length
-	);
 }
 
 /**
@@ -287,15 +278,20 @@ function askReviewer(
 	const maxTurns = subagent ? ctx.limits.subagentTurns : ctx.limits.reviewerTurns;
 	const defaultCategory = categories[0] ?? 'correctness';
 
-	const delegate = subagent ? undefined : delegateFor(item, records, ctx);
+	const runsCode = reviewersRunCode();
 
 	/** A second look only reads: verification runs every candidate it reports, so its turns go to finding them. */
-	const exec = Boolean(ctx.exec) && !item.purpose;
+	const exec = Boolean(ctx.exec) && !item.purpose && runsCode;
+
+	const delegate = subagent || !runsCode ? undefined : delegateFor(item, records, ctx);
 
 	return runJsonAgent({
 		stage: item.purpose ? 'second-look' : subagent ? 'subagent' : 'reviewer',
 		label: item.title,
-		system: withGuidelines(systemPrompt(item, subagent, ctx, Boolean(delegate)), ctx.inventory.guidelines),
+		system: withGuidelines(
+			systemPrompt(item, subagent, ctx, { exec, delegate: Boolean(delegate) }),
+			ctx.inventory.guidelines
+		),
 		exec,
 		delegate,
 		user: unitPrompt(
@@ -311,6 +307,7 @@ function askReviewer(
 		budget: ctx.budget,
 		evidence: ctx.evidence,
 		maxTurns,
+		...(maxTurns === 1 ? { maxReasoningChars: REVIEW_POLICY.singleCallReasoningChars } : {}),
 		signal: ctx.signal,
 		deadlineAt: ctx.deadlineAt,
 		parse: (raw) => parseReviewerOutput(raw, defaultCategory),
@@ -330,37 +327,20 @@ function askReviewer(
  * A unit agent's system prompt: the role a second look was sent for, a
  * subagent's, or the lens procedures with the parts this reviewer is offered.
  */
-function systemPrompt(item: ReviewUnit, subagent: boolean, ctx: PoolContext, delegate: boolean): string {
+function systemPrompt(item: ReviewUnit, subagent: boolean, ctx: PoolContext, offer: ToolOffer): string {
 	const selected = lensSelectionNote(ctx.selection);
 
 	if (item.purpose) return secondLookSystemPrompt(item.purpose, ctx.directive) + selected;
 
 	if (subagent) {
-		return subagentSystemPrompt(ctx.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0) + selected;
+		return subagentSystemPrompt(offer.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0) + selected;
 	}
 
-	return reviewerSystemPrompt(ctx.exec, ctx.directive, {
+	return reviewerSystemPrompt(offer.exec, ctx.directive, {
 		subagents: ctx.subagentRequests,
-		delegate
+		delegate: offer.delegate,
+		single: reviewerTools() === 'none'
 	});
-}
-
-/**
- * The hunks the first patch round did not reach, named so a reviewer of a large slice pages them itself and does
- * not list them as examined unread. Empty when the round held the whole scope.
- */
-function unreadHunks(item: ReviewUnit, patch: ScopedPatch): string {
-	const lines = item.scope.flatMap((entry) => {
-		const result = patch.find((candidate) => candidate.path === entry.path);
-		const shown = new Set(result?.ok ? result.hunkIds : []);
-		const unread = entry.hunkIds.filter((hunkId) => !shown.has(hunkId));
-
-		return unread.length ? [`- ${entry.path}: ${unread.join(', ')}`] : [];
-	});
-
-	if (!lines.length) return '';
-
-	return `\n\nThe first patch page did not reach these hunks. Read them with readDiff (the path and hunkIds, or the cursor of a truncated result) before you list them as examined:\n${lines.join('\n')}`;
 }
 
 /**
@@ -498,3 +478,5 @@ export function failAssignment(
 
 	ctx.events?.onAssignment?.(recordFor(records, item.id));
 }
+
+export { readScopedPatch, type ScopedPatch };

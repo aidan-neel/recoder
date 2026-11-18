@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAdaptiveReview } from '../../../src/review/pipeline/harness';
+import { lanesAvailable } from '../../../src/sandbox/checkout-lanes';
 import { execUnavailableReason } from '../../../src/sandbox/exec-sandbox';
 import {
 	DIFF,
@@ -192,6 +193,58 @@ test.skipIf((await execUnavailableReason()) !== null)(
 
 		expect(result.funnel).toMatchObject({ raised: 1, unproven: 0, verified: 0, notRun: 1, shown: 1 });
 	}
+);
+
+/** Reviews a repo with `base` that raises one bug, and expects a verifier to have run and proven it. */
+async function expectVerifiedByRun(base: Record<string, string>): Promise<void> {
+	const { result, verifiers } = await reviewOneBug(base);
+
+	expect(verifiers).toBeGreaterThan(0);
+	expect(result.findings[0].verification).toMatchObject({ status: 'verified', method: 'run' });
+}
+
+test.skipIf((await execUnavailableReason()) !== null)(
+	'a bug is still verified by a run when the only check fails after tests ran and passed',
+	() =>
+		expectVerifiedByRun({
+			'package.json': JSON.stringify({ scripts: { test: 'echo " 12 pass" && echo " 1 fail" && exit 1' } })
+		})
+);
+
+test.skipIf((await execUnavailableReason()) !== null)(
+	'a bug is still verified by a run when the test script stops at lint but one test file runs',
+	() =>
+		expectVerifiedByRun({
+			'package.json': JSON.stringify({ scripts: { test: 'false && bun test' } }),
+			'src/a.test.ts': "import { expect, test } from 'bun:test';\n\ntest('adds', () => expect(1 + 1).toBe(2));\n"
+		})
+);
+
+test.skipIf((await execUnavailableReason()) !== null || !lanesAvailable())(
+	'a bug is verified once the smoke run shows the code running, while the only check is still running',
+	async () => {
+		useTestModel(4);
+
+		const root = await mkdtemp(join(tmpdir(), 'recoder-verify-early-'));
+		const untilVerified = 'until [ -e "$TMPDIR/verified" ]; do sleep 0.05; done';
+
+		const base = {
+			'package.json': JSON.stringify({ scripts: { test: `${untilVerified} && bun test` } }),
+			'src/a.test.ts': "import { expect, test } from 'bun:test';\n\ntest('adds', () => expect(1 + 1).toBe(2));\n"
+		};
+
+		try {
+			const result = await reviewWithFakeModel(root, base, {
+				findings: ['Real bug.'],
+				realCommand: 'touch "$TMPDIR/verified"; grep -c missing src/a.ts'
+			});
+
+			expect(result.findings[0].verification).toMatchObject({ status: 'verified', method: 'run' });
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	},
+	30_000
 );
 
 test.skipIf((await execUnavailableReason()) !== null)(

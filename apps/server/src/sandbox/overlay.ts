@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { cloneTree } from './clone-tree.js';
 
 /** A shared directory shown read-only under `target`, with every write kept in `upper`. */
 export interface OverlayMount {
@@ -100,11 +101,15 @@ export function overlayUnavailableReason(): Promise<string | null> {
 }
 
 /**
- * Copies a directory tree without following links. APFS and btrfs clone the
- * files instead of copying their bytes when asked to; where that is not
- * supported the plain copy runs. `to` must not exist.
+ * Copies a directory tree without following links, the cheapest way the host
+ * has: one clone of the whole tree on APFS, then a clone per file (APFS,
+ * btrfs), then a plain copy. `to` must not exist.
  */
 export async function copyTree(from: string, to: string): Promise<void> {
+	await mkdir(dirname(to), { recursive: true });
+
+	if (await cloneTree(from, to)) return;
+
 	const flags =
 		process.platform === 'darwin'
 			? [
@@ -112,8 +117,6 @@ export async function copyTree(from: string, to: string): Promise<void> {
 					['-R', '-P', '-p']
 				]
 			: [['-a', '--reflink=auto'], ['-a']];
-
-	await mkdir(dirname(to), { recursive: true });
 
 	for (const attempt of flags) {
 		const proc = Bun.spawn(['cp', ...attempt, from, to], { stdout: 'ignore', stderr: 'pipe' });

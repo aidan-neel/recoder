@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runCommand } from '../commands/runner.js';
 import { env } from '../env.js';
@@ -142,11 +142,7 @@ export async function prepareSandbox(opts: {
 
 	await mkdir(path, { recursive: true });
 
-	const inside = await git(path, ['rev-parse', '--is-inside-work-tree'], 'sandbox check', { signal })
-		.then(() => true)
-		.catch(() => false);
-
-	if (!inside) {
+	if (!(await isCheckoutRoot(path, signal))) {
 		opts.onProgress?.('Cloning repository into the review checkout');
 
 		const cloneUrl = cloneUrlOf(repoSlug, repoUrl, opts.provider);
@@ -180,6 +176,20 @@ export async function prepareSandbox(opts: {
 	const headSha = await git(path, ['rev-parse', 'HEAD'], 'sandbox sha', { signal });
 
 	return { key, path, repoSlug, prNumber, headSha };
+}
+
+/**
+ * Whether `path` is the root of its own checkout. Being inside a work tree is
+ * not enough: a work dir under a folder that is itself a repository (a home
+ * directory kept in git) would pass for a checkout that was never cloned, and
+ * the fetch that follows would run against the outer repository.
+ */
+async function isCheckoutRoot(path: string, signal?: AbortSignal): Promise<boolean> {
+	const root = await git(path, ['rev-parse', '--show-toplevel'], 'sandbox check', { signal }).catch(() => null);
+
+	if (root === null) return false;
+
+	return (await realpath(root)) === (await realpath(path));
 }
 
 /**

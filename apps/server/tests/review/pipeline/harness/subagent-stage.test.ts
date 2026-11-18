@@ -6,6 +6,9 @@ import type { ChangeIntent } from '../../../../src/review/pipeline/intent/types'
 import type { LensId } from '../../../../src/review/pipeline/lenses/types';
 import { NOTHING, addedFile, modelReply, restoreAfterEach, useTestModel } from '../harness-fixtures';
 import { question } from '../question-fixtures';
+import { envFlag } from '../../../helpers/env-flag';
+
+envFlag('RECODER_REVIEWER_TOOLS', 'all');
 
 restoreAfterEach();
 

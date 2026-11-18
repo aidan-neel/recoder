@@ -7,15 +7,19 @@ import { runBaselineChecks } from '../../../../src/review/pipeline/harness/basel
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import { REVIEW_POLICY } from '../../../../src/review/session/review-policy';
 import { execUnavailableReason } from '../../../../src/sandbox/exec-sandbox';
+import type { ExecWorkspace } from '../../../../src/sandbox/exec-workspace';
 import { removeOverlayDirs } from '../../../../src/sandbox/overlay';
 import { baselineCacheDir } from '../../../../src/review/pipeline/harness/baseline-cache';
 import { sharedInstallFixture, type SharedInstallFixture } from '../../../helpers/shared-install';
 
 const available = (await execUnavailableReason()) === null;
 
-/** Counts its own runs in a file in the checkout, and prints a different line every run, so a replay is told from a rerun. */
+/**
+ * Counts its own runs in a file in the review's cache folder, which every copy of the checkout shares, and prints a
+ * different line every run, so a replay is told from a rerun.
+ */
 const CHECKER = `#!/bin/sh
-echo run >> calls
+mkdir -p "$XDG_CACHE_HOME" && echo run >> "$XDG_CACHE_HOME/calls"
 echo "checked $(date +%s%N) $*"
 exit \${CHECKER_EXIT:-0}
 `;
@@ -61,7 +65,7 @@ const checks = (made: Awaited<ReturnType<typeof review>>, commands: string[], ca
 		cache
 	});
 
-const calls = (made: { checkout: string }) => existsSync(join(made.checkout, 'calls'));
+const calls = (made: { workspace: ExecWorkspace }) => existsSync(join(made.workspace.layout.cacheDir, 'xdg/calls'));
 
 test.skipIf(!available)(
 	'a second review of the same head runs no command and reports the same result',

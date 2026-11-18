@@ -36,6 +36,8 @@ export const REVIEW_POLICY = {
 	schemaRepairAttempts: 4,
 	/** Reasoning longer than this (or looping) is cut off and the model is told to answer. */
 	maxReasoningChars: 32_000,
+	/** The same cut-off for an agent that answers in one call, which reasons over its whole slice at once. */
+	singleCallReasoningChars: 120_000,
 	reserveCallsForConsolidation: 1,
 	reserveMsForConsolidation: 90_000,
 	maxListPage: 200,
@@ -122,6 +124,12 @@ export interface ReviewLimits {
 	 * candidate repair and the intent summary. Verifiers add their own as they queue (`VerifyQueue.makeRoom`).
 	 */
 	maxModelCalls: number;
+	/**
+	 * Patch characters one reviewer's slice may hold, when set: the change is then cut into as many slices as keep
+	 * each within it, however few reviewers the budget names. Set for reviewers without tools, which read their whole
+	 * slice in one message.
+	 */
+	sliceChars?: number;
 }
 
 /** The limits of each budget. Low is one reviewer, Medium two or three, High four. */

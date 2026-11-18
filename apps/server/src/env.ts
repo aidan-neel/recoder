@@ -3,16 +3,33 @@ import { decodeSecretKey } from './secrets/key-format';
 
 /**
  * The review shapes an experiment compares with the baseline (issue #95): `specialist-tree` has a coordinator
- * assign the reviewers' slices to domain specialists, and `independent-pass` adds a second review of every slice
- * that never sees the first pass's findings.
+ * assign the reviewers' slices to domain specialists, `independent-pass` adds a second review of every slice
+ * that never sees the first pass's findings, and `lens-split` gives every slice one reviewer per lens group in
+ * place of one reviewer of every lens, cut without a model call.
  */
-const REVIEW_VARIANTS = ['specialist-tree', 'independent-pass'] as const;
+const REVIEW_VARIANTS = ['specialist-tree', 'independent-pass', 'lens-split'] as const;
 
 type ReviewVariant = (typeof REVIEW_VARIANTS)[number];
 
 const reviewVariantSchema = z.preprocess(
 	(value) => (value === '' ? undefined : value),
 	z.enum(REVIEW_VARIANTS).optional()
+);
+
+/**
+ * The tools a review's reviewers and subagents get (`RECODER_REVIEWER_TOOLS`). `none`, the default, gives
+ * reviewers no tool at all: each answers in one call from the patch of its slice and the context the harness
+ * gathered, and the review sends no subagent, since a subagent exists to follow a question with tools. A review
+ * then rests on what the harness hands the model, not on how well the model drives an agent loop. `read` gives
+ * them the reads and searches: no shell, no scratch files and no workers. `all` gives them every tool.
+ */
+const REVIEWER_TOOLS = ['none', 'read', 'all'] as const;
+
+type ReviewerTools = (typeof REVIEWER_TOOLS)[number];
+
+const reviewerToolsSchema = z.preprocess(
+	(value) => (value === '' ? undefined : value),
+	z.enum(REVIEWER_TOOLS).optional()
 );
 
 /** An OAuth application's client id: public, so only its shape is checked. Blank means the forge is not set up. */
@@ -69,6 +86,7 @@ const envSchema = z.object({
 	RECODER_ALLOWED_COMMANDS: z.string().default('echo,git,gh,glab,bun'),
 	RECODER_COMMAND_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
 	RECODER_REVIEW_VARIANT: reviewVariantSchema,
+	RECODER_REVIEWER_TOOLS: reviewerToolsSchema,
 	RECODER_GITHUB_CLIENT_ID: oauthClientIdSchema,
 	RECODER_GITLAB_CLIENT_ID: oauthClientIdSchema,
 	RECODER_GITHUB_CLIENT_SECRET: oauthClientSecretSchema,
@@ -161,4 +179,19 @@ export function configuredSecretKey(): Buffer | undefined {
 	if (!key) throw new Error('RECODER_SECRET_KEY must be 32 bytes as base64 (`openssl rand -base64 32`).');
 
 	return key;
+}
+
+/**
+ * The tools this review's reviewers get (`RECODER_REVIEWER_TOOLS`): none when it is unset. Read per review, so a
+ * test can switch it; a value that names no setting throws rather than run with a setting nobody chose.
+ */
+export function reviewerTools(): ReviewerTools {
+	const value = process.env.RECODER_REVIEWER_TOOLS;
+	const parsed = reviewerToolsSchema.safeParse(value);
+
+	if (!parsed.success) {
+		throw new Error(`RECODER_REVIEWER_TOOLS is "${value}"; it must be one of ${REVIEWER_TOOLS.join(', ')}`);
+	}
+
+	return parsed.data ?? 'none';
 }

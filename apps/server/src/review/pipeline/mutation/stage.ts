@@ -98,20 +98,24 @@ export async function runMatrix(run: ReviewRun, closed: () => boolean): Promise<
 
 			const owner = `mutation-${planIndex++}`;
 
-			for (const file of plan.files) {
-				const written = await workspace.writeFile(file.path, file.text, signal, owner);
+			try {
+				for (const file of plan.files) {
+					const written = await workspace.writeFile(file.path, file.text, signal, owner);
 
-				if (!written.ok) {
-					run.events?.onLog?.(`Test matrix could not write ${file.path}: ${written.error}`);
+					if (!written.ok) {
+						run.events?.onLog?.(`Test matrix could not write ${file.path}: ${written.error}`);
 
-					return notRun(`Not run: could not write ${file.path}: ${written.error}`, false);
+						return notRun(`Not run: could not write ${file.path}: ${written.error}`, false);
+					}
 				}
-			}
 
-			return workspace.runInvestigation(plan.command, timeoutMs, signal, owner, {
-				classifyAs: plan.testCommand,
-				tally: false
-			});
+				return await workspace.runInvestigation(plan.command, timeoutMs, signal, owner, {
+					classifyAs: plan.testCommand,
+					tally: false
+				});
+			} finally {
+				workspace.release(owner);
+			}
 		},
 		deadline: Date.now() + MATRIX_BUDGET_MS
 	});

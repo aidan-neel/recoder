@@ -420,9 +420,9 @@ async function harnessOn(
 		investigationDeadline: Date.now() + 600_000
 	} as unknown as ReviewRun;
 
-	await (
-		await prepareSandbox(run, { report: Promise.resolve(null), wait: { waitedMs: 0 } })
-	)();
+	const checks = await prepareSandbox(run, { report: Promise.resolve(null), wait: { waitedMs: 0 } });
+
+	await checks.done;
 
 	return { ws, dir, run, tasks };
 }

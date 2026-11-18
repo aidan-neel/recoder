@@ -46,6 +46,7 @@ import { FINISHED } from './assignments.js';
 import { applyDiffLimits } from './diff-limits.js';
 import type { PoolContext } from './pool.js';
 import { emptyReceived, receivedOf, recordingReads, reviewContext, type Received } from './received.js';
+import { reviewersRunCode, shapedForReviewerTools } from './reviewer-tools.js';
 import type { AdaptiveReviewInput, BaselineResult, HarnessEvents, TaskFn } from './types.js';
 import type { VerifyQueue } from './verify-queue.js';
 
@@ -96,6 +97,8 @@ export interface ReviewRun {
 	topicTallies: ReadonlyMap<string, TopicTally>;
 	/** The type check, lint and test runs on the PR head; empty without a sandbox. */
 	baseline: BaselineResult[];
+	/** Whether a package-prep smoke run reached its assertions, which shows the repository's code runs here. */
+	smokeReached: boolean;
 	/** Deterministic quality results on changed lines; the verifier turns them into proven candidates. */
 	detections: DetectorResult[];
 	/**
@@ -157,13 +160,13 @@ function atSpeed(input: AdaptiveReviewInput): AdaptiveReviewInput {
 
 /** Builds the run's shared state from the input, restoring what a resumed review carries over. */
 export function createRun(given: AdaptiveReviewInput, events?: HarnessEvents): ReviewRun {
-	const input = atSpeed(given);
+	const sped = atSpeed(given);
+	const { input, limits } = shapedForReviewerTools(sped, budgetLimits(sped.tokenBudget ?? DEFAULT_TOKEN_BUDGET));
 	const startedAt = reviewNow();
 	const inventory = buildInventory(input.diff, extraExcludes());
 	const coverage = new CoverageLedger();
 	const limitsCfg = reviewLimits();
 	const diffOmitted = applyDiffLimits(inventory, coverage, limitsCfg);
-	const limits = budgetLimits(input.tokenBudget ?? DEFAULT_TOKEN_BUDGET);
 	const scaled = scaledReviewLimits(reviewShape(inventory, limits, input), limits);
 	const deadlineAt = startedAt + scaled.deadlineMs;
 	const resume = input.resume;
@@ -204,6 +207,7 @@ export function createRun(given: AdaptiveReviewInput, events?: HarnessEvents): R
 		dismissals: input.repoId ? listDismissals(input.repoId) : [],
 		topicTallies: input.repoId ? topicTallies(input.repoId) : new Map(),
 		baseline: [],
+		smokeReached: false,
 		detections: [],
 		hidden: [],
 		recommended: new Set<string>(resume?.recommended ?? []),
@@ -406,8 +410,8 @@ export function poolContext(run: ReviewRun): PoolContext {
 		recommended: run.recommended,
 		exec: Boolean(run.workspace),
 		images: input.images ?? [],
-		sharedSetupNotes: (run.sharedSetupNotes ??= run.setupNotes),
-		setupNotes: () => run.setupNotes,
+		sharedSetupNotes: reviewersRunCode() ? run.sharedSetupNotes : '',
+		setupNotes: () => (reviewersRunCode() ? run.setupNotes : ''),
 		directive: run.directive,
 		subagentRequests: requestsPerReviewer(run),
 		limits: run.limits,

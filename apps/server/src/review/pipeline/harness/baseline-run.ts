@@ -4,6 +4,7 @@ import { withSandboxTier } from '../../../sandbox/host-load.js';
 import type { CheckInputs, ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import type { SetupReport } from '../../../sandbox/workspace-setup.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { showsPassedTest } from '../verify/cause.js';
 import { baselineCacheEnabled, readCachedCheck, writeCachedCheck } from './baseline-cache.js';
 import { installCommand } from './baseline-checks.js';
 import type { BaselineResult, HarnessEvents, TaskFn } from './types.js';
@@ -19,6 +20,8 @@ export interface BaselineHost {
 	task?: TaskFn;
 	/** False runs every check again, whatever an earlier review stored. */
 	cache?: boolean;
+	/** Called with each check's result as it finishes, before the others are done. */
+	onResult?: (result: BaselineResult) => void;
 }
 
 /** A run's whole output from its evidence record; the result handed back is cut to one turn's budget. */
@@ -47,7 +50,17 @@ export async function runBaselineChecks(commands: string[], host: BaselineHost):
 	host.task?.('checks', 'Run checks', 'running', `Running ${commands.join(', ')}`, { kind: 'checks' });
 
 	const inputs = await cacheInputs(host);
-	const settled = await Promise.all(commands.map((command) => runCheck(command, host, inputs)));
+
+	const settled = await Promise.all(
+		commands.map(async (command, at) => {
+			const result = await runCheck(command, `baseline-${at + 1}`, host, inputs);
+
+			if (result) host.onResult?.(result);
+
+			return result;
+		})
+	);
+
 	const results = settled.filter((result) => result !== null);
 	const failed = results.filter((result) => result.exitCode !== 0).length;
 	const cached = results.filter((result) => result.cached).length;
@@ -66,9 +79,22 @@ export async function runBaselineChecks(commands: string[], host: BaselineHost):
 	return results;
 }
 
-/** One baseline check in a prep slot, cut short at `baselineCheckTimeoutMs`; null when it did not run. */
+/**
+ * Whether a baseline check shows the repository's code running here: it passed, or it failed with tests that ran
+ * and passed. A pull request under review often fails its own checks (an unformatted file, a lint error, one test
+ * the change or the sandbox breaks), and that is no sign that a verifier's repro could not run.
+ */
+export function ranCode(check: BaselineResult): boolean {
+	return check.exitCode === 0 || showsPassedTest(check.output);
+}
+
+/**
+ * One baseline check in a prep slot, cut short at `baselineCheckTimeoutMs`; null when it did not run. It runs as
+ * `owner`, so where each agent has a copy of the checkout no check waits for another's: each runs in its own.
+ */
 async function runCheck(
 	command: string,
+	owner: string,
 	host: BaselineHost,
 	inputs: CheckInputs | null
 ): Promise<BaselineResult | null> {
@@ -96,9 +122,13 @@ async function runCheck(
 		evidence.executeRound(
 			[{ action: 'run', command, timeoutSec: Math.floor(REVIEW_POLICY.baselineCheckTimeoutMs / 1000) }],
 			signal,
-			onTool
+			onTool,
+			undefined,
+			owner
 		)
 	);
+
+	host.workspace?.release(owner);
 
 	if (!result) return null;
 

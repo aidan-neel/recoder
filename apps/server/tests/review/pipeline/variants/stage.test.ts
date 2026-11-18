@@ -24,6 +24,9 @@ import {
 	useTestModel
 } from '../harness-fixtures';
 import { restoreEnvAfterEach } from '../../../helpers/env';
+import { envFlag } from '../../../helpers/env-flag';
+
+envFlag('RECODER_REVIEWER_TOOLS', 'all');
 
 restoreAfterEach();
 restoreEnvAfterEach(['RECODER_REVIEW_VARIANT']);
@@ -248,4 +251,58 @@ describe('the specialist tree', () => {
 		expect(seen[0]).toContain('reviewer-1');
 		expect(seen[0]).toContain('reviewer-2');
 	});
+});
+
+test('lens-split gives every slice one reviewer per lens group, each over the whole slice, with no planning call', async () => {
+	process.env.RECODER_REVIEW_VARIANT = 'lens-split';
+	useTestModel();
+
+	const calls: string[] = [];
+
+	stubModel(calls);
+
+	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null });
+	const slices = partitionReviewers(buildInventory(TWO_UNIT_DIFF, []), budgetLimits(DEFAULT_TOKEN_BUDGET));
+	const reviewers = result.assignments.filter((record) => record.role === 'reviewer');
+	const groups = ['correctness', 'api-contract', 'security', 'concurrency', 'performance', 'upkeep'];
+
+	expect(reviewers.map((record) => record.id).sort()).toEqual(
+		slices.flatMap((slice) => groups.map((group) => `lens-${group}-${slice.id}`)).sort()
+	);
+
+	for (const slice of slices) {
+		const split = reviewers.filter((record) => record.id.endsWith(`-${slice.id}`));
+
+		expect(split.map((record) => record.scope)).toEqual(groups.map(() => slice.scope));
+	}
+
+	expect(calls).not.toContain('other');
+});
+
+test('a lens-split reviewer is told only the categories of its own lenses', async () => {
+	process.env.RECODER_REVIEW_VARIANT = 'lens-split';
+	useTestModel();
+
+	const assigned = new Map<string, string>();
+
+	stubModel([]);
+
+	const answer = globalThis.fetch;
+
+	globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+		const unit = unitOf(init);
+
+		if (unit)
+			assigned.set(unit, /Report only these categories: ([^.]+)\./.exec(messagesOf(init)[1]!.content)?.[1] ?? '');
+
+		return answer(url, init);
+	}) as unknown as typeof fetch;
+
+	await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null });
+
+	expect(assigned.get('lens-security-reviewer-1')).toBe('security');
+
+	expect(assigned.get('lens-upkeep-reviewer-1')).toBe(
+		'repo-rule, convention, duplication, dead-code, readability, complexity'
+	);
 });

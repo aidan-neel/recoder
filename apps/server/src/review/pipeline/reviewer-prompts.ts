@@ -11,7 +11,7 @@ import type { LensId } from './lenses/types.js';
 import type { RepoInventory } from './repo-inventory/repo-inventory.js';
 import { repoMap } from './repo-inventory/repo-map.js';
 import { REVIEW_POLICY } from '../session/review-policy.js';
-import { UNTRUSTED_PREFIX, FOCUS_RULES, reviewerContract, type ReviewerFocus } from './prompts.js';
+import { UNTRUSTED_PREFIX, FOCUS_RULES, reviewerContract, singleCallContract, type ReviewerFocus } from './prompts.js';
 import type { ReviewUnit } from './units.js';
 
 /** Most requests one reviewer's answer may carry: the largest subagent cap, though a reviewer is asked for its share. */
@@ -50,6 +50,8 @@ ${QUESTION_ANSWERS}`;
 interface ReviewerOffers {
 	subagents: number;
 	delegate: boolean;
+	/** The reviewer has no tools and answers in one call. */
+	single?: boolean;
 }
 
 /** Which rules a reviewer of these lenses is held to: only the maintainability ones, only the defect ones, or both. */
@@ -64,7 +66,7 @@ function focusOf(lenses: readonly LensId[]): ReviewerFocus {
  */
 export function reviewerSystemPrompt(exec: boolean, directive: ReviewDirective | null, offers: ReviewerOffers): string {
 	return withDirective(
-		`${reviewerContract(exec)}
+		`${offers.single ? singleCallContract() : reviewerContract(exec)}
 
 Role: reviewer. Apply only the focus rules, categories and procedures assigned in your unit message.
 

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { parseUnifiedDiff } from '@recoder/shared';
 import { existsSync } from 'node:fs';
 import { locateRepo, refspecFor } from '../../src/forge/providers';
+import { env } from '../../src/env';
 import { prepareSandbox, sandboxDiff, sandboxLocation } from '../../src/sandbox/sandbox';
 import { git } from '../helpers/git';
 import { localForgeFixture } from '../helpers/local-forge';
@@ -77,6 +78,25 @@ test('a local repo PR checks out from its file:// URL at the head, without the m
 	expect(provider).toBe('local');
 	expect(sandbox.headSha).toBe(pull7Head);
 	expect(existsSync(join(sandbox.path, '.git', 'recoder-forge.json'))).toBe(false);
+});
+
+test('a work dir inside another repository still gets its own clone', async () => {
+	const { repo, pull7Head } = await localForgeFixture();
+	const { provider, slug } = locateRepo(repo.url);
+
+	git(env.RECODER_WORKDIR, ['init', '-b', 'main']);
+
+	const preparing = prepareSandbox({
+		repoSlug: slug,
+		prNumber: 7,
+		repoUrl: repo.url,
+		...refspecFor(provider, 7),
+		reviewId: crypto.randomUUID(),
+		provider,
+		expectedHeadSha: pull7Head
+	}).finally(() => rm(join(env.RECODER_WORKDIR, '.git'), { recursive: true, force: true }));
+
+	expect((await preparing).headSha).toBe(pull7Head);
 });
 
 test('a stopped preparation runs no further git command and fetches nothing', async () => {

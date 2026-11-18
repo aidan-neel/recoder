@@ -169,7 +169,7 @@ async function runStep(
 ): Promise<PrepStep> {
 	options.onStep?.(plan, null);
 
-	const result = await withSandboxTier('prep', () => workspace.run(plan.command, timeoutMs, options.signal));
+	const result = await withSandboxTier('prep', () => workspace.prepare(plan.command, timeoutMs, options.signal));
 	const outcome = plan.kind === 'smoke' ? classifyRun(plan.command, result, profile) : undefined;
 
 	options.onStep?.(plan, result, outcome);
@@ -266,7 +266,7 @@ async function repair(
 
 		if (signal?.aborted || timeoutMs <= 0) break;
 
-		const result = await withSandboxTier('prep', () => workspace.run(command, timeoutMs, signal));
+		const result = await withSandboxTier('prep', () => workspace.prepare(command, timeoutMs, signal));
 
 		clock.spend(result.elapsedMs);
 		succeeded ||= result.exitCode === 0;

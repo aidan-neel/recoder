@@ -18,6 +18,11 @@ export interface JsonAgentOptions<T> {
 	budget: ModelBudget;
 	evidence: EvidenceStore;
 	maxTurns: number;
+	/**
+	 * Reasoning characters after which one model call is cut off and asked to answer; `REVIEW_POLICY.maxReasoningChars`
+	 * when absent. An agent that answers in one call reads all of its evidence in that call, so it is given more.
+	 */
+	maxReasoningChars?: number;
 	/** Turns at the end of `maxTurns` on which tools are refused, so the agent answers instead of running out; 1 when absent. */
 	answerTurns?: number;
 	signal: AbortSignal;
