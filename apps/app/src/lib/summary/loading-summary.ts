@@ -11,7 +11,8 @@ import type { SummaryView } from '../bugs/types';
 export const LOADING_SUMMARY: SummaryView = {
 	analysis:
 		'This change keeps the session token fresh across tabs. Each tab now reads the token from one shared store and renews it a minute before it runs out, so a tab left open no longer signs the person out. The renewal is guarded by a lock, so two tabs never renew at once, and a failed renewal is tried again before the session ends.',
-	description: null
+	description:
+		'Tabs kept their own copy of the token, so one tab could renew it while another still sent the old one and was signed out. This moves the token to a shared store and renews it under a lock.'
 };
 
 /** What one stand-in comment says. */

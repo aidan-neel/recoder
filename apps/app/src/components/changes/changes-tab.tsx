@@ -14,6 +14,7 @@ import { scrollToFile, useCurrentFile } from '@/lib/changes/use-current-file';
 import { usePullDiffView } from '@/lib/pull/pull-session';
 import { useRunView } from '@/lib/run/use-run';
 import { pullHref } from '@/lib/shell/routes';
+import { useAfterPaint } from '@/lib/shell/use-after-paint';
 import { useKeys } from '@/lib/shell/use-keys';
 
 import { PanelResizer } from '@/components/common/panel-resizer';
@@ -50,7 +51,10 @@ function inOrder(files: FileDiff[], order: string[]): FileDiff[] {
 
 function ignore(): void {}
 
-/** Stand-in file cards while the diff loads: the skeleton is measured from them, header and lines of code. */
+/**
+ * Stand-in file cards while the diff loads: the skeleton is measured from them, header and lines of code. They
+ * mount a frame after the tab does, so the click that opened the page paints without their cost.
+ */
 function DiffSkeleton() {
 	return (
 		<Skeleton loading>
@@ -78,6 +82,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 	const run = useRunView();
 	const bugs = useBugsView();
 	const scroller = useRef<HTMLDivElement | null>(null);
+	const painted = useAfterPaint();
 	const files = diff.phase === 'ready' ? diff.value.files : null;
 	const current = useCurrentFile(scroller, files);
 	const byFile = useMemo(() => bugsByFile(bugs.open), [bugs.open]);
@@ -148,7 +153,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 							</span>
 						</div>
 					) : null}
-					{diff.phase === 'loading' ? <DiffSkeleton /> : null}
+					{diff.phase === 'loading' && painted ? <DiffSkeleton /> : null}
 					{diff.phase === 'failed' ? (
 						<div className="page-notice">
 							<StatusNotice

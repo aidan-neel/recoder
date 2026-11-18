@@ -4,6 +4,7 @@ import { Button, Skeleton, Tooltip } from '@recoder/ui';
 import { ArrowUpRight, MessageSquare, Plus } from 'lucide-react';
 
 import { useRepoPage } from '@/lib/repo/use-repo-page';
+import { useAfterPaint } from '@/lib/shell/use-after-paint';
 import type { RepoPageView } from '@/lib/repo/types';
 
 import { Crumbs } from '@/components/common/crumbs';
@@ -49,11 +50,14 @@ function RepoActions({ view }: { view: RepoPageView }) {
 
 /**
  * One tracked repository at a glance: what needs a person, how its reviews have gone over the last thirty days,
- * where its bugs land and what merged lately. It paints once everything is in, from a skeleton of the same shape.
+ * where its bugs land and what merged lately. It paints once everything is in, from a skeleton of the same shape,
+ * which mounts a frame after the page does so the click that opened it paints without the skeleton's cost.
  */
 export function RepoScreen({ repoId }: { repoId: string }) {
 	const view = useRepoPage(repoId);
+	const painted = useAfterPaint();
 	const { data } = view;
+	const loading = view.phase === 'loading' && painted;
 
 	return (
 		<Page
@@ -66,8 +70,8 @@ export function RepoScreen({ repoId }: { repoId: string }) {
 		>
 			<div className="page-scroll">
 				{view.phase === 'missing' || view.phase === 'failed' ? <RepoNotice view={view} /> : null}
-				<Skeleton id="repo-page" loading={view.phase === 'loading'}>
-					{view.phase === 'loading' ? <RepoSkeleton /> : null}
+				<Skeleton id="repo-page" loading={loading}>
+					{loading ? <RepoSkeleton /> : null}
 					{data ? (
 						<div className="repo-page">
 							<RepoHeader repo={data.repo} figures={data.figures} />
