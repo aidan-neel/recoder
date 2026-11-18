@@ -37,9 +37,14 @@
 	margin-bottom: 12px;
 }
 
+/*
+ * The list is the grid and each row a subgrid of it, so the size and the fact keep their columns down the list
+ * however wide one row's fact is. A row's 12px padding comes out of the edge columns, so the mark's holds it.
+ */
 .pull-list {
-	display: flex;
-	flex-direction: column;
+	display: grid;
+	grid-template-columns: calc(16px + 12px) minmax(0, 1fr) 88px var(--size-icon-md) auto;
+	column-gap: 14px;
 	margin: 0 -12px;
 }
 .pull-list [data-ui='hover-list-highlight'] {
@@ -47,16 +52,17 @@
 }
 
 /*
- * A row: the mark, the title over its facts, then the one fact, the size and the menu, each in a lane of its own
- * so columns line up and nothing gives way to anything else.
+ * A row: the mark, the title over its facts, then the size, the menu and the one fact, each in a lane of its own
+ * so columns line up and nothing gives way to anything else. The fact, or the Review button in its place, ends
+ * the row on the gutter, under the bar's last control.
  */
 .pull-row {
 	position: relative;
 	display: grid;
 	min-height: 60px;
 	align-items: center;
-	grid-template-columns: 16px minmax(0, 1fr) auto 88px var(--size-icon-md);
-	gap: 0 14px;
+	grid-column: 1 / -1;
+	grid-template-columns: subgrid;
 	padding: 0 12px;
 	border-radius: var(--radius-row);
 	--row-button-radius: var(--radius-row);
@@ -166,14 +172,21 @@
 	height: 13px;
 	flex-shrink: 0;
 }
-/* A pull request with no lines changed has no size, so the size and the menu name their lanes. */
+/* "Review again" has no box at rest, so it reaches out by its own padding and its words end on the gutter. */
+.pull-row-status [data-ui='button'][data-variant='ghost'] {
+	margin-right: -9px;
+}
+/* A pull request with no lines changed has no size, so the size, the menu and the fact name their lanes. */
 .pull-row .diff-stat {
-	grid-column: 4;
+	grid-column: 3;
 	justify-content: flex-end;
 }
 .pull-row-menu {
-	grid-column: 5;
+	grid-column: 4;
 	justify-self: end;
+}
+.pull-row-status {
+	grid-column: 5;
 }
 /* The menu button waits in its lane until the row is pointed at, focused, or its menu is open. */
 .pull-row-menu [data-ui='button'] {

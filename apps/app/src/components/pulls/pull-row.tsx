@@ -95,6 +95,10 @@ export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent
 					<Age at={row.activeAt} className="meta-sep" />
 				</div>
 			</div>
+			<DiffStat additions={row.additions} deletions={row.deletions} />
+			<div className="pull-row-menu">
+				<RowMenu row={row} onReview={onReview} />
+			</div>
 			<div className="pull-row-status">
 				<PullStatus
 					status={row.status}
@@ -102,10 +106,6 @@ export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent
 					starting={starting}
 					onReview={() => onReview(row)}
 				/>
-			</div>
-			<DiffStat additions={row.additions} deletions={row.deletions} />
-			<div className="pull-row-menu">
-				<RowMenu row={row} onReview={onReview} />
 			</div>
 		</li>
 	);
