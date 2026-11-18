@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, StatusNotice } from '@recoder/ui';
-import { RotateCcw, SearchX } from 'lucide-react';
+import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon } from '@phosphor-icons/react';
 
 import { Link } from '@/components/common/link';
 import { OfflineNotice } from '@/components/common/offline-notice';
@@ -23,7 +23,7 @@ export function PullNotice({ view }: { view: PullPageView }) {
 		return (
 			<StatusNotice
 				variant="banner"
-				glyph={<SearchX aria-hidden />}
+				glyph={<MagnifyingGlassMinusIcon aria-hidden />}
 				title="There is no such pull request."
 				detail="It may be in a repository that is not connected, or the link may be wrong."
 				actions={
@@ -46,7 +46,7 @@ export function PullNotice({ view }: { view: PullPageView }) {
 						<Link href={pullsHref(base)}>Back to pull requests</Link>
 					</Button>
 					<Button onClick={view.refresh}>
-						<RotateCcw aria-hidden />
+						<ArrowCounterClockwiseIcon aria-hidden />
 						Try again
 					</Button>
 				</>

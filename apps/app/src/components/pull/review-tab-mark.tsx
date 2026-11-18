@@ -1,7 +1,7 @@
 'use client';
 
 import { Spinner, Tooltip } from '@recoder/ui';
-import { CircleAlert, Clock3, History, Pause, type LucideIcon } from 'lucide-react';
+import { WarningCircleIcon, ClockIcon, ClockCounterClockwiseIcon, PauseIcon, type Icon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import type { RunView } from '@/lib/run/types';
@@ -14,15 +14,15 @@ type WaitingState = 'queued' | 'paused' | 'failed' | 'outdated';
 interface Glyph {
 	/** The word for it, as a tooltip and for a screen reader. */
 	label: string;
-	icon: LucideIcon;
+	icon: Icon;
 	tone?: 'danger' | 'medium';
 }
 
 const GLYPHS: Record<WaitingState, Glyph> = {
-	queued: { label: 'Queued', icon: Clock3 },
-	paused: { label: 'Paused', icon: Pause },
-	failed: { label: 'Failed', icon: CircleAlert, tone: 'danger' },
-	outdated: { label: 'Out of date', icon: History, tone: 'medium' }
+	queued: { label: 'Queued', icon: ClockIcon },
+	paused: { label: 'Paused', icon: PauseIcon },
+	failed: { label: 'Failed', icon: WarningCircleIcon, tone: 'danger' },
+	outdated: { label: 'Out of date', icon: ClockCounterClockwiseIcon, tone: 'medium' }
 };
 
 /** Where the review stands for the tab: running, one of the glyph states, or `done` (done, or none yet) when the tab shows its open bugs. */

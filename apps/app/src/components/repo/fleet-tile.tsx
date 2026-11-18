@@ -13,7 +13,7 @@ import {
 	SkeletonBox,
 	Tooltip
 } from '@recoder/ui';
-import { CircleMinus, Ellipsis } from 'lucide-react';
+import { MinusCircleIcon, DotsThreeIcon } from '@phosphor-icons/react';
 
 import { useApi } from '@/lib/api/client';
 import type { PullRowStatus } from '@/lib/pulls/types';
@@ -54,11 +54,11 @@ function TileMenu({ tile, onStop }: Pick<FleetTileProps, 'tile' | 'onStop'>) {
 			<DropdownMenu>
 				<DropdownMenuTrigger>
 					<Button variant="ghost" size="icon" aria-label={`More for ${tile.name}`}>
-						<Ellipsis />
+						<DotsThreeIcon />
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
-					<DropdownMenuItem icon={<CircleMinus />} onSelect={() => onStop(tile)}>
+					<DropdownMenuItem icon={<MinusCircleIcon />} onSelect={() => onStop(tile)}>
 						Stop tracking
 					</DropdownMenuItem>
 				</DropdownMenuContent>

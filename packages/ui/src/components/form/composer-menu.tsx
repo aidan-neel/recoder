@@ -1,6 +1,6 @@
 'use client';
 
-import { MessageSquareText, Puzzle } from 'lucide-react';
+import { ChatTextIcon, PuzzlePieceIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useId, type RefObject } from 'react';
 
@@ -108,7 +108,7 @@ function MenuGroup({ label, rows, menu, menuId }: MenuGroupProps) {
 /** A row: a command reads `/name`, a skill its bare name, then what it is. */
 function MenuRow({ row, menu, menuId }: { row: SlashRow; menu: SlashMenu; menuId: string }) {
 	const index = menu.rows.indexOf(row);
-	const Glyph = row.kind === 'command' ? MessageSquareText : Puzzle;
+	const Glyph = row.kind === 'command' ? ChatTextIcon : PuzzlePieceIcon;
 
 	return (
 		<div

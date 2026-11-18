@@ -122,11 +122,6 @@
 		color: inherit;
 	}
 
-	/* Icons inside controls draw at 1.75, a touch lighter than lucide's default. */
-	[data-ui='button'] svg:not([data-ui='spinner'] > svg) {
-		stroke-width: 1.75;
-	}
-
 	/* ───────── Toast ───────── */
 	.ui-toast {
 		display: flex;
@@ -214,9 +209,10 @@
 .ui-toaster [data-sonner-toast][data-mounted='true'][data-removed='false'] {
 	transition-duration: var(--dur-menu);
 }
-/* A dismissed toast drops the same 10px as it fades, well inside the 200ms sonner waits before removing it. */
+/* A dismissed toast drops the same 10px as it fades, on the menu's clock, inside the 200ms sonner waits before removing it. */
 .ui-toaster [data-sonner-toast][data-removed='true'][data-front='true'][data-swipe-out='false'] {
 	--y: translateY(10px);
+	transition-duration: var(--dur-menu);
 }
 .ui-toaster
 	[data-sonner-toast][data-removed='true'][data-front='false'][data-swipe-out='false'][data-expanded='false'] {

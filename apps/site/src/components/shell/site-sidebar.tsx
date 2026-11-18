@@ -1,7 +1,7 @@
 'use client';
 
 import { ForgeMark, HoverList, NavPill, RowButton } from '@recoder/ui';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRightIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
@@ -103,7 +103,7 @@ export function SiteSidebar({ pages }: { pages: NavPage[] }) {
 				<a href={REPO_URL} target="_blank" rel="noopener noreferrer" aria-label="GitHub">
 					<ForgeMark provider="github" />
 					<span className="site-github-label">GitHub</span>
-					<ArrowUpRight aria-hidden className="site-github-arrow" />
+					<ArrowUpRightIcon aria-hidden className="site-github-arrow" />
 				</a>
 			</RowButton>
 		</aside>

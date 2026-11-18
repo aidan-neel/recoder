@@ -12,7 +12,7 @@ import {
 	Markdown,
 	Pill
 } from '@recoder/ui';
-import { Check, ChevronRight } from 'lucide-react';
+import { CheckIcon, CaretRightIcon } from '@phosphor-icons/react';
 import { useMemo } from 'react';
 
 import type { BugProof, BugView } from '@/lib/bugs/types';
@@ -122,7 +122,7 @@ function FixBody({ fix, patch }: { fix: NonNullable<BugView['fix']>; patch: Patc
 			{fix.checks.length > 0 ? (
 				<div className="bug-section-head">
 					{fix.checks.map((check) => (
-						<Pill key={check} face="code" tone="ok" icon={<Check aria-hidden />}>
+						<Pill key={check} face="code" tone="ok" icon={<CheckIcon aria-hidden />}>
 							{check}
 						</Pill>
 					))}
@@ -142,7 +142,7 @@ function FixBlock({ fix }: { fix: NonNullable<BugView['fix']> }) {
 	return (
 		<Collapsible className="bug-section">
 			<CollapsibleTrigger className="fix-head">
-				<ChevronRight aria-hidden />
+				<CaretRightIcon aria-hidden data-ui="disclosure-chevron" />
 				Suggested fix
 				{patch ? (
 					<Pill face="code" title={patch.path}>
@@ -150,7 +150,7 @@ function FixBlock({ fix }: { fix: NonNullable<BugView['fix']> }) {
 					</Pill>
 				) : null}
 				{'checks' in fix && fix.checks.length > 0 ? (
-					<Pill tone="ok" icon={<Check aria-hidden />}>
+					<Pill tone="ok" icon={<CheckIcon aria-hidden />}>
 						{plural(fix.checks.length, 'check')} passed
 					</Pill>
 				) : null}

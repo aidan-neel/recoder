@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronDown } from 'lucide-react';
+import { CheckIcon, CaretDownIcon } from '@phosphor-icons/react';
 import { AnimatePresence } from 'motion/react';
 import { Select as SelectPrimitive } from 'radix-ui';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -54,7 +54,7 @@ function SelectRow({ option }: { option: SelectOption }) {
 				{option.description ? <span className="text-[12px] leading-4 text-fg-subtle">{option.description}</span> : null}
 			</span>
 			<SelectPrimitive.ItemIndicator data-ui="menu-item-check" className={cn(option.description && 'mt-0.5')}>
-				<Check aria-hidden />
+				<CheckIcon aria-hidden />
 			</SelectPrimitive.ItemIndicator>
 		</SelectPrimitive.Item>
 	);
@@ -124,7 +124,7 @@ export function Select({
 					) : undefined}
 				</SelectPrimitive.Value>
 				<SelectPrimitive.Icon asChild>
-					<ChevronDown aria-hidden className="size-3.5 shrink-0 text-fg-faint" />
+					<CaretDownIcon aria-hidden className="size-3.5 shrink-0 text-fg-faint" />
 				</SelectPrimitive.Icon>
 			</SelectPrimitive.Trigger>
 			<AnimatePresence>

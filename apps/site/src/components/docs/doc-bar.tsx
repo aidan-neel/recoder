@@ -9,7 +9,7 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger
 } from '@recoder/ui';
-import { ArrowUpRight, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowUpRightIcon, CaretDownIcon, CaretRightIcon } from '@phosphor-icons/react';
 
 import type { NavPage } from '~/lib/docs';
 import { openSection } from '~/lib/open-section';
@@ -40,11 +40,11 @@ function SectionMenu({ title, sections }: Pick<DocBarProps, 'title' | 'sections'
 					<span className="doc-bar-page">{title}</span>
 					{currentTitle ? (
 						<>
-							<ChevronRight aria-hidden className="doc-bar-chevron" />
+							<CaretRightIcon aria-hidden className="doc-bar-chevron" />
 							<span className="doc-bar-current">{currentTitle}</span>
 						</>
 					) : null}
-					<ChevronDown aria-hidden />
+					<CaretDownIcon aria-hidden />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent>
@@ -71,7 +71,7 @@ export function DocBar({ title, sections, markdown, editUrl }: DocBarProps) {
 		<div className="doc-bar">
 			<nav className="doc-bar-crumbs" aria-label="Breadcrumb">
 				<span>Docs</span>
-				<ChevronRight aria-hidden className="doc-bar-chevron" />
+				<CaretRightIcon aria-hidden className="doc-bar-chevron" />
 				<span className="doc-bar-current" aria-current="page">
 					{title}
 				</span>
@@ -87,7 +87,7 @@ export function DocBar({ title, sections, markdown, editUrl }: DocBarProps) {
 				<Button asChild variant="ghost" className="doc-bar-wide">
 					<a href={editUrl} target="_blank" rel="noopener noreferrer">
 						Edit on GitHub
-						<ArrowUpRight aria-hidden />
+						<ArrowUpRightIcon aria-hidden />
 					</a>
 				</Button>
 			</div>

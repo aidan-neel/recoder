@@ -30,19 +30,13 @@
 	font-size: var(--trail-font);
 	line-height: var(--trail-line);
 }
-.trail svg.lucide {
+.trail svg {
 	width: var(--trail-icon);
 	height: var(--trail-icon);
 	flex-shrink: 0;
-	stroke-width: var(--trail-stroke);
-}
-/* The spinner draws in a 16-unit box, lucide in 24: the same stroke on screen. */
-.trail [data-ui='spinner'] svg {
-	width: var(--trail-icon);
-	height: var(--trail-icon);
 }
 .trail [data-ui='spinner'] :is(circle, path) {
-	stroke-width: calc(var(--trail-stroke) * 16 / 24);
+	stroke-width: var(--trail-stroke);
 }
 
 /* ───────── The line over the steps, and the chevron every toggle shares ───────── */

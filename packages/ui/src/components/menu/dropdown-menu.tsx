@@ -1,6 +1,6 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { CheckIcon } from '@phosphor-icons/react';
 import { AnimatePresence } from 'motion/react';
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
 import { useContext, useEffect, useState, type ComponentProps, type ReactNode } from 'react';
@@ -168,7 +168,7 @@ export function DropdownMenuRadioItem({ icon, className, children, ...props }: D
 			<MenuItemBody icon={icon}>{children}</MenuItemBody>
 			<span data-ui="menu-item-check" className="w-3.5">
 				<DropdownMenuPrimitive.ItemIndicator>
-					<Check aria-hidden />
+					<CheckIcon aria-hidden />
 				</DropdownMenuPrimitive.ItemIndicator>
 			</span>
 		</DropdownMenuPrimitive.RadioItem>

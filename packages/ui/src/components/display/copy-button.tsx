@@ -1,6 +1,6 @@
 'use client';
 
-import { Copy } from 'lucide-react';
+import { CopyIcon } from '@phosphor-icons/react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Button, type ButtonSize, type ButtonStatus, type ButtonVariant } from '../button';
@@ -84,7 +84,7 @@ export function CopyButton({
 				className={className}
 				onClick={copy}
 			>
-				<Copy />
+				<CopyIcon />
 				{iconOnly ? null : label}
 			</Button>
 			{iconOnly ? (

@@ -12,7 +12,7 @@ import {
 	SkeletonBox,
 	type CommandHint
 } from '@recoder/ui';
-import { Check, ChevronDown, GitBranch } from 'lucide-react';
+import { CheckIcon, CaretDownIcon, GitBranchIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -83,9 +83,9 @@ function BranchPicker({ current, busy }: { current: string | undefined; busy: bo
 				title={label}
 				onClick={show}
 			>
-				<GitBranch aria-hidden />
+				<GitBranchIcon aria-hidden />
 				<span className="branch-trigger-name">{label}</span>
-				<ChevronDown aria-hidden className="branch-trigger-chevron" />
+				<CaretDownIcon aria-hidden className="branch-trigger-chevron" />
 			</Button>
 			<CommandDialog open={open} onOpenChange={setOpen} label="Branch" className="branch-dialog" defaultValue={current}>
 				<CommandInput placeholder="Search branches" />
@@ -146,7 +146,7 @@ function BranchRows({
 					key={branch}
 					value={branch}
 					onSelect={() => onPick(branch)}
-					leading={<GitBranch aria-hidden />}
+					leading={<GitBranchIcon aria-hidden />}
 					detail={branch === current ? <RunningMark /> : null}
 					className="branch-row"
 				>
@@ -162,7 +162,7 @@ function BranchRows({
 function RunningMark() {
 	return (
 		<>
-			<Check aria-hidden className="branch-row-check" />
+			<CheckIcon aria-hidden className="branch-row-check" />
 			<span className="sr-only">Running</span>
 		</>
 	);

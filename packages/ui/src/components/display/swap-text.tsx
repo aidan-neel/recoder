@@ -58,7 +58,7 @@ interface Swap {
 
 /**
  * How long a leaving value may wait for its animation to end, in ms. The exit
- * takes 80ms; this covers one that never runs, under a hidden ancestor, so a
+ * takes 110ms; this covers one that never runs, under a hidden ancestor, so a
  * leaving value always goes.
  */
 const LEAVE_LIMIT_MS = 250;

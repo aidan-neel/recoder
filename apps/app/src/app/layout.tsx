@@ -18,8 +18,8 @@ export const metadata: Metadata = {
 /** The browser's own bar follows the device until the appearance script and the theme store take over (`--bg-chrome`). */
 export const viewport: Viewport = {
 	themeColor: [
-		{ media: '(prefers-color-scheme: light)', color: '#f6f6f6' },
-		{ media: '(prefers-color-scheme: dark)', color: '#161616' }
+		{ media: '(prefers-color-scheme: light)', color: '#f4f4f5' },
+		{ media: '(prefers-color-scheme: dark)', color: '#0f0f10' }
 	],
 	colorScheme: 'dark light'
 };

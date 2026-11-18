@@ -2,7 +2,7 @@
 
 import type { AgentStatus } from '@recoder/shared';
 import { Button, CopyButton, StatusGlyph } from '@recoder/ui';
-import { RotateCw } from 'lucide-react';
+import { ArrowClockwiseIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { cliState } from '@/lib/settings/providers/agent-cli';
@@ -50,7 +50,7 @@ function DetailHead({ agent }: { agent: AgentStatus }) {
 			<h2 className="provider-detail-title">{agent.name}</h2>
 			{agent.version ? <span className="provider-version">{agent.version}</span> : null}
 			<Button variant="ghost" status={check.status} successLabel="Checked" onClick={check.run}>
-				<RotateCw aria-hidden />
+				<ArrowClockwiseIcon aria-hidden />
 				Check again
 			</Button>
 		</div>

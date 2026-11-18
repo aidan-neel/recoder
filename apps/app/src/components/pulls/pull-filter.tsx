@@ -8,7 +8,7 @@ import {
 	DropdownMenuRadioItem,
 	DropdownMenuTrigger
 } from '@recoder/ui';
-import { ChevronDown } from 'lucide-react';
+import { CaretDownIcon } from '@phosphor-icons/react';
 
 import type { PullFilter } from '@/lib/pulls/types';
 
@@ -42,7 +42,7 @@ export function PullFilterMenu({ filter, counts, onChange }: PullFilterMenuProps
 			<DropdownMenuTrigger>
 				<Button variant="quiet" aria-label={`Showing: ${active.heading}. Change filter`}>
 					{active.heading}
-					<ChevronDown aria-hidden className="size-3.5 text-fg-faint" />
+					<CaretDownIcon aria-hidden className="size-3.5 text-fg-faint" />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className="w-[220px]">

@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, StatusNotice, StatusNoticeDetails } from '@recoder/ui';
-import { RotateCcw } from 'lucide-react';
+import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
 import { useLayoutEffect } from 'react';
 
 import { errorText } from '@/components/common/page-error';
@@ -42,7 +42,7 @@ export default function GlobalError({ error, retry }: GlobalErrorProps) {
 							footer={details ? <StatusNoticeDetails code={details} /> : null}
 							actions={
 								<Button onClick={retry}>
-									<RotateCcw aria-hidden />
+									<ArrowCounterClockwiseIcon aria-hidden />
 									Try again
 								</Button>
 							}

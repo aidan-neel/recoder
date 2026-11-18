@@ -14,7 +14,7 @@ import {
 	StackedBar,
 	StatusNotice
 } from '@recoder/ui';
-import { Coins, RotateCcw } from 'lucide-react';
+import { CoinsIcon, ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import type { TokenUsageKind, TokenUsageSummary } from '@/lib/metrics/token-usage';
@@ -56,7 +56,7 @@ export function TokenUsageButton({ kind, id, className }: TokenUsageButtonProps)
 				className={cn('token-usage-trigger', className)}
 				onClick={() => setOpen(true)}
 			>
-				<Coins aria-hidden className="size-3.5" />
+				<CoinsIcon aria-hidden className="size-3.5" />
 				Token usage
 			</Button>
 			<Modal open={open} onOpenChange={setOpen}>
@@ -120,7 +120,7 @@ function TokenUsageFailed({ error, onRetry }: { error: string; onRetry: () => vo
 				detail={error}
 				actions={
 					<Button onClick={onRetry}>
-						<RotateCcw aria-hidden />
+						<ArrowCounterClockwiseIcon aria-hidden />
 						Try again
 					</Button>
 				}

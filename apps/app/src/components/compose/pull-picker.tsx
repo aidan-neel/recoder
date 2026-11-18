@@ -11,7 +11,7 @@ import {
 	focusComposerField,
 	type CommandHint
 } from '@recoder/ui';
-import { Check, ChevronDown } from 'lucide-react';
+import { CheckIcon, CaretDownIcon } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 
 import { pickLabel } from '@/lib/compose/compose-pick';
@@ -67,7 +67,7 @@ export function PullPicker({ rows, pick, onPick }: PullPickerProps) {
 			>
 				<PullMark />
 				<span className="bar-trigger-name">{label}</span>
-				<ChevronDown aria-hidden className="bar-trigger-chevron" />
+				<CaretDownIcon aria-hidden className="bar-trigger-chevron" />
 			</Button>
 			<CommandDialog
 				open={open}
@@ -120,7 +120,7 @@ function PickedMark({ number }: { number: number }) {
 	return (
 		<span className="pick-row-picked">
 			#{number}
-			<Check aria-hidden className="pick-row-check" />
+			<CheckIcon aria-hidden className="pick-row-check" />
 			<span className="sr-only">Chosen</span>
 		</span>
 	);

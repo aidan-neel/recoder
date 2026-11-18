@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, StatusNotice } from '@recoder/ui';
-import { RotateCcw, SearchX } from 'lucide-react';
+import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon } from '@phosphor-icons/react';
 
 import type { RepoPageView } from '@/lib/repo/types';
 
@@ -32,7 +32,7 @@ export function RepoNotice({ view }: { view: RepoPageView }) {
 			{view.phase === 'missing' ? (
 				<StatusNotice
 					variant="banner"
-					glyph={<SearchX aria-hidden />}
+					glyph={<MagnifyingGlassMinusIcon aria-hidden />}
 					title="This repository is not tracked."
 					detail="It may have been removed, or the link may be wrong."
 					actions={back}
@@ -46,7 +46,7 @@ export function RepoNotice({ view }: { view: RepoPageView }) {
 						<>
 							{back}
 							<Button onClick={view.retry}>
-								<RotateCcw aria-hidden />
+								<ArrowCounterClockwiseIcon aria-hidden />
 								Try again
 							</Button>
 						</>

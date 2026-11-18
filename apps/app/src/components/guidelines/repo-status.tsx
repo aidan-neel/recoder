@@ -2,7 +2,7 @@
 
 import type { RepoGuidelines } from '@recoder/shared';
 import { Pill, Tooltip } from '@recoder/ui';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRightIcon } from '@phosphor-icons/react';
 
 import { activeSource } from '@/lib/guidelines/rules';
 
@@ -33,7 +33,7 @@ export function RepoStatus({ data }: { data: RepoGuidelines }) {
 				>
 					<Pill tone="medium">
 						Pending in #{data.pending.number}
-						<ArrowUpRight aria-hidden />
+						<ArrowUpRightIcon aria-hidden />
 					</Pill>
 				</a>
 			) : null}

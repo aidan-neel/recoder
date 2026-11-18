@@ -312,7 +312,6 @@
 	height: 14px;
 	flex-shrink: 0;
 	color: var(--text-muted);
-	stroke-width: 1.75;
 }
 .repo-setup-chevron {
 	width: 12px;

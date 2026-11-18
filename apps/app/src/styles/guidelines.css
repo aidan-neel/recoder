@@ -178,7 +178,6 @@ a.guidelines-pill:focus-visible {
 	width: 10px;
 	height: 10px;
 	margin: 0 2px;
-	fill: currentColor;
 }
 
 /* ───────── Draft popover: the request, what to read, and Draft ───────── */

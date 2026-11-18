@@ -92,9 +92,6 @@
 		align-items: center;
 		gap: 2px;
 	}
-	[data-ui='composer-tool'] svg {
-		stroke-width: 1.75;
-	}
 
 	/* ───────── Images: square tiles over the text, on the text's edge; the remove button rides the corner ───────── */
 	[data-ui='image-tiles'] {
@@ -289,7 +286,6 @@
 		height: 15px;
 		flex-shrink: 0;
 		color: var(--text-subtle);
-		stroke-width: 1.75;
 	}
 	[data-ui='composer-menu-item'][aria-selected='true'] [data-ui='composer-menu-glyph'] {
 		color: var(--text-primary);

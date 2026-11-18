@@ -1,7 +1,7 @@
 'use client';
 
 import { HoverList, RowButton } from '@recoder/ui';
-import { ChevronDown, GitMerge, GitPullRequest, GitPullRequestClosed, MessageSquare, Undo2 } from 'lucide-react';
+import { CaretDownIcon, GitMergeIcon, GitPullRequestIcon, ChatIcon, ArrowUUpLeftIcon } from '@phosphor-icons/react';
 import { usePathname } from '@/lib/shell/navigation';
 import { useState } from 'react';
 
@@ -19,10 +19,10 @@ import { SidebarSection } from './sidebar-section';
 const PREVIEW = 5;
 
 const MARKS = {
-	merged: { icon: GitMerge, label: 'Merged' },
-	closed: { icon: GitPullRequestClosed, label: 'Closed' },
-	review: { icon: GitPullRequest, label: 'Review' },
-	chat: { icon: MessageSquare, label: 'Chat' }
+	merged: { icon: GitMergeIcon, label: 'Merged' },
+	closed: { icon: GitPullRequestIcon, label: 'Closed' },
+	review: { icon: GitPullRequestIcon, label: 'Review' },
+	chat: { icon: ChatIcon, label: 'Chat' }
 };
 
 /** The mark for a settled row: how its pull request ended, or what it is. */
@@ -81,7 +81,7 @@ function SettledRows({ reviews, hidden, onShowAll }: SettledRowsProps) {
 
 		if (entry.outcome) return base;
 
-		return [{ id: 'unsettle', label: 'Unsettle', icon: Undo2, onSelect: () => mark(id, false) }, ...base];
+		return [{ id: 'unsettle', label: 'Unsettle', icon: ArrowUUpLeftIcon, onSelect: () => mark(id, false) }, ...base];
 	}
 
 	return (
@@ -109,7 +109,7 @@ function SettledRows({ reviews, hidden, onShowAll }: SettledRowsProps) {
 			})}
 			{hidden > 0 ? (
 				<RowButton data-recent className="settled-more" onClick={onShowAll}>
-					<ChevronDown aria-hidden className="recent-mark" />
+					<CaretDownIcon aria-hidden className="recent-mark" />
 					Show {hidden} more
 				</RowButton>
 			) : null}

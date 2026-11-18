@@ -13,7 +13,7 @@ import {
 	DropdownMenuTrigger,
 	SkeletonBox
 } from '@recoder/ui';
-import { ChevronDown, ChevronRight, Zap } from 'lucide-react';
+import { CaretDownIcon, CaretRightIcon, LightningIcon } from '@phosphor-icons/react';
 
 import { useApi } from '@/lib/api/client';
 import type { ModelRole } from '@/lib/settings/model-options';
@@ -139,8 +139,8 @@ function MenuTrigger({ name, agent, label, spark }: MenuTriggerProps) {
 			<Button variant="quiet" className="composer-models" aria-label={label}>
 				{agent ? <AgentMark agent={agent} className="composer-models-mark" /> : null}
 				<span className="composer-models-name">{name}</span>
-				{spark ? <Zap aria-hidden className="composer-models-spark" /> : null}
-				<ChevronDown aria-hidden className="composer-models-chevron" />
+				{spark ? <LightningIcon aria-hidden className="composer-models-spark" /> : null}
+				<CaretDownIcon aria-hidden className="composer-models-chevron" />
 			</Button>
 		</DropdownMenuTrigger>
 	);
@@ -160,7 +160,7 @@ function RoleItem({ role, picker }: { role: ComposerRole; picker: ModelPickerVie
 				<span className="composer-models-role-pick" data-quiet={picker.label?.quiet || undefined}>
 					{picker.label?.text}
 				</span>
-				<ChevronRight aria-hidden className="composer-models-role-chevron" />
+				<CaretRightIcon aria-hidden className="composer-models-role-chevron" />
 			</span>
 		</DropdownMenuItem>
 	);

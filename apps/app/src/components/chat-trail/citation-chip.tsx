@@ -8,7 +8,7 @@ import {
 	type ChatTrailFile
 } from '@recoder/shared';
 import { FileIcon, HoverCard, HoverCardContent, HoverCardTrigger, type LinkOverride } from '@recoder/ui';
-import { FileText } from 'lucide-react';
+import { FileTextIcon } from '@phosphor-icons/react';
 import { createContext, use, useState, type ComponentProps, type ReactNode } from 'react';
 
 import { fileName, lineRange } from '@/lib/chat/trail';
@@ -103,7 +103,7 @@ function PassageView({ passage: { file, snippet } }: { passage: Passage }) {
 	return (
 		<section className="cite-passage">
 			<p className="cite-path">
-				<FileText aria-hidden />
+				<FileTextIcon aria-hidden />
 				{folder || 'repository root'}
 			</p>
 			<p className="cite-title">

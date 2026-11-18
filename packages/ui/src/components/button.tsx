@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, X } from 'lucide-react';
+import { CheckIcon, XIcon } from '@phosphor-icons/react';
 import { Slot } from 'radix-ui';
 import {
 	Children,
@@ -145,7 +145,7 @@ interface IconEdges {
 /**
  * Finds whether the content starts or ends with an icon, so that side can
  * take less padding. An icon is an element with no children of its own (a
- * lucide icon, a keycap, a dot); an element that wraps a label is text. With
+ * Phosphor icon, a keycap, a dot); an element that wraps a label is text. With
  * `asChild` the content is the child link's own children.
  *
  * The children are read as React elements, so a button with an icon must be
@@ -221,11 +221,11 @@ function Faces({ status, labels, children }: { status: ButtonStatus; labels: Fac
 				{labels.pending}
 			</span>
 			<span data-face="success" data-on={status === 'success'} aria-hidden={spoken !== 'success'}>
-				{faceIcon(drawn.includes('success'), <Check />, 24)}
+				{faceIcon(drawn.includes('success'), <CheckIcon />, 24)}
 				{labels.success}
 			</span>
 			<span data-face="error" data-on={status === 'error'} aria-hidden={spoken !== 'error'}>
-				{faceIcon(drawn.includes('error'), <X />, 24)}
+				{faceIcon(drawn.includes('error'), <XIcon />, 24)}
 				{labels.error}
 			</span>
 		</span>

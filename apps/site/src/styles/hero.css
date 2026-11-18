@@ -115,13 +115,9 @@
 	background: var(--bg-canvas);
 	color: var(--text-primary);
 }
-/* The app fills its browser window; here it fills this one, on one row as tall as the window, so a long page scrolls inside it. */
-.demo-app .app-frame {
-	grid-template-rows: minmax(0, 1fr);
-}
+/* The app fills its browser window; here it fills this one, so a long page scrolls inside it. */
 .demo-app .app-frame,
-.demo-app .sidebar,
-.demo-app .page {
+.demo-app .sidebar {
 	height: 100%;
 }
 /* At tablet size the page takes the whole window; the sidebar would leave it too narrow to read. */

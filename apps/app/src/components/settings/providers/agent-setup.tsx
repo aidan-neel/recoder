@@ -2,7 +2,7 @@
 
 import type { AgentStatus } from '@recoder/shared';
 import { Button } from '@recoder/ui';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRightIcon } from '@phosphor-icons/react';
 
 import type { AgentSetupStep } from '@/lib/api/agent-setup';
 import { cliState } from '@/lib/settings/providers/agent-cli';
@@ -100,7 +100,7 @@ export function SignInLink({ url }: { url: string }) {
 		<Button variant="outline" asChild>
 			<a href={url} target="_blank" rel="noopener noreferrer">
 				Open sign-in page
-				<ArrowUpRight aria-hidden />
+				<ArrowUpRightIcon aria-hidden />
 			</a>
 		</Button>
 	);

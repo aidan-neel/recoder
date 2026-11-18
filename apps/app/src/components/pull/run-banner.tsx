@@ -2,7 +2,7 @@
 
 import { REVIEW_SPEED_PLANS, type ReviewSpeed } from '@recoder/shared';
 import { Button, cn, DropdownMenuItem, Keycap, SplitButton, StatusGlyph, StatusNotice } from '@recoder/ui';
-import { Check, Circle, RotateCcw, X, Zap } from 'lucide-react';
+import { CheckIcon, CircleIcon, ArrowCounterClockwiseIcon, XIcon, LightningIcon } from '@phosphor-icons/react';
 import type { ComponentProps } from 'react';
 
 import type { RunStage, RunView } from '@/lib/run/types';
@@ -58,12 +58,12 @@ function Banner(props: BannerProps) {
 
 /** The mark before a step in the footer: a check once done, a cross where it stopped, a ring for the rest. */
 function StepMark({ done, stopped }: { done: boolean; stopped: boolean }) {
-	if (done) return <Check className="text-ok" strokeWidth={2.5} aria-hidden />;
-	if (stopped) return <X className="text-danger" strokeWidth={2.5} aria-hidden />;
+	if (done) return <CheckIcon className="text-ok" aria-hidden />;
+	if (stopped) return <XIcon className="text-danger" aria-hidden />;
 
 	return (
 		<span className="grid size-3 place-items-center" aria-hidden>
-			<Circle className="size-2 text-fg-ghost" strokeWidth={3} />
+			<CircleIcon className="size-2 text-fg-ghost" />
 		</span>
 	);
 }
@@ -126,7 +126,7 @@ export function ReviewButton({ run, again, shortcut = false, variant }: ReviewBu
 			menuLabel="Other ways to review"
 			menuClassName="w-[300px]"
 			menu={
-				<DropdownMenuItem icon={<Zap />} className="split-option" onSelect={() => start('spark')}>
+				<DropdownMenuItem icon={<LightningIcon />} className="split-option" onSelect={() => start('spark')}>
 					<span className="flex flex-col gap-0.5 whitespace-normal">
 						{SPARK.label} review
 						<span className="split-option-detail">{SPARK.description}</span>
@@ -183,7 +183,7 @@ export function RunBanner({ run, bugs }: RunBannerProps) {
 							status={retrying.status}
 							onClick={() => runControl(retrying, run.retry, 'The review did not start again.')}
 						>
-							<RotateCcw aria-hidden />
+							<ArrowCounterClockwiseIcon aria-hidden />
 							Try again
 						</Button>
 					</>

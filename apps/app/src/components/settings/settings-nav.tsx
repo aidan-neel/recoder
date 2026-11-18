@@ -2,30 +2,30 @@
 
 import { HoverList, Input, RowButton } from '@recoder/ui';
 import {
-	Activity,
-	Blocks,
-	ChartNoAxesColumn,
-	Cpu,
-	Gauge,
-	Link2,
-	Palette,
-	Search,
-	ShieldUser,
-	type LucideIcon
-} from 'lucide-react';
+	PulseIcon,
+	SquaresFourIcon,
+	ChartBarIcon,
+	CpuIcon,
+	GaugeIcon,
+	LinkSimpleIcon,
+	PaletteIcon,
+	MagnifyingGlassIcon,
+	UserGearIcon,
+	type Icon
+} from '@phosphor-icons/react';
 import { useState, type KeyboardEvent } from 'react';
 
 import { matchSections, sectionsFor, type SettingsSection } from '@/lib/settings/sections';
 
-const ICONS: Record<SettingsSection, LucideIcon> = {
-	models: Cpu,
-	providers: Blocks,
-	connections: Link2,
-	limits: Gauge,
-	usage: ChartNoAxesColumn,
-	telemetry: Activity,
-	admin: ShieldUser,
-	appearance: Palette
+const ICONS: Record<SettingsSection, Icon> = {
+	models: CpuIcon,
+	providers: SquaresFourIcon,
+	connections: LinkSimpleIcon,
+	limits: GaugeIcon,
+	usage: ChartBarIcon,
+	telemetry: PulseIcon,
+	admin: UserGearIcon,
+	appearance: PaletteIcon
 };
 
 interface SettingsNavProps {
@@ -79,7 +79,7 @@ export function SettingsNav({ active, admin, onSelect }: SettingsNavProps) {
 				type="search"
 				aria-label="Search settings"
 				placeholder="Search"
-				leading={<Search aria-hidden />}
+				leading={<MagnifyingGlassIcon aria-hidden />}
 				value={query}
 				onChange={(event) => setQuery(event.target.value)}
 				onKeyDown={openFirst}

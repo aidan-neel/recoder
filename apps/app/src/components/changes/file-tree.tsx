@@ -1,7 +1,7 @@
 'use client';
 
 import { HoverList, Input, SkeletonRows } from '@recoder/ui';
-import { Check, ChevronRight, Search } from 'lucide-react';
+import { CheckIcon, CaretRightIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { useRef, type CSSProperties } from 'react';
 
 import type { FileTreeView, TreeRow } from '@/lib/changes/types';
@@ -40,7 +40,7 @@ function FolderRow({ row, onToggle }: { row: Extract<TreeRow, { kind: 'folder' }
 			aria-expanded={row.open}
 			onClick={onToggle}
 		>
-			<ChevronRight aria-hidden className="tree-chevron" />
+			<CaretRightIcon aria-hidden className="tree-chevron" />
 			<span className="tree-name">{row.label}</span>
 			<span className="tree-end">{row.files}</span>
 		</button>
@@ -72,7 +72,7 @@ function FileRow({ row, current, onOpen }: FileRowProps) {
 			<span className="tree-name">{row.name}</span>
 			<span className="tree-end">
 				{row.bugs > 0 ? <span className="tree-bug" role="img" aria-label={`${row.bugs} open bugs`} /> : null}
-				{row.viewed ? <Check aria-label="Viewed" /> : null}
+				{row.viewed ? <CheckIcon aria-label="Viewed" /> : null}
 				{!row.viewed && row.additions > 0 ? <span data-sign="add">+{row.additions}</span> : null}
 				{!row.viewed && row.deletions > 0 ? <span data-sign="del">−{row.deletions}</span> : null}
 			</span>
@@ -100,7 +100,7 @@ export function FileTree({ tree, loading, current, onOpenFile }: FileTreeProps) 
 				placeholder="Filter files"
 				autoComplete="off"
 				spellCheck={false}
-				leading={<Search aria-hidden />}
+				leading={<MagnifyingGlassIcon aria-hidden />}
 				value={tree.filter}
 				onChange={(event) => tree.setFilter(event.target.value)}
 			/>

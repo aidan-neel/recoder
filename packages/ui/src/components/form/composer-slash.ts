@@ -118,6 +118,9 @@ export function useSlashMenu({ text, onTextChange, commands, skills, field }: Sl
 	const caret = useFieldCaret(field);
 	const [dismissedAt, setDismissedAt] = useState<string | null>(null);
 	const [cursor, setCursor] = useState({ query: '', index: 0 });
+
+	if (dismissedAt !== null && dismissedAt !== text) setDismissedAt(null);
+
 	const shown = listAt(caret.offset);
 
 	/**

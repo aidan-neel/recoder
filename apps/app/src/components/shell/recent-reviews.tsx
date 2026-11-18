@@ -1,7 +1,7 @@
 'use client';
 
 import { Skeleton, StatusGlyph, type GlyphKind } from '@recoder/ui';
-import { GitPullRequest } from 'lucide-react';
+import { GitPullRequestIcon } from '@phosphor-icons/react';
 
 import { useSessionCache } from '@/lib/api/client';
 import { shortAge } from '@/lib/shell/age';
@@ -74,7 +74,7 @@ export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 										{review.label}
 									</span>
 									<span className="recent-pull">
-										<GitPullRequest aria-hidden />
+										<GitPullRequestIcon aria-hidden />
 										{review.number}
 									</span>
 								</>

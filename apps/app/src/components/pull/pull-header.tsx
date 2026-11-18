@@ -1,6 +1,6 @@
 import type { PullPage, PullState } from '@recoder/shared';
 import { Collapsible, Pill, type PillTone } from '@recoder/ui';
-import { Clock, GitBranch } from 'lucide-react';
+import { ClockIcon, GitBranchIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { author } from '@/lib/shell/format';
@@ -65,7 +65,7 @@ export function PullHeader({ page, actions, merge, children }: PullHeaderProps) 
 						{face.label}
 					</Pill>
 					<Pill icon={<Avatar name={by.name} className="pill-avatar" />}>{by.name}</Pill>
-					<Pill face="code" icon={<GitBranch aria-hidden />} title={`${headRef} into ${base}`}>
+					<Pill face="code" icon={<GitBranchIcon aria-hidden />} title={`${headRef} into ${base}`}>
 						{base} ← {headRef}
 					</Pill>
 					{page.pull.additions + page.pull.deletions > 0 ? (
@@ -73,7 +73,7 @@ export function PullHeader({ page, actions, merge, children }: PullHeaderProps) 
 							<DiffStat additions={page.pull.additions} deletions={page.pull.deletions} />
 						</Pill>
 					) : null}
-					<Pill icon={<Clock aria-hidden />}>
+					<Pill icon={<ClockIcon aria-hidden />}>
 						<Age at={page.status.updatedAt} form="long" />
 					</Pill>
 					{merge}

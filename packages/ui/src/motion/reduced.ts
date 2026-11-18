@@ -20,7 +20,7 @@ function capped(transition: Transition): Transition {
 /**
  * Keeps the opacity of each variant and holds every moving property at rest:
  * what reduced motion leaves of an entrance or a swap. The fade keeps its
- * curve but runs 40ms at most. The resting values stay in every variant, in
+ * curve but runs 150ms at most. The resting values stay in every variant, in
  * the preset's order, so a first paint renders the same style as the full
  * preset and a server-rendered swap hydrates cleanly.
  */
@@ -56,7 +56,7 @@ function fadeOnly(variants: Variants): Variants {
 
 /**
  * The variants to animate with. Under reduced motion (the shell's
- * `MotionConfig`, or the system setting) a preset keeps only its fade, 40ms
+ * `MotionConfig`, or the system setting) a preset keeps only its fade, 150ms
  * at most: no scale or rise, so nothing snaps to its size when the fade
  * ends.
  */

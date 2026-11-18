@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, RowButton } from '@recoder/ui';
-import { ChevronRight } from 'lucide-react';
+import { CaretRightIcon } from '@phosphor-icons/react';
 
 import type { StartedReview } from '@/lib/ask/types';
 
@@ -23,7 +23,7 @@ export function ReviewCard({ review }: { review: StartedReview }) {
 				</span>
 			</span>
 			<StatusPill status={review.status} />
-			<ChevronRight aria-hidden className="chat-review-chevron" />
+			<CaretRightIcon aria-hidden className="chat-review-chevron" />
 		</Card>
 	);
 }

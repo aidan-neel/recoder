@@ -21,7 +21,6 @@ describe('AgentMark', () => {
 			const html = renderToStaticMarkup(<AgentMark agent={agent} />);
 
 			expect(html).toContain(`data-agent="${agent}"`);
-			expect(html).not.toContain('lucide-square-terminal');
 		}
 	});
 
@@ -44,6 +43,7 @@ describe('AgentMark', () => {
 	test('falls back to the terminal icon for custom commands', () => {
 		const html = renderToStaticMarkup(<AgentMark agent="custom-command" />);
 
-		expect(html).toContain('lucide-square-terminal');
+		expect(html).toContain('data-ui="agent-mark"');
+		expect(html).not.toContain('data-agent=');
 	});
 });

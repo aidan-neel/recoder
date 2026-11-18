@@ -2,7 +2,7 @@
 
 import type { AgentProvider, AgentStatus } from '@recoder/shared';
 import { Button, Switch } from '@recoder/ui';
-import { Plus } from 'lucide-react';
+import { PlusIcon } from '@phosphor-icons/react';
 
 import { connectedProviders } from '@/lib/settings/providers/provider-entries';
 import type { ProviderSwitches } from '@/lib/settings/providers/use-provider-switches';
@@ -38,7 +38,7 @@ export function ModelProviders({ manager, canConnect, switches, onConnect, onDis
 			title="Model providers"
 			aside={
 				<Button variant="ghost" data-provider-control="connect" disabled={!canConnect} onClick={() => onConnect()}>
-					<Plus aria-hidden />
+					<PlusIcon aria-hidden />
 					Connect
 				</Button>
 			}

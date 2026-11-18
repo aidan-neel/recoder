@@ -143,7 +143,7 @@ When a model's plan runs out (ChatGPT's cap, a hosted provider's 429 or 402 afte
 - **Menus** close on outside click and Esc.
 
 ## Assets
-- Icons: Lucide, stroke 1.75, 12–16px.
+- Icons: Lucide, stroke 1.75, 12–16px, in apps/web. apps/app, apps/site and the React kit draw Phosphor in its bold weight.
 - Fonts: Geist, Geist Mono and Lora from Google Fonts.
 - No images or logo mark. The brand is the "Recoder" wordmark.
 
@@ -157,21 +157,21 @@ kit keeps them in `packages/ui/src/styles/tokens.css` and `motion/presets.ts`.
 
 | Token | React kit (`packages/ui`) | apps/web |
 |---|---|---|
-| `hover` | color/background 100ms ease-out | Same |
+| `hover` | color/background 80ms ease-out | 100ms ease-out |
 | `press` | none: controls never scale when pressed | Same |
-| `highlight` | Menus: travels between items over 120ms. Our own lists snap, 100ms opacity fade | Sivir menus travel over 160ms. Our own lists snap, 100ms opacity fade |
-| `toggle` | 180ms: chevrons, switches, label swaps, row actions | Same |
+| `highlight` | Menus: travels between items over 90ms. Our own lists snap, 100ms opacity fade | Sivir menus travel over 160ms. Our own lists snap, 100ms opacity fade |
+| `toggle` | 210ms: chevrons, switches, label swaps, row actions | Same |
 | `tab-pill` | A spring with no overshoot: a 100px move lands in about 230ms. Segmented thumbs too. A pill sits still through its control's first paint and travels from the frame after | 240ms cubic-bezier(.3,.7,.2,1). Segmented thumbs too |
-| `disclose` | 200ms height for panels and drawers that unfold | 240ms height |
-| `menu` | 130ms fade in from 0.95 scale and 2px blur, with no rise; 80ms out | The same, plus a 3px rise (`--motion-menu-y`) |
-| `modal` | 150ms fade in from 0.95 scale and 2px blur, with no rise; 70ms out | The same, plus a 3px rise (`--motion-modal-y`) |
-| `tooltip` | 100ms fade in from 0.95 scale, with no blur and no rise; 80ms out | Sivir's own |
-| `enter` | Content replaces its skeleton whole, in one 140ms crossfade (`DURATION.swap`), with no rise and no stagger. A load that beat the skeleton, or one that lands while the person scrolls or types, swaps with no fade | None. Content replaces its skeleton in place with no fade, rise or stagger |
-| `toast` | Rises 10px over 150ms, and drops 10px as it leaves | Rises from below over 320ms, and leaves over 240ms |
+| `disclose` | 230ms height for panels and drawers that unfold | 240ms height |
+| `menu` | 180ms fade in from 0.97 scale, with no blur and no rise; 150ms out, on the same ease-out curve (`cubic-bezier(0.23, 1, 0.32, 1)`) | 130ms fade in from 0.95 scale, 2px blur and a 3px rise (`--motion-menu-y`); 80ms out |
+| `modal` | 180ms fade in from 0.97 scale, with no blur and no rise; 130ms out, on the menu's curve | 150ms fade in from 0.95 scale, 2px blur and a 3px rise (`--motion-modal-y`); 70ms out |
+| `tooltip` | 80ms fade in from 0.97 scale, with no blur and no rise; 150ms out | Sivir's own |
+| `enter` | Content replaces its skeleton whole, in one 170ms crossfade (`DURATION.swap`), with no rise and no stagger. A load that beat the skeleton, or one that lands while the person scrolls or types, swaps with no fade. apps/app's Repositories tiles are the one exception: on first show they rise 6px and fade in, 40ms apart | None. Content replaces its skeleton in place with no fade, rise or stagger |
+| `toast` | Rises 10px over 150ms, and drops 10px over 150ms as it leaves | Rises from below over 320ms, and leaves over 240ms |
 | `shimmer` | Text: a 1.6s opacity swell; the label rests dim and lights to full once a pass. Skeleton: Skullet sweeps one light across the page every 2s, so every bar on screen is lit by the same band; it holds still under reduced motion | Text: a 1.6s linear sweep of light. Skeleton: a light sweeps across every 1.4s and never rests |
-| `skeleton` | Skullet draws it. A measured skeleton stays unseen for its first 120ms, so data that lands sooner never flashes one; a lone bar is hidden for 120ms (`--skeleton-delay`), then fades in over 140ms | Each bar is hidden for its first 200ms, then shows with no fade |
+| `skeleton` | Skullet draws it. A measured skeleton stays unseen for its first 120ms, so data that lands sooner never flashes one; a lone bar is hidden for 120ms (`--skeleton-delay`), then fades in over 170ms | Each bar is hidden for its first 200ms, then shows with no fade |
 | `spinner` | 0.9s linear | Same |
-| `reduced-motion` | CSS transitions snap to 1ms; the motion presets keep only their fade, 80ms at most; spinners stay | Transitions snap to 1ms; spinners stay |
+| `reduced-motion` | CSS transitions snap to 1ms; the motion presets keep only their fade, 150ms at most; spinners stay | Transitions snap to 1ms; spinners stay |
 
 apps/app and apps/web keep a toast up for 5s, an error for 6s, or 10s when
 it has a button. apps/app draws every skeleton with Skullet, measured from

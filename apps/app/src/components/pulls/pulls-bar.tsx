@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Select, Tooltip, type SelectOption } from '@recoder/ui';
-import { RefreshCw } from 'lucide-react';
+import { ArrowsClockwiseIcon } from '@phosphor-icons/react';
 
 import type { RepoOption } from '@/lib/pulls/types';
 
@@ -55,7 +55,7 @@ export function RefreshButton({ refreshing, onRefresh }: { refreshing: boolean; 
 				status={refreshing ? 'pending' : 'idle'}
 				onClick={onRefresh}
 			>
-				<RefreshCw />
+				<ArrowsClockwiseIcon />
 			</Button>
 		</Tooltip>
 	);

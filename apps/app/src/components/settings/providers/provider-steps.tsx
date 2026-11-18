@@ -1,6 +1,6 @@
 'use client';
 
-import { DURATION, EASE_IN, EASE_OUT } from '@recoder/ui';
+import { DURATION, EASE_OUT } from '@recoder/ui';
 import { AnimatePresence, motion, useReducedMotionConfig, type Variants } from 'motion/react';
 import type { ReactNode } from 'react';
 
@@ -17,7 +17,7 @@ const SLIDE: Variants = {
 	exit: (direction: number) => ({
 		opacity: 0,
 		x: `${-TRAVEL_REM * direction}rem`,
-		transition: { duration: DURATION.menuOut, ease: EASE_IN }
+		transition: { duration: DURATION.menuOut, ease: EASE_OUT }
 	})
 };
 

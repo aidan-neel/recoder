@@ -2,7 +2,7 @@
 
 import { REVIEW_SPEED_PLANS } from '@recoder/shared';
 import { Button, Pill, Tooltip } from '@recoder/ui';
-import { ArrowUpRight, Clock, GitCommitHorizontal, Timer, Zap } from 'lucide-react';
+import { ArrowUpRightIcon, ClockIcon, GitCommitIcon, TimerIcon, LightningIcon } from '@phosphor-icons/react';
 
 import type { BugsView } from '@/lib/bugs/types';
 import { isLive } from '@/lib/run/run-phase';
@@ -35,7 +35,7 @@ function PostedReview({ url }: { url: string | null }) {
 		<Button asChild variant="ghost">
 			<a href={url} target="_blank" rel="noreferrer">
 				See the review
-				<ArrowUpRight aria-hidden className="size-3.5" />
+				<ArrowUpRightIcon aria-hidden className="size-3.5" />
 			</a>
 		</Button>
 	);
@@ -72,7 +72,7 @@ function PostReview({ view }: { view: BugsView }) {
 /** The commit a review read, shortened as every forge shortens it; the full hash on hover. */
 function CommitPill({ sha }: { sha: string }) {
 	return (
-		<Pill face="code" icon={<GitCommitHorizontal aria-hidden />} title={sha}>
+		<Pill face="code" icon={<GitCommitIcon aria-hidden />} title={sha}>
 			{sha.slice(0, 7)}
 		</Pill>
 	);
@@ -85,7 +85,7 @@ function SparkPill() {
 	return (
 		<Tooltip content={spark.description}>
 			<span tabIndex={0} className="flex">
-				<Pill icon={<Zap aria-hidden />}>{spark.label}</Pill>
+				<Pill icon={<LightningIcon aria-hidden />}>{spark.label}</Pill>
 			</span>
 		</Tooltip>
 	);
@@ -100,13 +100,13 @@ function ReviewFacts({ view }: { view: BugsView }) {
 		<span className="review-facts" aria-label="This review">
 			{view.headSha ? <CommitPill sha={view.headSha} /> : null}
 			{view.reviewedAt ? (
-				<Pill icon={<Clock aria-hidden />}>
+				<Pill icon={<ClockIcon aria-hidden />}>
 					<Age at={view.reviewedAt} form="long" />
 				</Pill>
 			) : null}
 			{view.modelLabel ? <Pill>{view.modelLabel}</Pill> : null}
 			{view.speed === 'spark' ? <SparkPill /> : null}
-			{view.duration ? <Pill icon={<Timer aria-hidden />}>{view.duration}</Pill> : null}
+			{view.duration ? <Pill icon={<TimerIcon aria-hidden />}>{view.duration}</Pill> : null}
 		</span>
 	);
 }

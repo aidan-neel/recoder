@@ -94,17 +94,17 @@
 	--scrim: rgba(8, 7, 6, 0.6);
 
 	/* Motion: tuned for a tool opened thousands of times a day. Hover is near
-	   instant; menus and dialogs take a short, visible fade (120 to 150ms);
+	   instant; menus and dialogs take a short, visible fade (180ms in, 130 to 150ms out);
 	   only movement that explains a change (a panel unfolding) gets a longer
 	   ease. Tune the app's feel here. */
-	--ease-menu: cubic-bezier(0.2, 0.8, 0.2, 1);
-	--dur-hover: 50ms;
-	--dur-press: 80ms;
-	--dur-highlight: 70ms;
-	--dur-toggle: 180ms;
-	--dur-disclose: 200ms;
-	--dur-menu: 120ms;
-	--dur-swap: 140ms;
+	--ease-menu: cubic-bezier(0.23, 1, 0.32, 1);
+	--dur-hover: 80ms;
+	--dur-press: 110ms;
+	--dur-highlight: 100ms;
+	--dur-toggle: 210ms;
+	--dur-disclose: 230ms;
+	--dur-menu: 150ms;
+	--dur-swap: 170ms;
 	--dur-shimmer: 1.6s;
 	--dur-meter: 1.4s;
 	/* A loading state stays unseen this long, so a fast load never flashes one; the kit's skeletons hold as long. */
@@ -295,7 +295,7 @@
 	--focus-ring: 0 0 0 2px var(--focus-color);
 
 	/* The menu highlight's travel, and the ease app transitions share. Overlays time themselves in the motion presets. */
-	--motion-hover: 60ms;
+	--motion-hover: 90ms;
 	--ease-out: var(--ease-menu);
 }
 :root:not(.dark) {

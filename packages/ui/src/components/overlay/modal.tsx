@@ -1,6 +1,6 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { XIcon } from '@phosphor-icons/react';
 import { AnimatePresence } from 'motion/react';
 import { Dialog } from 'radix-ui';
 import { createContext, useContext, type ComponentProps, type ReactElement, type ReactNode } from 'react';
@@ -61,8 +61,8 @@ interface ModalContentProps {
 }
 
 /**
- * The modal panel and its scrim. The panel fades in from a 0.97 scale (75ms)
- * and leaves in 35ms; the scrim only fades. Under reduced motion
+ * The modal panel and its scrim. The panel fades in from a 0.97 scale (180ms)
+ * and leaves in 130ms; the scrim only fades. Under reduced motion
  * the panel only fades too. On close, focus returns to what had it when the
  * modal opened. The scrim covers the page, so the page's pointer lock stays
  * shallow (`ShallowBodyLock`).
@@ -123,7 +123,7 @@ function CloseButton() {
 				data-slot="close"
 				className="absolute text-fg-subtle hover:text-fg"
 			>
-				<X />
+				<XIcon />
 			</Button>
 		</Dialog.Close>
 	);

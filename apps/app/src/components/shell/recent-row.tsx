@@ -14,7 +14,7 @@ import {
 	DropdownMenuTrigger,
 	RowButton
 } from '@recoder/ui';
-import { Check, Ellipsis } from 'lucide-react';
+import { CheckIcon, DotsThreeIcon } from '@phosphor-icons/react';
 import { Fragment, type ComponentType, type ReactNode } from 'react';
 
 import { useIntent } from '@/lib/shell/intent';
@@ -76,7 +76,7 @@ function RowShell({ title, actions, onIntent, className, active, tools, children
 						<DropdownMenu>
 							<DropdownMenuTrigger>
 								<Button variant="ghost" size="icon" className="recent-more" aria-label={`More for ${title}`}>
-									<Ellipsis />
+									<DotsThreeIcon />
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="start" className="w-[200px]">
@@ -150,7 +150,7 @@ export function RecentCard({ href, active, title, repo, age, foot, actions, onIn
 			active={active}
 			tools={
 				<Button variant="ghost" size="sm" className="recent-settle" onClick={onSettle}>
-					<Check />
+					<CheckIcon />
 					Settle
 				</Button>
 			}

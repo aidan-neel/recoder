@@ -1,7 +1,7 @@
 'use client';
 
 import { HoverList, RowButton } from '@recoder/ui';
-import { BookOpen, Clock, FolderGit2, GitPullRequest, Plus } from 'lucide-react';
+import { BookOpenIcon, ClockIcon, FolderSimpleIcon, GitPullRequestIcon, PlusIcon } from '@phosphor-icons/react';
 import { usePathname } from '@/lib/shell/navigation';
 import type { ComponentType } from 'react';
 
@@ -33,8 +33,8 @@ const WARM: Partial<Record<Place, () => void>> = {
 
 /** The places only the live app has. */
 const LIVE_ROWS: NavRow[] = [
-	{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: Clock },
-	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpen }
+	{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: ClockIcon },
+	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpenIcon }
 ];
 
 /** The place the address belongs to, or null on a page the sidebar does not list (Settings). */
@@ -59,9 +59,9 @@ export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	const active = placeOf(usePathname(), base);
 
 	const rows: NavRow[] = [
-		{ id: 'new', label: 'New review', href: newReviewHref(base), icon: Plus },
-		{ id: 'pulls', label: 'Pull requests', href: pullsHref(base), icon: GitPullRequest },
-		{ id: 'repos', label: 'Repositories', href: reposHref(base), icon: FolderGit2 },
+		{ id: 'new', label: 'New review', href: newReviewHref(base), icon: PlusIcon },
+		{ id: 'pulls', label: 'Pull requests', href: pullsHref(base), icon: GitPullRequestIcon },
+		{ id: 'repos', label: 'Repositories', href: reposHref(base), icon: FolderSimpleIcon },
 		...(isLiveApp(base) ? LIVE_ROWS : [])
 	];
 

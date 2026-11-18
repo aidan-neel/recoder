@@ -1,6 +1,6 @@
 import { categoryLabel, type EvidenceClass } from '@recoder/shared';
 import { Pill } from '@recoder/ui';
-import { BookText, CircleCheck, CircleDashed, Route, type LucideIcon } from 'lucide-react';
+import { BookIcon, CheckCircleIcon, CircleDashedIcon, PathIcon, type Icon } from '@phosphor-icons/react';
 
 import type { BugView } from '@/lib/bugs/types';
 
@@ -11,11 +11,11 @@ const HISTORY_LABELS = { carried: 'From the last review', rechecked: 'Checked ag
 const RULE_CATEGORY = categoryLabel('repo-rule');
 
 /** Each class of evidence as an icon. Only a reproduced bug, proven by a run, is coloured. */
-const EVIDENCE_ICONS: Record<EvidenceClass, LucideIcon> = {
-	reproduced: CircleCheck,
-	traced: Route,
-	rule: BookText,
-	unverified: CircleDashed
+const EVIDENCE_ICONS: Record<EvidenceClass, Icon> = {
+	reproduced: CheckCircleIcon,
+	traced: PathIcon,
+	rule: BookIcon,
+	unverified: CircleDashedIcon
 };
 
 /** How the bug was shown: reproduced by a run (green), traced in code, a repository rule, or not checked. */

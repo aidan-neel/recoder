@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Tooltip } from '@recoder/ui';
-import { PanelLeft } from 'lucide-react';
+import { SidebarSimpleIcon } from '@phosphor-icons/react';
 
 import { keepTooltipShutOnCarry, toggleSidebar } from '@/lib/shell/sidebar-toggle';
 import { useSidebarShown } from '@/lib/shell/use-sidebar-shown';
@@ -21,7 +21,7 @@ export function SidebarReveal() {
 		<span className="sidebar-reveal" data-sidebar-part="reveal" inert={open}>
 			<Tooltip content="Show sidebar" shortcut="[" onFocus={keepTooltipShutOnCarry}>
 				<Button variant="ghost" size="icon" aria-label="Show sidebar" data-sidebar-toggle onClick={toggleSidebar}>
-					<PanelLeft />
+					<SidebarSimpleIcon />
 				</Button>
 			</Tooltip>
 		</span>

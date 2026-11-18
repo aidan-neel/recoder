@@ -10,7 +10,7 @@ import {
 	DropdownMenuTrigger,
 	Tooltip
 } from '@recoder/ui';
-import { ArrowUpRight, ChevronDown, MessageCircle, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { ArrowUpRightIcon, CaretDownIcon, ChatCircleIcon, ThumbsDownIcon, ThumbsUpIcon } from '@phosphor-icons/react';
 
 import type { BugsView, BugView } from '@/lib/bugs/types';
 import { errorToast, undoToast } from '@/lib/shell/notify';
@@ -53,7 +53,7 @@ function DismissMenu({ bug, view }: Pick<BugActionsProps, 'bug' | 'view'>) {
 			<DropdownMenuTrigger>
 				<Button variant="ghost">
 					Dismiss
-					<ChevronDown aria-hidden className="size-3.5" />
+					<CaretDownIcon aria-hidden className="size-3.5" />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className="w-[200px]">
@@ -84,7 +84,7 @@ function Votes({ bug, view }: Pick<BugActionsProps, 'bug' | 'view'>) {
 					aria-pressed={bug.vote === 'useful'}
 					onClick={() => cast('useful')}
 				>
-					<ThumbsUp />
+					<ThumbsUpIcon />
 				</Button>
 			</Tooltip>
 			<Tooltip content="This bug was not useful">
@@ -95,7 +95,7 @@ function Votes({ bug, view }: Pick<BugActionsProps, 'bug' | 'view'>) {
 					aria-pressed={bug.vote === 'not-useful'}
 					onClick={() => cast('not-useful')}
 				>
-					<ThumbsDown />
+					<ThumbsDownIcon />
 				</Button>
 			</Tooltip>
 		</div>
@@ -142,7 +142,7 @@ export function BugActions({ bug, view, asking, onAskToggle }: BugActionsProps) 
 				copiedLabel="Copied"
 			/>
 			<Button variant="ghost" aria-expanded={asking} onClick={onAskToggle}>
-				<MessageCircle aria-hidden />
+				<ChatCircleIcon aria-hidden />
 				Ask
 			</Button>
 			<Button variant="ghost" disabled={pending} onClick={accept}>
@@ -153,7 +153,7 @@ export function BugActions({ bug, view, asking, onAskToggle }: BugActionsProps) 
 				<Button asChild variant="ghost" className="bug-posted-link">
 					<a href={bug.posted.url} target="_blank" rel="noreferrer">
 						See the comment
-						<ArrowUpRight aria-hidden className="size-3.5" />
+						<ArrowUpRightIcon aria-hidden className="size-3.5" />
 					</a>
 				</Button>
 			) : null}

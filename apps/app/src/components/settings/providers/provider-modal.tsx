@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Modal, ModalBody, ModalClose, ModalContent, ModalFooter, ModalTitle, SwapText } from '@recoder/ui';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeftIcon } from '@phosphor-icons/react';
 
 import type { ProviderFlow } from '@/lib/settings/providers/use-provider-flow';
 import type { ProviderHost } from '@/lib/settings/use-agent-section';
@@ -30,7 +30,7 @@ function FlowFooter({ flow }: { flow: ProviderFlow }) {
 		<ModalFooter>
 			{flow.canGoBack ? (
 				<Button variant="ghost" className="provider-back" disabled={flow.sending} onClick={flow.back}>
-					<ArrowLeft aria-hidden />
+					<ArrowLeftIcon aria-hidden />
 					Back
 				</Button>
 			) : null}

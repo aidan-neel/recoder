@@ -1,7 +1,7 @@
 'use client';
 
 import { ConfirmDialog } from '@recoder/ui';
-import { ArrowUpRight, Ban, Link2, Trash2 } from 'lucide-react';
+import { ArrowUpRightIcon, ProhibitIcon, LinkSimpleIcon, TrashIcon } from '@phosphor-icons/react';
 import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
 
 import { copyLink } from '@/lib/shell/copy-link';
@@ -72,10 +72,10 @@ function pageActions(href: string): RowAction[] {
 		{
 			id: 'open',
 			label: 'Open in new tab',
-			icon: ArrowUpRight,
+			icon: ArrowUpRightIcon,
 			onSelect: () => window.open(href, '_blank', 'noopener')
 		},
-		{ id: 'copy', label: 'Copy link', icon: Link2, onSelect: () => copyLink(absoluteHref(href)) }
+		{ id: 'copy', label: 'Copy link', icon: LinkSimpleIcon, onSelect: () => copyLink(absoluteHref(href)) }
 	];
 }
 
@@ -94,7 +94,7 @@ export function useReviewActions(): (review: RecentReview) => RowAction[] {
 						{
 							id: 'cancel',
 							label: 'Cancel review',
-							icon: Ban,
+							icon: ProhibitIcon,
 							onSelect: () => ask({ kind: 'cancel-review', target })
 						}
 					]
@@ -102,7 +102,7 @@ export function useReviewActions(): (review: RecentReview) => RowAction[] {
 			{
 				id: 'delete',
 				label: 'Delete review',
-				icon: Trash2,
+				icon: TrashIcon,
 				destructive: true,
 				separated: true,
 				onSelect: () => ask({ kind: 'delete-review', target })
@@ -120,7 +120,7 @@ export function useChatActions(): (chat: RecentChat) => RowAction[] {
 		{
 			id: 'delete',
 			label: 'Delete chat',
-			icon: Trash2,
+			icon: TrashIcon,
 			destructive: true,
 			separated: true,
 			onSelect: () => ask({ kind: 'delete-chat', target: { id: chat.chatId, href: chat.href } })

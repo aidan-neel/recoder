@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Modal, ModalClose, ModalContent, ModalTitle, Tooltip } from '@recoder/ui';
-import { ChevronRight, X } from 'lucide-react';
+import { CaretRightIcon, XIcon } from '@phosphor-icons/react';
 import { usePathname } from '@/lib/shell/navigation';
 import { useEffect, type ReactNode } from 'react';
 
@@ -88,7 +88,7 @@ export function SettingsModal() {
 					<header className="settings-modal-bar">
 						<ModalTitle className="crumbs settings-modal-title">
 							<span>Settings</span>
-							<ChevronRight aria-hidden />
+							<CaretRightIcon aria-hidden />
 							<span className="settings-modal-section">{sectionLabel(section)}</span>
 						</ModalTitle>
 						<div className="settings-modal-end">
@@ -96,7 +96,7 @@ export function SettingsModal() {
 							<Tooltip content="Close">
 								<ModalClose>
 									<Button variant="ghost" size="icon" aria-label="Close settings">
-										<X />
+										<XIcon />
 									</Button>
 								</ModalClose>
 							</Tooltip>

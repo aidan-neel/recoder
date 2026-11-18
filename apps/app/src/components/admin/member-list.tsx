@@ -2,7 +2,7 @@
 
 import type { Member } from '@recoder/shared';
 import { Button, ConfirmDialog, ForgeMark, Pill } from '@recoder/ui';
-import { X } from 'lucide-react';
+import { XIcon } from '@phosphor-icons/react';
 import { useRef, type Ref } from 'react';
 
 import { forgeLabel } from '@/lib/connections/forges';
@@ -57,7 +57,7 @@ function MemberRow({ member, onRemove, removeRef }: MemberRowProps) {
 					aria-label={`Remove ${mention(member)}`}
 					onClick={() => onRemove(member)}
 				>
-					<X aria-hidden />
+					<XIcon aria-hidden />
 				</Button>
 			)}
 		</SettingsRow>

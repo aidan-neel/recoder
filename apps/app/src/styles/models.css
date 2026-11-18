@@ -44,7 +44,6 @@
 	height: 14px;
 	flex-shrink: 0;
 	color: var(--text-faint);
-	stroke-width: 1.75;
 }
 /* Wide enough that every effort's line about it stays on one line. It opens end-aligned, under the trigger. */
 .effort-menu {
@@ -88,7 +87,6 @@
 .model-row-mark svg {
 	width: 14px;
 	height: 14px;
-	stroke-width: 2;
 }
 .model-heading {
 	height: 28px;

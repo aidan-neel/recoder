@@ -11,7 +11,7 @@ import {
 	SwapText,
 	useMotionVariants
 } from '@recoder/ui';
-import { ChevronDown } from 'lucide-react';
+import { CaretDownIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
 import { useState } from 'react';
 
@@ -45,7 +45,7 @@ export function ChatTrail({ steps, startedAt, working, answering }: ChatTrailPro
 		<Collapsible open={open} onOpenChange={setOpen} className="trail" role="group" aria-label="What Recoder did">
 			<CollapsibleTrigger className="trail-head">
 				<TrailHead steps={steps} startedAt={startedAt} working={working} open={open} />
-				<ChevronDown className="trail-chevron" aria-hidden />
+				<CaretDownIcon className="trail-chevron" aria-hidden />
 			</CollapsibleTrigger>
 			<LatestLine steps={steps} shown={working && !open && !answering} />
 			<CollapsibleContent>
