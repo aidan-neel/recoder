@@ -154,7 +154,13 @@
 		display: none;
 	}
 
-	/* A list row: the mark, the title (which wraps) with the menu at its end, the meta line, then fact and size. */
+	/*
+	 * A list row: the mark, the title (which wraps) with the menu at its end, the meta line, then fact and size.
+	 * Each row lays itself out, so the list stops lending it columns.
+	 */
+	.pull-list {
+		grid-template-columns: minmax(0, 1fr);
+	}
 	.pull-row {
 		align-items: start;
 		grid-template-columns: 16px minmax(0, 1fr) var(--size-icon-md);
@@ -179,6 +185,7 @@
 	}
 	/* A ghost button has no box, so its words start where the pills above and below do. */
 	.pull-row-status [data-ui='button'][data-variant='ghost'] {
+		margin-right: 0;
 		margin-left: -9px;
 	}
 	.pull-row .diff-stat {

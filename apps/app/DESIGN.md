@@ -123,8 +123,11 @@ It departs from the root `DESIGN.md` (apps/web) in five places:
   branch, the author, the size of the change and one fact: what the newest
   review found, that a review is running, or that there is none (with
   "Cancelled 4 hours ago" before the Review button when a person stopped the
-  last one). The fact, the size and the row's menu each keep a lane of their
-  own, so hovering a row never hides its size. The row under the pointer and
+  last one). The size, the row's menu and the fact each keep a lane of their
+  own, in that order, so hovering a row never hides its size and the fact, or
+  the Review button in its place, ends the row on the right. The lanes are the
+  list's own columns, so they line up however wide one row's fact is. The row
+  under the pointer and
   the row `j` and `k` are on wear the same fill; the keyboard's adds a short
   bar on its leading edge, which is its focus mark. Open findings are worded
   one way wherever they are counted: "2 bugs, 1 suggestion". Filters:
