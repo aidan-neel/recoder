@@ -98,7 +98,7 @@ this. Treat a lint error as a bug, not a suggestion.
     `form`, `display`, `content`) with `styles/kit-<area>.css`, motion presets
     in `motion/`, tokens in `styles/tokens.css`.
   - Site `apps/site/src/`: routes in `app/`, components in
-    `components/<feature>/` (`home`, `shell`, `hero-demo`), content and
+    `components/<feature>/` (`home`, `shell`, `docs`, `hero-demo`), content and
     helpers in `lib/`, one CSS file per feature in `styles/`. The site's own
     imports use `~/`; `@/` points at `apps/app/src`, because the hero demo
     renders the app's real components and CSS, so app changes reach the site.

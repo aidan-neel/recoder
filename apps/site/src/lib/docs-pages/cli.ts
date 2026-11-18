@@ -56,18 +56,26 @@ recoder review --pull 214       # a pull or merge request (needs gh or glab)
 recoder review --diff change.diff
 \`\`\`
 
-While it runs you see each stage and what every reviewer is doing. Then the report prints: the findings most severe first, each with where it is, how it was verified, a suggestion and, when there is one, a patch that was checked in the sandbox. Your working tree is only read: the review runs in a throwaway checkout, which is removed when it ends.
+While it runs you see each stage and what every reviewer is doing. Then the report prints: the findings most severe first, each with where it is, how it was verified, a suggestion and, when there is one, a patch that was checked in the sandbox.
+
+> **Note** Your working tree is only read. The review runs in a throwaway checkout, which is removed when it ends.
 
 \`--format markdown\` prints a document and \`--format json\` every field; \`--output <file>\` writes the report to a file. The report goes to standard output and progress to standard error, so \`recoder review > review.txt\` saves it without the progress, and without colors.
 
 Useful flags:
 
-- \`--repo <path>\` reviews another repository.
-- \`--budget low|medium|high\` sets how much the review spends. \`low\` is the default, since agents run reviews often.
-- \`--reviewer <model id>\`, \`--worker <model id>\` and \`--verifier <model id>\` pick the models for one run: the reviewers, their subagents and the verifiers. Verifiers follow the reviewers' model unless you name one. \`recoder models\` lists the ids.
-- \`--instructions <text>\` says what to look for or leave out.
-- \`--min-severity\` and \`--include-unconfirmed\` filter the report; \`--fail-on <severity>\` exits 1 when a finding meets it.
-- \`--no-exec\` runs no code, so bugs are reported unverified.
+| Flag | What it does |
+| --- | --- |
+| \`--repo <path>\` | Reviews another repository. |
+| \`--budget low\\|medium\\|high\` | Sets how much the review spends. \`low\` is the default, since agents run reviews often. |
+| \`--reviewer <model id>\` | Picks the reviewers' model for this run. \`recoder models\` lists the ids. |
+| \`--worker <model id>\` | Picks the model of the reviewers' subagents. |
+| \`--verifier <model id>\` | Picks the verifiers' model. They follow the reviewers' model unless you name one. |
+| \`--instructions <text>\` | Says what to look for or leave out. |
+| \`--min-severity <severity>\` | Leaves findings below that severity out of the report. |
+| \`--include-unconfirmed\` | Adds the findings the review could not confirm to the report. |
+| \`--fail-on <severity>\` | Exits 1 when a finding meets it. |
+| \`--no-exec\` | Runs no code, so bugs are reported unverified. |
 
 \`recoder review --help\` lists every flag.
 
@@ -83,7 +91,7 @@ recoder result            # prints the report
 
 A detached review keeps going when the terminal closes. \`status\`, \`wait\`, \`result\` and \`cancel\` act on the newest run unless you name one. \`recoder runs\` lists them, and the six characters it shows are enough to name a run, as in \`recoder result a1b2c3\`.
 
-## For agents and scripts: \`-p\`
+## For agents and scripts
 
 Add \`-p\` (\`--programmatic\`) to any command and it prints JSON, with fields that keep their shape, and plain progress lines:
 
@@ -118,12 +126,12 @@ Every command takes \`-p\` and \`--help\`.
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Done. No finding met \`--fail-on\`. |
-| 1 | A finding met \`--fail-on\`. |
-| 2 | A flag or argument was wrong. Nothing ran. |
-| 3 | The review did not finish. |
-| 4 | The machine is not ready. Run \`recoder doctor\`. |
-| 130 | Stopped by a signal or by \`--timeout\`. |
+| \`0\` | Done. No finding met \`--fail-on\`. |
+| \`1\` | A finding met \`--fail-on\`. |
+| \`2\` | A flag or argument was wrong. Nothing ran. |
+| \`3\` | The review did not finish. |
+| \`4\` | The machine is not ready. Run \`recoder doctor\`. |
+| \`130\` | Stopped by a signal or by \`--timeout\`. |
 
 ## The agent skill
 

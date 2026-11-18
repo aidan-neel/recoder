@@ -1,10 +1,12 @@
-import { Button, StaticMarkdown } from '@recoder/ui';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { StaticMarkdown } from '@recoder/ui';
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { docBySlug, docs, docSummary } from '~/lib/docs';
+import { DocBar } from '~/components/docs/doc-bar';
+import { DOC_CODE } from '~/components/docs/doc-code';
+import { DocPager } from '~/components/docs/doc-pager';
+import { splitSections } from '~/lib/doc-sections';
+import { docBySlug, docEditUrl, docHref, docMarkdown, docs, docSummary } from '~/lib/docs';
 import { SITE_URL } from '~/lib/site';
 
 /** Only the pages in `docs` exist; any other slug is a 404. */
@@ -22,42 +24,48 @@ export async function generateMetadata({ params }: PageProps<'/docs/[slug]'>): P
 	return {
 		title: `${doc.title} · Recoder docs`,
 		description: docSummary(doc),
-		alternates: { canonical: `${SITE_URL}/docs/${doc.slug}` }
+		alternates: { canonical: `${SITE_URL}${docHref(doc)}` }
 	};
 }
 
-/** One docs page: the title, the Markdown body and links to the pages before and after it. */
+/**
+ * One docs page: the bar, the title and the intro, a section for each `##`
+ * heading (its id is what the section list and the search link to), and
+ * links to the pages before and after it.
+ */
 export default async function DocPage({ params }: PageProps<'/docs/[slug]'>) {
 	const doc = docBySlug((await params).slug);
 
 	if (!doc) notFound();
 
+	const { intro, sections } = splitSections(doc.body);
 	const index = docs.indexOf(doc);
-	const previous = docs[index - 1];
-	const next = docs[index + 1];
 
 	return (
-		<article className="docs-column">
-			<h1 className="docs-title">{doc.title}</h1>
-			<StaticMarkdown className="docs-prose">{doc.body}</StaticMarkdown>
-			<nav className="docs-pager" aria-label="Docs pages">
-				{previous ? (
-					<Button asChild variant="ghost">
-						<Link href={`/docs/${previous.slug}`}>
-							<ArrowLeft aria-hidden />
-							{previous.title}
-						</Link>
-					</Button>
-				) : null}
-				{next ? (
-					<Button asChild variant="ghost" className="ml-auto">
-						<Link href={`/docs/${next.slug}`}>
-							{next.title}
-							<ArrowRight aria-hidden />
-						</Link>
-					</Button>
-				) : null}
-			</nav>
-		</article>
+		<>
+			<DocBar
+				title={doc.title}
+				sections={sections.map(({ id, title }) => ({ id, title }))}
+				markdown={docMarkdown(doc)}
+				editUrl={docEditUrl(doc)}
+			/>
+			<article className="docs-column">
+				<header className="docs-intro">
+					<h1 className="docs-title">{doc.title}</h1>
+					<StaticMarkdown className="docs-prose" code={DOC_CODE}>
+						{intro}
+					</StaticMarkdown>
+				</header>
+				{sections.map((section) => (
+					<section key={section.id} id={section.id} className="docs-section">
+						<h2 className="docs-heading">{section.title}</h2>
+						<StaticMarkdown className="docs-prose" code={DOC_CODE}>
+							{section.body}
+						</StaticMarkdown>
+					</section>
+				))}
+				<DocPager previous={docs[index - 1]} next={docs[index + 1]} />
+			</article>
+		</>
 	);
 }
