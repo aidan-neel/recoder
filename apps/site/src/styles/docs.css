@@ -1,40 +1,115 @@
 /* ───────── Docs ───────── */
 /* Docs paint fully formed: no entrance motion. */
+
+/* The page bar stays at the top of the window while the page scrolls under it. */
+.doc-bar {
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	display: flex;
+	height: var(--bar-height);
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 0 10px 0 20px;
+	border-bottom: 1px solid var(--line-subtle);
+	border-radius: var(--radius-card) var(--radius-card) 0 0;
+	background: var(--bg-canvas);
+}
+.doc-bar-crumbs {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 16px;
+}
+.doc-bar-current {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-weight: 500;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.doc-bar .doc-bar-chevron {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.doc-bar-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+}
+.doc-bar .doc-bar-sections,
+.doc-bar .doc-bar-narrow {
+	display: none;
+}
+
 .docs-column {
+	display: flex;
 	width: 100%;
-	max-width: 768px;
+	max-width: 720px;
+	flex-direction: column;
+	gap: 36px;
 	margin: 0 auto;
-	padding: 80px 40px 64px;
+	padding: 56px 40px 72px;
+}
+.docs-intro {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
 }
 .docs-title {
-	margin: 0 0 16px;
-	font-size: 32px;
+	margin: 0;
+	font-size: 26px;
 	font-weight: 600;
-	line-height: 1.15;
+	line-height: 32px;
 	letter-spacing: -0.03em;
 	color: var(--text-primary);
 }
-[data-ui='markdown'].docs-prose {
-	font-size: 15px;
-	line-height: 1.65;
-	color: var(--text-secondary);
+/* A link to a section stops with its heading clear of the page bar. */
+.docs-section {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding-top: 32px;
+	border-top: 1px solid var(--line-subtle);
+	scroll-margin-top: calc(var(--bar-height) - 8px);
 }
-.docs-prose :where(p) {
-	margin: 0 0 14px;
-}
-.docs-prose :is(h2, h3) {
-	margin: 44px 0 12px;
+.docs-heading {
+	margin: 0;
+	font-size: 17px;
 	font-weight: 600;
-	line-height: 1.3;
+	line-height: 24px;
+	letter-spacing: -0.01em;
 	color: var(--text-primary);
 }
-.docs-prose h2 {
-	font-size: 20px;
-	letter-spacing: -0.02em;
+
+/* ───────── Prose ───────── */
+[data-ui='markdown'].docs-prose {
+	font-size: 14px;
+	line-height: 23px;
+	color: var(--text-secondary);
+}
+/* Every block sits 12px under the one before it. */
+.docs-prose > * {
+	margin: 0;
+}
+.docs-prose > * + * {
+	margin-top: 12px;
 }
 .docs-prose h3 {
-	font-size: 16px;
+	margin-top: 24px;
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 22px;
 	letter-spacing: -0.01em;
+	color: var(--text-primary);
 }
 .docs-prose strong {
 	font-weight: 500;
@@ -50,78 +125,253 @@
 .docs-prose a:hover {
 	text-decoration-color: currentColor;
 }
+
+/* Inline code is a small chip that may break inside a long path. */
 .docs-prose .inline-code {
+	padding: 2px 5px;
+	border-radius: var(--radius-chip);
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card);
 	color: var(--text-primary);
-	font-size: 0.84em;
+	font-size: 12px;
+	overflow-wrap: anywhere;
+	box-decoration-break: clone;
+	-webkit-box-decoration-break: clone;
 }
 
 /* Lists: a little air between items; the markers stay faint. */
 .docs-prose :where(ul, ol) {
-	margin: 0 0 14px;
 	padding-left: 1.25em;
 }
 .docs-prose :where(li) {
 	margin: 6px 0;
 	padding-left: 0.25em;
 }
+.docs-prose :where(li):first-child {
+	margin-top: 0;
+}
+.docs-prose :where(li):last-child {
+	margin-bottom: 0;
+}
 .docs-prose :where(ol > li)::marker {
 	font-variant-numeric: tabular-nums;
 }
 
-.docs-prose [data-ui='code-block'] {
-	margin: 4px 0 18px;
+/* A note: a rule on the left, no box and no icon. */
+.docs-prose blockquote {
+	padding: 2px 0 2px 14px;
 }
-.docs-prose [data-ui='code-block-content'] {
-	padding: 12px 14px;
+.docs-prose blockquote > p {
+	margin: 0;
 }
 
-/* Tables: hairline rows and a quiet header, no grid. Variable names stay on one line where there is room. */
+/* ───────── Code ───────── */
+/* A command line is 40px tall; a block's lines sit 22px apart. Copy always shows. */
+.docs-prose [data-ui='code-block-content'] {
+	padding: 12px 14px;
+	line-height: 22px;
+}
+.docs-prose [data-ui='code-block'][data-layout='single-line'] [data-ui='code-block-content'] {
+	padding: 9px 44px 9px 14px;
+}
+.docs-prose [data-ui='code-block-copy'] {
+	opacity: 1;
+}
+/* Shell commands: the words are bright, and the tokeniser's spans take the app's syntax colors. */
+.docs-prose [data-ui='code-block'][data-gutter='prompt'] code {
+	color: var(--text-primary);
+}
+.docs-prose [data-token='flag'] {
+	color: var(--syn-keyword);
+}
+.docs-prose [data-token='placeholder'] {
+	color: var(--syn-type);
+}
+.docs-prose [data-token='value'] {
+	color: var(--syn-string);
+}
+.docs-prose [data-token='comment'] {
+	color: var(--syn-comment);
+}
+.docs-prose [data-token='operator'] {
+	color: var(--text-faint);
+}
+/* In running text a chip is one color: only a table's first column and the code blocks color their tokens. */
+.docs-prose .inline-code [data-token] {
+	color: inherit;
+}
+
+/* ───────── Tables ───────── */
+/* One ring around the table, a quiet head, hairline rows. */
 .docs-prose [data-ui='markdown-table'] {
-	margin: 4px 0 20px;
+	border-radius: var(--radius-row);
+	box-shadow: 0 0 0 1px var(--line-card);
 }
 .docs-prose table {
 	font-size: 14px;
-	line-height: 1.5;
+	line-height: 22px;
 }
-.docs-prose :is(th, td) {
-	padding: 9px 16px 9px 0;
+.docs-prose th {
+	height: 32px;
+	padding: 0 14px;
+	border: 0;
+	border-bottom: 1px solid var(--line-card);
+	background: var(--bg-panel);
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+	font-weight: 500;
+	vertical-align: middle;
+}
+.docs-prose td {
+	padding: 9px 14px;
 	border: 0;
 	border-bottom: 1px solid var(--line-subtle);
 }
-.docs-prose th {
-	background: none;
-	color: var(--text-muted);
-	font-size: var(--font-size-label);
-	font-weight: 500;
-	border-bottom-color: var(--line-card);
+.docs-prose tbody tr:last-child td {
+	border-bottom: 0;
 }
-.docs-prose td code {
+.docs-prose tbody tr:hover td {
+	background: rgb(var(--wash-rgb) / 0.03);
+}
+/* The first column names the thing: plain mono with no chip, on one line, its flags and placeholders colored. */
+.docs-prose td:first-child {
+	padding-right: 24px;
+	color: var(--text-primary);
 	white-space: nowrap;
 }
+.docs-prose td:first-child .inline-code {
+	padding: 0;
+	background: none;
+	box-shadow: none;
+	font-size: 12.5px;
+	overflow-wrap: normal;
+}
+.docs-prose td:first-child .inline-code [data-token='flag'] {
+	color: var(--syn-keyword);
+}
+.docs-prose td:first-child .inline-code [data-token='placeholder'] {
+	color: var(--syn-type);
+}
+.docs-prose td:first-child .inline-code [data-token='operator'] {
+	color: var(--text-faint);
+}
 
+/* ───────── Pager ───────── */
 .docs-pager {
 	display: flex;
-	gap: 8px;
-	margin-top: 56px;
-	padding-top: 16px;
+	justify-content: space-between;
+	gap: 16px;
+	padding-top: 20px;
 	border-top: 1px solid var(--line-subtle);
 }
+.docs-pager-link {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+	border-radius: var(--radius-control);
+	outline: none;
+}
+.docs-pager-link[data-side='next'] {
+	align-items: flex-end;
+	margin-left: auto;
+}
+.docs-pager-link:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.docs-pager-label {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.docs-pager-title {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-primary);
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 22px;
+}
+.docs-pager-title svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-muted);
+	transition: color var(--dur-hover) ease-out;
+}
+.docs-pager-link:hover svg {
+	color: var(--text-primary);
+}
 
+/* Narrow screens: the bar holds the section menu and one copy icon. */
 @media (max-width: 900px) {
+	.doc-bar {
+		padding: 0 6px 0 8px;
+	}
+	.doc-bar .doc-bar-crumbs,
+	.doc-bar .doc-bar-wide {
+		display: none;
+	}
+	.doc-bar .doc-bar-sections,
+	.doc-bar .doc-bar-narrow {
+		display: inline-flex;
+	}
+	.doc-bar .doc-bar-sections {
+		min-width: 0;
+		gap: 6px;
+	}
+	span.doc-bar-sections {
+		padding: 0 8px;
+		font-size: var(--font-size-label);
+	}
+	.doc-bar-page {
+		color: var(--text-muted);
+	}
 	.docs-column {
-		padding: 56px 32px 48px;
+		padding: 40px 32px 56px;
 	}
 }
+/* Phones: a table row stacks, the name over what it does, so every column keeps room to read. */
 @media (max-width: 640px) {
 	.docs-column {
-		padding: 40px 16px 32px;
+		padding: 28px 16px 40px;
 	}
-	.docs-title {
-		font-size: 28px;
+	[data-ui='markdown'].docs-prose {
+		font-size: 15px;
 	}
-	/* Phones: long names wrap, so every column keeps room to read. */
-	.docs-prose td code {
+	.docs-prose :is(table, thead, tbody, tr, th, td) {
+		display: block;
+	}
+	.docs-prose th {
+		line-height: 31px;
+	}
+	.docs-prose th:not(:first-child) {
+		display: none;
+	}
+	.docs-prose tr {
+		padding: 10px 0;
+		border-bottom: 1px solid var(--line-subtle);
+	}
+	.docs-prose thead tr {
+		padding: 0;
+		border-bottom: 0;
+	}
+	.docs-prose tbody tr:last-child {
+		border-bottom: 0;
+	}
+	.docs-prose td {
+		padding: 0 14px;
+		border-bottom: 0;
+	}
+	.docs-prose tbody tr:hover td {
+		background: none;
+	}
+	.docs-prose td:first-child {
+		padding: 0 14px 2px;
 		white-space: normal;
+	}
+	.docs-prose td:first-child .inline-code {
 		overflow-wrap: anywhere;
 	}
 }

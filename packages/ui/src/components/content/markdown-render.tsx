@@ -5,12 +5,19 @@ import remarkGfm from 'remark-gfm';
 import { cn } from '../../lib/cn';
 import { whenIdle } from './idle';
 import { cachedMarkdown } from './markdown-cache';
-import { MARKDOWN_PARTS, partsWithLinkOverride, STATIC_MARKDOWN_PARTS, type LinkOverride } from './markdown-parts';
+import {
+	MARKDOWN_PARTS,
+	partsWithLinkOverride,
+	STATIC_MARKDOWN_PARTS,
+	staticPartsWithCode,
+	type LinkOverride,
+	type MarkdownCodeParts
+} from './markdown-parts';
 
 type MarkdownVariant = 'ui' | 'ai';
 
 /** What every Markdown renders from: the source, the voice and a class for the wrapper. */
-interface StaticMarkdownProps {
+interface MarkdownSource {
 	/** The Markdown source (GitHub flavored). Raw HTML renders as text. */
 	children: string;
 	/** `ui`: the UI sans for chat replies. `ai`: the Lora serif voice for summaries and findings. */
@@ -18,8 +25,14 @@ interface StaticMarkdownProps {
 	className?: string;
 }
 
+/** A server Markdown's props: complete text, and the page's own drawing of its code when it has one. */
+interface StaticMarkdownProps extends MarkdownSource {
+	/** Draws fenced and inline code with the page's components in place of the kit's. */
+	code?: MarkdownCodeParts;
+}
+
 /** A client Markdown's props: text that may still be arriving. */
-export interface MarkdownProps extends StaticMarkdownProps {
+export interface MarkdownProps extends MarkdownSource {
 	/** The text is still arriving: it goes out a few words at a time, each fading in as it comes. */
 	streaming?: boolean;
 	/** Draws the links with this target prefix through a component of the caller's, keeping every other link as is. */
@@ -217,6 +230,6 @@ export function MarkdownProse({
  * highlighted, so the page ships neither the Markdown parser nor the
  * highlighter; only a code block's copy button runs on the client.
  */
-export function StaticMarkdown(props: StaticMarkdownProps) {
-	return <MarkdownProse {...props} parts={STATIC_MARKDOWN_PARTS} />;
+export function StaticMarkdown({ code, ...props }: StaticMarkdownProps) {
+	return <MarkdownProse {...props} parts={code ? staticPartsWithCode(code) : STATIC_MARKDOWN_PARTS} />;
 }

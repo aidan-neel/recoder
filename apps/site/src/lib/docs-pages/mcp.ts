@@ -7,10 +7,17 @@ export const mcp: DocPage = {
 
 ## Add it to your agent
 
-The server speaks MCP over standard input and output. Start it with the command \`recoder\` and the argument \`mcp\`:
+The server speaks MCP over standard input and output. Start it with the command \`recoder\` and the argument \`mcp\`. For an agent that reads a project’s \`.mcp.json\`:
 
-\`\`\`json
-{ "mcpServers": { "recoder": { "command": "recoder", "args": ["mcp"] } } }
+\`\`\`json title=".mcp.json"
+{
+  "mcpServers": {
+    "recoder": {
+      "command": "recoder",
+      "args": ["mcp"]
+    }
+  }
+}
 \`\`\`
 
 In Claude Code:
