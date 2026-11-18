@@ -1,7 +1,7 @@
 import type { FindingClaim } from '@recoder/shared';
 import type { EvidenceStore } from '../../../evidence/evidence.js';
 import type { CandidateFinding } from '../consolidate.js';
-import { REVERTED_EDITS, SANDBOXED_SHELL, TOOL_ECONOMY_RULES } from '../prompts.js';
+import { TOOL_ECONOMY_RULES } from '../prompts.js';
 
 /** The JSON a bug verifier ends with. */
 const VERDICT_JSON =
@@ -24,11 +24,11 @@ The finding came from another reviewer and may be wrong. Your job is to prove or
 - If a stated non-goal (N#) or the stacked parent or child pull request (#123) in the change intent already covers the problem, answer "refuted", set "coveredBy" to that id, and say so in the reason.`;
 
 	if (mutation) {
-		return `You verify one code review finding, that a test is too weak, by mutation. You have ${SANDBOXED_SHELL}.
+		return `You verify one code review finding, that a test is too weak, by mutation. You have a sandboxed shell on the PR checkout: no network, no secrets, only the checkout is writable, dependencies already installed.
 ${shared}
 - Work in this order: read the test, read the code under test, then plant the bug and run the test in one command. Answer as soon as that run is done; you have few turns, so do not explore further.
 - The finding says the test would still pass with a bug it should catch. Plant that bug: make one small edit to the code under test that introduces exactly the wrong behavior the finding says the test accepts, and run that one test. For a test that accepts a broad error class, throw a different error of that class that carries the fields the test reads (a sibling subclass defined in the same edit), not only the bare parent; for a bound, return a value past the exact one; for a step the test never takes, break only that step.
-- ${REVERTED_EDITS}, so apply the edit and run the test in one command (for example \`sed -i … file && <test command for that file>\`), and print the edited line before the test runs so the output shows the edit applied. The test command must come last and bare: no pipe, no \`|| true\`, no trailing \`echo\`, so the run's exit code is the test's own.
+- Edits to tracked files are reverted after every command, so apply the edit and run the test in one command (for example \`sed -i … file && <test command for that file>\`), and print the edited line before the test runs so the output shows the edit applied. The test command must come last and bare: no pipe, no \`|| true\`, no trailing \`echo\`, so the run's exit code is the test's own.
 - "confirmed": the test still passes with the bug planted (the run exits 0), so the test is too weak. "refuted": the test fails because of the planted bug (the run exits nonzero on an assertion, not on a syntax or import error), so the test does catch it. "unverified": you could not plant the bug or run the test.
 - Running the test unchanged settles nothing: it passes either way. A run where the edit did not apply settles nothing either.
 - Cite the evidence id of the mutation run you made; baseline checks and the reviewer's runs do not count. Name the edit and the run's result in the reason.
@@ -36,7 +36,7 @@ ${EXPECTED_RULE}
 ${VERDICT_JSON}`;
 	}
 
-	return `You verify one code review finding by running code. You have ${SANDBOXED_SHELL}.
+	return `You verify one code review finding by running code. You have a sandboxed shell on the PR checkout: no network, no secrets, only the checkout is writable, dependencies already installed.
 ${shared}
 - Always run something. Write the smallest repro that would fail if the finding is true: a scratch test next to the code, or a script that imports the changed code and calls it with the triggering input. Run it. Existing tests, type checks and linters also count when their output shows the problem.
 - If the first repro does not run (an import path, a missing fixture), fix the script and run it again; read the code to find the right entry point.
@@ -44,7 +44,7 @@ ${shared}
 - Make the repro decide for itself: compare the actual value with the expected one and exit nonzero (a failing \`expect\`, a throw, \`process.exit(1)\`) when the finding is true. A script that only prints values and exits 0 proves nothing on its own. If the assertion passes, the finding is refuted.
 - Cite the evidence id of a run you made that proves your verdict; baseline checks and the reviewer's runs do not count. A confirming run fails on the assertion, not on setup (a bad import is not proof); copy the output line that shows the problem into the reason, in backticks. A refuting run must pass. If no run could show it, a confirmation citing the code you read counts as traced, not proven.
 ${EXPECTED_RULE}
-${REVERTED_EDITS}, so put experiments in new files or patch and run in one command.
+Edits to tracked files are reverted after every command, so put experiments in new files or patch and run in one command.
 ${VERDICT_JSON}`;
 }
 

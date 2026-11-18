@@ -16,8 +16,7 @@ import type { ChatOptions } from '../models/llm/types';
  *
  * Tool boundary: an adapter never lets its CLI use its own shell, file, edit or network tools. The only way a
  * run reaches the repository is {@link AgentRunOptions.runTool}, served to the CLI over MCP by
- * `tools/mcp-host.ts`, which passes each call to Recoder's gate (permitted reads, sandboxed runs). The one
- * exception is a run handed a {@link AgentRunOptions.workspace}, which only an adapter with `ownTools` takes.
+ * `tools/mcp-host.ts`, which passes each call to Recoder's gate (permitted reads, sandboxed runs).
  */
 export interface AgentAdapter {
 	/** The adapter id: also the model provider, and the prefix of its model ids (`claude-code:opus`). */
@@ -35,11 +34,6 @@ export interface AgentAdapter {
 	 * agent that cannot read them is refused before it starts, never sent without them.
 	 */
 	readonly readsImages: boolean;
-	/**
-	 * True when a run can work in a checkout with the CLI's own file and shell tools
-	 * ({@link AgentRunOptions.workspace}); absent for a CLI that only takes Recoder's tools.
-	 */
-	readonly ownTools?: true;
 	/** Installed, version, sign-in state. Cached until `refresh`. */
 	detect(refresh?: boolean): Promise<AgentStatus>;
 	/** The status `recoder doctor` reports, found without starting anything that outlives the check. */
@@ -117,17 +111,6 @@ export interface AgentModelSettings {
 	source?: string;
 }
 
-/**
- * A checkout a run works in with the CLI's own tools, in place of Recoder's. The CLI reads whatever configuration
- * and instruction files the directory holds, so the caller hands over a copy without them.
- */
-export interface AgentWorkspace {
-	/** The directory the CLI runs in: a private copy of the PR head. */
-	directory: string;
-	/** Whether the CLI may run commands and write files there, or only read and search. */
-	exec: boolean;
-}
-
 /** What a tool call answers: the text the model reads, and whether it is a refusal or a failure. */
 export interface ToolOutcome {
 	text: string;
@@ -148,8 +131,6 @@ export type AgentEvent =
 	| { type: 'reasoning'; delta: string; partId: string }
 	| { type: 'tool-call'; name: string }
 	| { type: 'tool-result'; name: string; isError: boolean }
-	/** A shell command the CLI's own tool ran in the run's workspace, as the CLI reports it. */
-	| { type: 'command'; command: string; output: string; exitCode: number | null; elapsedMs: number }
 	/** A step ended, having used this much. */
 	| { type: 'usage'; usage: TokenUsage; step?: string }
 	/** Something went wrong that the run survives, such as a line the parser could not read. */
@@ -166,11 +147,6 @@ export interface AgentRunOptions {
 	 */
 	tools: readonly string[];
 	runTool: ToolRunner;
-	/**
-	 * Where the CLI works with its own tools; `tools` is then empty and `runTool` is never called. Each command its
-	 * shell runs is reported as a `command` event, and each other tool call as `tool-call` and `tool-result`.
-	 */
-	workspace?: AgentWorkspace;
 	onEvent: (event: AgentEvent) => void;
 	/** Aborting it kills the CLI's whole process group. */
 	signal: AbortSignal;

@@ -20,7 +20,6 @@ import {
 	type ModelBudget
 } from '../agent-loop.js';
 import type { JsonAgentOptions } from '../agent-loop/options.js';
-import { worksWithOwnTools } from '../agent-loop/own-tools.js';
 import { unitContextParts } from '../change-model/change-model.js';
 import type { CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
@@ -280,9 +279,7 @@ function askReviewer(
 	/** A second look only reads: verification runs every candidate it reports, so its turns go to finding them. */
 	const exec = Boolean(ctx.exec) && !item.purpose && !tools;
 
-	/** A worker is reached through Recoder's `delegate` tool, which an agent on its CLI's own tools does not have. */
-	const alone = subagent || tools || worksWithOwnTools({ config: cfg, exec, evidence: ctx.evidence });
-	const delegate = alone ? undefined : delegateFor(item, records, ctx);
+	const delegate = subagent || tools ? undefined : delegateFor(item, records, ctx);
 
 	return runJsonAgent({
 		stage: item.purpose ? 'second-look' : subagent ? 'subagent' : 'reviewer',

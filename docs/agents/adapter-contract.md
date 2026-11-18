@@ -72,7 +72,6 @@ interface AgentRunOptions {
 	system: string; // replaces the CLI's own system prompt
 	tools: readonly string[]; // tool names the run may call; [] = answer only. A review lists native tools; repository chat lists its own.
 	runTool: ToolRunner; // the gate; reached only through the MCP host
-	workspace?: { directory: string; exec: boolean }; // work there with the CLI's own tools; see "A run in a workspace"
 	onEvent: (event: AgentEvent) => void;
 	signal: AbortSignal; // aborting kills the process group
 }
@@ -128,7 +127,6 @@ type AgentEvent =
 	| { type: 'reasoning'; delta: string; partId: string }
 	| { type: 'tool-call'; name: string } // sent by the MCP host, not the adapter
 	| { type: 'tool-result'; name: string; isError: boolean } // sent by the MCP host
-	| { type: 'command'; command: string; output: string; exitCode: number | null; elapsedMs: number } // a workspace run's shell command
 	| { type: 'usage'; usage: TokenUsage; step?: string } // a model call ended, with its usage
 	| { type: 'error'; message: string }; // something the run survives; logged
 ```
@@ -144,7 +142,7 @@ one message; a new id starts a new message on the dashboard.
 
 ## The tool boundary
 
-The CLI is the whole agent, and Recoder's tools are its only tools, unless the run is handed a workspace (below):
+The CLI is the whole agent, and Recoder's tools are its only tools:
 
 1. The CLI runs in an empty directory (`emptyDirectory` in `cli-process.ts`, or a scratch dir), never in the
    checkout.
@@ -160,21 +158,6 @@ The CLI is the whole agent, and Recoder's tools are its only tools, unless the r
 5. The child environment drops the server's keys and tokens (`cliEnv` with a `STRIPPED` list). A run never reads
    the CLI's credential files and never logs its output past what a failure message quotes. The one read of a
    sign-in is a usage-limits reader's, below.
-
-### A run in a workspace
-
-`RECODER_AGENT_TOOLS=cli` (an experiment, see [configuration.md](../review/configuration.md)) hands a run that
-executes code `options.workspace` in place of tools. Only an adapter that sets `ownTools = true` is given one;
-OpenCode is the only one today.
-
-- The CLI runs in `workspace.directory`, a private copy of the PR head without the root files a CLI reads as its
-  own instructions and settings. `options.tools` is empty and no MCP server is leased.
-- The adapter allows the CLI's own read and search tools, and its shell and file-write tools when
-  `workspace.exec` is true. Every other tool stays off: web, subagents, skills, user MCP servers.
-- A prompt with `options.tools` false must take the CLI's own tools away, since no gate refuses them.
-- The adapter reports each tool call as `tool-call` and `tool-result`, and each shell command as a `command`
-  event with the output and exit code the CLI gives. Recoder keeps those as the agent's run evidence.
-- Nothing sandboxes the CLI's shell. An adapter whose CLI has a sandbox of its own should turn it on.
 
 Never pass a shell string: `streamCli` (`apps/server/src/agents/cli-stream.ts`) takes an argv array, starts the
 CLI in its own process group, caps stdout (`CLI_OUTPUT_CAP_BYTES`), and kills the whole group on abort, timeout,

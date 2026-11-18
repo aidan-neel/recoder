@@ -1,4 +1,4 @@
-import type { AgentAdapter, AgentEvent, AgentReply, AgentRun } from '../../../agents/contract.js';
+import type { AgentAdapter, AgentReply, AgentRun } from '../../../agents/contract.js';
 import { reviewerTools } from '../../../env.js';
 import { nativeToolNames, type ToolOffer } from '../../../evidence/native-tools.js';
 import { extractJsonValue } from '../../../models/json-extract.js';
@@ -14,20 +14,12 @@ import { sleep } from '../../../models/llm/retry.js';
 import { isAuthFailure, isUsageLimit, modelFailure } from '../../../models/model-failure.js';
 import { currentReviewControl, reviewNow, reviewPausePoint } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
-import {
-	CHAT_STYLE,
-	NATIVE_REPLY_RULES,
-	OWN_REPLY_RULES,
-	TOOLLESS_REPLY_RULES,
-	forNativeTools,
-	forOwnTools
-} from '../prompts.js';
+import { CHAT_STYLE, NATIVE_REPLY_RULES, TOOLLESS_REPLY_RULES, forNativeTools } from '../prompts.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './budget.js';
 import { agentDeadlines, deadlineError, newAgentId, toolTurns, type AgentLimits } from './limits.js';
 import { StepRelay } from './step-relay.js';
 import { FINAL_TURN_NOTE, ToolGate } from './tool-gate.js';
 import type { JsonAgentOptions } from './options.js';
-import { OwnToolWork, worksWithOwnTools } from './own-tools.js';
 
 type AgentResult<T> = { value: T | null; error?: string };
 
@@ -68,15 +60,12 @@ const SESSION_CLOSED = new Error('the OpenCode session closed before the model s
  * One agent run with an agent CLI as the agent. The CLI drives the model step
  * after step and calls Recoder's tools itself; Recoder keeps what it must
  * own: the tools (through {@link ToolGate}), the turn and call budget, the
- * deadline, pausing, and checking the final result. An agent on its CLI's
- * own tools ({@link OwnToolWork}) passes no gate: Recoder records what it ran
- * and stops it when it calls a tool on a turn that may only answer.
+ * deadline, pausing, and checking the final result.
  */
 class NativeRun<T> {
 	private readonly limits: AgentLimits;
 	private readonly relay: StepRelay<T>;
 	private readonly gate: ToolGate<T>;
-	private readonly own: OwnToolWork<T> | null;
 	private readonly spendOpts: { consumeReserve?: boolean };
 	private readonly endpoint: string;
 	private session: AgentRun | null = null;
@@ -106,34 +95,12 @@ class NativeRun<T> {
 			onOverthought: () => this.stop('overthought')
 		});
 
-		const agentId = opts.agentId ?? newAgentId();
-
 		this.gate = new ToolGate(
 			opts,
-			agentId,
+			opts.agentId ?? newAgentId(),
 			{ isFinal: () => this.finalTurn(), nextIsFinal: () => this.relay.finished + 1 >= toolTurns(opts) },
 			initialDiscussion
 		);
-
-		this.own = this.toolsOn && worksWithOwnTools(opts) ? new OwnToolWork(opts, agentId) : null;
-	}
-
-	/** What the agent did with its tools, counted by whichever side ran them. */
-	private get activity(): { retrievals: number; runs: number } {
-		return this.own ?? this.gate;
-	}
-
-	/** Passes an event on; a tool the CLI's own agent calls on a turn that may only answer stops the run there. */
-	private readonly onEvent = (event: AgentEvent): void => {
-		this.relay.onEvent(event);
-		this.own?.onEvent(event);
-
-		if (this.own && event.type === 'tool-call' && this.promptTools && this.finalTurn()) this.stop('final');
-	};
-
-	/** A prompt written for JSON action requests, reworded for the tools this agent has. */
-	private reword(prompt: string): string {
-		return this.own ? forOwnTools(prompt, this.own.mergeBaseSha) : forNativeTools(prompt);
 	}
 
 	/** The model may no longer call tools: its turns, the call budget or its time are used up. */
@@ -178,7 +145,6 @@ class NativeRun<T> {
 	/** A finished step reached the provider, which is what lets a backed-off model limit recover. */
 	private stepDone(): void {
 		this.gate.stepDone();
-		this.own?.stepDone();
 		recordLlmSuccess(this.endpoint);
 	}
 
@@ -193,28 +159,18 @@ class NativeRun<T> {
 		return { exec: Boolean(this.opts.exec), delegate: Boolean(this.opts.delegate) };
 	}
 
-	/** How the agent is told to work and finish: with its CLI's tools, with Recoder's, or with none. */
-	private replyRules(): string {
-		if (!this.toolsOn) return TOOLLESS_REPLY_RULES;
-
-		return this.own ? OWN_REPLY_RULES : NATIVE_REPLY_RULES;
-	}
-
 	private async open(): Promise<AgentRun> {
 		const { opts } = this;
-		const workspace = await this.own?.open();
-		const listed = !workspace && toolTurns(opts) > 0;
 
 		return this.agent.openRun({
 			model: opts.config.model,
 			reasoningEffort: opts.config.reasoningEffort,
-			system: this.reword(opts.system) + this.replyRules() + CHAT_STYLE,
-			tools: listed ? nativeToolNames(this.listedTools()) : [],
+			system: forNativeTools(opts.system) + (this.toolsOn ? NATIVE_REPLY_RULES : TOOLLESS_REPLY_RULES) + CHAT_STYLE,
+			tools: toolTurns(opts) > 0 ? nativeToolNames(this.listedTools()) : [],
 			runTool: this.gate.run,
-			onEvent: this.onEvent,
+			onEvent: this.relay.onEvent,
 			signal: opts.signal,
-			images: opts.images,
-			...(workspace ? { workspace } : {})
+			images: opts.images
 		});
 	}
 
@@ -332,15 +288,14 @@ class NativeRun<T> {
 
 		if (value) {
 			/** Each push-back goes out once, and only while the agent can still act on it. */
-			const { retrievals, runs } = this.activity;
-			const nudge = final ? null : opts.checkFinal?.(value, { retrievals, runs });
+			const nudge = final ? null : opts.checkFinal?.(value, { retrievals: this.gate.retrievals, runs: this.gate.runs });
 
 			if (!nudge || this.nudged.has(nudge)) return { value };
 
 			this.nudged.add(nudge);
 			opts.onLog?.(`${opts.label} finished early; asking it to investigate first`);
 
-			return { next: this.reword(nudge) };
+			return { next: forNativeTools(nudge) };
 		}
 
 		const problems = opts.validationError?.(parsed) ?? 'output did not match the required schema';
@@ -404,7 +359,6 @@ class NativeRun<T> {
 	async close(): Promise<void> {
 		this.relay.settle(SESSION_CLOSED);
 		await this.session?.close();
-		await this.own?.close();
 	}
 }
 

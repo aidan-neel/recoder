@@ -13,49 +13,6 @@ export interface SessionHandlers {
 	onStepFinish?: (usage: TokenUsage, step?: string) => void;
 	/** A step ended, including when the provider omitted its usage. */
 	onStepEnd?: () => void;
-	/** The model called a tool; reported by a server version that tells of its tool calls. */
-	onToolStart?: (name: string) => void;
-	onToolDone?: (call: OwnToolCall) => void;
-}
-
-/** A finished tool call, as OpenCode reports it. */
-export interface OwnToolCall {
-	name: string;
-	input: Record<string, unknown>;
-	/** The text the model was given back. */
-	output: string;
-	failed: boolean;
-	/** A shell command's exit code; absent for another tool and for a command that never exited. */
-	exitCode?: number;
-	elapsedMs: number;
-}
-
-/** OpenCode's own tool that runs a shell command, whose calls are reported as the commands they ran. */
-const SHELL_TOOL = 'shell';
-
-/**
- * The handlers that report the calls of OpenCode's own tools, for a run that works in a checkout. A run on
- * Recoder's tools leaves them out: the MCP host reports those calls itself.
- */
-export function ownToolHandlers(onEvent: (event: AgentEvent) => void): SessionHandlers {
-	return {
-		onToolStart: (name) => onEvent({ type: 'tool-call', name }),
-		onToolDone: (call) => {
-			const { command } = call.input;
-
-			if (call.name === SHELL_TOOL && typeof command === 'string') {
-				onEvent({
-					type: 'command',
-					command,
-					output: call.output,
-					exitCode: call.exitCode ?? null,
-					elapsedMs: call.elapsedMs
-				});
-			}
-
-			onEvent({ type: 'tool-result', name: call.name, isError: call.failed });
-		}
-	};
 }
 
 /** The session handlers that report what OpenCode does as the contract's events. */

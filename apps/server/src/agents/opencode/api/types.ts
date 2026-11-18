@@ -16,7 +16,7 @@ export interface NewSession {
 	model: string;
 	system: string;
 	variant?: string;
-	/** Tool name patterns the session may call; every other tool, OpenCode's own included, stays off. */
+	/** Tool name patterns the session may call besides OpenCode's own, which stay off. */
 	allow: string[];
 	signal: AbortSignal;
 }
@@ -64,14 +64,6 @@ export interface SessionEvents {
 	router(handlers: SessionHandlers): (event: unknown, session: string | null) => void;
 }
 
-/** A version's own tools that a run working in a checkout may be allowed, by what they can do. */
-export interface OwnToolNames {
-	/** Tools that read and search files. */
-	read: string[];
-	/** Tools that run commands and write files. */
-	exec: string[];
-}
-
 /**
  * The routes and shapes of one OpenCode major version. Everything else in
  * Recoder talks to this and never to a path: `opencode serve` 1.x answers at the
@@ -80,8 +72,6 @@ export interface OwnToolNames {
 export interface OpenCodeApi {
 	/** Whether a prompt can force a JSON-schema answer; when not, the model is asked for plain JSON. */
 	readonly structuredOutput: boolean;
-	/** The version's own file and shell tools, for a run that works in a checkout; null when Recoder has not mapped them. */
-	readonly ownTools: OwnToolNames | null;
 	readonly events: SessionEvents;
 
 	/** Every provider OpenCode knows, as `{ all: [...] }`. */

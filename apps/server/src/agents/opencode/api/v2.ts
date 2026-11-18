@@ -2,10 +2,10 @@ import { z } from 'zod';
 import type { ImageUpload } from '@recoder/shared';
 import { LlmError, cancelledError } from '../../../models/llm/errors';
 import { imageDataUrl } from '../../../models/llm/message-images';
+import type { SessionHandlers } from '../opencode-events';
 import { OpenCodeError, providerError } from '../opencode-error';
 import type { OpenCodeServer, ServerRequest } from '../opencode-server';
 import { tokensSchema, usage } from './tokens';
-import { sessionRouter } from './v2-events';
 import {
 	MCP_TIMEOUT_MS,
 	OAUTH_TIMEOUT_MS,
@@ -13,7 +13,6 @@ import {
 	type NewSession,
 	type OAuthStart,
 	type OpenCodeApi,
-	type OwnToolNames,
 	type Prompt,
 	type Reply,
 	type SessionEvents
@@ -56,6 +55,19 @@ const messageSchema = z
 	.passthrough();
 
 type Message = z.infer<typeof messageSchema>;
+
+const eventSchema = z.object({
+	type: z.string(),
+	data: z
+		.object({
+			sessionID: z.string().optional(),
+			assistantMessageID: z.string().optional(),
+			ordinal: z.number().optional(),
+			delta: z.string().optional(),
+			tokens: tokensSchema.optional()
+		})
+		.passthrough()
+});
 
 const wrapped = <T extends z.ZodType>(schema: T) => z.object({ data: schema });
 
@@ -116,6 +128,38 @@ function settled(newest: Message[], userId: string): Reply | null {
 	return { id: last?.id, texts, tokens };
 }
 
+/**
+ * Routes one session's events to its handlers. A model call can be announced
+ * again when the provider is retried, so each step is reported once.
+ */
+function sessionRouter(handlers: SessionHandlers): (event: unknown, session: string | null) => void {
+	const steps = new Set<string>();
+
+	return (raw, session) => {
+		const parsed = eventSchema.safeParse(raw);
+
+		if (!parsed.success || parsed.data.data.sessionID !== session) return;
+
+		const { type, data } = parsed.data;
+		const message = data.assistantMessageID ?? '';
+		const part = `${message}:${data.ordinal ?? 0}`;
+
+		if (type === 'session.text.delta' && data.delta) handlers.onText?.(data.delta, part);
+		else if (type === 'session.reasoning.delta' && data.delta) handlers.onReasoning?.(data.delta, part);
+		else if (type === 'session.step.started' && !steps.has(`start:${message}`)) {
+			steps.add(`start:${message}`);
+			handlers.onStepStart?.(message || undefined);
+		} else if (type === 'session.step.ended' && !steps.has(`end:${message}`)) {
+			handlers.onStepEnd?.();
+
+			if (data.tokens) {
+				steps.add(`end:${message}`);
+				handlers.onStepFinish?.(usage(data.tokens), message || undefined);
+			}
+		}
+	};
+}
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const timer = setTimeout(resolve, ms);
@@ -152,8 +196,6 @@ function attachments(images: readonly ImageUpload[]): { files?: { uri: string; n
 export class V2Api implements OpenCodeApi {
 	/** v2 has no schema-forced answer; the model is asked for plain JSON. */
 	readonly structuredOutput = false;
-
-	readonly ownTools: OwnToolNames = { read: ['read', 'grep', 'glob'], exec: ['shell', 'edit', 'write'] };
 
 	readonly events: SessionEvents = { path: () => '/api/event', router: sessionRouter };
 

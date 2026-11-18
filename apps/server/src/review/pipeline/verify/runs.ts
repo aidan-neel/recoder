@@ -1,4 +1,3 @@
-import { agentTools } from '../../../env.js';
 import type { EvidenceRecord, EvidenceStore } from '../../../evidence/evidence.js';
 import type { CandidateFinding } from '../consolidate.js';
 import { SETUP_FAILURE, unresolved } from '../harness/run-outcome.js';
@@ -85,46 +84,12 @@ export function showsDefect(run: EvidenceRecord, reason: string): boolean {
 	return quotedSpans(reason).some((span) => span && !run.command?.includes(span) && output.includes(span));
 }
 
-/**
- * The records a verdict cites. A citation is an evidence id, or the command of a run the verifier made with its
- * CLI's own shell, which hands the model no id to copy.
- */
-export function citedRecords(evidenceIds: string[], evidence: EvidenceStore, agentId: string): EvidenceRecord[] {
-	return evidenceIds
-		.map((id) => evidence.get(id) ?? evidence.runByCommand(agentId, id))
-		.filter((record) => record !== undefined);
-}
-
 /** The runs a verdict cites that its own verifier made; a baseline check or another agent's run never counts. */
 export function ownRuns(evidenceIds: string[], evidence: EvidenceStore, agentId: string): EvidenceRecord[] {
-	return citedRecords(evidenceIds, evidence, agentId).filter(
-		(record) => record.kind === 'run' && record.agentId === agentId
-	);
-}
-
-/** How many of its latest runs a verifier is shown when it is asked to cite one. */
-const LISTED_RUNS = 8;
-
-/** Characters of a command kept in that list. */
-const LISTED_COMMAND_CHARS = 200;
-
-/**
- * What a verifier on its CLI's own tools is told when its verdict cites none of the commands it ran: the runs
- * Recoder recorded for it, each with the id to cite. Its shell handed it no ids, so without this list it has
- * nothing to copy. Null when it cited a run of its own, ran nothing, or works with Recoder's tools, which give ids.
- */
-export function uncitedRunsNote(evidenceIds: string[], evidence: EvidenceStore, agentId: string): string | null {
-	if (agentTools() !== 'cli' || ownRuns(evidenceIds, evidence, agentId).length) return null;
-
-	const runs = evidence.runsBy(agentId).slice(-LISTED_RUNS);
-
-	if (!runs.length) return null;
-
-	const listed = runs.map(
-		(run) => `- ${run.id}: \`${run.command?.slice(0, LISTED_COMMAND_CHARS)}\` (exit ${run.exitCode ?? 'unknown'})`
-	);
-
-	return `Your verdict cites none of the commands you ran, so no run counts as its proof. Recoder recorded these runs of yours:\n${listed.join('\n')}\nSend your verdict again with the id of the run that proves it in "evidenceIds". If none of them proves it, run one that does first.`;
+	return evidenceIds
+		.map((id) => evidence.get(id))
+		.filter((record) => record !== undefined)
+		.filter((record) => record.kind === 'run' && record.agentId === agentId);
 }
 
 /** Where in `lines` the output shows the problem: a line holding a quoted span, else the first failure line, else the end. */
