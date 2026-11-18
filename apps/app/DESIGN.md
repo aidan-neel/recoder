@@ -85,7 +85,7 @@ It departs from the root `DESIGN.md` (apps/web) in five places:
   opened by the bar's button or `[` and shut by its scrim, Escape or going to
   another page; it always starts shut. The tab row keeps its tabs and
   buttons and the review's facts drop to a line under it. Under 760px the
-  file tree steps out of Changes and the Ask pane moves under the Summary.
+  file tree steps out of Changes.
   Under 640px a list row stacks its title (which wraps), its meta line, then
   its fact and size; the pull request's title wraps over its buttons, with
   the merge button filling their line; the bar keeps the last two crumbs and
@@ -224,12 +224,10 @@ It departs from the root `DESIGN.md` (apps/web) in five places:
     files in.
   - **Summary**: what the change does (clamped), the order to read the
     files in, the description (clamped), and the conversation with the
-    reviewer. No boxes: labels, space and hairlines group it. The
+    reviewer. No boxes: labels, space and hairlines group it. It runs the
+    page's full width on the header's gutters, with no chat beside it. The
     conversation ends in a one-line comment field (the composer's row
-    layout). The Ask pane beside the tab is the chat with Recoder: its thread
-    scrolls above the composer docked at the pane's foot, and a sent message
-    and its reply stay in view until the reader scrolls up. A reply's
-    Thinking line starts folded (a click opens its steps). While it works, the
+    layout). In a bug's Ask, a reply's Thinking line starts folded (a click opens its steps). While it works, the
     newest thought sweeps on one line under it; when the answer begins, that
     line fades out where the answer's first line fades in, on the same
     baseline. The answer goes out a few words at a time at a pace that keeps
@@ -245,9 +243,9 @@ It departs from the root `DESIGN.md` (apps/web) in five places:
     accept it, or dismiss it with a reason; accepting and dismissing both
     answer with a toast that undoes them. The post button keeps one width for
     both its labels and the link to the posted comment comes after the last
-    action, so no button moves when a bug is posted. The tab reads in one
-    800px column on the header's gutter, so a bug's chevron, its evidence and
-    its votes end on one edge at any window width. The tab row carries the
+    action, so no button moves when a bug is posted. The tab runs the page's
+    full width on the header's gutters, so a bug's chevron, its evidence and
+    its votes end on the header's edge. The tab row carries the
     review's own facts as badges (commit, when, model, duration), posting the
     review and Review again. While a review is queued, runs or is paused, there is
     no box: its four steps are rows in the bugs' row language (the same
@@ -420,7 +418,7 @@ a short path for any other site.
 ## Composer
 
 Every place a person writes to Recoder or to the forge uses the kit's
-`Composer`: New, the Ask pane, a bug's Ask, the repository chat and the
+`Composer`: New, a bug's Ask, the repository chat and the
 comment field. There is no second implementation.
 
 - **Shape.** One box at the card radius on `--bg-raised`, ringed with
@@ -448,7 +446,7 @@ comment field. There is no second implementation.
   the puzzle mark, and the message loads that skill. A chat offers only what
   it can do now: `/review` only when a new run can start. New has no
   commands, only skills, because the pull request has to lead its text.
-- **"+".** In the Ask pane and a bug's Ask, "+" opens a searchable dialog of
+- **"+".** In a bug's Ask, "+" opens a searchable dialog of
   the pull request's changed files and adds the chosen path to the text; the
   chat takes text only. Focus comes back to the field, caret at the end.
 - **Models.** A quiet trigger in the bar shows the mark of the agent that
@@ -492,9 +490,14 @@ Motion explains a change and never makes the person wait.
   one 170ms crossfade. Where the content cannot be laid out (a settings
   group, a chart, one value), `SkeletonRows`, `SkeletonText` and
   `SkeletonBox` stand at its exact size. Never draw a bar by hand.
-- The one entrance is the Repositories page: its tiles rise 6px and fade in
-  over `--dur-disclose`, 40ms apart (the first eight), the first time the
-  grid shows.
+- Pages arrive. `Page` gives every page the kit's entrance (`useEntrance`,
+  `kit-motion.css`): the blocks under the bar rise 4px and fade in over
+  `--dur-disclose`, top-down, 30ms apart, while the bar and sidebar stay
+  still. The main lists stagger their own rows the same way (pull requests,
+  a repository's page, the settings groups; the Repositories tiles rise
+  6px), and a block whose list does so does not rise itself. It plays once,
+  on a page's first reveal: changing tab, filtering or a refresh shows what
+  changed at once, and reduced motion keeps only the fade.
 - A click changes the page in the same frame. The app renders in the browser
   only, so `Link` and `navigate` (`components/common/link.tsx`,
   `lib/shell/navigation.ts`) change the address with the History API and the

@@ -5,6 +5,7 @@
 export { cn } from './lib/cn';
 export * from './motion/presets';
 export { useMotionVariants } from './motion/reduced';
+export { useEntrance, type EntranceKind, type EntranceProps } from './motion/entrance';
 export * from './components/button';
 export * from './components/icon-root';
 export * from './components/keycap';

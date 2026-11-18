@@ -30,8 +30,10 @@ export async function generateMetadata({ params }: PageProps<'/docs/[slug]'>): P
 
 /**
  * One docs page: the bar, the title and the intro, a section for each `##`
- * heading (its id is what the section list and the search link to), and
- * links to the pages before and after it.
+ * heading (its id is what the section list and the search link to, and the
+ * heading links to it too), and links to the pages before and after it. The
+ * page arrives top-down; sections further down rise in as they scroll into
+ * view (`docs.css`).
  */
 export default async function DocPage({ params }: PageProps<'/docs/[slug]'>) {
 	const doc = docBySlug((await params).slug);
@@ -49,7 +51,7 @@ export default async function DocPage({ params }: PageProps<'/docs/[slug]'>) {
 				markdown={docMarkdown(doc)}
 				editUrl={docEditUrl(doc)}
 			/>
-			<article className="docs-column">
+			<article className="docs-column" data-enter="stagger">
 				<header className="docs-intro">
 					<h1 className="docs-title">{doc.title}</h1>
 					<StaticMarkdown className="docs-prose" code={DOC_CODE}>
@@ -58,7 +60,11 @@ export default async function DocPage({ params }: PageProps<'/docs/[slug]'>) {
 				</header>
 				{sections.map((section) => (
 					<section key={section.id} id={section.id} className="docs-section">
-						<h2 className="docs-heading">{section.title}</h2>
+						<h2 className="docs-heading">
+							<a href={`#${section.id}`} className="docs-anchor">
+								{section.title}
+							</a>
+						</h2>
 						<StaticMarkdown className="docs-prose" code={DOC_CODE}>
 							{section.body}
 						</StaticMarkdown>
