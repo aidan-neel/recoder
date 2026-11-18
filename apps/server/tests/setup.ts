@@ -25,11 +25,18 @@ function keepRealAgentsOut(): void {
 	delete process.env.RECODER_CUSTOM_AGENT;
 }
 
+/** Keeps the machine's and the contributor's git config (URL rewrites, signing, hooks paths) out of every git the tests or the code under test run. */
+function isolateGit(): void {
+	process.env.GIT_CONFIG_NOSYSTEM = '1';
+	process.env.GIT_CONFIG_GLOBAL = '/dev/null';
+}
+
 /** Tests simulate provider failures and expect them to surface at once; llm-retry.test.ts opts back in. */
 function failFast(): void {
 	process.env.RECODER_LLM_RETRIES ??= '0';
 }
 
 isolateStorage();
+isolateGit();
 keepRealAgentsOut();
 failFast();
