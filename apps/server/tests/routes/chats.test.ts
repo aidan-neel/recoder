@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, expect, jest, mock, spyOn, test } from 'bun:test';
 import { pathToFileURL } from 'node:url';
 import {
 	MAX_CHAT_MESSAGE_CHARS,
@@ -9,6 +9,7 @@ import {
 } from '@recoder/shared';
 import { app } from '../../src/app';
 import { imageDataUrl } from '../../src/models/llm/message-images';
+import { WRITER_HEARTBEAT_MS } from '../../src/repo-chat/chat-record';
 import { replySettled } from '../../src/repo-chat/chat-reply';
 import { requestStop, subscribeRepoChat } from '../../src/repo-chat/chat-turns';
 import { getStoredSettings, setReviewOverrides } from '../../src/review/session/review-settings';
@@ -16,6 +17,7 @@ import { db, reviewMetrics } from '../../src/store';
 import { readEventsUntil } from '../helpers/event-stream';
 import { useCommittedRepos } from '../helpers/git';
 import { imageUpload } from '../helpers/images';
+import { streamingModel } from './chat-fixtures';
 
 const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();
@@ -33,6 +35,7 @@ beforeEach(() => {
 
 afterEach(async () => {
 	mock.restore();
+	jest.useRealTimers();
 	globalThis.fetch = originalFetch;
 	setReviewOverrides(originalSettings);
 	await db.repoChats.clear();
@@ -66,43 +69,6 @@ async function startChat(repoId: string, text: string): Promise<RepoChat> {
 	expect(response.status).toBe(201);
 
 	return (await response.json()) as RepoChat;
-}
-
-/**
- * A model that streams `chunks`, then hangs until its request is aborted when
- * `hang` is set. It keeps each request's body and abort signal.
- */
-function streamingModel(chunks: string[], hang = false): { bodies: string[]; signals: (AbortSignal | undefined)[] } {
-	const bodies: string[] = [];
-	const signals: (AbortSignal | undefined)[] = [];
-
-	globalThis.fetch = (async (_url, init) => {
-		bodies.push(init?.body as string);
-		signals.push(init?.signal ?? undefined);
-
-		return new Response(
-			new ReadableStream({
-				start(controller) {
-					for (const chunk of chunks)
-						controller.enqueue(
-							new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n\n`)
-						);
-
-					if (!hang) {
-						controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
-						controller.close();
-
-						return;
-					}
-
-					init?.signal?.addEventListener('abort', () => controller.error(new Error('aborted')), { once: true });
-				}
-			}),
-			{ headers: { 'content-type': 'text/event-stream' } }
-		);
-	}) as typeof fetch;
-
-	return { bodies, signals };
 }
 
 /** Resolves once the chat's open reply holds `text`. */
@@ -395,10 +361,14 @@ test('a stop for a reply that already closed leaves the next reply streaming', a
 test('a stop another replica saves on the record aborts the model at the next save of the reply', async () => {
 	const repo = await trackedRepo();
 	const model = streamingModel(['Partial answer'], true);
+
+	jest.useFakeTimers();
+
 	const chat = await startChat(repo.id, 'Explain the checkout flow');
 
 	await replyHolds(chat.id, 'Partial answer');
 	expect(await requestStop(chat.id, chat.messages[1].id)).toBe(true);
+	jest.advanceTimersByTime(WRITER_HEARTBEAT_MS);
 	await replySettled(chat.id);
 
 	expect(model.signals[0]?.aborted).toBe(true);

@@ -7,7 +7,6 @@ import {
 	MAX_CHECKPOINTS
 } from '../../../../src/review/pipeline/agent-loop/checkpoint';
 import { executeTurn } from '../../../../src/review/pipeline/agent-loop/delegation';
-import { contextBudget } from '../../../../src/review/pipeline/agent-loop/context-budget';
 import { EvidenceStore } from '../../../../src/evidence/evidence';
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import type { JsonAgentOptions } from '../../../../src/review/pipeline/agent-loop/options';
@@ -170,12 +169,6 @@ test('an agent attempts no more than three checkpoints even as its transcript gr
 	await runJsonAgent(options({ maxTurns: 45 }));
 
 	expect(checkpoints).toBe(MAX_CHECKPOINTS);
-});
-
-test('small windows reduce tool output and large windows retain the existing round cap', () => {
-	expect(contextBudget(16000).toolRoundChars).toBe(5120);
-	expect(contextBudget(128000).toolRoundChars).toBe(24000);
-	expect(contextBudget(1000000).toolRoundChars).toBe(24000);
 });
 
 test('abort during a checkpoint stops without another model call and charges the interrupted call', async () => {

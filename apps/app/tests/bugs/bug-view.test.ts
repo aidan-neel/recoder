@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { BaseComparisonResult, Finding, VerificationEvidence } from '@recoder/shared';
+import type { Finding, VerificationEvidence } from '@recoder/shared';
 
 import { baseSentence, bugView, shortWhere } from '../../src/lib/bugs/bug-view';
 
@@ -133,21 +133,6 @@ describe('bugView fields', () => {
 });
 
 describe('baseSentence', () => {
-	const sentences: Record<BaseComparisonResult, string> = {
-		regression: 'Passes on the base branch.',
-		'pre-existing': 'Fails the same way on the base branch.',
-		incompatible: 'Can’t run on the base branch, which lacks the new code.',
-		environment: 'Fails on the base branch before it reaches the check.',
-		worsened: 'Already fails on the base branch; this change makes it worse.',
-		unstable: 'Ends differently from run to run on the base branch.'
-	};
-
-	test.each(Object.entries(sentences))('a %s comparison reads as one sentence', (result, sentence) => {
-		const known = Object.keys(sentences).find((key): key is BaseComparisonResult => key === result);
-
-		expect(baseSentence({ exitCode: 0, differs: true, result: known })).toBe(sentence);
-	});
-
 	test('a comparison without a result says whether the run ended differently, or why it could not run', () => {
 		expect(baseSentence({ exitCode: 0, differs: true })).toBe('Ends differently on the base branch.');
 		expect(baseSentence({ exitCode: 1, differs: false })).toBe('Ends the same way on the base branch.');

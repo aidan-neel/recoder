@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, jest, test } from 'bun:test';
 import type { TokenUsage } from '@recoder/shared';
 import { LlmError } from '../../../../src/models/llm';
 import { getReviewMetrics, withUsageMetrics } from '../../../../src/models/metrics';
@@ -6,6 +6,7 @@ import { ModelBudget } from '../../../../src/review/pipeline/agent-loop/budget';
 import type { JsonAgentOptions } from '../../../../src/review/pipeline/agent-loop/options';
 import { StepRelay } from '../../../../src/review/pipeline/agent-loop/step-relay';
 import { db, modelCalls, reviewMetrics } from '../../../../src/store';
+import { settleOnClock } from '../../../helpers/fake-clock';
 import { testReview } from '../../../helpers/review';
 import { useTempStore } from '../../../helpers/temp-store';
 
@@ -39,6 +40,20 @@ async function relay(): Promise<{ reviewId: string; run: <T>(work: (relay: StepR
 		reviewId: review.id,
 		run: async (work) => await withUsageMetrics(review.id, 'pipeline', () => work(target))
 	};
+}
+
+/**
+ * Ends a prompt whose step usage never arrives. The relay waits a grace period for it, which passes on bun's fake
+ * clock here and not in real seconds.
+ */
+async function finishUnreported(target: StepRelay<unknown>, tokens: TokenUsage): Promise<void> {
+	jest.useFakeTimers();
+
+	try {
+		await settleOnClock(target.finishPrompt(tokens), 250, 5_000);
+	} finally {
+		jest.useRealTimers();
+	}
 }
 
 async function calls(reviewId: string): Promise<TokenUsage['totalTokens'][]> {
@@ -94,7 +109,7 @@ test('a single step without a usage event takes the prompt’s tokens, but sever
 
 	await one.run(async (target) => {
 		target.onEvent({ type: 'step-start', step: 'msg_1' });
-		await target.finishPrompt(usage(120, 15));
+		await finishUnreported(target, usage(120, 15));
 	});
 
 	expect(await calls(one.reviewId)).toEqual([135]);
@@ -105,7 +120,7 @@ test('a single step without a usage event takes the prompt’s tokens, but sever
 		target.onEvent({ type: 'step-start', step: 'msg_1' });
 		target.onEvent({ type: 'step-start', step: 'msg_2' });
 		target.onEvent({ type: 'usage', usage: usage(100, 10), step: 'msg_1' });
-		await target.finishPrompt(usage(300, 30));
+		await finishUnreported(target, usage(300, 30));
 	});
 
 	expect(await calls(two.reviewId)).toEqual([110, null]);

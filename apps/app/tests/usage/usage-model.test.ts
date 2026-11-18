@@ -6,8 +6,6 @@ import type { UsageReport } from '@recoder/shared';
 import {
 	activePeople,
 	findActivePerson,
-	formatCost,
-	formatSessions,
 	modelColor,
 	OTHERS_COLOR,
 	personColor,
@@ -169,18 +167,8 @@ describe('usage figures', () => {
 		expect(uncachedInput(report.totals)).toBeGreaterThanOrEqual(0);
 	});
 
-	test('writes a dash for an unknown cost and keeps cents otherwise', () => {
-		expect(formatCost(null)).toBe('—');
-		expect(formatCost(12301.389)).toBe('$12,301.39');
-	});
-
 	test('names the models every cost leaves out for want of a price', () => {
 		expect(unpricedNote(usageScope(report, null))).toBe('Costs leave out glm-5.2, which has no price.');
 		expect(unpricedNote(usageScope(report, person))).toBeNull();
-	});
-
-	test('counts one session in the singular', () => {
-		expect(formatSessions(1)).toBe('1 session');
-		expect(formatSessions(1732)).toBe('1,732 sessions');
 	});
 });

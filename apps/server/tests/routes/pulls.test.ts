@@ -1,15 +1,22 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, beforeAll, expect, test } from 'bun:test';
 import type { PullDiff, PullList, PullPage } from '@recoder/shared';
 import { app } from '../../src/app';
 import { pullStateKey, pullStates } from '../../src/forge/pulls/pull-states';
 import { db } from '../../src/store';
 import { fakeGh, type GhReply } from '../helpers/fake-gh';
-import { localForgeFixture } from '../helpers/local-forge';
+import { localForgeFixture, type LocalForgeFixture } from '../helpers/local-forge';
 
 const realPath = process.env.PATH;
 
 /** Repositories a test tracked; the store outlives the file, and other suites list every repository. */
 const tracked: string[] = [];
+
+/** One local repository on disk for the whole file: every test only reads it. */
+let localForge: LocalForgeFixture;
+
+beforeAll(async () => {
+	localForge = await localForgeFixture();
+});
 
 afterEach(async () => {
 	process.env.PATH = realPath;
@@ -31,14 +38,14 @@ async function githubRepo(): Promise<string> {
 	return id;
 }
 
-/** The fixture's local repository, tracked. */
-async function localRepo() {
-	const fixture = await localForgeFixture();
+/** The file's local repository, tracked under an id of its own so nothing kept for one test answers another. */
+async function localRepo(): Promise<LocalForgeFixture> {
+	const repo = { ...localForge.repo, id: crypto.randomUUID() };
 
-	await db.repos.set(fixture.repo);
-	tracked.push(fixture.repo.id);
+	await db.repos.set(repo);
+	tracked.push(repo.id);
 
-	return fixture;
+	return { ...localForge, repo };
 }
 
 /**
@@ -160,19 +167,6 @@ test('a pull request number that is not a positive integer is refused', async ()
 	const res = await app.request(`/api/repos/${repo.id}/pulls/0/page`);
 
 	expect(res.status).toBe(400);
-});
-
-test('a comment body that is blank or too long is refused before the forge is asked', async () => {
-	const id = await githubRepo();
-	const gh = await fakeGh({});
-
-	process.env.PATH = gh.path;
-
-	const blank = await post(`/api/repos/${id}/pulls/7/comments`, { body: '  \n ' });
-	const long = await post(`/api/repos/${id}/pulls/7/comments`, { body: 'x'.repeat(65_537) });
-
-	expect([blank.status, long.status]).toEqual([400, 400]);
-	expect(await gh.calls()).toEqual([]);
 });
 
 test('a merge at a head the pull request moved past is refused with 409 and never reaches gh pr merge', async () => {

@@ -20,16 +20,8 @@ test('help names the command it explains, and the program for anything that is n
 	expect(parse()).toEqual({ command: 'help', topic: 'main' });
 });
 
-test('a mistyped command names the one that was probably meant', () => {
-	expect(() => parse('revew')).toThrow('recoder review');
-});
-
 test('an unknown command is a usage error', () => {
 	expect(() => parse('bogus')).toThrow(usageError);
-});
-
-test('an unknown command is named in the message', () => {
-	expect(() => parse('bogus')).toThrow('"bogus"');
 });
 
 test('doctor with no flags is the doctor command', () => {

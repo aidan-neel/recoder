@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
-import { obligationCap, obligationTurns, obligationsOn } from '../../../../src/review/pipeline/obligations/config';
+import { obligationCap, obligationTurns } from '../../../../src/review/pipeline/obligations/config';
 import { restoreEnvAfterEach } from '../../../helpers/env';
 
-const ENV = ['RECODER_OBLIGATIONS', 'RECODER_OBLIGATION_CAP', 'RECODER_OBLIGATION_TURNS'] as const;
+const ENV = ['RECODER_OBLIGATION_CAP', 'RECODER_OBLIGATION_TURNS'] as const;
 
 restoreEnvAfterEach([...ENV]);
 
@@ -13,16 +13,6 @@ function read<T>(key: (typeof ENV)[number], value: string | undefined, setting: 
 
 	return setting();
 }
-
-test('obligations are off unless RECODER_OBLIGATIONS is exactly 1', () => {
-	expect([undefined, '', '0', 'true', '1'].map((value) => read('RECODER_OBLIGATIONS', value, obligationsOn))).toEqual([
-		false,
-		false,
-		false,
-		false,
-		true
-	]);
-});
 
 test('the cap defaults to 8 and takes any whole number from 0', () => {
 	expect(

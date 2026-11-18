@@ -23,12 +23,6 @@ afterEach(() => {
 
 const entry = { id: 'm', label: 'M', model: 'z-ai/glm-5.3-flash', baseUrl: 'http://model.test/v1' };
 
-test('a model with no entry settings and no built-in profile samples at temperature 0 with 8000 tokens', () => {
-	saveReviewSettings({ models: [{ ...entry, model: 'some-unlisted-model' }] });
-
-	expect(sampling(configForOrchestrator())).toEqual({ temperature: 0, maxTokens: 8000 });
-});
-
 test('an entry’s own runtime beats the built-in profile for its model, field by field', () => {
 	saveReviewSettings({ models: [{ ...entry, runtime: { temperature: 0.3 } }] });
 

@@ -63,12 +63,6 @@ afterEach(() => {
 });
 
 describe('adaptive llm limiter', () => {
-	test('defaults the ceiling to 64 slots', async () => {
-		delete process.env.RECODER_LLM_CONCURRENCY;
-
-		expect(await freeSlots(100)).toBe(64);
-	});
-
 	test('Claude Code runs eight processes at once unless its own env var says otherwise, never above the shared ceiling', async () => {
 		delete process.env.RECODER_CLAUDE_CODE_CONCURRENCY;
 

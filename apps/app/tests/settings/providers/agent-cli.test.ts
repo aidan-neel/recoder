@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { AgentStatus } from '@recoder/shared';
 
-import { cliDetail, cliFix, cliGlyph, cliState } from '../../../src/lib/settings/providers/agent-cli';
+import { cliFix, cliState } from '../../../src/lib/settings/providers/agent-cli';
 
 function agent(patch: Partial<AgentStatus>): AgentStatus {
 	return {
@@ -38,13 +38,5 @@ describe('an agent CLI’s state', () => {
 
 		expect(cliFix(agent({}))).toBeNull();
 		expect(cliFix(agent({ error: 'x' }))).toBeNull();
-	});
-
-	test('the detail line is the path when ready, the state’s words or the error otherwise', () => {
-		expect(cliDetail(agent({}))).toBe('/usr/bin/claude');
-		expect(cliDetail(agent({ error: 'too old' }))).toBe('too old');
-		expect(cliDetail(agent({ signedIn: false }))).toBe('Not signed in');
-		expect(cliDetail(agent({ installed: false, path: null }))).toBe('Not installed');
-		expect(cliGlyph(agent({})).kind).toBe('ok');
 	});
 });

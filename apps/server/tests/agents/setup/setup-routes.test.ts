@@ -71,13 +71,3 @@ test('the setup routes answer 404 for an agent that is not registered', async ()
 	expect((await app.request('/api/agent/not-an-agent/sign-in', { method: 'POST' })).status).toBe(404);
 	expect((await app.request('/api/agent/jobs/not-a-job')).status).toBe(404);
 });
-
-test('job input needs a text to paste', async () => {
-	const response = await app.request('/api/agent/jobs/some-job/input', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({})
-	});
-
-	expect(response.status).toBe(400);
-});

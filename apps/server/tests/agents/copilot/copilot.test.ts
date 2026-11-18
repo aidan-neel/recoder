@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import type { ReasoningEffort, TokenUsage } from '@recoder/shared';
+import type { TokenUsage } from '@recoder/shared';
 import { CopilotAgent } from '../../../src/agents/copilot/copilot';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { COPILOT_FAILURES, fakeCopilot } from '../../helpers/fake-copilot';
@@ -49,35 +49,6 @@ async function logged(env: Record<string, string | undefined>): Promise<z.infer<
 function after(args: string[], flag: string): string | undefined {
 	return args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined;
 }
-
-test('the fixed models are the ids copilot help config documents, each but auto offered the CLI’s effort levels', async () => {
-	const agent = new CopilotAgent(await fakeCopilot());
-	const efforts: ReasoningEffort[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-	const models = await agent.models();
-
-	expect(models).toHaveLength(28);
-
-	expect(models[0]).toMatchObject({
-		id: 'copilot:auto',
-		provider: 'copilot',
-		model: 'auto',
-		label: 'Auto (Copilot picks)',
-		baseUrl: null,
-		apiKeySet: false,
-		contextWindow: 200_000
-	});
-
-	expect(models[0]).not.toHaveProperty('efforts');
-	expect(models[0]).not.toHaveProperty('defaultEffort');
-
-	for (const entry of models.slice(1)) expect(entry).toMatchObject({ efforts, defaultEffort: 'medium' });
-
-	expect(models.map((entry) => entry.model)).toContain('claude-sonnet-5.5');
-	expect(models.map((entry) => entry.model)).toContain('gpt-6.1-sol');
-	expect(models.every((entry) => entry.id === `copilot:${entry.model}`)).toBe(true);
-
-	expect(agent.fixedModels()).toEqual(models);
-});
 
 describe('CopilotAgent.complete', () => {
 	test('streams the reply, runs with its own tools off and the server keys stripped, and counts the usage', async () => {

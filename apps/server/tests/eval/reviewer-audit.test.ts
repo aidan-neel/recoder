@@ -186,13 +186,22 @@ function hashOf(path: string): string {
 	return new Bun.CryptoHasher('sha256').update(readFileSync(path)).digest('hex');
 }
 
+const SIDE_FILE_SUFFIXES = ['-wal', '-shm', '-journal'];
+
+/** A store's main file alone, as a copied snapshot arrives; Apple's SQLite keeps `-wal` and `-shm` after a close. */
+function writeSnapshot(name: string): string {
+	const path = writeStore(name);
+
+	for (const suffix of SIDE_FILE_SUFFIXES) rmSync(`${path}${suffix}`, { force: true });
+
+	return path;
+}
+
 test('--snapshot reads a WAL store as immutable: the same audit, no side files, the file unchanged', () => {
-	const snapshot = writeStore('snapshot.db');
+	const snapshot = writeSnapshot('snapshot.db');
 	const { path } = writeReport('snapshot.json', ['review-clean', 'review-mixed', 'review-gone']);
 	const before = hashOf(snapshot);
-	const sideFiles = () => ['-wal', '-shm', '-journal'].filter((suffix) => existsSync(`${snapshot}${suffix}`));
-
-	expect(sideFiles()).toEqual([]);
+	const sideFiles = () => SIDE_FILE_SUFFIXES.filter((suffix) => existsSync(`${snapshot}${suffix}`));
 
 	const { code, out } = cli(path, snapshot, '--snapshot');
 

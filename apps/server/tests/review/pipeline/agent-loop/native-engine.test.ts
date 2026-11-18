@@ -181,6 +181,17 @@ test('a model that tries refused tools on its final turn still has room to answe
 	expect(result.value?.results?.map((item) => item.isError)).toEqual([true, true]);
 });
 
+/** Resolves once the fake server holds the session's prompt, so an abort lands mid-turn however long the session took to open. */
+async function promptReached(target: Awaited<ReturnType<typeof startAgent>>): Promise<void> {
+	for (;;) {
+		const calls = (await target.request('/test/calls')) as Call[];
+
+		if (calls.some((call) => call.method === 'POST' && call.path === '/session/ses_1/message')) return;
+
+		await Bun.sleep(10);
+	}
+}
+
 test('aborting the review stops the run and deletes its OpenCode session', async () => {
 	const target = await startAgent();
 	const controller = new AbortController();
@@ -190,9 +201,10 @@ test('aborting the review stops the run and deletes its OpenCode session', async
 		target
 	);
 
-	setTimeout(() => controller.abort(), 150);
+	const aborted = promptReached(target).then(() => controller.abort());
 
 	await expect(run).rejects.toThrow('review aborted');
+	await aborted;
 
 	const calls = (await target.request('/test/calls')) as Call[];
 

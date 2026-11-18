@@ -326,7 +326,7 @@ test('reviewers assigned different lenses wait on the same warm-start gate', asy
 
 		await flush();
 		expect(f.send).toHaveBeenCalledTimes(1);
-		f.handlers[0].onStepEnd?.();
+		for (const handler of f.handlers) handler.onStepEnd?.();
 		await flush();
 		expect(f.send).toHaveBeenCalledTimes(2);
 		await settle(f, work, runs);

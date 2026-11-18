@@ -3,13 +3,21 @@
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
-			"outputs": ["build/**", "dist/**"]
+			"outputs": ["build/**", "dist/**"],
+			"outputLogs": "errors-only"
 		},
 		"check": {
-			"dependsOn": ["^build"]
+			"dependsOn": ["^build"],
+			"outputLogs": "errors-only"
 		},
 		"test": {
-			"dependsOn": ["^build"]
+			"dependsOn": ["^build"],
+			"outputLogs": "errors-only"
+		},
+		"@recoder/server#test:ha": {
+			"dependsOn": ["^build"],
+			"env": ["TEST_DATABASE_URL", "RECODER_POSTGRES_TEST_URL"],
+			"outputLogs": "errors-only"
 		},
 		"dev": {
 			"cache": false,
@@ -18,7 +26,8 @@
 		"@recoder/web#build": {
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/px-to-rem.ts"],
-			"outputs": ["build/**", "dist/**"]
+			"outputs": ["build/**", "dist/**"],
+			"outputLogs": "errors-only"
 		},
 		"@recoder/site#build": {
 			"dependsOn": ["^build"],
@@ -28,20 +37,29 @@
 				"$TURBO_ROOT$/packages/ui/src/**",
 				"$TURBO_ROOT$/apps/app/src/**"
 			],
-			"outputs": ["!.next/cache/**", ".next/**"]
+			"outputs": ["!.next/cache/**", ".next/**"],
+			"outputLogs": "errors-only"
 		},
 		"@recoder/site#check": {
 			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/src/**", "$TURBO_ROOT$/apps/app/src/**"]
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/src/**", "$TURBO_ROOT$/apps/app/src/**"],
+			"outputLogs": "errors-only"
+		},
+		"@recoder/site#test": {
+			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/src/**", "$TURBO_ROOT$/apps/app/src/**"],
+			"outputLogs": "errors-only"
 		},
 		"@recoder/app#build": {
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/px-to-rem.ts", "$TURBO_ROOT$/packages/ui/src/**"],
-			"outputs": ["!.next/cache/**", ".next/**"]
+			"outputs": ["!.next/cache/**", ".next/**"],
+			"outputLogs": "errors-only"
 		},
 		"@recoder/app#check": {
 			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/src/**"]
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/src/**"],
+			"outputLogs": "errors-only"
 		},
 		"lint": {
 			"inputs": [
@@ -49,7 +67,11 @@
 				"$TURBO_ROOT$/eslint.config.js",
 				"$TURBO_ROOT$/.prettierrc.json",
 				"$TURBO_ROOT$/.prettierignore"
-			]
+			],
+			"outputLogs": "errors-only"
+		},
+		"//#deadcode": {
+			"outputLogs": "errors-only"
 		}
 	}
 }

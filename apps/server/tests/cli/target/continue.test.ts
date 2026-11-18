@@ -7,6 +7,7 @@ import { git } from '../../helpers/git';
 import { runIdAt, storeReview, useFreshDataDir, type StoredReview } from '../runs/run-fixtures';
 import {
 	commitAll,
+	copyOfRepository,
 	localForge,
 	rejection,
 	removeFixtureFolders,
@@ -33,8 +34,32 @@ interface CommitStep {
 	message: string;
 }
 
-/** A repo with `feature` branched from `main`, holding the given commits in order; `heads` are their SHAs. */
-async function featureRepo(steps: CommitStep[]): Promise<{ dir: string; mainSha: string; heads: string[] }> {
+/** A repo with `feature` branched from `main`, holding some commits in order; `heads` are their SHAs. */
+interface FeatureRepo {
+	dir: string;
+	mainSha: string;
+	heads: string[];
+}
+
+/**
+ * The feature repos already built, by their commits. Building one takes a dozen git processes, so each is built once
+ * and every test gets a copy of its own, with the same commits, to change.
+ */
+const builtFeatureRepos = new Map<string, Promise<FeatureRepo>>();
+
+/** A repo of its own for the caller, with `feature` branched from `main` and holding the given commits in order. */
+async function featureRepo(steps: CommitStep[]): Promise<FeatureRepo> {
+	const key = JSON.stringify(steps);
+	const built = builtFeatureRepos.get(key) ?? buildFeatureRepo(steps);
+
+	builtFeatureRepos.set(key, built);
+
+	const repo = await built;
+
+	return { ...repo, dir: await copyOfRepository(repo.dir) };
+}
+
+async function buildFeatureRepo(steps: CommitStep[]): Promise<FeatureRepo> {
 	const dir = await userRepository();
 	const mainSha = git(dir, ['rev-parse', 'main']);
 
@@ -69,7 +94,7 @@ async function continuedReview(dir: string, since: string): Promise<ResolvedTarg
 }
 
 /** A feature branch of two commits whose first commit run 1 reviewed. */
-async function reviewedOnce(): Promise<{ dir: string; mainSha: string; heads: string[] }> {
+async function reviewedOnce(): Promise<FeatureRepo> {
 	const repo = await featureRepo([FIRST, SECOND]);
 
 	await earlierReview(repo.heads[0], repo.mainSha);

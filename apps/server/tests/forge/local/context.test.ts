@@ -1,20 +1,36 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, beforeAll, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Repo } from '@recoder/shared';
 import { gatherChangeContext, prsForCommit } from '../../../src/forge/pr-context';
 import { fetchPull, fetchPullPreview } from '../../../src/forge/pull-preview';
 import { repoFileHost } from '../../../src/forge/repo-files';
 import { fakeBin } from '../../helpers/fake-bin';
 import { git } from '../../helpers/git';
-import { localForgeFixture } from '../../helpers/local-forge';
+import { localForgeFixture, type LocalForgeFixture } from '../../helpers/local-forge';
 
 const signal = new AbortController().signal;
 const realFetch = globalThis.fetch;
 const realPath = process.env.PATH;
+
+/** One fixture for the tests that only read it; a test that changes its repository takes a copy. */
+let readOnlyForge: LocalForgeFixture;
+
+beforeAll(async () => {
+	readOnlyForge = await localForgeFixture();
+});
+
+/** A copy of the fixture, with the same commits, in a directory and under an id of its own. */
+async function forgeCopy(dirPrefix = 'recoder-local-forge-'): Promise<LocalForgeFixture> {
+	const dir = await mkdtemp(join(tmpdir(), dirPrefix));
+
+	await cp(fileURLToPath(readOnlyForge.repo.url), dir, { recursive: true });
+
+	return { ...readOnlyForge, repo: { ...readOnlyForge.repo, id: crypto.randomUUID(), url: pathToFileURL(dir).href } };
+}
 
 afterEach(() => {
 	globalThis.fetch = realFetch;
@@ -53,7 +69,7 @@ async function mergeBranch(dir: string, file: string, ...message: string[]) {
 }
 
 test('a local pull gathers its body, closing issue with comments, discussion, thread and commits', async () => {
-	const { repo, pull7Commit } = await localForgeFixture();
+	const { repo, pull7Commit } = readOnlyForge;
 	const context = await gatherChangeContext(repo, 7, 'local', signal);
 	const byRef = Object.fromEntries(context.sources.map((source) => [source.ref, source]));
 
@@ -67,7 +83,7 @@ test('a local pull gathers its body, closing issue with comments, discussion, th
 });
 
 test('a commit maps to the pull whose baseSha..head holds it, and a squash names its pull in the subject', async () => {
-	const { repo, root, pull3Commit, squash, pull7Commit } = await localForgeFixture();
+	const { repo, root, pull3Commit, squash, pull7Commit } = readOnlyForge;
 
 	expect(await numbers(repo, pull7Commit)).toEqual([7]);
 	expect(await numbers(repo, pull3Commit)).toEqual([3]);
@@ -76,7 +92,7 @@ test('a commit maps to the pull whose baseSha..head holds it, and a squash names
 });
 
 test('a local repo whose file URL contains a space still maps commits to its pulls', async () => {
-	const { repo, pull7Commit } = await localForgeFixture('recoder forge-');
+	const { repo, pull7Commit } = await forgeCopy('recoder forge-');
 
 	repo.url = `file://${fileURLToPath(repo.url)}`;
 
@@ -84,7 +100,7 @@ test('a local repo whose file URL contains a space still maps commits to its pul
 });
 
 test('a base revision git cannot resolve fails the lookup instead of matching a pull the commit is not in', async () => {
-	const { repo, squash } = await localForgeFixture();
+	const { repo, squash } = await forgeCopy();
 	const file = forgeFilePath(repo);
 	const forge = JSON.parse(await readFile(file, 'utf8'));
 
@@ -95,7 +111,7 @@ test('a base revision git cannot resolve fails the lookup instead of matching a 
 });
 
 test('a merge commit names its saved pull when the pull has no mergeSha, and a number with no saved pull maps to none', async () => {
-	const { repo, root } = await localForgeFixture();
+	const { repo, root } = await forgeCopy();
 	const dir = fileURLToPath(repo.url);
 	const file = forgeFilePath(repo);
 	const forge = JSON.parse(await readFile(file, 'utf8'));
@@ -113,7 +129,7 @@ test('a merge commit names its saved pull when the pull has no mergeSha, and a n
 });
 
 test('a local repo never reaches fetch, gh or glab', async () => {
-	const { repo } = await localForgeFixture();
+	const { repo } = readOnlyForge;
 	const marker = join(await mkdtemp(join(tmpdir(), 'recoder-forge-cli-')), 'called');
 	const script = `#!/bin/sh\necho "$0 $*" >> ${marker}\nexit 1\n`;
 	const fetched: string[] = [];
@@ -140,7 +156,7 @@ test('a local repo never reaches fetch, gh or glab', async () => {
 });
 
 test('a trailer or GitLab footer naming another project never maps a commit to the local pull with that number', async () => {
-	const { repo } = await localForgeFixture();
+	const { repo } = await forgeCopy();
 	const dir = fileURLToPath(repo.url);
 	const foreignUrl = await commitFile(dir, 'd.ts', 'Port d\n\nPR-URL: https://github.com/other/lib/pull/3');
 	const foreignFooter = await commitFile(dir, 'e.ts', "Merge branch 'e'\n\nPort e\n\nSee merge request upstream/lib!3");

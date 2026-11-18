@@ -2,6 +2,11 @@
 
 ## Commands
 
+- Everything: `bun run verify` runs every package's `check`, `lint`, `build` and
+  `test`, then `deadcode`, through turbo. Turbo replays the cached result of any
+  task whose inputs did not change, so only the packages you touched run again
+  and a second run takes under a second. It prints only what failed. Run it
+  before every push: CI runs exactly this command.
 - Helm: `helm lint --strict charts/recoder -f charts/recoder/tests/values.yaml` and
   `bun test charts/recoder/tests/render.test.ts`. See `charts/recoder/README.md`
   for image builds and installation. `.github/workflows/helm.yml` runs these checks.
@@ -12,7 +17,10 @@
   `/sample` needs no server); `bun run dev:web` starts the server and apps/web;
   `bun run dev:all` starts every package.
 - UI kit (`packages/ui`, React): `bun run --filter @recoder/ui check` · `test` · `lint`.
-- Server: `bun run --filter @recoder/server check` · `test`
+- Server: `bun run --filter @recoder/server check` · `test`. `test` runs the
+  whole suite as parallel batches of isolated files (`apps/server/tests/run.ts`)
+  and prints only failures; for one file or folder run `bun test tests/<path>`
+  from `apps/server`. `test:ha` is the PostgreSQL suite (see Code style).
 - CLI (`recoder`, in `apps/server/src/cli`): `bun run recoder <command>` from the
   root or `apps/server`. It prints for a person by default and JSON with `-p`,
   which is what agents and the skill pass; the JSON is the contract, the text is
@@ -29,12 +37,17 @@
 - Dead and duplicated code (repo): `bun run deadcode` runs knip and jscpd.
 - Format: `bunx prettier --write <paths>` then `bunx eslint --fix <paths>`.
 
-Run the relevant `check`, `lint` and tests before finishing a change, and
-`deadcode` when you remove or move code.
+Run the relevant `check`, `lint` and tests while you work, and `bun run verify`
+before you push, so each push is one green CI run.
 
-CI runs each package's `check`, `test`, `build` and `lint` as its own job,
-plus one `deadcode` job for the repo (`.github/workflows/ci.yml`), so a failure
-names the package and task. Add a matrix entry when a package gains a new task.
+CI is one job that runs `bun run verify` (`.github/workflows/ci.yml`), on pull
+requests and on main only: a branch without a pull request runs nothing. It
+restores turbo's cache first, so a change pays for the packages it touches and
+nothing else, and a failure names the package and task (`@recoder/app#lint`)
+above that task's output alone. PostgreSQL starts only when the HA suite has to
+run. A new task reaches CI by being added to the `verify` script and to
+`turbo.json`. When a package reads files outside its own folder, list them in
+that task's `inputs` in `turbo.json`, or a change to them will not rerun it.
 jscpd fails on any clone (`.jscpd.json`); CSS and `package.json` are excluded.
 
 ## Code style (mandatory)
@@ -47,8 +60,9 @@ persistence; drain the queue before reporting completion. See
 Multiple API replicas require PostgreSQL and fenced review ownership. Keep settings
 inside a request/job snapshot, enqueue shared controls durably, and commit terminal
 results with their progress and event state. See [HA operation](docs/ha-operating.md).
-Run the explicit HA integration suite against an isolated PostgreSQL instance with
-`TEST_DATABASE_URL` and `RECODER_POSTGRES_TEST_URL` set. Default unit tests clear
+Run the explicit HA integration suite (`bun run --filter @recoder/server test:ha`)
+against an isolated PostgreSQL instance with `TEST_DATABASE_URL` and
+`RECODER_POSTGRES_TEST_URL` set; without them its tests skip. Default unit tests clear
 `RECODER_DATABASE_URL` and never access a configured shared database.
 
 ESLint (`eslint.config.js`) and Prettier (`.prettierrc.json`) enforce most of
@@ -140,6 +154,19 @@ Don't write a test for:
 
 Keep each test to one behavior, named as a sentence about that behavior. When a
 change makes a test obsolete, delete the test.
+
+Keep the suite fast, because every push pays for it:
+
+- A test never waits on real time. Drive timers with the fake clock
+  (`apps/server/tests/helpers/fake-clock.ts`), or wait for the condition itself
+  (a file, a recorded call), never for a fixed delay that hopes it has happened.
+- Server test files run in parallel, each in its own module registry. Take
+  ports from the OS, make temp dirs with `mkdtemp`, and never depend on what
+  another file left behind or on the order two async calls finish in.
+- Build an expensive fixture (a git repo, a spawned server) once per file in
+  `beforeAll` and copy it per test, instead of rebuilding it for every test.
+- If only a constant in `src/` makes a test slow, give the code a seam (an
+  option or a parameter) instead of waiting it out.
 
 ## UI requirement (mandatory — no exceptions)
 

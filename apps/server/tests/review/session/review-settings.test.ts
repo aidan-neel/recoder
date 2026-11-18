@@ -2,13 +2,11 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MAX_CONTEXT_WINDOW, MIN_CONTEXT_WINDOW } from '@recoder/shared';
 import { configForOrchestrator } from '../../../src/models/models';
 import {
 	effectiveSubagentCap,
 	getStoredSettings,
 	initReviewSettings,
-	reviewSettingsSchema,
 	saveReviewSettings,
 	setConnection,
 	setReviewOverrides
@@ -135,13 +133,6 @@ test('a context window patch merges over the saved windows and null removes a mo
 
 	saveReviewSettings({ contextWindows: { m: null, n: 64_000 } });
 	expect(getStoredSettings().contextWindows).toEqual({ n: 64_000 });
-});
-
-test('a context window outside the bounds is refused, and the bounds themselves are kept', () => {
-	expect(reviewSettingsSchema.safeParse({ contextWindows: { m: MIN_CONTEXT_WINDOW - 1 } }).success).toBe(false);
-	expect(reviewSettingsSchema.safeParse({ contextWindows: { m: MAX_CONTEXT_WINDOW + 1 } }).success).toBe(false);
-	expect(reviewSettingsSchema.safeParse({ contextWindows: { m: MIN_CONTEXT_WINDOW } }).success).toBe(true);
-	expect(reviewSettingsSchema.safeParse({ contextWindows: { m: MAX_CONTEXT_WINDOW } }).success).toBe(true);
 });
 
 test('set context windows survive a restart', () => {

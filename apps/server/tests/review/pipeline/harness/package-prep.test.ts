@@ -9,6 +9,7 @@ import { recordBaseline } from '../../../../src/review/pipeline/harness/verify-b
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import { settleVerdict } from '../../../../src/review/pipeline/verify/settle';
 import type { ExecWorkspace } from '../../../../src/sandbox/exec-workspace';
+import { whenFound } from '../../../helpers/when-found';
 import {
 	available,
 	checkout,
@@ -381,11 +382,19 @@ test.skipIf(!available)('cancelling during a prerequisite stops it and runs noth
 	const controller = new AbortController();
 	const started = Date.now();
 
+	const scriptStarted = () =>
+		whenFound(async () => ((await prepRuns(dir)) > 0 ? true : null), {
+			afterMs: 4_000,
+			waitingFor: 'the prepare script to start'
+		});
+
 	const report = await preparePackages(
 		ws,
 		options(['value.test.ts'], {
 			signal: controller.signal,
-			onStep: (_, result) => result || setTimeout(() => controller.abort(), 1_000)
+			onStep: (_, result) => {
+				if (!result) void scriptStarted().then(() => controller.abort());
+			}
 		})
 	);
 

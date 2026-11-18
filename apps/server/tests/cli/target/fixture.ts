@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { env } from '../../../src/env';
 import type { ReviewScope, ReviewTarget } from '../../../src/cli/review/options';
 import type { TargetRequest } from '../../../src/cli/target/resolve-target';
@@ -16,6 +16,12 @@ const WHOLE_CHANGE: ReviewScope = { include: [], exclude: [] };
 /** Temp folders the tests made, removed by `removeFixtureFolders` once a test file finishes. */
 const fixtureFolders: string[] = [];
 
+/**
+ * The forge already built. Building it takes some twenty git processes and copying its folder takes none, so it is
+ * built once per test file and every test gets a copy of its own to change.
+ */
+let builtForge: ReturnType<typeof localForgeFixture> | null = null;
+
 /** A new temp folder, by its real path, that `removeFixtureFolders` removes. */
 export async function fixtureFolder(prefix: string): Promise<string> {
 	const dir = realpathSync(await mkdtemp(join(tmpdir(), prefix)));
@@ -25,13 +31,33 @@ export async function fixtureFolder(prefix: string): Promise<string> {
 	return dir;
 }
 
-/** Removes every folder the tests made; each test file runs it after its last test. */
+/** Removes every folder the tests made, the built forge included; each test file runs it after its last test. */
 export async function removeFixtureFolders(): Promise<void> {
+	builtForge = null;
+
 	await Promise.all(fixtureFolders.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 }
 
-/** The shared local forge fixture, its folder removed with the others. */
+/** A copy of the repository at `dir` in a new temp folder, with the same commits, that the caller may change. */
+export async function copyOfRepository(dir: string): Promise<string> {
+	const copy = await fixtureFolder('recoder-target-');
+
+	await cp(dir, copy, { recursive: true });
+
+	return copy;
+}
+
+/** A copy of the shared local forge fixture that the caller may change, its folder removed with the others. */
 export async function localForge(): ReturnType<typeof localForgeFixture> {
+	builtForge ??= buildForge();
+
+	const forge = await builtForge;
+	const copy = await copyOfRepository(fileURLToPath(forge.repo.url));
+
+	return { ...forge, repo: { ...forge.repo, url: pathToFileURL(copy).href } };
+}
+
+async function buildForge(): ReturnType<typeof localForgeFixture> {
 	const forge = await localForgeFixture();
 
 	fixtureFolders.push(fileURLToPath(forge.repo.url));

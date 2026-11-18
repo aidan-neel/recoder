@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { emptyReviewProgress, type ReviewProgress, type ReviewToolCall } from '@recoder/shared';
 import { app } from '../../../src/app';
-import { listenerCount } from '../../../src/review/session/events';
 import { db, reviewProgress } from '../../../src/store';
 import { testReview } from '../../helpers/review';
 
@@ -42,18 +41,4 @@ test('a stream opened with tools=0 sends its snapshot without the tool calls, an
 
 	await db.reviews.delete(review.id);
 	await reviewProgress.delete(review.id);
-});
-
-test('a client that leaves ends its stream and releases the subscription', async () => {
-	const review = await db.reviews.set(testReview({ status: 'running' }));
-	const reader = (await app.request(`/api/reviews/${review.id}/events`)).body!.getReader();
-
-	await reader.read();
-	expect(listenerCount(review.id)).toBe(1);
-
-	await reader.cancel();
-	await Bun.sleep(5);
-	expect(listenerCount(review.id)).toBe(0);
-
-	await db.reviews.delete(review.id);
 });

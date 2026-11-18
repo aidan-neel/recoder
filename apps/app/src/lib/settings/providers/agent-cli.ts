@@ -34,17 +34,3 @@ export function cliFix(agent: AgentStatus): string | null {
 
 	return null;
 }
-
-/**
- * The line under the CLI's name: where the binary is, what is wrong, or the
- * state's words when there is nothing better to say.
- */
-export function cliDetail(agent: AgentStatus): string {
-	const state = cliState(agent);
-
-	if (state === 'missing') return GLYPH.missing.label;
-	if (state === 'broken') return agent.error ?? GLYPH.broken.label;
-	if (state === 'signed-out') return GLYPH['signed-out'].label;
-
-	return agent.path ?? GLYPH.ready.label;
-}

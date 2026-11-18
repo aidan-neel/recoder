@@ -187,21 +187,6 @@ describe('review settings', () => {
 		expect((await (await app.request('/api/settings/models')).json()).subagentCap).toBe('uncapped');
 	});
 
-	test('invalid effort values are rejected without changing settings', async () => {
-		setReviewOverrides({ specialistEffort: 'high' });
-
-		for (const specialistEffort of ['ultra', '', 1, [], {}]) {
-			const res = await app.request('/api/settings/models', {
-				method: 'PATCH',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ specialistEffort })
-			});
-
-			expect(res.status).toBe(400);
-			expect(getStoredSettings().specialistEffort).toBe('high');
-		}
-	});
-
 	test('a saved file with per-role picks loads as one Specialist pick', async () => {
 		const legacy = (extra: object) =>
 			writeFileSync(

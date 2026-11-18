@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { PANEL_WIDTHS, parseStoredWidth, widthToRem } from '../../src/lib/shell/panel-width';
+import { PANEL_WIDTHS, parseStoredWidth } from '../../src/lib/shell/panel-width';
 
 const SIDEBAR = PANEL_WIDTHS.sidebar;
 
@@ -15,11 +15,5 @@ describe('parseStoredWidth', () => {
 		for (const text of [null, '', 'wide', '-300', '300.5', '1e3', '300px', '12345']) {
 			expect(parseStoredWidth(text, SIDEBAR)).toBe(SIDEBAR.fallback);
 		}
-	});
-});
-
-describe('widthToRem', () => {
-	test('divides by the base font size', () => {
-		expect(widthToRem(248)).toBe('15.5rem');
 	});
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { z } from 'zod';
@@ -86,7 +86,7 @@ describe('CopilotAgent.openRun', () => {
 			url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:/)
 		});
 
-		expect(call.cwd.startsWith(tmpdir())).toBe(true);
+		expect(call.cwd.startsWith(realpathSync(tmpdir()))).toBe(true);
 		expect(call.cwd.split('/').at(-1)).toBe('work');
 		expect(after(call.args, '--model')).toBe('gpt-5.6-sol');
 		expect(after(call.args, '--reasoning-effort')).toBe('high');
