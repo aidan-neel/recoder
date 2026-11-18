@@ -3,10 +3,10 @@
 import type { Repo } from '@recoder/shared';
 import { HoverList, RowButton } from '@recoder/ui';
 import { ChevronRight } from 'lucide-react';
-import { Link } from '@/components/common/link';
 
 import { useRecentActivity, type RecentRow } from '@/lib/settings/use-activity';
 
+import { Link } from '@/components/common/link';
 import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
 
 /** One review the watcher started. The whole row opens its pull request. */

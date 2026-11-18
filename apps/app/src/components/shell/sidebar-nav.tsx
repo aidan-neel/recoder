@@ -2,13 +2,14 @@
 
 import { HoverList, RowButton } from '@recoder/ui';
 import { BookOpen, Clock, FolderGit2, GitPullRequest, Plus } from 'lucide-react';
-import { Link } from '@/components/common/link';
 import { usePathname } from '@/lib/shell/navigation';
 import type { ComponentType } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import { useIntent } from '@/lib/shell/intent';
 import { AUTOMATIONS_HREF, GUIDELINES_HREF, isLiveApp, newReviewHref, pullsHref, reposHref } from '@/lib/shell/routes';
+
+import { Link } from '@/components/common/link';
 
 type Place = 'new' | 'pulls' | 'repos' | 'automations' | 'guidelines';
 

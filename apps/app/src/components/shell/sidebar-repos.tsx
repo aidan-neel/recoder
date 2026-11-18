@@ -1,7 +1,6 @@
 'use client';
 
 import { ForgeMark, HoverList, RowButton } from '@recoder/ui';
-import { Link } from '@/components/common/link';
 import { usePathname } from '@/lib/shell/navigation';
 import { useCallback } from 'react';
 
@@ -9,6 +8,8 @@ import { useOverviewCache } from '@/lib/api/client';
 import { useIntent } from '@/lib/shell/intent';
 import { useSidebarFolds } from '@/lib/shell/sidebar-folds';
 import type { SidebarRepo } from '@/lib/shell/types';
+
+import { Link } from '@/components/common/link';
 
 import { SidebarSection } from './sidebar-section';
 

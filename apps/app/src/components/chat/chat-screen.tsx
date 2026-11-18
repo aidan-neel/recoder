@@ -2,7 +2,6 @@
 
 import { Button, StatusNotice } from '@recoder/ui';
 import { MessageSquareOff, RotateCcw } from 'lucide-react';
-import { Link } from '@/components/common/link';
 
 import { useApi } from '@/lib/api/client';
 import type { RepoChatView } from '@/lib/chat/types';
@@ -10,6 +9,7 @@ import { useRepoChat } from '@/lib/chat/use-repo-chat';
 import { newReviewHref } from '@/lib/shell/routes';
 
 import { Crumbs, type Crumb } from '@/components/common/crumbs';
+import { Link } from '@/components/common/link';
 import { Page } from '@/components/common/page';
 import { TokenUsageButton } from '@/components/common/token-usage-modal';
 import { FilePanelHost } from '@/components/files/file-panel-host';
