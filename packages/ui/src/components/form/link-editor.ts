@@ -43,7 +43,7 @@ import { docFromText, embedLinks, linkAfter, linkBefore, replaceRange, wordAroun
 export interface EditorHost extends EmbedSource {
 	maxLength: () => number | undefined;
 	disabled: () => boolean;
-	/** The names an `@` mention may take, so `@name` shows as an embed. */
+	/** The skill names a `/` mention may take, so `/name` shows as an embed. */
 	mentions: () => ReadonlySet<string>;
 	/** The person changed the text. */
 	onChange: (text: string) => void;

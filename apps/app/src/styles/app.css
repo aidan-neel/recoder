@@ -7,6 +7,7 @@
 @import './pulls.css';
 @import './pull.css';
 @import './repo.css';
+@import './fleet.css';
 @import './changes.css';
 @import './bugs.css';
 @import './run.css';
@@ -30,3 +31,4 @@
 @import './setup.css';
 @import './appearance.css';
 @import './account.css';
+@import './narrow.css';

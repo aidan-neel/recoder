@@ -138,9 +138,8 @@
 	}
 }
 /*
- * At phone size the window drops what a narrow page cannot fit: a tab's own
- * tools, the search field, a row's line counts, and the merge bar's line
- * about conflicts, so titles and the merge button keep their room.
+ * At phone size the app lays itself out as it does on a phone (its own narrow rules: stacked rows, a stacked merge
+ * strip), so the window only drops what is no use in a picture: a tab's own tools and the search field.
  */
 @container (max-width: 600px) {
 	.demo-window {
@@ -148,13 +147,8 @@
 		height: 620px;
 	}
 	.demo-app .pull-tools,
-	.demo-app .pulls-find,
-	.demo-app .pull-row .diff-stat,
-	.demo-app .merge-bar > span.merge-bar-fact {
+	.demo-app .pulls-find {
 		display: none;
-	}
-	.demo-app .pull-row {
-		grid-template-columns: 16px minmax(0, 1fr) auto 30px;
 	}
 }
 /*

@@ -5,7 +5,7 @@ import { HoverList, Pill } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import type { GuidePart } from '@/lib/changes/types';
-import { plural } from '@/lib/shell/format';
+import { findingsLabel, plural } from '@/lib/shell/format';
 
 /** The part that holds the files the review's plan left out, so no file is lost in the guide. */
 const REST_ID = 'rest';
@@ -19,7 +19,14 @@ export function partsWithRest(parts: GuidePart[], files: FileDiff[]): GuidePart[
 
 	return [
 		...parts,
-		{ id: REST_ID, title: 'Everything else', reason: 'Files the review did not group.', paths: rest, bugs: 0 }
+		{
+			id: REST_ID,
+			title: 'Everything else',
+			reason: 'Files the review did not group.',
+			paths: rest,
+			bugs: 0,
+			suggestions: 0
+		}
 	];
 }
 
@@ -66,7 +73,11 @@ export function GuidePartSection({ part, position, children }: GuidePartSectionP
 					<h2 className="guide-part-title">{part.title}</h2>
 					<p className="guide-part-reason">{part.reason}</p>
 				</div>
-				{part.bugs > 0 ? <Pill tone="high">{plural(part.bugs, 'bug')}</Pill> : null}
+				{part.bugs > 0 ? (
+					<Pill tone={part.bugs > part.suggestions ? 'high' : 'low'}>
+						{findingsLabel(part.bugs - part.suggestions, part.suggestions)}
+					</Pill>
+				) : null}
 				<span className="meta">{plural(part.paths.length, 'file')}</span>
 			</div>
 			{children}

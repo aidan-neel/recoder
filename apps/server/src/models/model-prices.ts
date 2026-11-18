@@ -64,13 +64,25 @@ export function priceLookupFrom(body: unknown): PriceLookup {
 	return (model) => prices.get(normalizeModelId(model)) ?? null;
 }
 
+/** The catalog object changes when its cache refreshes, so the derived index lives exactly as long as its source. */
+const priceIndexes = new WeakMap<object, PriceLookup>();
+
 /**
  * The prices from models.dev, cached for an hour with the hosted catalogs. When models.dev cannot be reached every
  * model is unpriced, so a report shows its token counts with no cost instead of failing.
  */
 export async function loadPriceLookup(): Promise<PriceLookup> {
 	try {
-		return priceLookupFrom(await modelsDevCatalog());
+		const catalog = await modelsDevCatalog();
+		const object = catalog && typeof catalog === 'object' ? catalog : {};
+		let lookup = priceIndexes.get(object);
+
+		if (!lookup) {
+			lookup = priceLookupFrom(catalog);
+			priceIndexes.set(object, lookup);
+		}
+
+		return lookup;
 	} catch (error) {
 		console.warn('[usage] could not load model prices', error instanceof Error ? error.message : error);
 

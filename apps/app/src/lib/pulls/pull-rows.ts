@@ -46,6 +46,11 @@ function isRealReview(review: ReviewListItem | null): review is ReviewListItem {
 	return !!review && review.status !== 'draft' && !isCancelled(review);
 }
 
+/** When a person stopped `review`; null for any other review, or none. */
+function cancelledAt(review: ReviewListItem | null): string | null {
+	return review && isCancelled(review) ? review.updatedAt : null;
+}
+
 /** The status of a review that ran or failed, when it decides the row; null to read the forge's state next. */
 export function reviewStatus(review: ReviewListItem | null): PullRowStatus | null {
 	if (!review) return null;
@@ -71,7 +76,7 @@ export function rowStatus({ item, review }: ListedPull): PullRowStatus {
 	if (status.mergeability === 'conflicts') return { kind: 'conflicts' };
 	if (status.checks && status.checks.failed > 0) return { kind: 'checks-failing', failed: status.checks.failed };
 	if (status.draft) return { kind: 'draft' };
-	if (!isRealReview(review)) return { kind: 'not-reviewed' };
+	if (!isRealReview(review)) return { kind: 'not-reviewed', cancelledAt: cancelledAt(review) };
 	if (review.headSha !== pull.headSha) return { kind: 'outdated' };
 	if (status.mergeability === 'clean' && !status.checks?.pending) return { kind: 'ready' };
 

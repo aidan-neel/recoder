@@ -3,7 +3,10 @@ import { afterEach, beforeEach, jest } from 'bun:test';
 /** Promise callbacks run after each step of the clock, enough for a stream read, its parse and the turn that follows. */
 const FLUSH_ROUNDS = 500;
 
-/** For a test file: every test runs on bun's fake clock, which also moves `Date.now`. */
+/**
+ * For a test file: every test runs on bun's fake clock. Advancing it moves `Date.now` on Bun 1.4 but not on 1.3.14,
+ * the version CI pins, so a test that needs `Date.now` to pass a deadline sets the system time instead.
+ */
 export function useFakeClock(): void {
 	beforeEach(() => jest.useFakeTimers());
 	afterEach(() => jest.useRealTimers());

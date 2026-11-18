@@ -11,8 +11,8 @@ import { AskSuggestions, AskThread } from './ask-thread';
 /**
  * The conversation with Recoder about the whole pull request, as a pane
  * beside the reading: its thread scrolls and sits on the composer, which stays
- * docked at the pane's foot with the "+" for a changed file, the "/"
- * commands, the "@" skills of the repository and the pull request's head,
+ * docked at the pane's foot with the "+" for a changed file, the "/" menu of
+ * commands and of the skills of the repository and the pull request's head,
  * and the models. While the thread is empty, questions to start
  * from stand where the first message will. A sent question and its reply stay
  * in view as the reply arrives.
@@ -37,7 +37,7 @@ export function AskPane() {
 				</div>
 			</div>
 			<div className="ask-pane-foot">
-				<AskComposer ask={ask} label="Ask about this pull request" mentions={skills} />
+				<AskComposer ask={ask} label="Ask about this pull request" skills={skills} />
 			</div>
 		</aside>
 	);

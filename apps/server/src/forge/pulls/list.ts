@@ -20,7 +20,8 @@ const REPO_TIMEOUT_MS = 25_000;
  * One page of the open pull requests of `repos`, newest activity first, each
  * joined with its newest review. Repositories load a few at a time; one whose
  * forge fails or is too slow is named in `failures` and the rest still load,
- * and one with more pages has its next cursor in `nextCursors`.
+ * one with more pages has its next cursor in `nextCursors`, and one whose
+ * forge counts its open pull requests has the count in `openCounts`.
  */
 export async function listOpenPulls(
 	repos: Repo[],
@@ -31,16 +32,18 @@ export async function listOpenPulls(
 	const items: PullListItem[] = [];
 	const failures: PullList['failures'] = [];
 	const nextCursors: PullList['nextCursors'] = {};
+	const openCounts: PullList['openCounts'] = {};
 
 	await forEachBounded(repos, REPO_CONCURRENCY, async (repo) => {
 		try {
-			const { entries, nextCursor } = await withDeadline(loadPulls(repo), REPO_TIMEOUT_MS);
+			const { entries, nextCursor, total } = await withDeadline(loadPulls(repo), REPO_TIMEOUT_MS);
 
 			for (const entry of entries) {
 				items.push({ repoId: repo.id, ...entry, review: reviewOf(repo.id, entry.pull.number) });
 			}
 
 			if (nextCursor !== null) nextCursors[repo.id] = nextCursor;
+			if (total !== null) openCounts[repo.id] = total;
 		} catch (err) {
 			logForgeFailure(`listing pull requests for repo ${repo.id}`, err);
 			failures.push({ repoId: repo.id, error: forgeFailureMessage(err) });
@@ -49,7 +52,7 @@ export async function listOpenPulls(
 
 	items.sort((a, b) => Date.parse(b.status.updatedAt) - Date.parse(a.status.updatedAt));
 
-	return { items, failures, nextCursors, fetchedAt: new Date().toISOString() };
+	return { items, failures, nextCursors, openCounts, fetchedAt: new Date().toISOString() };
 }
 
 /** Looks up each pull request's newest review; a real review outranks a newer empty draft. */

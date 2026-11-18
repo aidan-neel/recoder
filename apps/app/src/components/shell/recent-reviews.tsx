@@ -23,7 +23,8 @@ const GLYPHS: Record<RecentReview['state'], GlyphKind> = {
 	running: 'spinner',
 	bugs: 'high',
 	clean: 'ok',
-	failed: 'failed'
+	failed: 'failed',
+	cancelled: 'cancelled'
 };
 
 /** How many placeholder rows stand in while the reviews load. */

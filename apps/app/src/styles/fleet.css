@@ -1,0 +1,316 @@
+/* ───────── Repositories: every tracked repository, a tile each ───────── */
+.fleet {
+	display: flex;
+	min-height: 100%;
+	flex-direction: column;
+	padding: 32px 40px 64px;
+}
+/* The scopes' text starts on the grid's edge, so their fills reach 8px past it. */
+.fleet-head {
+	display: flex;
+	min-height: 26px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 0 -8px 20px;
+}
+.fleet-head .page-tabs {
+	min-width: 0;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.fleet-head .page-tab {
+	white-space: nowrap;
+}
+.fleet-window {
+	padding-right: 8px;
+	color: var(--text-subtle);
+	font-size: var(--font-size-label);
+	white-space: nowrap;
+}
+.fleet-find {
+	width: 200px;
+}
+
+.fleet-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	gap: 16px;
+}
+.fleet-cell {
+	display: grid;
+	min-width: 0;
+}
+
+/* A tile: its name, its figures, a month of reviews, and the pull request to open next under a hairline. */
+.fleet-tile {
+	position: relative;
+	display: flex;
+	min-width: 0;
+	min-height: 224px;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 16px 18px;
+	--row-button-radius: var(--radius-card);
+	transition: box-shadow var(--dur-hover) ease-out;
+}
+.fleet-tile:has(.fleet-tile-name:hover) {
+	box-shadow: 0 0 0 1px var(--line-strong);
+}
+.fleet-tile-head {
+	display: flex;
+	height: 18px;
+	align-items: center;
+	gap: 10px;
+	color: var(--text-muted);
+}
+.fleet-tile-head > svg {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+}
+.fleet-tile-name {
+	display: flex;
+	flex: 1;
+	gap: 0;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+	line-height: 18px;
+}
+.fleet-tile-owner,
+.fleet-tile-repo {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.fleet-tile-owner,
+.fleet-tile-slash {
+	color: var(--text-subtle);
+	font-weight: 400;
+}
+.fleet-tile-slash {
+	flex-shrink: 0;
+	white-space: pre;
+}
+/* After an owner the name keeps up to 70% of the line and the owner is cut first, so a long owner never hides it. */
+.fleet-tile-slash + .fleet-tile-repo {
+	max-width: 70%;
+	flex-shrink: 0;
+}
+/* The menu button waits until the tile is pointed at, focused, or its menu is open; it adds no height to the head. */
+.fleet-menu {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	margin: -5px -4px -5px 0;
+}
+.fleet-menu [data-ui='button'] {
+	opacity: 0;
+	transition:
+		opacity var(--dur-hover) ease-out,
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
+}
+.fleet-tile:hover .fleet-menu [data-ui='button'],
+.fleet-tile:focus-within .fleet-menu [data-ui='button'],
+.fleet-menu [data-ui='button'][data-state='open'] {
+	opacity: 1;
+}
+@media (hover: none) {
+	.fleet-menu [data-ui='button'] {
+		opacity: 1;
+	}
+}
+/* Whether auto review watches the repository: a 6px dot in an 18px target, so its tip is easy to reach. */
+.fleet-dot {
+	position: relative;
+	z-index: 1;
+	display: grid;
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	place-items: center;
+	margin-right: -6px;
+	color: var(--text-ghost);
+}
+.fleet-dot::before {
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background: currentColor;
+	content: '';
+}
+.fleet-dot[data-on] {
+	color: var(--success);
+}
+
+/* The figures share a baseline: the open count large, then what waits and what the reviews found. */
+.fleet-figures {
+	display: flex;
+	min-width: 0;
+	height: 32px;
+	align-items: baseline;
+	gap: 18px;
+	overflow: hidden;
+	color: var(--text-subtle);
+	font-size: var(--font-size-button);
+	white-space: nowrap;
+}
+.fleet-count {
+	color: var(--text-primary);
+	font-size: 28px;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	line-height: 32px;
+}
+.fleet-count[data-zero] {
+	color: var(--text-ghost);
+}
+.fleet-fact-number,
+.fleet-fact[data-tone='plain'] {
+	color: var(--text-secondary);
+}
+.fleet-fact[data-tone='high'] {
+	color: var(--sev-high);
+}
+.fleet-fact[data-tone='ok'] {
+	color: var(--success);
+}
+.fleet-figures-skeleton {
+	width: 148px;
+	height: 32px;
+}
+
+/* The repository page's chart, small: no axis, and the low marks of the empty days read as its baseline. */
+.fleet-bars {
+	height: 28px;
+	margin-top: 0;
+	padding-bottom: 0;
+	border-bottom: 0;
+}
+.fleet-bars-skeleton {
+	width: 100%;
+	height: 28px;
+}
+.fleet-bars-failed {
+	display: flex;
+	height: 28px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	color: var(--text-faint);
+	font-size: var(--font-size-label);
+}
+.fleet-bars-failed [data-ui='button'] {
+	position: relative;
+	z-index: 1;
+	margin-right: -8px;
+}
+
+.fleet-foot {
+	display: flex;
+	min-width: 0;
+	height: 29px;
+	box-sizing: border-box;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding-top: 12px;
+	border-top: 1px solid var(--line-subtle);
+	color: var(--text-subtle);
+	font-size: var(--font-size-label);
+	line-height: 16px;
+}
+.fleet-foot-aside {
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+.fleet-foot-action {
+	position: relative;
+	z-index: 1;
+	margin-right: -8px;
+}
+/* The pull request to open next is its own link above the tile's: its fill reaches 6px past the text. */
+.fleet-next {
+	z-index: 1;
+	width: auto;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 8px;
+	margin: 0 -6px;
+	padding: 4px 6px;
+	--row-button-radius: var(--radius-control);
+}
+.fleet-next:hover {
+	background: var(--bg-hover);
+}
+.fleet-next-number {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: var(--font-size-badge);
+}
+.fleet-next-title {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	color: var(--text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	transition: color var(--dur-hover) ease-out;
+}
+.fleet-next:hover .fleet-next-title {
+	color: var(--text-primary);
+}
+.fleet-next [data-ui='pill'] {
+	flex-shrink: 0;
+}
+
+/* The last tile tracks another repository: an outline with no fill, so it reads as a place and not a repository. */
+.fleet-connect {
+	position: relative;
+	display: flex;
+	min-height: 224px;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	border-radius: var(--radius-card);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+	text-align: center;
+	--row-button-radius: var(--radius-card);
+	transition: background-color var(--dur-hover) ease-out;
+}
+.fleet-connect:hover {
+	background: var(--bg-raised-2);
+}
+.fleet-connect-mark {
+	display: grid;
+	width: 32px;
+	height: 32px;
+	place-items: center;
+	margin-bottom: 14px;
+	border-radius: var(--radius-card);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+	color: var(--text-muted);
+}
+.fleet-connect-mark svg {
+	width: 16px;
+	height: 16px;
+}
+.fleet-connect-name {
+	width: auto;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+	line-height: 18px;
+	text-align: center;
+}
+.fleet-connect-detail {
+	margin-top: 2px;
+	color: var(--text-subtle);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}

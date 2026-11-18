@@ -29,7 +29,7 @@ afterAll(() => {
 
 /** A forge's last page of open pull requests. */
 function whole(...entries: PullEntry[]): OpenPulls {
-	return { entries, nextCursor: null };
+	return { entries, nextCursor: null, total: null };
 }
 
 function entry(number: number, updatedAt: string): PullEntry {
@@ -80,15 +80,17 @@ test('a failure is logged without the credentials the forge output quotes', asyn
 	expect(JSON.stringify(warn.mock.calls)).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz0123');
 });
 
-test('a repository with more pages has its next cursor in nextCursors', async () => {
+test('a repository with more pages has its next cursor in nextCursors and its forge count in openCounts', async () => {
 	const load = async (r: Repo): Promise<OpenPulls> => ({
 		entries: [entry(1, '2026-11-01T00:00:00Z')],
-		nextCursor: r.id === 'b' ? 'cursor-2' : null
+		nextCursor: r.id === 'b' ? 'cursor-2' : null,
+		total: r.id === 'b' ? 1234 : null
 	});
 
 	const list = await listOpenPulls([repo('a'), repo('b')], [], load);
 
 	expect(list.nextCursors).toEqual({ b: 'cursor-2' });
+	expect(list.openCounts).toEqual({ b: 1234 });
 	expect(list.items).toHaveLength(2);
 });
 

@@ -174,13 +174,23 @@
 	flex-shrink: 0;
 	color: var(--text-faint);
 }
+.composer-models .composer-models-mark {
+	width: 14px;
+	height: 14px;
+}
+.composer-models .composer-models-spark {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-secondary);
+}
 .composer-models-loading {
 	width: 88px;
 	height: 12px;
 	margin-inline: 8px;
 }
 .composer-models-menu {
-	width: 280px;
+	width: 300px;
 }
 .composer-models-role {
 	height: 30px;
@@ -215,6 +225,25 @@
 .composer-models-label {
 	padding: 6px 8px 2px;
 	color: var(--text-subtle);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+/* A speed: its name over what it trades, which wraps in the menu's width. */
+.composer-speed {
+	height: auto;
+	min-height: 30px;
+	align-items: flex-start;
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+.composer-speed-body {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	white-space: normal;
+}
+.composer-speed-detail {
+	color: var(--text-faint);
 	font-size: var(--font-size-meta);
 	line-height: 16px;
 }

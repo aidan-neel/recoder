@@ -136,7 +136,10 @@
 		box-shadow: 0 0 0 2px var(--bg-raised);
 	}
 
-	/* ───────── A sent message's images: small chips, each opening its image ───────── */
+	/*
+	 * ───────── A sent message's images: small chips, each opening its image ─────────
+	 * The thumb sits 4px in from the chip's top, bottom and left, so the chip's radius is the thumb's plus 4px.
+	 */
 	[data-ui='image-chips'] {
 		display: flex;
 		flex-wrap: wrap;
@@ -150,7 +153,7 @@
 		height: 36px;
 		align-items: center;
 		padding: 0 4px;
-		border-radius: var(--radius-row);
+		border-radius: calc(var(--radius-chip) + 4px);
 		background-color: var(--bg-canvas);
 		box-shadow: 0 0 0 1px var(--line-subtle);
 	}
@@ -223,48 +226,78 @@
 		display: none;
 	}
 
-	/* ───────── The "/" and "@" menus: over the composer, from its left edge, at most 440px wide ───────── */
+	/*
+	 * ───────── The "/" menu: over the composer, across its width, at its radius ─────────
+	 * The panel mirrors the box: the same radius and inset, so a row's corners are the bar controls' (radius less
+	 * inset) and run parallel to the panel's. Names in the UI face at medium weight.
+	 */
 	[data-ui='composer-menu'] {
 		position: absolute;
 		z-index: 130;
-		bottom: calc(100% + 6px);
+		bottom: calc(100% + 8px);
 		left: 0;
 		display: flex;
-		width: min(100%, 440px);
-		max-height: 280px;
+		width: 100%;
+		max-height: 320px;
 		flex-direction: column;
 		overflow: hidden;
-		border-radius: var(--radius-card);
+		border-radius: var(--composer-radius);
 		background-color: var(--bg-menu);
 		box-shadow: var(--shadow-menu);
 		transform-origin: bottom center;
 		cursor: default;
 	}
 	[data-ui='composer-menu-list'] {
+		--menu-highlight-radius: calc(var(--composer-radius) - var(--composer-inset));
+
+		display: flex;
+		flex-direction: column;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		padding: var(--composer-inset);
+	}
+	[data-ui='composer-menu-group'] {
 		display: flex;
 		flex-direction: column;
 		gap: 1px;
-		overflow-y: auto;
-		overscroll-behavior: contain;
-		padding: 4px;
+	}
+	[data-ui='composer-menu-label'] {
+		padding: 6px 10px 4px;
+		color: var(--text-subtle);
+		font-size: 12px;
+		line-height: 16px;
+	}
+	[data-ui='composer-menu-separator'] {
+		height: 1px;
+		flex-shrink: 0;
+		margin: 6px 4px;
+		background-color: var(--line-control);
 	}
 	[data-ui='composer-menu-item'] {
 		display: flex;
-		height: 30px;
+		height: 34px;
 		flex-shrink: 0;
 		align-items: center;
 		gap: 10px;
-		padding: 0 8px;
-		border-radius: var(--radius-chip);
-		font-size: 13px;
+		padding: 0 10px;
+		border-radius: var(--menu-highlight-radius);
+		font-size: 13.5px;
 		user-select: none;
 	}
+	[data-ui='composer-menu-glyph'] {
+		width: 15px;
+		height: 15px;
+		flex-shrink: 0;
+		color: var(--text-subtle);
+		stroke-width: 1.75;
+	}
+	[data-ui='composer-menu-item'][aria-selected='true'] [data-ui='composer-menu-glyph'] {
+		color: var(--text-primary);
+	}
 	[data-ui='composer-menu-name'] {
-		min-width: 84px;
 		flex-shrink: 0;
 		color: var(--text-primary);
-		font-family: var(--font-code);
-		font-size: 12.5px;
+		font-weight: 500;
 	}
 	[data-ui='composer-menu-description'] {
 		min-width: 0;

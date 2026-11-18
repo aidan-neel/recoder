@@ -3,7 +3,6 @@
 import type { PullPage } from '@recoder/shared';
 import { Button } from '@recoder/ui';
 import { ArrowUpRight } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -13,7 +12,9 @@ import { forgeLabel } from '@/lib/connections/forges';
 import { PullSessionProvider, useMergeView, usePullChecksView, usePullPageView } from '@/lib/pull/pull-session';
 import type { PullTab } from '@/lib/pull/types';
 import { usePullTab } from '@/lib/pull/use-pull-tab';
+import { isLive } from '@/lib/run/run-phase';
 import { useRunView } from '@/lib/run/use-run';
+import { replaceSearch } from '@/lib/shell/navigation';
 import { pullHref, pullsHref, repoHref } from '@/lib/shell/routes';
 
 import { BugsTab } from '@/components/bugs/bugs-tab';
@@ -55,16 +56,22 @@ function ChangesTabTools({ mode, onModeChange }: { mode: ChangesMode; onModeChan
 	return <ChangesTools viewed={useViewedFiles()} mode={mode} onModeChange={onModeChange} />;
 }
 
-/** Review, while there is none or it is out of date, then the menu and the merge button. `r` presses Review. */
+/**
+ * Review, while there is none or it is out of date, then the menu and the merge button. `r` presses Review.
+ * The merge button is the page's primary only once nothing is open: with findings to read or a review running it
+ * steps back to an outline, so the one cream button in view is the next step.
+ */
 function PullActions({ page }: { page: PullPage }) {
 	const run = useRunView();
 	const merge = useMergeView();
+	const bugs = useBugsView();
+	const settled = !isLive(run.phase) && !(bugs.phase === 'ready' && bugs.open.length > 0);
 	const reviewable = run.phase === 'none' || run.phase === 'cancelled' || (run.phase === 'passed' && run.outdated);
 
 	return (
 		<>
 			{reviewable ? <ReviewButton run={run} again={false} shortcut variant="outline" /> : null}
-			<MergeActions page={page} merge={merge} />
+			<MergeActions page={page} merge={merge} settled={settled} />
 		</>
 	);
 }
@@ -81,7 +88,6 @@ function PullChecksList() {
 
 /** The page inside its session: the bar, the header with its merge facts, the tabs and the open tab. */
 function PullFrame({ repoId, number, tab }: PullOnTabProps) {
-	const router = useRouter();
 	const { base } = useApi();
 	const view = usePullPageView();
 	const [mode, setMode] = useState<ChangesMode>('files');
@@ -91,7 +97,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	/** Opens the Changes tab in the guide's reading order. */
 	function openGuide(): void {
 		setMode('guide');
-		router.replace(pullHref(base, repoId, number, 'changes'), { scroll: false });
+		replaceSearch(pullHref(base, repoId, number, 'changes'));
 	}
 
 	const tools: Record<PullTab, ReactNode> = {

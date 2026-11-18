@@ -39,7 +39,7 @@ export function FirstRun() {
 				>
 					<h2 className="setup-title">
 						<SwapText id={view.left} mode="wait">
-							{COUNT_WORDS[view.left]} before your first review.
+							{COUNT_WORDS[view.left]} before your first review
 						</SwapText>
 					</h2>
 					<Card>

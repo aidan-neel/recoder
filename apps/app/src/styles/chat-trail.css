@@ -20,7 +20,9 @@
 	--trail-body: var(--text-secondary);
 	--trail-quiet: var(--text-faint);
 	--trail-rule: var(--line-strong);
+	--trail-now-gap: 6px;
 
+	position: relative;
 	display: flex;
 	min-width: 0;
 	flex-direction: column;
@@ -79,23 +81,17 @@
 	rotate: 180deg;
 }
 
-/* ───────── What the model said it would do: one line under the trail's line while it works ───────── */
+/*
+ * What the model said it would do: one line under the trail's line while it works. Its gap is padding, not margin,
+ * so a line leaving the layout fades exactly where it stood; the answer starts the same gap under the trail, so its
+ * first line fades in where the thought fades out.
+ */
 .trail-now {
-	margin: 2px 0 0;
+	margin: 0;
+	padding-top: var(--trail-now-gap);
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-/* A new line fades in as it takes the old one's place, under the same sweep as the label over it. */
-.trail .trail-now[data-shimmer] {
-	animation:
-		trail-now-in var(--dur-hover) ease-out,
-		trail-sweep var(--dur-shimmer) linear infinite;
-}
-@keyframes trail-now-in {
-	from {
-		opacity: 0;
-	}
 }
 .trail-said {
 	margin: 0;
@@ -200,8 +196,7 @@
 	}
 }
 @media (prefers-reduced-motion: reduce) {
-	.trail [data-shimmer],
-	.trail .trail-now[data-shimmer] {
+	.trail [data-shimmer] {
 		background: none;
 		color: var(--trail-label);
 		animation: none;
@@ -275,9 +270,12 @@
 	outline: none;
 }
 
-/* The answer sits a little under the trail, counting the message's own gap. */
+/*
+ * The answer's first line sits where the trail's last thought stood, baselines matched: the message's gap less the
+ * trail's pull-up leaves 2px, and 3px more lands the answer's taller line on the thought's baseline.
+ */
 .ask-message[data-from='recoder'] .trail + [data-ui='markdown'] {
-	margin-top: 8px;
+	margin-top: 3px;
 }
 
 /* Citations: a chip in the line of the answer, and the card it opens. */

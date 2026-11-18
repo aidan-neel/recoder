@@ -5,9 +5,32 @@ export function author(login: string): { name: string; agent: boolean } {
 	return { name: agent ? login.replace(/\[bot\]$/, '') : login, agent };
 }
 
+/** Formats counts for every call: building a formatter per number cost about a millisecond a page. */
+const COUNT_FORMAT = new Intl.NumberFormat('en-US');
+
+/** A count with thousands separators: `2,418`. */
+export function formatCount(value: number): string {
+	return COUNT_FORMAT.format(value);
+}
+
+const SHORT_COUNT_FORMAT = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+
+/** A count shortened as GitHub shortens its counters: `999`, `1.2k`, `12.3k`, `1.5m`. */
+export function shortCount(value: number): string {
+	return SHORT_COUNT_FORMAT.format(value).toLowerCase();
+}
+
 /** "1 decision", "3 decisions". */
 export function plural(count: number, word: string, many = `${word}s`): string {
 	return `${count} ${count === 1 ? word : many}`;
+}
+
+/** What a review left open, in the words every screen uses: `2 bugs`, `1 suggestion`, or `2 bugs, 1 suggestion`. */
+export function findingsLabel(bugs: number, suggestions: number): string {
+	if (suggestions === 0) return plural(bugs, 'bug');
+	if (bugs === 0) return plural(suggestions, 'suggestion');
+
+	return `${plural(bugs, 'bug')}, ${plural(suggestions, 'suggestion')}`;
 }
 
 /** A span of time in the largest whole unit: "40 seconds", "2 minutes", "3 hours", "4 days". */

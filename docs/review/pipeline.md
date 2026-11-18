@@ -64,7 +64,7 @@ What the budget leaves alone, on purpose:
 - **Verification.** `maxVerifications`, `maxVerifierTurns`, `maxMutationVerifierTurns`, the verifier reserves and the consolidation reserve are the same at every budget. Every valid candidate is still re-proven, and the model-call ceiling still grows by a verifier's turns when one is queued (`VerifyQueue.makeRoom`), so a low ceiling never takes a verifier's share. Verifiers run on `configForVerifier()`, which follows the Review model and effort unless `verifierModelId` or `verifierEffort` is set.
 - **Deadlines.** `analysisDeadlineMs`, `msPerAssignment` and the per-agent clocks are time limits that stop a review. They are the same at every budget, though the deadline grows with the reviewers and subagents a budget runs. They do not save tokens, and a shorter one would end reviews early rather than make them cheaper.
 - **Workers.** `maxDelegationsPerAgent` and `maxWorkerTurns` only matter with a separate second model, and move work to that cheaper model rather than change how much is spent. The delegation count is also written into a prompt constant (`DELEGATE_OFFER`).
-- **`maxTranscriptChars`.** About 60k tokens, above what a call reaches today, so it never fires. Lowering it would stub tool output a reviewer still needs.
+- **Transcript compaction.** It sizes itself from the review model's context window (`contextBudget` in `apps/server/src/review/pipeline/agent-loop/context-budget.ts`), not from the token budget, so it fires at the same point whatever the budget. See [models.md](models.md#transports).
 - **`reportLowSeverity`.** It marks a low-severity candidate `belowBar`, which is still verified (queued after publishable ones), so it changes what is shown, not what is spent.
 - **`maxFiles` and `maxDiffChars`.** Enforced by `applyDiffLimits` in `createRun` (`apps/server/src/review/pipeline/harness/diff-limits.ts` and `context.ts`) before units and budgets are sized. Anything over either limit is left out with its reason recorded in `ReviewContext.omitted` (`file-cap` or `diff-cap`) and `CoverageLedger`. They are independent of the token budget.
 
@@ -149,6 +149,7 @@ Two functions share the name `prepareSandbox`. The first checks out the code bef
 
 - `runReviewPipeline` fetches the pull request, calls that `prepareSandbox`, then `sandboxRevisionDiff`. The result is a `ReviewRevision` and the diff. `ReviewRevision` is defined in `apps/server/src/evidence/types.ts`.
 - `openWorkspace` in `apps/server/src/review/pipeline/harness/context.ts` opens the exec workspace. `execUnavailableReason` explains when commands cannot run; `RECODER_EXEC=off` turns execution off.
+- What a command can reach is `SANDBOX_NETWORK` in `apps/server/src/sandbox/exec-sandbox.ts`. On macOS every command has the internet, with this machine's own addresses and unix sockets blocked, because the server has no sign-in. Under bubblewrap only the dependency install is online, since bubblewrap can only share the host's network. The checkout's `.venv/bin` leads the sandbox PATH, and `python` falls back to `python3` (`linkPython` in `sandbox-layout.ts`).
 
 The second `prepareSandbox` installs packages and runs baseline checks. It is in `apps/server/src/review/pipeline/harness/sandbox-setup.ts`, with `startSetup` returning a `PendingSetup`.
 

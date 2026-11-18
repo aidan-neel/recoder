@@ -51,7 +51,7 @@ export function ChatConversation({ chat }: { chat: RepoChatView }) {
 						onStop={ask.stop}
 						onSend={send}
 						images={images}
-						mentions={skills}
+						skills={skills}
 						trailing={<ComposerModels />}
 					/>
 				</div>

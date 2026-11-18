@@ -1,5 +1,4 @@
 import { PULL_TABS, type PullTab } from '../pull/types';
-import { SETTINGS_SECTIONS, type SettingsSection } from '../settings/sections';
 
 /**
  * Page addresses. Each takes the client's `base` (`''` live, `'/sample'` for
@@ -14,6 +13,14 @@ export const GUIDELINES_HREF = '/guidelines';
 
 /** The sample: the same screens answered from memory, for a first look with nothing connected. */
 export const SAMPLE_HREF = '/sample';
+
+/**
+ * True for the live app. The sample has no Automations, Guidelines or Settings of its own, so its shell leaves
+ * them out instead of sending a visitor to the live pages and their sign-in.
+ */
+export function isLiveApp(base: string): boolean {
+	return base === '';
+}
 
 /** The pull request list. */
 export function pullsHref(base: string): string {
@@ -37,6 +44,11 @@ export function pullTabOf(value: string | null): PullTab {
 	return tab ?? PULL_TAB_ALIASES.get(value ?? '') ?? 'changes';
 }
 
+/** The tracked repositories, with a way to add more. */
+export function reposHref(base: string): string {
+	return `${base}/repos`;
+}
+
 /** A tracked repository's page: what needs a person there, and how its reviews have gone. */
 export function repoHref(base: string, repoId: string): string {
 	return `${base}/repos/${encodeURIComponent(repoId)}`;
@@ -50,21 +62,4 @@ export function newReviewHref(base: string): string {
 /** A chat with Recoder about a repository. */
 export function chatHref(base: string, chatId: string): string {
 	return `${base}/chats/${encodeURIComponent(chatId)}`;
-}
-
-/** Where Settings' pages live. */
-const SETTINGS_ROOT = '/settings';
-
-/**
- * Settings on `section`, or on its first section. Opening Settings goes
- * straight there, so the sidebar's swap lands on an open section row instead
- * of waiting for a redirect. Live only.
- */
-export function settingsHref(section: SettingsSection = SETTINGS_SECTIONS[0].id): string {
-	return `${SETTINGS_ROOT}/${section}`;
-}
-
-/** True on Settings or one of its sections, where the sidebar lists the sections instead of the app's places. */
-export function isSettingsPath(pathname: string): boolean {
-	return pathname === SETTINGS_ROOT || pathname.startsWith(`${SETTINGS_ROOT}/`);
 }

@@ -14,7 +14,7 @@ export async function chatSkillCatalog(repo: Repo, signal: AbortSignal): Promise
 /**
  * The requested skills of the default branch, with their text. Throws `UnknownSkillError` naming every attached one
  * the repository lacks, and a `RepoFilesError` when this server has no git copy to read attached ones from;
- * mentioned ones are left out then, since an `@` may name a person.
+ * mentioned ones are left out then, since a `/` may start a path.
  */
 export async function chatSkills(repo: Repo, request: SkillRequest, signal: AbortSignal): Promise<LoadedSkill[]> {
 	if (isEmptyRequest(request)) return [];

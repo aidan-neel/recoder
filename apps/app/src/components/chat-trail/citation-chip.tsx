@@ -7,7 +7,7 @@ import {
 	type ChatCitation,
 	type ChatTrailFile
 } from '@recoder/shared';
-import { HoverCard, HoverCardContent, HoverCardTrigger, type LinkOverride } from '@recoder/ui';
+import { FileIcon, HoverCard, HoverCardContent, HoverCardTrigger, type LinkOverride } from '@recoder/ui';
 import { FileText } from 'lucide-react';
 import { createContext, use, useState, type ComponentProps, type ReactNode } from 'react';
 
@@ -34,7 +34,8 @@ interface Passage {
 }
 
 /**
- * A citation in a reply: the file's name with its lines, and "+1" when the link cites more than one. Resting on it
+ * A citation in a reply: the file's language mark and name, and "+1" when the link cites more than one; the card holds
+ * its folder and lines. Resting on it
  * opens a card with each passage. While the reply is still writing the chip has no card yet; once it is finished, a
  * link to a file the server could not read is plain text, so no chip promises what the card cannot show.
  */
@@ -75,7 +76,6 @@ function CitationChip({
 }: { files: ChatTrailFile[]; onPress?: () => void } & ComponentProps<'button'>) {
 	const openFile = useOpenFile();
 	const [first] = files;
-	const lines = lineRange(first);
 
 	return (
 		<button
@@ -88,11 +88,8 @@ function CitationChip({
 			}}
 			{...trigger}
 		>
-			<FileText aria-hidden />
-			<span>
-				{fileName(first.path)}
-				{lines ? `:${lines}` : ''}
-			</span>
+			<FileIcon path={first.path} />
+			<span>{fileName(first.path)}</span>
 			{files.length > 1 ? <span className="cite-more">+{files.length - 1}</span> : null}
 		</button>
 	);

@@ -108,6 +108,8 @@ export interface RepoPageView {
 	showPulls: () => void;
 	/** The New screen, set to this repository: for a review or for a chat. */
 	newHref: string;
+	/** The Repositories page, which the first crumb links to. */
+	reposHref: string;
 	prepareReview: () => void;
 	prepareAsk: () => void;
 }

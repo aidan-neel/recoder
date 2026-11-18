@@ -3,13 +3,12 @@
 import { REVIEW_SPEED_PLANS, type ReviewSpeed } from '@recoder/shared';
 import { Button, cn, DropdownMenuItem, Keycap, SplitButton, StatusGlyph, StatusNotice } from '@recoder/ui';
 import { Check, Circle, RotateCcw, X, Zap } from 'lucide-react';
-import Link from 'next/link';
 import type { ComponentProps } from 'react';
 
 import type { RunStage, RunView } from '@/lib/run/types';
 import { plural } from '@/lib/shell/format';
 import { errorToast } from '@/lib/shell/notify';
-import { settingsHref } from '@/lib/shell/routes';
+import { useChrome } from '@/lib/shell/chrome';
 import { useAction } from '@/lib/shell/use-action';
 import { useKeys } from '@/lib/shell/use-keys';
 
@@ -146,8 +145,8 @@ function FailureLink({ action }: { action: NonNullable<RunView['failure']>['acti
 	if (!action) return null;
 
 	return (
-		<Button asChild variant="outline">
-			<Link href={settingsHref('models')}>Open settings</Link>
+		<Button variant="outline" onClick={() => useChrome.getState().openSettings('models')}>
+			Open settings
 		</Button>
 	);
 }
@@ -210,7 +209,7 @@ export function RunBanner({ run, bugs }: RunBannerProps) {
 
 	return (
 		<Banner
-			glyph={<StatusGlyph kind="idle" />}
+			glyph={<StatusGlyph kind={cancelled ? 'cancelled' : 'idle'} />}
 			title={cancelled ? 'The review was cancelled.' : 'Recoder has not reviewed this pull request.'}
 			meta={<RunFacts at={cancelled ? run.finishedAt : null} model={run.modelLabel} />}
 			actions={<ReviewButton run={run} again={false} />}

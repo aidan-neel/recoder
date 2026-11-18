@@ -3,6 +3,8 @@
 import type { KeyboardEvent } from 'react';
 import { useRef, useState } from 'react';
 
+import { formatCount } from '../shell/format';
+
 import { draftKeys } from './draft-keys';
 import { parseWholeNumber, stepLimit } from './limits';
 import { useSaveState, type SaveState } from './use-save-state';
@@ -149,7 +151,7 @@ export function useNumberField(source: NumberFieldSource): LimitFieldView {
 	function step(direction: -1 | 1, shift: boolean): void {
 		const base = draftRef.current !== null ? (parseWholeNumber(draftRef.current) ?? current()) : current();
 		const nextValue = stepLimit(base, direction, shift ? shiftStep : stepSize, max, min);
-		const nextText = nextValue.toLocaleString('en-US');
+		const nextText = formatCount(nextValue);
 
 		edit(nextText);
 		void commitNow(nextText);
@@ -168,7 +170,7 @@ export function useNumberField(source: NumberFieldSource): LimitFieldView {
 		);
 	}
 
-	const text = draft ?? saved.toLocaleString('en-US');
+	const text = draft ?? formatCount(saved);
 	const parsed = parseWholeNumber(text);
 	const shownState: SaveState = state === 'success' && (draft !== null || error !== null) ? 'idle' : state;
 

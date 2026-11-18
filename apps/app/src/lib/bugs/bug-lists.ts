@@ -133,6 +133,19 @@ function durationOf(review: Review): string | null {
 	return Number.isFinite(took) && took >= 0 ? formatDuration(took) : null;
 }
 
+/** Open findings by kind, as every count on the page words them. */
+export interface OpenFound {
+	bugs: number;
+	suggestions: number;
+}
+
+/** How many of the open findings are bugs and how many suggestions. */
+export function openFound(open: Pick<BugView, 'kind'>[]): OpenFound {
+	const suggestions = open.filter((bug) => bug.kind === 'suggestion').length;
+
+	return { bugs: open.length - suggestions, suggestions };
+}
+
 /** The model the review's orchestrator ran on, in words; null until the review says. */
 export function modelLabel(model: string | undefined): string | null {
 	return model ? prettyModelName(model) : null;

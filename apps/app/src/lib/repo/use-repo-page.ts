@@ -5,14 +5,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useApi, useListStore, useSessionCache } from '../api/client';
+import { useApi, useListStore, useOverviewCache, useSessionCache } from '../api/client';
 import { ApiError, failureText, isOffline } from '../api/http';
 import { useComposeMode, type ComposeMode } from '../compose/compose-mode';
 import type { PullRow } from '../pulls/types';
 import { useRowEntries, useWatchList } from '../pulls/use-rows';
 import { errorToast } from '../shell/notify';
 import { repoName } from '../shell/format';
-import { newReviewHref, pullsHref } from '../shell/routes';
+import { newReviewHref, pullsHref, reposHref } from '../shell/routes';
 import { repoPageData } from './repo-page';
 import type { RepoPageView } from './types';
 
@@ -23,9 +23,13 @@ type OverviewState =
 	| { phase: 'missing' }
 	| { phase: 'failed'; error: string; offline: boolean };
 
-/** Reads the repository's overview once per visit, and again on `retry`. An answer for another repository reads as loading. */
+/**
+ * The repository's overview. The copy read before (on an earlier visit, or as the pointer rested on the repository's
+ * link) paints at once; the page reads it again once per visit and on `retry`. A read that fails keeps a copy already
+ * on screen, and with none reads as the failure. An answer for another repository reads as loading.
+ */
 function useOverview(repoId: string): { state: OverviewState; retry: () => void } {
-	const client = useApi();
+	const overviews = useOverviewCache();
 	const [answer, setAnswer] = useState<{ repoId: string; state: OverviewState } | null>(null);
 	const [attempt, setAttempt] = useState(0);
 
@@ -38,22 +42,29 @@ function useOverview(repoId: string): { state: OverviewState; retry: () => void 
 		let current = true;
 		const settle = (state: OverviewState) => current && setAnswer({ repoId, state });
 
-		client.repoOverview(repoId).then(
+		overviews.read(repoId).then(
 			(overview) => settle({ phase: 'ready', overview }),
 			(error: unknown) => {
-				if (error instanceof ApiError && error.status === 404) settle({ phase: 'missing' });
-				else settle({ phase: 'failed', error: failureText(error), offline: isOffline(error) });
+				if (error instanceof ApiError && error.status === 404) {
+					overviews.forget(repoId);
+					settle({ phase: 'missing' });
+				} else if (!overviews.peek(repoId)) {
+					settle({ phase: 'failed', error: failureText(error), offline: isOffline(error) });
+				}
 			}
 		);
 
 		return () => {
 			current = false;
 		};
-	}, [client, repoId, attempt]);
+	}, [overviews, repoId, attempt]);
 
-	const state: OverviewState = answer?.repoId === repoId ? answer.state : { phase: 'loading' };
+	return { state: answer?.repoId === repoId ? answer.state : keptState(overviews.peek(repoId)), retry };
+}
 
-	return { state, retry };
+/** What the page shows before this visit's read answers: the copy read before, or loading. */
+function keptState(kept: RepoOverview | null): OverviewState {
+	return kept ? { phase: 'ready', overview: kept } : { phase: 'loading' };
 }
 
 /**
@@ -78,7 +89,8 @@ export function useRepoPage(repoId: string): RepoPageView {
 			error: state.error,
 			offline: state.offline,
 			starting: state.starting,
-			more: state.more.cursors[repoId] !== undefined
+			more: state.more.cursors[repoId] !== undefined,
+			openTotal: state.list?.openCounts[repoId] ?? null
 		}))
 	);
 
@@ -89,9 +101,9 @@ export function useRepoPage(repoId: string): RepoPageView {
 	const data = useMemo(
 		() =>
 			repo && ready && shared.phase === 'ready'
-				? repoPageData({ repo, entries, more: shared.more, overview: ready, base })
+				? repoPageData({ repo, entries, more: shared.more, openTotal: shared.openTotal, overview: ready, base })
 				: null,
-		[repo, ready, shared.phase, entries, shared.more, base]
+		[repo, ready, shared.phase, entries, shared.more, shared.openTotal, base]
 	);
 
 	const missing = overview.state.phase === 'missing' || (shared.repos !== null && repo === null);
@@ -138,6 +150,7 @@ export function useRepoPage(repoId: string): RepoPageView {
 		pullsHref: pullsHref(base),
 		showPulls: () => list.state.setState({ repoId, filter: 'all', query: '' }),
 		newHref: newReviewHref(base),
+		reposHref: reposHref(base),
 		prepareReview: () => prepare('review'),
 		prepareAsk: () => prepare('chat')
 	};

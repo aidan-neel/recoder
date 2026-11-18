@@ -57,10 +57,12 @@ export function MergeFacts({ page, checks }: MergeFactsProps) {
 interface MergeActionsProps {
 	page: PullPage;
 	merge: MergeView;
+	/** True when the newest review left nothing open and none runs; see `MergeButton`. */
+	settled: boolean;
 }
 
 /** The end of the title's row: why a merge failed, the pull request's menu, and the merge button. */
-export function MergeActions({ page, merge }: MergeActionsProps) {
+export function MergeActions({ page, merge, settled }: MergeActionsProps) {
 	return (
 		<>
 			{merge.phase === 'failed' && merge.error ? (
@@ -69,7 +71,7 @@ export function MergeActions({ page, merge }: MergeActionsProps) {
 				</span>
 			) : null}
 			<PullMenu page={page} />
-			<MergeButton view={merge} pull={`#${page.pull.number}`} base={page.pull.base} />
+			<MergeButton view={merge} pull={`#${page.pull.number}`} base={page.pull.base} settled={settled} />
 		</>
 	);
 }

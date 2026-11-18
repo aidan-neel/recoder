@@ -47,7 +47,7 @@ interface LinkFieldProps extends Omit<
 	linkFacts?: LinkFacts;
 	/** The images whose tokens (`imageToken`) the text holds, each drawn where its token stands. */
 	images?: readonly InlineImage[];
-	/** The names `@name` may take; each mention of one shows as an embed. */
+	/** The skill names `/name` may take; each mention of one shows as an embed. */
 	mentions?: ReadonlySet<string>;
 	ref?: Ref<HTMLDivElement>;
 }

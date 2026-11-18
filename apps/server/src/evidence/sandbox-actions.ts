@@ -24,7 +24,7 @@ function runTimeoutMs(action: RetrievalAction): number {
 	return Math.min(seconds * 1000, REVIEW_POLICY.maxRunTimeoutMs);
 }
 
-/** Runs a shell command offline. A failing command is still evidence; only a run that never finished is an error. */
+/** Runs a shell command in the sandbox. A failing command is still evidence; only a run that never finished is an error. */
 export async function runCommand(
 	context: SandboxContext,
 	action: RetrievalAction,

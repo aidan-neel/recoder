@@ -26,7 +26,7 @@ app.get('/', async (c) => {
 	const read = c.req.query('fresh') === '1' ? freshOpenPulls : openPulls;
 	const loadPulls = (repo: Repo) => read(repo, after);
 
-	return c.json(await listOpenPulls(selected, await db.reviews.list(), loadPulls));
+	return c.json(await listOpenPulls(selected, await db.reviews.summaries(), loadPulls));
 });
 
 export default app;

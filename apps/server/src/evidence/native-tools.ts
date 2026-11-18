@@ -1,4 +1,5 @@
 import { normalizeActions } from './parse-actions.js';
+import { SANDBOX_NETWORK } from '../sandbox/exec-sandbox.js';
 import type { ActionName, RetrievalAction } from './types.js';
 
 /** One evidence action as a tool a model calls directly, rather than a JSON request Recoder parses. */
@@ -66,7 +67,7 @@ const EXEC_TOOLS: NativeTool[] = [
 	tool(
 		'run',
 		'run',
-		'Run a shell command from the repository root on the PR head, inside the review sandbox (no network, no secrets). Its output and exit code become evidence you can cite.',
+		`Run a shell command from the repository root on the PR head, inside the review sandbox (${SANDBOX_NETWORK}, no secrets). Its output and exit code become evidence you can cite.`,
 		{ command: str, timeoutSec: { type: 'integer', description: 'Default 120, at most 300.' } },
 		['command']
 	),

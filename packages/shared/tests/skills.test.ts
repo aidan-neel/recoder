@@ -11,8 +11,8 @@ test('a skill name is a safe file-name token of at most 64 characters', () => {
 	}
 });
 
-test('skill mentions are the @ words of a text, without sentence punctuation, repeats or addresses', () => {
-	const text = '@lint first, then ask @maya. Mail me@example.com about @giga-ui) and @lint again; @../up';
+test('skill mentions are the slash words of a text, without sentence punctuation, repeats or paths', () => {
+	const text = '/lint first, then ask /maya. Open src/app.ts or /src/app.ts about /giga-ui) and /lint again; /../up';
 
 	expect(skillMentions(text)).toEqual(['lint', 'maya', 'giga-ui']);
 });

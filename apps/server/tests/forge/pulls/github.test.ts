@@ -101,10 +101,10 @@ function graphqlNode(
 }
 
 /** A GraphQL `pullRequests` answer with `nodes` and, when `endCursor` is set, a next page after it. */
-function graphqlPage(nodes: unknown[], endCursor?: string) {
+function graphqlPage(nodes: unknown[], endCursor?: string, totalCount = nodes.length) {
 	const pageInfo = { hasNextPage: endCursor !== undefined, endCursor: endCursor ?? null };
 
-	return { out: { data: { repository: { pullRequests: { pageInfo, nodes } } } } };
+	return { out: { data: { repository: { pullRequests: { totalCount, pageInfo, nodes } } } } };
 }
 
 test('the list reads each pull request status and check tally from the check counts', async () => {
@@ -151,9 +151,9 @@ async function graphqlCalls(gh: { calls: () => Promise<string[]> }): Promise<str
 	return (await gh.calls()).join('\n').split(/^(?=api graphql)/m);
 }
 
-test('the list asks for one page and hands back the cursor of the next', async () => {
+test('the list asks for one page and hands back the cursor of the next and the open total', async () => {
 	const nodes = Array.from({ length: PULL_LIST_PAGE }, (_, index) => graphqlNode(PULL_LIST_PAGE - index));
-	const gh = await fakeGh({ 'api-graphql': [graphqlPage(nodes, 'cursor-1')] });
+	const gh = await fakeGh({ 'api-graphql': [graphqlPage(nodes, 'cursor-1', 1234)] });
 
 	process.env.PATH = gh.path;
 
@@ -162,6 +162,7 @@ test('the list asks for one page and hands back the cursor of the next', async (
 
 	expect(list.entries).toHaveLength(PULL_LIST_PAGE);
 	expect(list.nextCursor).toBe('cursor-1');
+	expect(list.total).toBe(1234);
 	expect(rest).toHaveLength(0);
 	expect(call).toContain(`first=${PULL_LIST_PAGE}`);
 	expect(call).not.toContain('after=');

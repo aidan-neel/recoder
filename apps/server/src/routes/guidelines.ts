@@ -6,8 +6,7 @@ import {
 	MAX_GUIDELINES_PROMPT_CHARS,
 	type GuidelinesOverview,
 	proposeRefusal,
-	type GuidelinesProposal,
-	type RepoGuidelines
+	type GuidelinesProposal
 } from '@recoder/shared';
 import { GhError } from '../forge/gh';
 import {
@@ -22,12 +21,10 @@ import { LlmError } from '../models/llm';
 import { isReviewConfigured } from '../models/models';
 import { repoFileHost } from '../forge/repo-files';
 import { detectProvider } from '../forge/providers';
-import { proposalPath, readRepoGuidelinesFile } from '../review/guidelines/repo-layer';
+import { proposalPath } from '../review/guidelines/repo-layer';
 import { db } from '../store';
 import { settingsOperation } from '../storage/backend';
-
-/** Branches Recoder opens for guideline changes; one pending change per repo. */
-const BRANCH_PREFIX = 'recoder/review-guidelines-';
+import { GUIDELINES_BRANCH_PREFIX, forgetRepoOverview, repoOverview } from '../review/guidelines/repo-overview';
 
 const contentSchema = z.object({ content: z.string().max(MAX_GUIDELINES_CHARS * 2) });
 
@@ -104,31 +101,7 @@ app.get('/repos/:id', async (c) => {
 
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
 
-	const host = repoFileHost(repo);
-
-	return withHost(c, async () => {
-		const [head, pending] = await Promise.all([
-			host.defaultBranch(),
-			host.findPending(BRANCH_PREFIX).catch(() => null)
-		]);
-
-		const [file, pendingFile] = await Promise.all([
-			readRepoGuidelinesFile(host, head.branch),
-			pending ? readRepoGuidelinesFile(host, pending.branch).catch(() => null) : null
-		]);
-
-		const body: RepoGuidelines = {
-			repoId: repo.id,
-			path: file?.path ?? pendingFile?.path ?? GUIDELINES_PATH,
-			ref: head.branch,
-			sha: head.sha || null,
-			content: file?.content ?? null,
-			pending: pending ? { ...pending, content: pendingFile?.content ?? null } : null,
-			canPropose: host.canWrite()
-		};
-
-		return c.json(body);
-	});
+	return withHost(c, async () => c.json(await repoOverview(repo)));
 });
 
 /** Open a pull/merge request with the file, or push to the pending one. The file keeps its path; a new one is `RECODER.md`. */
@@ -150,14 +123,14 @@ app.post('/repos/:id/propose', async (c) => {
 	if (!host.canWrite()) return c.json({ error: proposeRefusal(repo.provider ?? detectProvider(repo.url)) }, 401);
 
 	return withHost(c, async () => {
-		const pending = await host.findPending(BRANCH_PREFIX);
+		const pending = await host.findPending(GUIDELINES_BRANCH_PREFIX);
 		const path = await proposalPath(host, pending?.branch ?? null);
 		const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
 
 		const result = await host.propose({
 			path,
 			content,
-			branch: `${BRANCH_PREFIX}${stamp}`,
+			branch: `${GUIDELINES_BRANCH_PREFIX}${stamp}`,
 			pending,
 			commitMessage: pending ? 'Update Recoder review guidelines' : 'Add Recoder review guidelines',
 			title: 'Update Recoder review guidelines',
@@ -169,6 +142,8 @@ app.post('/repos/:id/propose', async (c) => {
 				'_Opened from Recoder._'
 			].join('\n')
 		});
+
+		forgetRepoOverview(repo.id);
 
 		const body: GuidelinesProposal = { ...result, updated: !!pending };
 

@@ -74,9 +74,6 @@
 	color: var(--text-faint);
 }
 /* The review speeds: wide enough that each one's line on what it trades wraps once at most. */
-.compose-speed-menu {
-	width: 340px;
-}
 .bar-trigger .bar-trigger-add {
 	width: 14px;
 	height: 14px;

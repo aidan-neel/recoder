@@ -74,7 +74,8 @@
 	[data-ui='status-glyph-face'][data-kind='failed'] {
 		--glyph: var(--sev-high);
 	}
-	[data-ui='status-glyph-face'][data-kind='outdated'] {
+	[data-ui='status-glyph-face'][data-kind='outdated'],
+	[data-ui='status-glyph-face'][data-kind='cancelled'] {
 		--glyph: var(--text-subtle);
 	}
 	[data-ui='status-glyph-face'][data-kind='spinner'] {

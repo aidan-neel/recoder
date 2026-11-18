@@ -36,6 +36,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 
 import { createChatCache, type ChatCache } from '../chat/chat-cache';
 import { createSessionCache, type SessionCache } from '../pull/session-cache';
+import { createOverviewCache, type OverviewCache } from '../repo/overview-cache';
 import { createListStore, type ListStore } from '../pulls/list-store';
 import { accountsApi, type AuthApi } from './accounts';
 import { chatApi } from './chat';
@@ -76,6 +77,8 @@ export interface ApiClient {
 	/** What the repository page shows over the last thirty days; rejects with a 404 for a repository that is not tracked. */
 	repoOverview: (repoId: string) => Promise<RepoOverview>;
 	addRepo: (input: CreateRepoInput) => Promise<Repo>;
+	/** Stops tracking a repository; its reviews stay on the server. */
+	removeRepo: (repoId: string) => Promise<void>;
 	pulls: (query?: PullListQuery) => Promise<PullList>;
 	pullPage: (repoId: string, number: number) => Promise<PullPage>;
 	pullDiff: (repoId: string, number: number) => Promise<PullDiff>;
@@ -136,7 +139,7 @@ export interface ApiClient {
 	repoTree: (repoId: string, path: string, ref?: string) => Promise<RepoTree>;
 	/** One file of a repository at `ref` (the default branch when omitted). */
 	repoFile: (repoId: string, path: string, ref?: string) => Promise<RepoFile>;
-	/** The skills a repository ships for agents, which "@" offers; with `pull`, its head's as well. */
+	/** The skills a repository ships for agents, which "/" offers; with `pull`, its head's as well. */
 	repoSkills: (repoId: string, pull?: number) => Promise<SkillSummary[]>;
 }
 
@@ -168,6 +171,7 @@ export const liveApi: ApiClient = {
 	repos: reviewsApi.repos,
 	repoOverview: reposApi.overview,
 	addRepo: connectionsApi.addRepo,
+	removeRepo: async (repoId) => void (await connectionsApi.removeRepo(repoId)),
 	pulls: pullsApi.list,
 	pullPage: pullsApi.page,
 	pullDiff: pullsApi.diff,
@@ -217,6 +221,8 @@ interface ApiContext {
 	sessions: SessionCache;
 	/** Chats kept from earlier visits; hovering a chat's row reads it ahead of the click. */
 	chats: ChatCache;
+	/** Repository overviews kept from earlier visits; hovering a repository's link reads it ahead of the click. */
+	overviews: OverviewCache;
 }
 
 const Context = createContext<ApiContext | null>(null);
@@ -229,7 +235,13 @@ export function ApiProvider({ client, children }: { client: ApiClient; children:
 	const [value] = useState(() => {
 		const list = createListStore(client);
 
-		return { client, list, sessions: createSessionCache(client, list), chats: createChatCache(client) };
+		return {
+			client,
+			list,
+			sessions: createSessionCache(client, list),
+			chats: createChatCache(client),
+			overviews: createOverviewCache(client)
+		};
 	});
 
 	return <Context.Provider value={value}>{children}</Context.Provider>;
@@ -261,4 +273,9 @@ export function useSessionCache(): SessionCache {
 /** The chats the screens under the provider have read. */
 export function useChatCache(): ChatCache {
 	return useApiContext().chats;
+}
+
+/** The repository overviews the screens under the provider have read. */
+export function useOverviewCache(): OverviewCache {
+	return useApiContext().overviews;
 }

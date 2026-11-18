@@ -355,49 +355,12 @@
 	font-weight: 500;
 }
 
-/*
- * While a reply is still working, a bright white band sweeps across the whole block every --dur-shimmer. The mask is
- * three blocks wide and only moves between its two ends, so it always covers the block: a mask that slid past an
- * edge would hide the text it no longer covered.
- */
-[data-ui='markdown'][data-state='streaming'] {
-	--md-shimmer-rest: rgb(0 0 0 / 0.74);
-	--md-shimmer-band: rgb(0 0 0 / 1);
+/* Streaming text has nothing to draw yet before its first word: it takes no room until then. */
+[data-ui='markdown']:empty {
+	display: none;
+}
 
-	color: var(--brand-ink);
-	mask-image: linear-gradient(
-		105deg,
-		var(--md-shimmer-rest) 36%,
-		var(--md-shimmer-band) 50%,
-		var(--md-shimmer-rest) 64%
-	);
-	mask-size: 300% 100%;
-	mask-repeat: no-repeat;
-	animation: ui-markdown-sweep var(--dur-shimmer) linear infinite;
-}
-[data-ui='markdown'][data-state='streaming'] :where(a) {
-	color: inherit;
-}
-:root:not(.dark) [data-ui='markdown'][data-state='streaming'] {
-	--md-shimmer-rest: rgb(0 0 0 / 0.92);
-	--md-shimmer-band: rgb(0 0 0 / 0.4);
-
-	color: var(--text-primary);
-}
-@keyframes ui-markdown-sweep {
-	from {
-		mask-position: 100% 0;
-	}
-	to {
-		mask-position: 0 0;
-	}
-}
 @media (prefers-reduced-motion: reduce) {
-	[data-ui='markdown'][data-state='streaming'] {
-		color: inherit;
-		mask-image: none;
-		animation: none;
-	}
 	[data-ui='code-line'] {
 		transition: none;
 	}

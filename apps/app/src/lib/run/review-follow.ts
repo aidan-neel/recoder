@@ -32,13 +32,22 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 	/** True from `close` until the session opens again: a closed session starts no stream. */
 	let closed = true;
 
-	/** Takes the server's copy of the followed review; a run that just ended tells the page. */
+	/**
+	 * Takes the server's copy of the followed review; a run that just ended tells the page. A finished review that a
+	 * running one replaces is kept as the previous review until the run ends.
+	 */
 	function accept(review: Review): void {
 		if (review.id !== followed?.id) return;
 
-		const before = state.getState().review;
+		const { review: before, previousReview } = state.getState();
+		const replaced = before && before.id !== review.id && before.status === 'passed' ? before : previousReview;
 
-		state.setState({ review, reviewLoad: 'ready', reviewError: null });
+		state.setState({
+			review,
+			previousReview: isReviewing(review) ? replaced : null,
+			reviewLoad: 'ready',
+			reviewError: null
+		});
 
 		if (before && isReviewing(before) && !isReviewing(review)) {
 			events.reviewSettled();

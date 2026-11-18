@@ -1,22 +1,17 @@
 'use client';
 
 import { Button, Pill, Spinner, type ButtonStatus, type PillTone } from '@recoder/ui';
+import { CircleSlash } from 'lucide-react';
 import Link from 'next/link';
 
-import { plural } from '@/lib/shell/format';
+import { findingsLabel, plural } from '@/lib/shell/format';
 import type { PullRowStatus } from '@/lib/pulls/types';
+
+import { Age } from '@/components/common/age';
 
 interface StatusFace {
 	tone: PillTone;
 	label: string;
-}
-
-/** `2 bugs`, `1 suggestion`, or both when the review found both. */
-function findingsLabel(bugs: number, suggestions: number): string {
-	if (suggestions === 0) return plural(bugs, 'bug');
-	if (bugs === 0) return plural(suggestions, 'suggestion');
-
-	return `${plural(bugs, 'bug')}, ${plural(suggestions, 'suggestion')}`;
 }
 
 /** The pill each status wears. The two statuses that ask for a review wear a button and have no face. */
@@ -76,8 +71,9 @@ interface PullStatusProps {
 
 /**
  * The one thing a row says about its pull request: a pill for a state, or
- * the Review button when the next step is a review. A pull request with
- * commits newer than its review gets the quieter "Review again". A pill about
+ * the Review button when the next step is a review, after "Cancelled" when a
+ * person stopped the last one. A pull request with commits newer than its
+ * review gets the quieter "Review again". A pill about
  * the review (reviewing, bugs, failed) is a link to the Review tab, beside
  * the row's own link rather than inside it.
  */
@@ -106,8 +102,16 @@ export function PullStatus({ status, reviewHref, starting, onReview }: PullStatu
 	}
 
 	return (
-		<Button variant="outline" status={pending} onClick={onReview}>
-			Review
-		</Button>
+		<>
+			{status.kind === 'not-reviewed' && status.cancelledAt ? (
+				<span className="meta pull-row-cancelled">
+					<CircleSlash aria-hidden />
+					Cancelled <Age at={status.cancelledAt} form="long" />
+				</span>
+			) : null}
+			<Button variant="outline" status={pending} onClick={onReview}>
+				Review
+			</Button>
+		</>
 	);
 }

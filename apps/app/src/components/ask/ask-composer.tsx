@@ -1,6 +1,6 @@
 'use client';
 
-import type { ComposerMentions } from '@recoder/ui';
+import type { ComposerMenuItem } from '@recoder/ui';
 
 import type { AskView } from '@/lib/ask/types';
 
@@ -11,10 +11,18 @@ import { ComposerModels } from './model-menu';
 /**
  * The composer under an Ask about a pull request or one of its bugs: send
  * and stop, its "/" commands, a changed file to attach and the models, and
- * with `mentions` the skills "@" offers. `label` names what is asked about
+ * with `skills` the skills "/" offers beside the commands. `label` names what is asked about
  * and doubles as the placeholder.
  */
-export function AskComposer({ ask, label, mentions }: { ask: AskView; label: string; mentions?: ComposerMentions }) {
+export function AskComposer({
+	ask,
+	label,
+	skills
+}: {
+	ask: AskView;
+	label: string;
+	skills?: readonly ComposerMenuItem[];
+}) {
 	return (
 		<ChatComposer
 			label={label}
@@ -24,7 +32,7 @@ export function AskComposer({ ask, label, mentions }: { ask: AskView; label: str
 			onStop={ask.stop}
 			onSend={ask.send}
 			commands={ask.commands}
-			mentions={mentions}
+			skills={skills}
 			tools={(append) => <AttachFile onAttach={append} />}
 			trailing={<ComposerModels />}
 		/>

@@ -12,6 +12,7 @@ import { watchInput } from '../overlay/input-modality';
 import { returnFocusQuietly } from '../overlay/return-focus';
 import { ShallowBodyLock } from '../overlay/shallow-body-lock';
 import { MENU_ITEM, MenuPanel } from './menu-parts';
+import { holdHover } from './hover-hold';
 import { MenuHighlight } from './menu-highlight';
 
 /** One choice in a `Select`. */
@@ -66,7 +67,8 @@ function SelectRow({ option }: { option: SelectOption }) {
  * `align="end"`), with the traveling highlight and a check mark on the
  * chosen value. Arrow keys, Home, End and typeahead work; Escape closes and
  * returns focus to the trigger, with its ring only after a key press. A clear layer under the list takes presses
- * outside it, so the page's pointer lock stays shallow (`ShallowBodyLock`).
+ * outside it, so the page's pointer lock stays shallow (`ShallowBodyLock`); a press on the trigger that closes the
+ * list keeps the trigger's hover (`holdHover`).
  */
 export function Select({
 	value,
@@ -88,12 +90,19 @@ export function Select({
 
 	useEffect(watchInput, []);
 
+	/** An opening list drops a hover the last close held, so the open wash shows. */
+	function changeOpen(next: boolean): void {
+		if (next) triggerRef.current?.removeAttribute('data-hover-hold');
+
+		setOpen(next);
+	}
+
 	return (
 		<SelectPrimitive.Root
 			value={value}
 			onValueChange={onValueChange}
 			open={open}
-			onOpenChange={setOpen}
+			onOpenChange={changeOpen}
 			disabled={disabled}
 		>
 			<SelectPrimitive.Trigger
@@ -129,6 +138,9 @@ export function Select({
 							sideOffset={4}
 							collisionPadding={8}
 							onCloseAutoFocus={(event) => returnFocusQuietly(event, triggerRef.current)}
+							onPointerDownOutside={(event) => {
+								holdHover(triggerRef.current, event.detail.originalEvent);
+							}}
 						>
 							<MenuPanel
 								ref={panelRef}

@@ -24,15 +24,25 @@ function showsTrail(message: AskMessageView): boolean {
 	return message.state === 'writing' && (message.trail !== undefined || message.text === '');
 }
 
-/** Recoder's reply: what it did first, then its words as markdown, with citations drawn as chips. */
+/**
+ * Recoder's reply: what it did first, then its words as markdown, with citations drawn as chips. The markdown is
+ * there from the start of a reply that is writing, so its first words fade in as they arrive.
+ */
 function ReplyBody({ message }: { message: AskMessageView }) {
 	const writing = message.state === 'writing';
 	const passages = { citations: message.citations ?? [], complete: !writing };
 
 	return (
 		<>
-			{showsTrail(message) ? <ChatTrail steps={message.trail ?? []} startedAt={message.at} working={writing} /> : null}
-			{message.text === '' ? null : (
+			{showsTrail(message) ? (
+				<ChatTrail
+					steps={message.trail ?? []}
+					startedAt={message.at}
+					working={writing}
+					answering={message.text !== ''}
+				/>
+			) : null}
+			{message.text === '' && !writing ? null : (
 				<CitedPassagesContext value={passages}>
 					<Markdown streaming={writing} linkOverride={CITATION_LINKS}>
 						{message.text}

@@ -57,7 +57,11 @@ export function RepoScreen({ repoId }: { repoId: string }) {
 
 	return (
 		<Page
-			start={<Crumbs parts={[{ label: 'Repositories' }, ...(view.name ? [{ label: view.name }] : [])]} />}
+			start={
+				<Crumbs
+					parts={[{ label: 'Repositories', href: view.reposHref }, ...(view.name ? [{ label: view.name }] : [])]}
+				/>
+			}
 			end={view.phase === 'missing' ? null : <RepoActions view={view} />}
 		>
 			<div className="page-scroll">

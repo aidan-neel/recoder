@@ -175,7 +175,7 @@ export class ExecWorkspace {
 		return this.setupDone;
 	}
 
-	/** Run one reviewer command, offline, after setup, with `owner`'s scratch files in place. */
+	/** Run one reviewer command after setup, with `owner`'s scratch files in place. */
 	async run(command: string, timeoutMs: number, signal?: AbortSignal, owner = ''): Promise<RunResult> {
 		await this.setupDone?.catch(() => undefined);
 
@@ -229,7 +229,7 @@ export class ExecWorkspace {
 	}
 
 	/**
-	 * Run a command, offline, on a copy of the merge-base commit with `owner`'s
+	 * Run a command on a copy of the merge-base commit with `owner`'s
 	 * scratch files in place, the way `run` does on the head. The copy is built
 	 * once, prepared with the head's generation commands, and put back after
 	 * every command. `unavailable` says why it could not be used: changed

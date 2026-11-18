@@ -2,7 +2,6 @@
 export { Checkbox } from './checkbox';
 export { Composer, ComposerSend, ComposerStop, ComposerTool, focusComposerField, type ComposerNote } from './composer';
 export type { ComposerCommand, ComposerMenuItem } from './composer-commands';
-export type { ComposerMentions } from './composer-mentions';
 export { ImageChips, type ImageChip } from './image-chips';
 export { Field } from './field';
 export { Input } from './input';

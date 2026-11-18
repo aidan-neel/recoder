@@ -31,7 +31,7 @@ export function startedReview(
 /** Reviewing until the list has the review; then its state, with a stopped review saying nothing. */
 function cardStatus(review: ReviewListItem | null): PullRowStatus {
 	if (!review) return { kind: 'reviewing' };
-	if (isCancelled(review)) return { kind: 'not-reviewed' };
+	if (isCancelled(review)) return { kind: 'not-reviewed', cancelledAt: review.updatedAt };
 
 	return reviewStatus(review) ?? { kind: 'reviewed' };
 }

@@ -44,6 +44,28 @@ function followWith(overrides: Partial<ApiClient>) {
 	return { review, state, streams };
 }
 
+describe('the review before the one that runs', () => {
+	test('a finished review a new run replaces stays as the previous review until the run ends', async () => {
+		const finished: Review = { ...OLDER, status: 'passed' };
+		const running: Review = { ...NEWER, status: 'running', findings: [] };
+		const { review, state, streams } = followWith({ createReview: async () => running, review: async () => finished });
+
+		review.open();
+		review.sync(reviewListItem(finished));
+		await Promise.resolve();
+		await review.start();
+
+		expect(state.getState().review?.id).toBe(running.id);
+		expect(state.getState().previousReview?.id).toBe(finished.id);
+
+		streams
+			.at(-1)
+			?.handlers.onMessage({ type: 'heartbeat', review: { ...running, status: 'passed' } } as ProgressMessage);
+
+		expect(state.getState().previousReview).toBeNull();
+	});
+});
+
 describe('following the newest review', () => {
 	test('a page that answers after the session closed starts no stream', () => {
 		const { review, streams } = followWith({ review: async () => OLDER });
