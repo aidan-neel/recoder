@@ -11,18 +11,18 @@ import {
 	type CommandHint
 } from '@recoder/ui';
 import {
-	BookOpen,
-	Clock,
-	CornerDownLeft,
-	FolderGit2,
-	GitPullRequest,
-	Keyboard,
-	Palette,
-	Plus,
-	Settings,
-	ShieldUser,
-	SunMoon
-} from 'lucide-react';
+	BookOpenIcon,
+	ClockIcon,
+	ArrowElbowDownLeftIcon,
+	FolderSimpleIcon,
+	GitPullRequestIcon,
+	KeyboardIcon,
+	PaletteIcon,
+	PlusIcon,
+	GearIcon,
+	UserGearIcon,
+	CircleHalfIcon
+} from '@phosphor-icons/react';
 import { useState, type ComponentType } from 'react';
 
 import { useIsAdmin } from '@/lib/account/use-is-admin';
@@ -117,20 +117,26 @@ export function CommandPalette() {
 
 	/** The live app's own pages and its Settings; the sample has none of them, so its palette leaves them out. */
 	const livePlaces: Action[] = [
-		{ id: 'automations', label: 'Automations', icon: Clock, run: () => go(AUTOMATIONS_HREF) },
-		{ id: 'guidelines', label: 'Guidelines', icon: BookOpen, run: () => go(GUIDELINES_HREF) },
-		...(admin ? [{ id: 'admin', label: 'Recoder', icon: ShieldUser, run: () => openSettings('admin') }] : []),
-		{ id: 'settings', label: 'Settings', icon: Settings, shortcut: 'mod+,', run: () => openSettings() },
-		{ id: 'palette', label: 'Change palette', icon: Palette, run: () => openSettings('appearance') }
+		{ id: 'automations', label: 'Automations', icon: ClockIcon, run: () => go(AUTOMATIONS_HREF) },
+		{ id: 'guidelines', label: 'Guidelines', icon: BookOpenIcon, run: () => go(GUIDELINES_HREF) },
+		...(admin ? [{ id: 'admin', label: 'Recoder', icon: UserGearIcon, run: () => openSettings('admin') }] : []),
+		{ id: 'settings', label: 'Settings', icon: GearIcon, shortcut: 'mod+,', run: () => openSettings() },
+		{ id: 'palette', label: 'Change palette', icon: PaletteIcon, run: () => openSettings('appearance') }
 	];
 
 	const actions: Action[] = [
-		{ id: 'new', label: 'New review', icon: Plus, shortcut: 'c', run: () => go(newReviewHref(base)) },
-		{ id: 'pulls', label: 'Pull requests', icon: GitPullRequest, run: () => go(pullsHref(base)) },
-		{ id: 'repos', label: 'Repositories', icon: FolderGit2, run: () => go(reposHref(base)) },
+		{ id: 'new', label: 'New review', icon: PlusIcon, shortcut: 'c', run: () => go(newReviewHref(base)) },
+		{ id: 'pulls', label: 'Pull requests', icon: GitPullRequestIcon, run: () => go(pullsHref(base)) },
+		{ id: 'repos', label: 'Repositories', icon: FolderSimpleIcon, run: () => go(reposHref(base)) },
 		...(isLiveApp(base) ? livePlaces : []),
-		{ id: 'theme', label: 'Switch theme', icon: SunMoon, run: toggleTheme },
-		{ id: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, shortcut: '?', run: () => setShortcutsOpen(true) }
+		{ id: 'theme', label: 'Switch theme', icon: CircleHalfIcon, run: toggleTheme },
+		{
+			id: 'shortcuts',
+			label: 'Keyboard shortcuts',
+			icon: KeyboardIcon,
+			shortcut: '?',
+			run: () => setShortcutsOpen(true)
+		}
 	];
 
 	return (
@@ -147,7 +153,7 @@ export function CommandPalette() {
 				<CommandEmpty>Nothing matches. Paste a pull request link to open it.</CommandEmpty>
 				{pasted ? (
 					<CommandGroup>
-						<CommandItem value={query} icon={CornerDownLeft} onSelect={openPasted}>
+						<CommandItem value={query} icon={ArrowElbowDownLeftIcon} onSelect={openPasted}>
 							{pasted}
 						</CommandItem>
 					</CommandGroup>

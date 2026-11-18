@@ -1,4 +1,6 @@
-import { FileText } from 'lucide-react';
+'use client';
+
+import { FileTextIcon } from '@phosphor-icons/react';
 
 import { cn } from '../../lib/cn';
 import { fileLanguageIcon } from './file-icons';
@@ -8,7 +10,7 @@ export function FileIcon({ path, className }: { path: string; className?: string
 	const classes = cn('size-3 shrink-0', className);
 	const icon = fileLanguageIcon(path);
 
-	if (!icon) return <FileText aria-hidden className={classes} />;
+	if (!icon) return <FileTextIcon aria-hidden className={classes} />;
 
 	return (
 		<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={classes}>

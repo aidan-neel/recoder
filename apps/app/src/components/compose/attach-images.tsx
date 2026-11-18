@@ -2,7 +2,7 @@
 
 import { IMAGE_TYPES } from '@recoder/shared';
 import { ComposerTool } from '@recoder/ui';
-import { Paperclip } from 'lucide-react';
+import { PaperclipIcon } from '@phosphor-icons/react';
 import { useRef, type ChangeEvent } from 'react';
 
 /** The file chooser's filter: the image types Recoder accepts. */
@@ -28,7 +28,7 @@ export function AttachImages({ onAttach, disabled }: { onAttach: (files: File[])
 	return (
 		<>
 			<ComposerTool label="Attach images" disabled={disabled} onClick={() => input.current?.click()}>
-				<Paperclip />
+				<PaperclipIcon />
 			</ComposerTool>
 			<input ref={input} type="file" accept={ACCEPT} multiple hidden onChange={chosen} />
 		</>

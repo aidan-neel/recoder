@@ -1,5 +1,5 @@
 import { isStepRunning, type ChatTrailThought } from '@recoder/shared';
-import { Lightbulb } from 'lucide-react';
+import { LightbulbIcon } from '@phosphor-icons/react';
 import { Fragment } from 'react';
 
 import { thoughtLabel } from '@/lib/chat/trail';
@@ -12,7 +12,7 @@ const CODE_SPAN = /`([^`\n]+)`/g;
 /** One step of the model's reasoning: its title as the label, sweeping while it goes, and its text under it. */
 export function ThoughtStep({ step }: { step: ChatTrailThought }) {
 	return (
-		<TrailStep icon={<Lightbulb />} kind="thought">
+		<TrailStep icon={<LightbulbIcon />} kind="thought">
 			<p className="trail-label">
 				<span data-shimmer={isStepRunning(step) || undefined}>{thoughtLabel(step)}</span>
 			</p>

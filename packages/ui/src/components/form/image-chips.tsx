@@ -1,6 +1,6 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { XIcon } from '@phosphor-icons/react';
 
 import { Button } from '../button';
 import { Tooltip } from '../overlay/tooltip';
@@ -79,7 +79,7 @@ export function ImageTiles({ images, onRemove }: ImageTilesProps) {
 									data-ui="image-tile-remove"
 									onClick={() => onRemove(image.id)}
 								>
-									<X />
+									<XIcon />
 								</Button>
 							</Tooltip>
 						</span>

@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown } from 'lucide-react';
+import { CaretDownIcon } from '@phosphor-icons/react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
@@ -60,7 +60,7 @@ export function SplitButton({
 						disabled={disabled || status === 'pending'}
 						className={cn('rounded-s-none', HALF_FOCUS, variant === 'primary' ? SEAM : '-ms-px')}
 					>
-						<ChevronDown />
+						<CaretDownIcon />
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className={menuClassName}>

@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, CodeBlock, StatusNotice, type ButtonVariant } from '@recoder/ui';
-import { RotateCw } from 'lucide-react';
+import { ArrowClockwiseIcon } from '@phosphor-icons/react';
 
 import { pickNotice } from '@/lib/settings/providers/pick-notice';
 import { useCheckAgain } from '@/lib/settings/providers/use-check-again';
@@ -26,7 +26,7 @@ export function CheckAgain({ label, variant = 'outline', className }: CheckAgain
 
 	return (
 		<Button variant={variant} status={check.status} successLabel="Checked" className={className} onClick={check.run}>
-			<RotateCw aria-hidden />
+			<ArrowClockwiseIcon aria-hidden />
 			{label}
 		</Button>
 	);

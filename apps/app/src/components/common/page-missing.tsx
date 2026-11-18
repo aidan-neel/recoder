@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, StatusNotice } from '@recoder/ui';
-import { SearchX } from 'lucide-react';
+import { MagnifyingGlassMinusIcon } from '@phosphor-icons/react';
 import { Link } from './link';
 
 import { useApi } from '@/lib/api/client';
@@ -22,7 +22,7 @@ export function PageMissing() {
 				<StatusNotice
 					variant="banner"
 					heading="h1"
-					glyph={<SearchX aria-hidden />}
+					glyph={<MagnifyingGlassMinusIcon aria-hidden />}
 					title="This page does not exist."
 					detail="The link may be old or mistyped."
 					actions={

@@ -7,16 +7,23 @@ and merge it or send the fix back. The layout is the one people know from
 pull request tools: a sidebar, a list of pull requests, and a pull request
 page with tabs.
 
-It departs from the root `DESIGN.md` (apps/web) in four places:
+It departs from the root `DESIGN.md` (apps/web) in five places:
 
-- **A sidebar shell**, not a top bar with session tabs. The rule "do not
-  reintroduce the left sidebar" is for apps/web only.
+- **An inset sidebar shell**, not a top bar with session tabs. The sidebar
+  has no surface of its own and sits on the window's tint (`--bg-chrome`);
+  from 1024px the page is a panel 8px in from the window's edges, with 12px
+  corners and a `--line-subtle` hairline, and scrolls inside itself. The rule
+  "do not reintroduce the left sidebar" is for apps/web only.
 - **One sans face.** The UI face is Inter (`--font-ui`), and the AI voice
   uses it too (`--font-ai`). There is no serif and no Cal Sans. Code, paths,
   hashes and aligned numbers are Geist Mono.
-- **Neutral surfaces.** Near-black panels with white hairlines in dark,
-  white and light grey in light. One cream primary button and one light-blue (`#2383e2`)
-  accent (links, the selected line, hunk headers).
+- **Near-neutral surfaces.** Near-black panels with white hairlines in dark,
+  white and light grey in light, all with a faint cool tint. The sidebar sits
+  a step darker than the page and menus a step lighter. One cream primary
+  button and one indigo-blue (`#3777ec`) accent (links, the selected line,
+  hunk headers).
+- **Phosphor icons in their bold weight**, set once by the kit's `IconRoot`,
+  not Lucide. Import the `*Icon` names (`MagnifyingGlassIcon`).
 - **A pull request is the unit**, not a review session. A review belongs to a
   pull request and shows inside its page.
 
@@ -154,7 +161,9 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   the tile fades, the grid closes the gap, and the repository leaves the
   sidebar at once; the server forgets it when the toast's Undo is gone. The
   last tile, an outline with no fill, opens the same dialog as Add
-  repository, and stands alone when nothing is tracked. A scope or filter
+  repository, and stands alone when nothing is tracked. Pointing at a tile's
+  link deepens its ring to `--line-strong`, its fill to `--bg-raised-2` and
+  its bars to `--text-faint`, over `--dur-swap`. A scope or filter
   text with no repository under it says so in one line. The page loads
   behind three skeleton tiles; a tile whose month did not load says so with
   Try again. Under 640px the tiles stack, Add repository keeps its icon and
@@ -461,8 +470,10 @@ Motion explains a change and never makes the person wait.
 - Things that move: the sidebar slides, the highlight under the pointer in a
   menu or list follows it, collapsibles and the provider dialog change height.
   Menus, selects, the palette, dialogs, tooltips and the link card fade in
-  from a 0.97 scale, with no blur: menus in 120ms and out in 80ms, dialogs in
-  150ms and out in 100ms. A link that becomes an embed settles in place: its
+  from a 0.97 scale, with no blur: menus in 180ms and out in 150ms, dialogs in
+  180ms and out in 130ms. Entrances and exits share one strong ease-out
+  (`cubic-bezier(0.23, 1, 0.32, 1)`), so a closing menu clears in its first
+  frames instead of lingering. A link that becomes an embed settles in place: its
   tint fades in over `--dur-swap`, with no change of size. Settings enters
   and leaves as every dialog does; changing its section swaps the pane at
   once, scrolled to the top.
@@ -478,9 +489,12 @@ Motion explains a change and never makes the person wait.
   bar over every line and control, so the skeleton has the content's own
   geometry. With an `id` it remembers the shape the content had, and the
   next load draws that. Content then takes the skeleton's place whole, in
-  one 140ms crossfade. Where the content cannot be laid out (a settings
+  one 170ms crossfade. Where the content cannot be laid out (a settings
   group, a chart, one value), `SkeletonRows`, `SkeletonText` and
   `SkeletonBox` stand at its exact size. Never draw a bar by hand.
+- The one entrance is the Repositories page: its tiles rise 6px and fade in
+  over `--dur-disclose`, 40ms apart (the first eight), the first time the
+  grid shows.
 - A click changes the page in the same frame. The app renders in the browser
   only, so `Link` and `navigate` (`components/common/link.tsx`,
   `lib/shell/navigation.ts`) change the address with the History API and the
@@ -489,9 +503,9 @@ Motion explains a change and never makes the person wait.
   `next/navigation`. A screen that has no data yet shows its skeleton; it
   never holds the old page.
 - Durations and easings come from the kit tokens (`--dur-*`, `--motion-*`,
-  `--ease-menu`) and the kit's motion presets (`DURATION`). Hover and the
-  menu highlight take 50ms. Nothing on a keyboard path runs longer than about
-  100ms.
+  `--ease-menu`) and the kit's motion presets (`DURATION`). Hover takes 80ms
+  and the menu highlight 90ms. Nothing on a keyboard path runs longer than
+  about 130ms.
 - `prefers-reduced-motion` turns movement into plain swaps.
 
 ## Interaction rules

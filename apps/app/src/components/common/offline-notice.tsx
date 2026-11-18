@@ -1,5 +1,5 @@
 import { Button, StatusNotice } from '@recoder/ui';
-import { RotateCcw } from 'lucide-react';
+import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
 
 import { OFFLINE_TEXT } from '@/lib/api/http';
 
@@ -12,7 +12,7 @@ export function OfflineNotice({ onRetry }: { onRetry: () => void }) {
 			detail="Start it, then try again."
 			actions={
 				<Button onClick={onRetry}>
-					<RotateCcw aria-hidden />
+					<ArrowCounterClockwiseIcon aria-hidden />
 					Try again
 				</Button>
 			}

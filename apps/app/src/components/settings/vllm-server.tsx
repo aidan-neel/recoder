@@ -2,7 +2,7 @@
 
 import { formatContextWindow, type VllmModel, type VllmServer } from '@recoder/shared';
 import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Pill, StatusGlyph } from '@recoder/ui';
-import { ChevronDown } from 'lucide-react';
+import { CaretDownIcon } from '@phosphor-icons/react';
 
 import { useVllmModels } from '@/lib/settings/use-vllm-models';
 import { syncLine } from '@/lib/settings/vllm-text';
@@ -53,7 +53,7 @@ function ServedModels({ models }: { models: VllmModel[] }) {
 					</CollapsibleContent>
 					<CollapsibleTrigger asChild>
 						<Button variant="ghost" className="server-more">
-							<ChevronDown aria-hidden />
+							<CaretDownIcon aria-hidden />
 							{view.moreLabel}
 						</Button>
 					</CollapsibleTrigger>

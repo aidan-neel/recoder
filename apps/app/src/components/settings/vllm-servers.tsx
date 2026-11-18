@@ -2,7 +2,7 @@
 
 import type { VllmServer } from '@recoder/shared';
 import { Button, ConfirmDialog, SkeletonRows } from '@recoder/ui';
-import { Plus, RotateCw } from 'lucide-react';
+import { PlusIcon, ArrowClockwiseIcon } from '@phosphor-icons/react';
 import { useRef, type RefObject } from 'react';
 
 import { useVllmSection, type VllmSection } from '@/lib/settings/use-vllm-section';
@@ -26,11 +26,11 @@ function ServerActions({ view, addButton }: ServersProps) {
 	return (
 		<span className="server-actions">
 			<Button variant="ghost" status={view.refresh.status} successLabel="Synced" onClick={view.refresh.run}>
-				<RotateCw aria-hidden />
+				<ArrowClockwiseIcon aria-hidden />
 				Refresh
 			</Button>
 			<Button ref={addButton} variant="ghost" onClick={() => view.setAdding(true)}>
-				<Plus aria-hidden />
+				<PlusIcon aria-hidden />
 				Add server
 			</Button>
 		</span>
@@ -55,7 +55,7 @@ function ServerRows({ view, addButton }: ServersProps) {
 		return (
 			<SettingsRow name="No local servers" detail="Connect a vLLM server to review on the models it serves">
 				<Button ref={addButton} variant="outline" onClick={() => view.setAdding(true)}>
-					<Plus aria-hidden />
+					<PlusIcon aria-hidden />
 					Add server
 				</Button>
 			</SettingsRow>

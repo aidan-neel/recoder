@@ -67,7 +67,7 @@ interface PopoverContentProps {
 
 /**
  * The floating panel: menu surface, the card radius, 10px padding. It grows
- * from the side it is anchored to (65ms in, 40ms out), flips and shifts to stay
+ * from the side it is anchored to (180ms in, 150ms out), flips and shifts to stay
  * 8px inside the viewport, and scrolls when taller than the room it has.
  */
 export function PopoverContent({

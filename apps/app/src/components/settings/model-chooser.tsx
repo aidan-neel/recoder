@@ -12,7 +12,7 @@ import {
 	ScrollArea,
 	SkeletonBox
 } from '@recoder/ui';
-import { ChevronDown, Search } from 'lucide-react';
+import { CaretDownIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { useId } from 'react';
 
 import { shownCount, type ChooserGroup } from '@/lib/settings/model-chooser';
@@ -87,7 +87,7 @@ function ProviderBlock({ group, chooser }: ProviderBlockProps) {
 						<span className="chooser-count">
 							{shown} of {group.options.length}
 						</span>
-						<ChevronDown aria-hidden />
+						<CaretDownIcon aria-hidden />
 					</CollapsibleTrigger>
 				</h3>
 			</div>
@@ -152,7 +152,7 @@ export function ModelChooser() {
 		<SettingsGroup title="Available models" action={<SaveStatus state={chooser.state} />}>
 			<div className="chooser-search">
 				<Input
-					leading={<Search aria-hidden />}
+					leading={<MagnifyingGlassIcon aria-hidden />}
 					placeholder="Search models"
 					aria-label="Search models"
 					value={chooser.query}

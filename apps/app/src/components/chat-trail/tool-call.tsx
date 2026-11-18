@@ -2,7 +2,13 @@
 
 import { isStepRunning } from '@recoder/shared';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger, Spinner } from '@recoder/ui';
-import { ChevronDown, FileText, Search, SquareTerminal, TriangleAlert } from 'lucide-react';
+import {
+	CaretDownIcon,
+	FileTextIcon,
+	MagnifyingGlassIcon,
+	TerminalWindowIcon,
+	WarningIcon
+} from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { hasDetail, opensDetail, toolLine, type ToolStep } from '@/lib/chat/trail';
@@ -24,7 +30,7 @@ export function ToolCall({ step }: { step: ToolStep }) {
 				<Collapsible open={chosen ?? opensDetail(step)} onOpenChange={setChosen}>
 					<CollapsibleTrigger className="trail-label trail-toggle">
 						<ToolLabel step={step} />
-						<ChevronDown className="trail-chevron" aria-hidden />
+						<CaretDownIcon className="trail-chevron" aria-hidden />
 					</CollapsibleTrigger>
 					<CollapsibleContent>
 						<ToolDetail step={step} />
@@ -59,12 +65,12 @@ function ToolLabel({ step }: { step: ToolStep }) {
 
 /** A tool's icon, a spinner while it runs, and the failure mark when it failed. */
 function ToolIcon({ step }: { step: ToolStep }) {
-	if (step.status === 'error') return <TriangleAlert />;
+	if (step.status === 'error') return <WarningIcon />;
 	if (isStepRunning(step)) return <Spinner />;
-	if (step.kind === 'search') return <Search />;
-	if (step.kind === 'read') return <FileText />;
+	if (step.kind === 'search') return <MagnifyingGlassIcon />;
+	if (step.kind === 'read') return <FileTextIcon />;
 
-	return <SquareTerminal />;
+	return <TerminalWindowIcon />;
 }
 
 /** What opens under a call's label: the files it touched, or the command and what it printed. */

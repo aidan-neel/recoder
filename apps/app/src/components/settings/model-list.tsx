@@ -2,7 +2,7 @@
 
 import { formatContextWindow } from '@recoder/shared';
 import { CommandItem } from '@recoder/ui';
-import { Check } from 'lucide-react';
+import { CheckIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { FOLLOW_LABEL, rowBottom, type ModelRow } from '@/lib/settings/model-rows';
@@ -47,7 +47,7 @@ function Choice({ row, picked, onPick }: ChoiceProps) {
 			onSelect={() => onPick(row.key)}
 			leading={
 				<span className="model-row-mark">
-					{picked ? <Check aria-hidden /> : null}
+					{picked ? <CheckIcon aria-hidden /> : null}
 					{picked ? <span className="sr-only">Current pick</span> : null}
 				</span>
 			}

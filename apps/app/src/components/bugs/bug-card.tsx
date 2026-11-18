@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown } from 'lucide-react';
+import { CaretDownIcon } from '@phosphor-icons/react';
 import { memo, useId, useState } from 'react';
 
 import { useAskView } from '@/lib/ask/use-ask';
@@ -61,7 +61,7 @@ export const BugCard = memo(function BugCard({ bug, view, open, onToggle, stale 
 				onClick={() => onToggle(bug.id)}
 			>
 				<span className="bug-title">{bug.title}</span>
-				<ChevronDown aria-hidden />
+				<CaretDownIcon aria-hidden />
 				<BugFacts bug={bug} />
 			</button>
 			{open ? (

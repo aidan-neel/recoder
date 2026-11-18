@@ -4,7 +4,7 @@ import { motion, type Transition } from 'motion/react';
 import { Checkbox as CheckboxPrimitive } from 'radix-ui';
 
 import { cn } from '../../lib/cn';
-import { DURATION, EASE_IN, EASE_OUT } from '../../motion/presets';
+import { DURATION, EASE_OUT } from '../../motion/presets';
 import { useFieldControl } from './field-context';
 
 /** Ticked, clear, or `'some'`: the box that stands for a group in which only some rows are ticked. */
@@ -19,9 +19,9 @@ interface CheckboxProps {
 	className?: string;
 }
 
-/** The check draws in over 180ms when ticked and fades out faster when cleared. */
+/** The check draws in over 210ms when ticked and fades out faster when cleared. */
 const DRAW: Transition = { pathLength: { duration: DURATION.toggle, ease: EASE_OUT }, opacity: { duration: 0 } };
-const ERASE: Transition = { duration: DURATION.menuOut, ease: EASE_IN };
+const ERASE: Transition = { duration: DURATION.menuOut, ease: EASE_OUT };
 
 /** The check, and the dash a box wears when only some of its group is ticked. */
 const MARKS = { check: 'M5 12.5 9.5 17 19 7', dash: 'M6 12h12' } as const;

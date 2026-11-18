@@ -2,7 +2,7 @@
 
 import type { Repo } from '@recoder/shared';
 import { HoverList, RowButton } from '@recoder/ui';
-import { ChevronRight } from 'lucide-react';
+import { CaretRightIcon } from '@phosphor-icons/react';
 
 import { useRecentActivity, type RecentRow } from '@/lib/settings/use-activity';
 
@@ -21,7 +21,7 @@ function RecentLink({ row }: { row: RecentRow }) {
 				}
 				detail={row.description}
 			>
-				<ChevronRight aria-hidden />
+				<CaretRightIcon aria-hidden />
 			</SettingsRow>
 		</li>
 	);

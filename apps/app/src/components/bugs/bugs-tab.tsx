@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Pill, SkeletonRows, StatusNotice } from '@recoder/ui';
-import { Clock, GitCommitHorizontal } from 'lucide-react';
+import { ClockIcon, GitCommitIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 
 import type { BugsView } from '@/lib/bugs/types';
@@ -93,12 +93,12 @@ function PreviousFindings({ view, open, onToggle }: PreviousFindingsProps) {
 			<div className="bugs-previous-head">
 				<h2 className="section-label">Previous review</h2>
 				{view.previous.headSha ? (
-					<Pill face="code" icon={<GitCommitHorizontal aria-hidden />} title={view.previous.headSha}>
+					<Pill face="code" icon={<GitCommitIcon aria-hidden />} title={view.previous.headSha}>
 						{view.previous.headSha.slice(0, 7)}
 					</Pill>
 				) : null}
 				{view.previous.reviewedAt ? (
-					<Pill icon={<Clock aria-hidden />}>
+					<Pill icon={<ClockIcon aria-hidden />}>
 						<Age at={view.previous.reviewedAt} form="long" />
 					</Pill>
 				) : null}

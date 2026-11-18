@@ -1,6 +1,6 @@
 'use client';
 
-import { Minus, Plus } from 'lucide-react';
+import { MinusIcon, PlusIcon } from '@phosphor-icons/react';
 import type { InputHTMLAttributes, KeyboardEvent, MouseEvent, Ref } from 'react';
 
 import { cn } from '../../lib/cn';
@@ -87,7 +87,7 @@ export function NumberField({
 				onMouseDown={keepFocus}
 				onClick={(event) => onStep?.(-1, event.shiftKey)}
 			>
-				<Minus aria-hidden />
+				<MinusIcon aria-hidden />
 			</button>
 			<input
 				ref={ref}
@@ -113,7 +113,7 @@ export function NumberField({
 				onMouseDown={keepFocus}
 				onClick={(event) => onStep?.(1, event.shiftKey)}
 			>
-				<Plus aria-hidden />
+				<PlusIcon aria-hidden />
 			</button>
 		</div>
 	);

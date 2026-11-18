@@ -15,7 +15,7 @@ import {
 	swapMotion,
 	useMotionVariants
 } from '@recoder/ui';
-import { Check } from 'lucide-react';
+import { CheckIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useRef, type Ref } from 'react';
 
@@ -30,7 +30,7 @@ import { CheckAgain } from './provider-notice';
 function InstalledMark() {
 	return (
 		<span className="add-provider-installed">
-			<Check aria-hidden />
+			<CheckIcon aria-hidden />
 			Installed
 		</span>
 	);

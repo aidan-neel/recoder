@@ -113,7 +113,7 @@
 
 	/* ───────── Swap text: the new text fades in with a 2px rise as the old one leaves 2px up ───────── */
 	/*
-	 * No blur, since swaps run on every decision. The leave takes 80ms (--dur-press); a leaving copy
+	 * No blur, since swaps run on every decision. The leave takes 110ms (--dur-press); a leaving copy
 	 * rests hidden if it never runs, and goes out of the flow so a shorter label never cuts it. In a
 	 * `wait` swap (data-wait) it keeps its place, and the new copy sits over it, unseen behind a delay
 	 * as long as the leave, then takes the flow, keeping the delay until it settles so the fade never
@@ -190,12 +190,12 @@
 
 	/* ───────── Collapsible: the chevron that leads a trigger hangs its ink on the trigger's edge ───────── */
 	/*
-	 * Lucide's chevron-right starts its ink 8 units into its 24-unit box (a third of its size: 4.6px of 14px,
-	 * measured by scanning the drawn glyph), so it is pulled left by that much. It turns about (13.5, 13.5), so the
+	 * Phosphor's bold caret-right starts its ink 84 units into its 256-unit box (about a third of its size: 4.6px
+	 * of 14px), so it is pulled left by that much. It turns about (13.5, 13.5), so the
 	 * open chevron's ink starts on the same edge and stays centred on the line. A chevron that is not 14px sets
 	 * --disclosure-chevron-size to its size.
 	 */
-	[data-ui='collapsible-trigger'] > svg.lucide-chevron-right:first-child {
+	[data-ui='collapsible-trigger'] > [data-ui='disclosure-chevron']:first-child {
 		margin-left: calc(var(--disclosure-chevron-size, 14px) / -3);
 		transform-origin: 56.25% 56.25%;
 	}

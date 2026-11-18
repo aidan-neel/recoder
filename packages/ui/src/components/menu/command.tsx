@@ -1,7 +1,7 @@
 'use client';
 
 import { Command, useCommandState } from 'cmdk';
-import { Search } from 'lucide-react';
+import { MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Dialog } from 'radix-ui';
 import type { ComponentProps, ComponentType, KeyboardEvent, ReactNode } from 'react';
@@ -154,7 +154,7 @@ export function CommandInput({
 			data-ui="command-input"
 			className={cn('flex h-11 shrink-0 items-center gap-2.5 border-b border-line-card px-3', className)}
 		>
-			{leading ?? <Search aria-hidden className="size-4 shrink-0 text-fg-muted" />}
+			{leading ?? <MagnifyingGlassIcon aria-hidden className="size-4 shrink-0 text-fg-muted" />}
 			<Command.Input
 				placeholder={placeholder}
 				value={value}

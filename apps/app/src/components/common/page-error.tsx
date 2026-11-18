@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, StatusNotice, StatusNoticeDetails } from '@recoder/ui';
-import { RotateCcw } from 'lucide-react';
+import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
 import { Link } from './link';
 import { usePathname } from '@/lib/shell/navigation';
 
@@ -64,7 +64,7 @@ export function PageError({ error, retry }: PageErrorProps) {
 								</Button>
 							)}
 							<Button onClick={retry}>
-								<RotateCcw aria-hidden />
+								<ArrowCounterClockwiseIcon aria-hidden />
 								Try again
 							</Button>
 						</>

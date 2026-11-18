@@ -87,7 +87,6 @@
 	width: 13px;
 	height: 13px;
 	color: var(--success);
-	stroke-width: 2.25;
 }
 /* The row's last slot: a chevron into the sign-in, or the key that picks the first match. */
 .provider-pick-end {
@@ -556,7 +555,6 @@
 	width: 14px;
 	height: 14px;
 	color: var(--success);
-	stroke-width: 2.25;
 }
 /* Indented past the 28px mark and 12px gap so live output lines up with the row's text. */
 .add-provider-job {

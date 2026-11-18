@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Skeleton, Tooltip } from '@recoder/ui';
-import { ArrowUpRight, MessageSquare, Plus } from 'lucide-react';
+import { ArrowUpRightIcon, ChatIcon, PlusIcon } from '@phosphor-icons/react';
 
 import { useRepoPage } from '@/lib/repo/use-repo-page';
 import { useAfterPaint } from '@/lib/shell/use-after-paint';
@@ -27,20 +27,20 @@ function RepoActions({ view }: { view: RepoPageView }) {
 				<Tooltip content={`Open on ${forge.label}`}>
 					<Button asChild variant="ghost" size="icon" aria-label={`Open on ${forge.label}`}>
 						<a href={forge.url} target="_blank" rel="noreferrer">
-							<ArrowUpRight />
+							<ArrowUpRightIcon />
 						</a>
 					</Button>
 				</Tooltip>
 			) : null}
 			<Button asChild variant="outline">
 				<Link href={view.newHref} onClick={view.prepareAsk}>
-					<MessageSquare aria-hidden />
+					<ChatIcon aria-hidden />
 					Ask
 				</Link>
 			</Button>
 			<Button asChild variant="primary">
 				<Link href={view.newHref} onClick={view.prepareReview}>
-					<Plus aria-hidden />
+					<PlusIcon aria-hidden />
 					New review
 				</Link>
 			</Button>

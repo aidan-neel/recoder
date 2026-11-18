@@ -1,4 +1,6 @@
-import { ChevronRight } from 'lucide-react';
+'use client';
+
+import { CaretRightIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
@@ -104,7 +106,7 @@ export function StatusNoticeDetails({ code }: { code: string }) {
 	return (
 		<Collapsible>
 			<CollapsibleTrigger>
-				<ChevronRight aria-hidden />
+				<CaretRightIcon aria-hidden data-ui="disclosure-chevron" />
 				Details
 			</CollapsibleTrigger>
 			<CollapsibleContent>

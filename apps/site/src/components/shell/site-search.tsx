@@ -11,7 +11,7 @@ import {
 	Keycap,
 	type CommandHint
 } from '@recoder/ui';
-import { FileText, Hash, Search } from 'lucide-react';
+import { FileTextIcon, HashIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -70,7 +70,7 @@ export function SiteSearch({ pages }: { pages: NavPage[] }) {
 				aria-keyshortcuts="Meta+K Control+K"
 				onClick={() => setOpen(true)}
 			>
-				<Search aria-hidden />
+				<MagnifyingGlassIcon aria-hidden />
 				<span className="site-search-label">Search</span>
 				<Keycap k="mod+k" className="site-search-key" />
 			</Button>
@@ -96,14 +96,14 @@ export function SiteSearch({ pages }: { pages: NavPage[] }) {
 function PageRows({ page, onChoose }: { page: NavPage; onChoose: (href: string) => void }) {
 	return (
 		<>
-			<CommandItem value={page.title} icon={FileText} onSelect={() => onChoose(page.href)}>
+			<CommandItem value={page.title} icon={FileTextIcon} onSelect={() => onChoose(page.href)}>
 				{page.title}
 			</CommandItem>
 			{page.sections.map((section) => (
 				<CommandItem
 					key={section.id}
 					value={`${section.title} (${page.title})`}
-					icon={Hash}
+					icon={HashIcon}
 					detail={page.title}
 					onSelect={() => onChoose(`${page.href}#${section.id}`)}
 				>

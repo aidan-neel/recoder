@@ -1,7 +1,7 @@
 'use client';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger, RowButton } from '@recoder/ui';
-import { ChevronDown } from 'lucide-react';
+import { CaretDownIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 interface SidebarSectionProps {
@@ -22,7 +22,7 @@ export function SidebarSection({ title, open, onOpenChange, className, aside, ch
 				<CollapsibleTrigger>
 					<span className="section-label">{title}</span>
 					{aside}
-					<ChevronDown aria-hidden className="section-chevron" />
+					<CaretDownIcon aria-hidden className="section-chevron" />
 				</CollapsibleTrigger>
 			</RowButton>
 			<CollapsibleContent>{children}</CollapsibleContent>

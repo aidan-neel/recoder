@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronRight, File, Folder, FolderOpen } from 'lucide-react';
+import { CaretRightIcon, FileIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react';
 import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent } from 'react';
 
 import { cn } from '../../lib/cn';
@@ -43,7 +43,7 @@ interface TreeItemProps {
 /** A folder with its chevron and icon, or a file with its icon; a folder reading its contents shows a spinner. */
 function TreeItem({ row, selected, tabbable, onPress }: TreeItemProps) {
 	const folder = row.kind === 'folder';
-	const FolderIcon = row.open ? FolderOpen : Folder;
+	const FolderMark = row.open ? FolderOpenIcon : FolderIcon;
 
 	return (
 		<button
@@ -61,8 +61,8 @@ function TreeItem({ row, selected, tabbable, onPress }: TreeItemProps) {
 			style={depthStyle(row.depth)}
 			onClick={onPress}
 		>
-			{folder ? <ChevronRight aria-hidden data-ui="tree-chevron" /> : <span data-ui="tree-gap" aria-hidden />}
-			{folder ? <FolderIcon aria-hidden /> : <File aria-hidden />}
+			{folder ? <CaretRightIcon aria-hidden data-ui="tree-chevron" /> : <span data-ui="tree-gap" aria-hidden />}
+			{folder ? <FolderMark aria-hidden /> : <FileIcon aria-hidden />}
 			<span data-ui="tree-label">{row.label}</span>
 			{row.loading ? <Spinner size={12} /> : null}
 		</button>

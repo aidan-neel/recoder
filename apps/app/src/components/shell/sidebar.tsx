@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Tooltip } from '@recoder/ui';
-import { PanelLeft, Search } from 'lucide-react';
+import { SidebarSimpleIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { useChrome } from '@/lib/shell/chrome';
@@ -30,12 +30,12 @@ export function Sidebar({ model }: { model: ReactNode }) {
 				<AccountMenu account={shell.account} />
 				<Tooltip content="Search" shortcut="mod+k">
 					<Button variant="ghost" size="icon" aria-label="Search" onClick={() => setPaletteOpen(true)}>
-						<Search />
+						<MagnifyingGlassIcon />
 					</Button>
 				</Tooltip>
 				<Tooltip content="Hide sidebar" shortcut="[" onFocus={keepTooltipShutOnCarry}>
 					<Button variant="ghost" size="icon" aria-label="Hide sidebar" data-sidebar-toggle onClick={toggleSidebar}>
-						<PanelLeft />
+						<SidebarSimpleIcon />
 					</Button>
 				</Tooltip>
 			</div>

@@ -2,7 +2,7 @@
 
 import type { ReasoningEffort } from '@recoder/shared';
 import { Button, Select, SkeletonBox, SwapText } from '@recoder/ui';
-import { ChevronDown } from 'lucide-react';
+import { CaretDownIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { ROLE_NAME, type ModelRole } from '@/lib/settings/model-options';
@@ -107,7 +107,7 @@ export function ModelPicker({ role, picker }: ModelPickerProps) {
 				onClick={() => picker.setOpen(true)}
 			>
 				{triggerLabel(picker)}
-				<ChevronDown aria-hidden className="model-trigger-chevron" />
+				<CaretDownIcon aria-hidden className="model-trigger-chevron" />
 			</Button>
 			<ModelDialog
 				open={picker.open}

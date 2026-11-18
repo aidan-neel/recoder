@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, HoverList, ImageChips, LinkText, Markdown, RowButton } from '@recoder/ui';
-import { CornerDownRight } from 'lucide-react';
+import { ArrowElbowDownRightIcon } from '@phosphor-icons/react';
 
 import type { AskMessageView, AskView } from '@/lib/ask/types';
 
@@ -105,7 +105,7 @@ export function AskSuggestions({ ask }: { ask: AskView }) {
 		<HoverList className="ask-suggestions" itemSelector="[data-suggestion]" aria-label="Questions to start from">
 			{ask.suggestions.map((question) => (
 				<RowButton key={question} data-suggestion className="ask-suggestion" onClick={() => void ask.send(question)}>
-					<CornerDownRight aria-hidden />
+					<ArrowElbowDownRightIcon aria-hidden />
 					{question}
 				</RowButton>
 			))}

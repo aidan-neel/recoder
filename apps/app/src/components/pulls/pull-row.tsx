@@ -8,7 +8,7 @@ import {
 	DropdownMenuTrigger,
 	RowButton
 } from '@recoder/ui';
-import { ArrowUpRight, Ellipsis, Link2, RotateCw } from 'lucide-react';
+import { ArrowUpRightIcon, DotsThreeIcon, LinkSimpleIcon, ArrowClockwiseIcon } from '@phosphor-icons/react';
 import { memo, useCallback } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -47,19 +47,19 @@ function RowMenu({ row, onReview }: Pick<PullRowProps, 'row' | 'onReview'>) {
 		<DropdownMenu>
 			<DropdownMenuTrigger>
 				<Button variant="ghost" size="icon" aria-label={`More for #${row.number}`}>
-					<Ellipsis />
+					<DotsThreeIcon />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end">
 				{canReviewAgain(row) ? (
-					<DropdownMenuItem icon={<RotateCw />} onSelect={() => onReview(row)}>
+					<DropdownMenuItem icon={<ArrowClockwiseIcon />} onSelect={() => onReview(row)}>
 						Review again
 					</DropdownMenuItem>
 				) : null}
-				<DropdownMenuItem icon={<ArrowUpRight />} onSelect={() => window.open(row.href, '_blank', 'noopener')}>
+				<DropdownMenuItem icon={<ArrowUpRightIcon />} onSelect={() => window.open(row.href, '_blank', 'noopener')}>
 					Open in a new tab
 				</DropdownMenuItem>
-				<DropdownMenuItem icon={<Link2 />} onSelect={() => copyLink(new URL(row.href, location.origin).href)}>
+				<DropdownMenuItem icon={<LinkSimpleIcon />} onSelect={() => copyLink(new URL(row.href, location.origin).href)}>
 					Copy link
 				</DropdownMenuItem>
 			</DropdownMenuContent>

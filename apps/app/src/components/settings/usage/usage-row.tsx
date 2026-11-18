@@ -1,5 +1,5 @@
 import { ChartTip, formatCompact, formatShare, Tooltip } from '@recoder/ui';
-import { ChevronRight } from 'lucide-react';
+import { CaretRightIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import type { RowTip } from '@/lib/usage/report-shared';
@@ -88,7 +88,7 @@ export function ReportTableRow({ row, widest, tip, onSelectPerson, children }: R
 				{children}
 				{onSelectPerson ? (
 					<div role="cell" className="usage-cell usage-cell-go">
-						{personId ? <ChevronRight aria-hidden /> : null}
+						{personId ? <CaretRightIcon aria-hidden /> : null}
 					</div>
 				) : null}
 			</div>

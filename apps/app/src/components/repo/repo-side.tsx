@@ -1,7 +1,7 @@
 'use client';
 
 import { ChartTip, HoverList, Meter, RowButton, Tooltip } from '@recoder/ui';
-import { BookOpen, ChevronRight, Clock } from 'lucide-react';
+import { BookOpenIcon, CaretRightIcon, ClockIcon } from '@phosphor-icons/react';
 
 import type { HotspotRow, RepoPageData, ReviewChart as ReviewChartView } from '@/lib/repo/types';
 import { plural } from '@/lib/shell/format';
@@ -79,8 +79,8 @@ function Hotspots({ rows, window }: { rows: HotspotRow[]; window: string }) {
 }
 
 const SETUP = [
-	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpen },
-	{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: Clock }
+	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpenIcon },
+	{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: ClockIcon }
 ] as const;
 
 /** Where the repository's reviews are shaped: its guidelines and the automations that start them. */
@@ -94,7 +94,7 @@ function SetUp() {
 							<Link href={href} className="repo-row-link">
 								<Icon aria-hidden className="repo-setup-icon" />
 								<span className="repo-row-title">{label}</span>
-								<ChevronRight aria-hidden className="repo-setup-chevron" />
+								<CaretRightIcon aria-hidden className="repo-setup-chevron" />
 							</Link>
 						</RowButton>
 					</li>

@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Pill, Spinner, type ButtonStatus, type PillTone } from '@recoder/ui';
-import { CircleSlash } from 'lucide-react';
+import { ProhibitIcon } from '@phosphor-icons/react';
 
 import { findingsLabel, plural } from '@/lib/shell/format';
 import type { PullRowStatus } from '@/lib/pulls/types';
@@ -105,7 +105,7 @@ export function PullStatus({ status, reviewHref, starting, onReview }: PullStatu
 		<>
 			{status.kind === 'not-reviewed' && status.cancelledAt ? (
 				<span className="meta pull-row-cancelled">
-					<CircleSlash aria-hidden />
+					<ProhibitIcon aria-hidden />
 					Cancelled <Age at={status.cancelledAt} form="long" />
 				</span>
 			) : null}

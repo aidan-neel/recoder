@@ -1,13 +1,13 @@
-import { GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from 'lucide-react';
+import { GitMergeIcon, GitPullRequestIcon } from '@phosphor-icons/react';
 
 /** What the mark says about a pull request. */
 export type PullMarkState = 'open' | 'draft' | 'merged' | 'closed';
 
 const MARKS = {
-	open: GitPullRequest,
-	draft: GitPullRequestDraft,
-	merged: GitMerge,
-	closed: GitPullRequestClosed
+	open: GitPullRequestIcon,
+	draft: GitPullRequestIcon,
+	merged: GitMergeIcon,
+	closed: GitPullRequestIcon
 };
 
 /** The pull request mark, drawn and tinted for its state. Decorative: the state is always in words nearby. */

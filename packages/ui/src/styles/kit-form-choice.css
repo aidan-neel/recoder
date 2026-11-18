@@ -214,7 +214,6 @@
 	[data-ui='segmented-label'] svg {
 		width: 14px;
 		height: 14px;
-		stroke-width: 1.75;
 	}
 
 	/* ───────── Nav fill: under every label, with its item's corners, so the items need no z-index of their own ───────── */

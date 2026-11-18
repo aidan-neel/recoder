@@ -13,7 +13,7 @@ import {
 	StatusGlyph,
 	type GlyphKind
 } from '@recoder/ui';
-import { ArrowUpRight, ChevronDown, CircleCheck, CircleDashed, CircleX } from 'lucide-react';
+import { ArrowUpRightIcon, CaretDownIcon, CheckCircleIcon, CircleDashedIcon, XCircleIcon } from '@phosphor-icons/react';
 
 import type { PullChecksView } from '@/lib/pull/types';
 import { plural } from '@/lib/shell/format';
@@ -49,7 +49,7 @@ function summarize({ outcome, tally }: PullChecksView): Summary {
 	return { tone: 'ok', text: `${plural(tally.passed, 'check')} passed` };
 }
 
-const SUMMARY_ICONS = { ok: CircleCheck, bad: CircleX, wait: CircleDashed };
+const SUMMARY_ICONS = { ok: CheckCircleIcon, bad: XCircleIcon, wait: CircleDashedIcon };
 
 /**
  * The head commit's checks as one fact in the header. When they loaded, it is
@@ -62,7 +62,7 @@ export function ChecksToggle({ view }: { view: PullChecksView }) {
 	if (view.phase === 'failed') {
 		return (
 			<span className="merge-fact" data-tone="wait" title={view.error ?? undefined}>
-				<CircleDashed aria-hidden />
+				<CircleDashedIcon aria-hidden />
 				The checks did not load
 			</span>
 		);
@@ -76,7 +76,7 @@ export function ChecksToggle({ view }: { view: PullChecksView }) {
 			<Button variant="quiet" className="merge-fact checks-toggle" data-tone={summary.tone}>
 				<Icon aria-hidden />
 				{summary.text}
-				<ChevronDown aria-hidden className="checks-chevron" />
+				<CaretDownIcon aria-hidden className="checks-chevron" />
 			</Button>
 		</CollapsibleTrigger>
 	);
@@ -104,7 +104,7 @@ function CheckRow({ check }: { check: PrCheck }) {
 		<RowButton asChild data-check className="check-row">
 			<a href={check.url} target="_blank" rel="noreferrer" title={check.name}>
 				{body}
-				<ArrowUpRight aria-hidden className="check-row-link" />
+				<ArrowUpRightIcon aria-hidden className="check-row-link" />
 			</a>
 		</RowButton>
 	);
@@ -128,7 +128,7 @@ function SkippedChecks({ checks }: { checks: PrCheck[] }) {
 			<CollapsibleTrigger asChild>
 				<Button variant="quiet" className="checks-skipped-toggle">
 					{checks.length} skipped
-					<ChevronDown aria-hidden className="checks-chevron" />
+					<CaretDownIcon aria-hidden className="checks-chevron" />
 				</Button>
 			</CollapsibleTrigger>
 			<CollapsibleContent>

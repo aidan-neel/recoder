@@ -1,5 +1,5 @@
 import { CodeBlockView, FileIcon, StaticCodeBlock, type MarkdownCodeParts, type MarkdownFence } from '@recoder/ui';
-import { SquareTerminal } from 'lucide-react';
+import { TerminalWindowIcon } from '@phosphor-icons/react/dist/ssr';
 
 import { shellHtml } from '~/lib/shell-tokens';
 
@@ -17,7 +17,7 @@ const FILE_TITLE = /\btitle="([^"]+)"/;
 function ShellBlock({ code }: { code: string }) {
 	const title = code.includes('\n') ? (
 		<>
-			<SquareTerminal aria-hidden />
+			<TerminalWindowIcon aria-hidden weight="bold" />
 			Terminal
 		</>
 	) : undefined;

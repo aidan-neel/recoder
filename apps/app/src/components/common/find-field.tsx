@@ -1,7 +1,7 @@
 'use client';
 
 import { Input, Keycap } from '@recoder/ui';
-import { Search } from 'lucide-react';
+import { MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { useRef, type KeyboardEvent } from 'react';
 
 import { useKeys } from '@/lib/shell/use-keys';
@@ -42,7 +42,7 @@ export function FindField({ query, onQueryChange, label, placeholder, onSubmit, 
 			placeholder={placeholder}
 			autoComplete="off"
 			spellCheck={false}
-			leading={<Search aria-hidden />}
+			leading={<MagnifyingGlassIcon aria-hidden />}
 			trailing={query ? undefined : <Keycap k="/" />}
 			value={query}
 			onChange={(event) => onQueryChange(event.target.value)}

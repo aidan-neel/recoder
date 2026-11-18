@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@recoder/ui';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRightIcon } from '@phosphor-icons/react';
 
 import { REPO_URL } from '~/lib/site';
 
@@ -16,7 +16,7 @@ export function SelfHostLink() {
 		<Button asChild variant="primary" size="lg">
 			<a href={REPO_URL}>
 				Self-host on GitHub
-				<ArrowUpRight aria-hidden />
+				<ArrowUpRightIcon aria-hidden />
 			</a>
 		</Button>
 	);

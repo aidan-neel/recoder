@@ -1,59 +1,61 @@
 /*
- * The app's palette. The kit's tokens keep their names and get neutral values:
- * near-black surfaces, hairlines of white, one cream primary and one light-blue
- * accent. Scoped to `.app-skin`, on <html> here and in apps/site.
+ * The app's palette. The kit's tokens keep their names and get near-neutral
+ * values: near-black surfaces with a faint cool tint, a sidebar a step darker
+ * than the page, menus a step lighter, hairlines of white, one cream primary
+ * and one indigo-blue accent. Scoped to `.app-skin`, on <html> here and in
+ * apps/site.
  */
 .app-skin {
 	color-scheme: dark;
 	--wash-rgb: 255 255 255;
-	--ink-rgb: 237 237 237;
+	--ink-rgb: 236 236 237;
 	--shade-rgb: 0 0 0;
 
 	/* Surfaces */
-	--bg-chrome: #161616;
-	--bg-canvas: #111111;
-	--bg-panel: #141414;
-	--bg-raised: #1a1a1a;
-	--bg-raised-2: #171717;
-	--bg-menu: #1c1c1c;
-	--bg-hover: #222222;
-	--bg-selected: #282828;
-	--bg-bubble: #1e1e1e;
-	--bg-field: #161616;
-	--bg-search: #161616;
+	--bg-chrome: #0f0f10;
+	--bg-canvas: #111112;
+	--bg-panel: #151516;
+	--bg-raised: #1a1a1b;
+	--bg-raised-2: #181819;
+	--bg-menu: #1f1f20;
+	--bg-hover: #232324;
+	--bg-selected: #2a2a2b;
+	--bg-bubble: #1f1f20;
+	--bg-field: #181819;
+	--bg-search: #181819;
 
 	/* Lines */
-	--line-divider: #1c1c1c;
-	--line-subtle: #1f1f1f;
-	--line-subtle-2: #212121;
-	--line-canvas: #222222;
-	--line-card: #252525;
-	--line-tab: #272727;
-	--line-control: #2b2b2b;
-	--line-menu: #2f2f2f;
-	--line-strong: #353535;
-	--line-hover: #3d3d3d;
-	--line-focus: #474747;
+	--line-divider: #1c1c1d;
+	--line-subtle: #1f1f20;
+	--line-subtle-2: #212122;
+	--line-canvas: #222223;
+	--line-card: #252526;
+	--line-tab: #272728;
+	--line-control: #2b2b2c;
+	--line-menu: #323233;
+	--line-strong: #353536;
+	--line-hover: #3d3d3e;
+	--line-focus: #474748;
 
 	/* Text */
-	--text-primary: #ededed;
-	--text-ai: #e4e4e4;
-	--text-secondary: #cfcfcf;
-	--text-tertiary: #bdbdbd;
-	--text-muted: #a1a1a1;
-	--text-subtle: #8a8a8a;
-	--text-faint: #737373;
-	--text-ghost: #555555;
-	--text-brief-body: #8f8f8f;
+	--text-primary: #ececed;
+	--text-ai: #e4e4e5;
+	--text-secondary: #cfcfd0;
+	--text-tertiary: #bdbdbe;
+	--text-muted: #a1a1a2;
+	--text-subtle: #8a8a8b;
+	--text-faint: #737374;
+	--text-ghost: #555556;
+	--text-brief-body: #8f8f90;
 
 	--primary: #f2f0eb;
 	--primary-hover: #ffffff;
-	--on-primary: #111111;
+	--on-primary: #111112;
 
 	/* The one accent: links, the selected line, the hunk header. */
-	--accent: #2383e2;
-	--accent-text: #5aa6f0;
-	--accent-tint: rgba(35, 131, 226, 0.14);
+	--accent: #3777ec;
+	--accent-text: #6aa1f7;
+	--accent-tint: rgba(55, 119, 236, 0.14);
 
 	/* Status: text on a tint of its own hue. */
 	--sev-high: #ff9da1;
@@ -86,7 +88,7 @@
 	--diff-add-gutter: rgba(61, 214, 140, 0.15);
 	--diff-del-gutter: rgba(255, 99, 105, 0.15);
 	--diff-focus: rgba(245, 165, 36, 0.08);
-	--selection: rgba(35, 131, 226, 0.26);
+	--selection: rgba(55, 119, 236, 0.26);
 	--selection-bar: var(--accent);
 	--syn-keyword: #8fb4f0;
 	--syn-function: #cdb4f2;
@@ -132,50 +134,50 @@
 :root:not(.dark) .app-skin {
 	color-scheme: light;
 	--wash-rgb: 0 0 0;
-	--ink-rgb: 23 23 23;
+	--ink-rgb: 26 26 28;
 	--shade-rgb: 0 0 0;
 
-	--bg-chrome: #f6f6f6;
-	--bg-canvas: #ffffff;
-	--bg-panel: #fafafa;
+	--bg-chrome: #f4f4f5;
+	--bg-canvas: #fcfcfd;
+	--bg-panel: #f9f9fa;
 	--bg-raised: #ffffff;
-	--bg-raised-2: #fafafa;
+	--bg-raised-2: #f9f9fa;
 	--bg-menu: #ffffff;
-	--bg-hover: #f0f0f0;
-	--bg-selected: #e8e8e8;
-	--bg-bubble: #f2f2f2;
+	--bg-hover: #efeff0;
+	--bg-selected: #e7e7e8;
+	--bg-bubble: #f1f1f2;
 	--bg-field: #ffffff;
-	--bg-search: #f6f6f6;
+	--bg-search: #f5f5f6;
 
-	--line-divider: #efefef;
-	--line-subtle: #ededed;
-	--line-subtle-2: #ebebeb;
-	--line-canvas: #e9e9e9;
-	--line-card: #e6e6e6;
-	--line-tab: #e2e2e2;
-	--line-control: #dedede;
-	--line-menu: #dadada;
-	--line-strong: #cfcfcf;
-	--line-hover: #bdbdbd;
-	--line-focus: #a3a3a3;
+	--line-divider: #efeff0;
+	--line-subtle: #ededee;
+	--line-subtle-2: #ebebec;
+	--line-canvas: #e9e9ea;
+	--line-card: #e6e6e7;
+	--line-tab: #e2e2e3;
+	--line-control: #dededf;
+	--line-menu: #dadadb;
+	--line-strong: #cfcfd0;
+	--line-hover: #bdbdbe;
+	--line-focus: #a3a3a4;
 
-	--text-primary: #171717;
-	--text-ai: #1f1f1f;
-	--text-secondary: #333333;
-	--text-tertiary: #454545;
-	--text-muted: #5c5c5c;
-	--text-subtle: #6b6b6b;
-	--text-faint: #858585;
-	--text-ghost: #a8a8a8;
-	--text-brief-body: #6b6b6b;
+	--text-primary: #1a1a1c;
+	--text-ai: #1f1f20;
+	--text-secondary: #333334;
+	--text-tertiary: #454546;
+	--text-muted: #5c5c5d;
+	--text-subtle: #6b6b6c;
+	--text-faint: #858586;
+	--text-ghost: #a8a8aa;
+	--text-brief-body: #6b6b6c;
 
-	--primary: #171717;
+	--primary: #1a1a1c;
 	--primary-hover: #000000;
 	--on-primary: #ffffff;
 
-	--accent: #2383e2;
-	--accent-text: #0b6bcb;
-	--accent-tint: rgba(35, 131, 226, 0.09);
+	--accent: #3777ec;
+	--accent-text: #2a65d9;
+	--accent-tint: rgba(55, 119, 236, 0.09);
 
 	--sev-high: #b3261e;
 	--sev-high-icon: #d6352c;
@@ -205,7 +207,7 @@
 	--diff-add-gutter: rgba(26, 127, 55, 0.15);
 	--diff-del-gutter: rgba(214, 53, 44, 0.14);
 	--diff-focus: rgba(214, 140, 0, 0.08);
-	--selection: rgba(35, 131, 226, 0.16);
+	--selection: rgba(55, 119, 236, 0.16);
 	--syn-keyword: #1d4ed8;
 	--syn-function: #7a3fb0;
 	--syn-type: #0f766e;

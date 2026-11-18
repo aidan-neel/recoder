@@ -1,6 +1,6 @@
 import type { ReportPerson } from '@recoder/shared';
 import { Button, Pill } from '@recoder/ui';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeftIcon } from '@phosphor-icons/react';
 
 import { Avatar } from '@/components/common/avatar';
 
@@ -14,7 +14,7 @@ export function UsagePersonHeader({ person, onBack }: UsagePersonHeaderProps) {
 	return (
 		<header className="usage-person-head">
 			<Button variant="ghost" onClick={onBack} data-usage-back>
-				<ArrowLeft aria-hidden />
+				<ArrowLeftIcon aria-hidden />
 				Everyone
 			</Button>
 			<div className="usage-person-id">

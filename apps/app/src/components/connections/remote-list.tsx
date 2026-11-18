@@ -11,7 +11,7 @@ import {
 	swapMotion,
 	useMotionVariants
 } from '@recoder/ui';
-import { Check, TriangleAlert } from 'lucide-react';
+import { CheckIcon, WarningIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { Forge } from '@/lib/api/connections';
@@ -79,7 +79,7 @@ function RowEnd({ repo, tracked }: RemoteRowView) {
 						animate="animate"
 						exit="exit"
 					>
-						<Check aria-hidden />
+						<CheckIcon aria-hidden />
 						Tracked
 					</motion.span>
 				) : (
@@ -110,7 +110,7 @@ function RemoteRow({ repo, tracked }: RemoteRowView) {
 function FailedNote({ note }: { note: RemoteNoteView }) {
 	return (
 		<div className="strip remote-note" role="status">
-			<TriangleAlert aria-hidden />
+			<WarningIcon aria-hidden />
 			<span className="strip-text">
 				<strong>{forgeLabel(note.forge)}</strong> repositories did not load. {note.error}
 			</span>

@@ -1,4 +1,6 @@
-import { FolderGit2 } from 'lucide-react';
+'use client';
+
+import { FolderSimpleIcon } from '@phosphor-icons/react';
 
 import { cn } from '../../lib/cn';
 import { FORGE_PATHS } from './forge-paths';
@@ -13,7 +15,7 @@ interface ForgeMarkProps {
 export function ForgeMark({ provider, className }: ForgeMarkProps) {
 	const classes = cn('size-3.5 shrink-0', className);
 
-	if (provider === 'local') return <FolderGit2 aria-label="Local repository" role="img" className={classes} />;
+	if (provider === 'local') return <FolderSimpleIcon aria-label="Local repository" role="img" className={classes} />;
 
 	return (
 		<svg

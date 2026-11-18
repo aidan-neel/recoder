@@ -2,7 +2,7 @@
 
 import type { GuidelinesDraftRequest } from '@recoder/shared';
 import { Button, Checkbox, Keycap, LinkField, Popover, PopoverContent, PopoverTrigger, SwapText } from '@recoder/ui';
-import { Sparkles, Square } from 'lucide-react';
+import { SparkleIcon, StopIcon } from '@phosphor-icons/react';
 import { useId } from 'react';
 
 import { DRAFT_SOURCES, useDraftPopover, type DraftPopoverView } from '@/lib/guidelines/use-draft-popover';
@@ -59,7 +59,7 @@ export function DraftPopover({ repoId, revising, streaming, disabled, onDraft, o
 					onClick={view.onTriggerClick}
 				>
 					<SwapText id={streaming ? 'stop' : 'draft'} textClassName="guidelines-draft-face">
-						{streaming ? <Square aria-hidden data-glyph="stop" /> : <Sparkles aria-hidden />}
+						{streaming ? <StopIcon aria-hidden data-glyph="stop" weight="fill" /> : <SparkleIcon aria-hidden />}
 						{streaming ? 'Stop' : 'Draft with AI'}
 					</SwapText>
 				</Button>

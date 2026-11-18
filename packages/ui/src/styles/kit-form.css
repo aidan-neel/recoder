@@ -107,7 +107,6 @@
 	[data-ui='input-trailing'] svg {
 		width: 14px;
 		height: 14px;
-		stroke-width: 1.75;
 	}
 
 	/* ───────── Number field: step buttons flank a centered, tabular value ───────── */
@@ -157,7 +156,6 @@
 	[data-ui='number-step'] svg {
 		width: 13px;
 		height: 13px;
-		stroke-width: 1.75;
 	}
 	[data-ui='number-input'] {
 		width: var(--number-input-width, 50px);

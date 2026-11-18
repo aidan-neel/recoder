@@ -14,7 +14,7 @@ import {
 	type ReactNode
 } from 'react';
 
-import { DURATION, EASE_IN, EASE_OUT } from '../../motion/presets';
+import { DURATION, EASE_OUT } from '../../motion/presets';
 import { useMotionVariants } from '../../motion/reduced';
 import { Keycap } from '../keycap';
 import { isKeyboardLast, watchInput } from './input-modality';
@@ -25,7 +25,7 @@ const Provided = createContext(false);
 
 /** A fade with the menus' 0.97 scale and no rise: a small hint that comes and goes as the pointer travels. */
 const tooltipMotion: Variants = {
-	closed: { opacity: 0, scale: 0.97, transition: { duration: DURATION.menuOut, ease: EASE_IN } },
+	closed: { opacity: 0, scale: 0.97, transition: { duration: DURATION.menuOut, ease: EASE_OUT } },
 	open: { opacity: 1, scale: 1, transition: { duration: DURATION.hover, ease: EASE_OUT } }
 };
 

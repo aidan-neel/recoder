@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, DURATION, Keycap, Textarea } from '@recoder/ui';
-import { Undo2 } from 'lucide-react';
+import { ArrowUUpLeftIcon } from '@phosphor-icons/react';
 import { useEffect, useRef, type RefObject } from 'react';
 
 import { caretAt, firstRule } from '@/lib/guidelines/rules';
@@ -94,7 +94,7 @@ export function GuidelinesEditor(spec: GuidelinesEditorSpec) {
 				/>
 				{edit.canUndoDraft ? (
 					<Button variant="quiet" className="guidelines-quiet" onClick={edit.undoDraft}>
-						<Undo2 aria-hidden />
+						<ArrowUUpLeftIcon aria-hidden />
 						Undo draft
 					</Button>
 				) : null}

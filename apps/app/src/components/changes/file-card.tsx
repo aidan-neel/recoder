@@ -2,7 +2,7 @@
 
 import type { FileDiff } from '@recoder/shared';
 import { Button, Checkbox, Pill } from '@recoder/ui';
-import { ChevronRight } from 'lucide-react';
+import { CaretRightIcon } from '@phosphor-icons/react';
 import { memo, useId, useRef, useState } from 'react';
 
 import { openFound } from '@/lib/bugs/bug-lists';
@@ -94,7 +94,7 @@ export const FileCard = memo(function FileCard({ file, viewed, onToggleViewed, b
 					aria-controls={bodyId}
 					onClick={() => setOpen(!open)}
 				>
-					<ChevronRight aria-hidden />
+					<CaretRightIcon aria-hidden />
 					<FilePath path={file.path} />
 				</button>
 				<DiffStat additions={file.additions} deletions={file.deletions} />

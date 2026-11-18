@@ -9,7 +9,7 @@ import {
 	DropdownMenuTrigger,
 	writeClipboard
 } from '@recoder/ui';
-import { Ellipsis, GitBranch, Link2 } from 'lucide-react';
+import { DotsThreeIcon, GitBranchIcon, LinkSimpleIcon } from '@phosphor-icons/react';
 
 import { useApi } from '@/lib/api/client';
 import { copyLink } from '@/lib/shell/copy-link';
@@ -33,14 +33,14 @@ export function PullMenu({ page }: { page: PullPage }) {
 		<DropdownMenu>
 			<DropdownMenuTrigger>
 				<Button variant="ghost" size="icon" aria-label={`More for #${page.pull.number}`}>
-					<Ellipsis />
+					<DotsThreeIcon />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end">
-				<DropdownMenuItem icon={<GitBranch />} onSelect={() => copyBranch(page.pull.headRef)}>
+				<DropdownMenuItem icon={<GitBranchIcon />} onSelect={() => copyBranch(page.pull.headRef)}>
 					Copy branch name
 				</DropdownMenuItem>
-				<DropdownMenuItem icon={<Link2 />} onSelect={() => copyLink(new URL(href, location.origin).href)}>
+				<DropdownMenuItem icon={<LinkSimpleIcon />} onSelect={() => copyLink(new URL(href, location.origin).href)}>
 					Copy link
 				</DropdownMenuItem>
 			</DropdownMenuContent>

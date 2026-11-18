@@ -11,7 +11,7 @@ import {
 	focusComposerField,
 	type CommandHint
 } from '@recoder/ui';
-import { FileDiff, Plus } from 'lucide-react';
+import { GitDiffIcon, PlusIcon } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 
 import { useSessionData } from '@/lib/pull/pull-session';
@@ -49,7 +49,7 @@ export function AttachFile({ onAttach }: { onAttach: (path: string) => void }) {
 				disabled={!files || files.length === 0}
 				onClick={() => setOpen(true)}
 			>
-				<Plus />
+				<PlusIcon />
 			</ComposerTool>
 			<CommandDialog
 				open={open}
@@ -67,7 +67,7 @@ export function AttachFile({ onAttach }: { onAttach: (path: string) => void }) {
 						<CommandItem
 							key={file.path}
 							value={file.path}
-							icon={FileDiff}
+							icon={GitDiffIcon}
 							detail={<FileCounts additions={file.additions} deletions={file.deletions} />}
 							onSelect={() => attach(file.path)}
 						>

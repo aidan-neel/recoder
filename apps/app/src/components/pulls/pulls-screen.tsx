@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Skeleton } from '@recoder/ui';
-import { CornerDownLeft, TriangleAlert } from 'lucide-react';
+import { ArrowElbowDownLeftIcon, WarningIcon } from '@phosphor-icons/react';
 import { useCallback } from 'react';
 
 import type { PullListView, PullRow, PullTarget } from '@/lib/pulls/types';
@@ -46,7 +46,7 @@ function Strips({ failures }: Pick<PullListView, 'failures'>) {
 		<div className="pulls-strips">
 			{failures.map((failure) => (
 				<div key={failure.repoName} className="strip" role="status">
-					<TriangleAlert aria-hidden />
+					<WarningIcon aria-hidden />
 					<span className="strip-text">
 						<strong>{failure.repoName}</strong> did not load. {failure.error}
 					</span>
@@ -66,7 +66,7 @@ interface OpenRowProps {
 function OpenRow({ label, onOpen, status }: OpenRowProps) {
 	return (
 		<div className="pulls-open">
-			<CornerDownLeft aria-hidden className="size-4 text-fg-faint" />
+			<ArrowElbowDownLeftIcon aria-hidden className="size-4 text-fg-faint" />
 			<span className="pulls-open-text">{label}</span>
 			<Button variant="primary" status={status} onClick={onOpen}>
 				Open

@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react';
+import { CaretRightIcon } from '@phosphor-icons/react';
 import { Link } from './link';
 import { Fragment } from 'react';
 
@@ -14,7 +14,7 @@ export function Crumbs({ parts }: { parts: Crumb[] }) {
 		<nav aria-label="Breadcrumb" className="crumbs">
 			{parts.map((part, index) => (
 				<Fragment key={part.label}>
-					{index > 0 ? <ChevronRight aria-hidden /> : null}
+					{index > 0 ? <CaretRightIcon aria-hidden /> : null}
 					{part.href ? <Link href={part.href}>{part.label}</Link> : null}
 					{!part.href && index < parts.length - 1 ? <span>{part.label}</span> : null}
 					{!part.href && index === parts.length - 1 ? <span aria-current="page">{part.label}</span> : null}

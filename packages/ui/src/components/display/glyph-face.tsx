@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUpRight, Check, CircleSlash, GitCommitHorizontal, TriangleAlert, X } from 'lucide-react';
+import { ArrowUpRightIcon, CheckIcon, ProhibitIcon, GitCommitIcon, WarningIcon, XIcon } from '@phosphor-icons/react';
 
 import { Spinner } from '../spinner';
 
@@ -26,22 +26,22 @@ export function GlyphFace({ kind }: { kind: GlyphKind }) {
 			return <Spinner size={14} />;
 
 		case 'ok':
-			return <Check size={11} strokeWidth={2.5} />;
+			return <CheckIcon size={11} />;
 
 		case 'sent':
-			return <ArrowUpRight size={11} strokeWidth={2.5} />;
+			return <ArrowUpRightIcon size={11} />;
 
 		case 'dismissed':
-			return <X size={10} strokeWidth={2.5} />;
+			return <XIcon size={10} />;
 
 		case 'failed':
-			return <TriangleAlert size={13} strokeWidth={2} />;
+			return <WarningIcon size={13} />;
 
 		case 'cancelled':
-			return <CircleSlash size={13} strokeWidth={2} />;
+			return <ProhibitIcon size={13} />;
 
 		case 'outdated':
-			return <GitCommitHorizontal size={14} strokeWidth={2} />;
+			return <GitCommitIcon size={14} />;
 
 		case 'question':
 			return <span data-ui="status-glyph-q">?</span>;

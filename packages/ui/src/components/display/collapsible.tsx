@@ -74,8 +74,8 @@ interface CollapsibleContentProps {
 }
 
 /**
- * The body. Its height unfolds from 0 to auto (200ms, the kit's ease-out)
- * while it fades in (180ms). It mounts on first open and then stays mounted,
+ * The body. Its height unfolds from 0 to auto (230ms, the kit's ease-out)
+ * while it fades in (210ms). It mounts on first open and then stays mounted,
  * so streamed text grows in place and a closed body keeps its state. Reduced
  * motion snaps.
  */

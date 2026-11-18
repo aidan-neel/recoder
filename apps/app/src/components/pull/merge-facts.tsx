@@ -1,7 +1,7 @@
 'use client';
 
 import type { PullMergeability, PullPage } from '@recoder/shared';
-import { CircleCheck, CircleDashed, CircleX } from 'lucide-react';
+import { CheckCircleIcon, CircleDashedIcon, XCircleIcon } from '@phosphor-icons/react';
 
 import type { MergeView, PullChecksView } from '@/lib/pull/types';
 
@@ -14,7 +14,7 @@ interface Fact {
 	text: string;
 }
 
-const FACT_ICONS = { ok: CircleCheck, bad: CircleX, wait: CircleDashed };
+const FACT_ICONS = { ok: CheckCircleIcon, bad: XCircleIcon, wait: CircleDashedIcon };
 
 /** What the forge says about merging into `base`; nothing while it has not worked it out. */
 function mergeFact(mergeability: PullMergeability, base: string): Fact | null {

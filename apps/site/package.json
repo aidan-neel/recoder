@@ -13,8 +13,8 @@
 	},
 	"dependencies": {
 		"@neondatabase/serverless": "1.1.0",
+		"@phosphor-icons/react": "2.1.10",
 		"@recoder/ui": "workspace:*",
-		"lucide-react": "1.59.0",
 		"motion": "14.3.0",
 		"next": "16.4.6",
 		"react": "19.3.0",

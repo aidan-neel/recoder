@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, Pill } from '@recoder/ui';
-import { ChevronRight } from 'lucide-react';
+import { CaretRightIcon } from '@phosphor-icons/react';
 import { useMemo } from 'react';
 
 import type { BugView } from '@/lib/bugs/types';
@@ -37,7 +37,7 @@ export function Walkthrough({ parts, open, onOpenGuide }: WalkthroughProps) {
 				</h2>
 				<Button variant="ghost" onClick={onOpenGuide}>
 					Open in Changes
-					<ChevronRight aria-hidden />
+					<CaretRightIcon aria-hidden />
 				</Button>
 			</div>
 			<ol className="walkthrough">

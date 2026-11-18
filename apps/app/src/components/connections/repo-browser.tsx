@@ -1,7 +1,7 @@
 'use client';
 
 import { Input, Modal, ModalBody, ModalContent, ModalTitle } from '@recoder/ui';
-import { Search } from 'lucide-react';
+import { MagnifyingGlassIcon } from '@phosphor-icons/react';
 
 import {
 	useRepoBrowser,
@@ -21,7 +21,7 @@ function BrowserBody({ shell }: { shell: BrowserShell }) {
 		<ModalBody className="repo-browser">
 			<Input
 				value={body.query}
-				leading={<Search aria-hidden />}
+				leading={<MagnifyingGlassIcon aria-hidden />}
 				placeholder="Search repositories"
 				aria-label="Search repositories"
 				autoComplete="off"

@@ -194,7 +194,6 @@
 .save-status svg {
 	width: 14px;
 	height: 14px;
-	stroke-width: 2.25;
 }
 .save-status [data-face='success'] {
 	color: var(--success);

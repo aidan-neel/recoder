@@ -2,7 +2,7 @@
 
 import type { ThemeChoice } from '@recoder/shared';
 import { SegmentedControl } from '@recoder/ui';
-import { Monitor, Moon, Sun } from 'lucide-react';
+import { MonitorIcon, MoonIcon, SunIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 import { TYPEFACE } from '@/lib/appearance/choices';
@@ -12,9 +12,9 @@ import { PalettePicker } from './palette-picker';
 import { SettingsGroup, SettingsRow } from './settings-group';
 
 const THEMES: { value: ThemeChoice; label: string; icon: ReactNode }[] = [
-	{ value: 'system', label: 'System', icon: <Monitor /> },
-	{ value: 'light', label: 'Light', icon: <Sun /> },
-	{ value: 'dark', label: 'Dark', icon: <Moon /> }
+	{ value: 'system', label: 'System', icon: <MonitorIcon /> },
+	{ value: 'light', label: 'Light', icon: <SunIcon /> },
+	{ value: 'dark', label: 'Dark', icon: <MoonIcon /> }
 ];
 
 const DETAIL: Record<ThemeChoice, string> = {

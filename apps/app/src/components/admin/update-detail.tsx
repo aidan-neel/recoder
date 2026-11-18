@@ -1,5 +1,5 @@
 import { CollapsibleTrigger, Spinner } from '@recoder/ui';
-import { Check, ChevronDown } from 'lucide-react';
+import { CheckIcon, CaretDownIcon } from '@phosphor-icons/react';
 
 import type { UpdateLine, UpdateStep } from '@/lib/update/update-line';
 
@@ -34,7 +34,7 @@ function AvailableLine({ line }: { line: AvailableLine }) {
 			{line.commits.length > 0 ? (
 				<CollapsibleTrigger className="update-disclosure">
 					What’s new
-					<ChevronDown aria-hidden />
+					<CaretDownIcon aria-hidden />
 				</CollapsibleTrigger>
 			) : null}
 			{note ? <span data-tone={line.blockedReason ? 'danger' : undefined}>{note}</span> : null}
@@ -69,7 +69,7 @@ function StepMark({ stage }: { stage: UpdateStep['stage'] }) {
 	return (
 		<span className="update-step-mark" aria-hidden>
 			{stage === 'current' ? <Spinner size={12} /> : null}
-			{stage === 'done' ? <Check /> : null}
+			{stage === 'done' ? <CheckIcon /> : null}
 		</span>
 	);
 }
