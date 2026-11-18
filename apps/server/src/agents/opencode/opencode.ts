@@ -56,6 +56,8 @@ export class OpenCodeAgent implements AgentAdapter {
 	readonly name = 'OpenCode';
 	/** Images go in as `data:` file attachments of the prompt. */
 	readonly readsImages = true;
+
+	readonly ownTools = true;
 	/** Every call goes through one `opencode serve` process, so they share the endpoint ceiling. */
 	readonly processCeiling = null;
 	readonly signInFix =

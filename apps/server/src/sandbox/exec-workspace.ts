@@ -175,6 +175,13 @@ export class ExecWorkspace {
 		return this.setupDone;
 	}
 
+	/** Runs `work` once setup is done and while no command runs in the checkout, so it sees a settled tree. */
+	async whileIdle<T>(work: () => Promise<T>): Promise<T> {
+		await this.setupDone?.catch(() => undefined);
+
+		return this.exclusive(work);
+	}
+
 	/** Run one reviewer command, offline, after setup, with `owner`'s scratch files in place. */
 	async run(command: string, timeoutMs: number, signal?: AbortSignal, owner = ''): Promise<RunResult> {
 		await this.setupDone?.catch(() => undefined);

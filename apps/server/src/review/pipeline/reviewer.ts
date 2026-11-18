@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { FINDING_CATEGORIES, READABILITY_SMELLS, type FindingCategory } from '@recoder/shared';
+import { findingCitations } from '../../evidence/citations.js';
 import { reviewerFindingSchema } from './finding-schema.js';
 import {
 	ANSWERED_RESPONSE,
@@ -201,8 +202,7 @@ function normalizeFinding(item: unknown, defaultCategory: FindingCategory): Reco
 
 	repairLines(f, true);
 
-	if (Array.isArray(f.evidenceIds))
-		f.evidenceIds = f.evidenceIds.filter((id) => typeof id === 'string' && id).slice(0, 12);
+	if (Array.isArray(f.evidenceIds)) f.evidenceIds = findingCitations(f.evidenceIds);
 	else if (typeof f.evidenceIds === 'string') f.evidenceIds = [f.evidenceIds];
 
 	f.title = clip(f.title, 120);

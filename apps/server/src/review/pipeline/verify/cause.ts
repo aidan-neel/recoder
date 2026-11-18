@@ -45,6 +45,9 @@ const FOREIGN_FRAME = /node_modules\/|^node:|internal\//;
 /** A runner's count of failed tests (`3 fail`, `Tests  2 failed`, `1 failing`). */
 const FAIL_COUNT = /(\d+)\s+(?:tests?\s+)?fail(?:ed|ing|ures?)?\b/gi;
 
+/** A runner's count of passed tests, never zero (`477 pass`, `Tests  12 passed`, `3 passing`). */
+const PASS_COUNT = /\b[1-9]\d*\s+(?:tests?\s+)?pass(?:ed|ing)?\b/i;
+
 /** Errors kept per run. */
 const MAX_ERRORS = 12;
 
@@ -88,6 +91,13 @@ function failureCount(output: string): number | null {
 	const counts = [...output.matchAll(FAIL_COUNT)].map((match) => Number(match[1]));
 
 	return counts.length ? Math.max(...counts) : null;
+}
+
+/** Whether a run's output shows a test that ran and passed: a line its runner marks passed, or its count of them. */
+export function showsPassedTest(output: string): boolean {
+	const plain = output.replace(ANSI, '');
+
+	return PASS_COUNT.test(plain) || plain.split('\n').some((line) => PASSED_TEST.test(line));
 }
 
 /** What a recorded run's output says about why it failed; a run that passed has no errors. */

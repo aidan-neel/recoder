@@ -104,12 +104,11 @@ export class StepRelay<T> {
 
 		const reasoning = this.reasoning;
 
-		reasoning.text = (reasoning.text + delta).slice(0, 64_000);
+		const cap = opts.maxReasoningChars ?? REVIEW_POLICY.maxReasoningChars;
 
-		if (
-			!reasoning.overthought &&
-			(reasoning.text.length > REVIEW_POLICY.maxReasoningChars || isLooping(reasoning.text))
-		) {
+		reasoning.text = (reasoning.text + delta).slice(0, 2 * cap);
+
+		if (!reasoning.overthought && (reasoning.text.length > cap || isLooping(reasoning.text))) {
 			reasoning.overthought = true;
 			opts.onLog?.(`${opts.label} reasoning ran long; asking for an answer`);
 			this.hooks.onOverthought();

@@ -81,7 +81,9 @@ export function judgeModel(choice: string, effort: ReasoningEffort | undefined):
 /**
  * The judge's score for these findings, reused when the same model already
  * judged the same findings against the same defects, so a rerun that finds
- * the same things costs no judge call.
+ * the same things costs no judge call. A judge call that fails, mostly on its
+ * time limit, is made once more: a resume reviews an unjudged run again, which
+ * costs far more than a second judge call.
  */
 async function cachedJudgement(
 	judge: Judge,
@@ -93,7 +95,7 @@ async function cachedJudgement(
 
 	if (cached) return cached;
 
-	const score = await judgePr(judge.chat, defects, findings);
+	const score = await judgePr(judge.chat, defects, findings).catch(() => judgePr(judge.chat, defects, findings));
 
 	writeCache('benchmark-judge', key, score);
 
@@ -165,7 +167,8 @@ async function scoreStages(
 
 /**
  * Judges a passed run; a judge failure leaves the run unscored instead of
- * sinking the benchmark. The adjudication file's match corrections apply over
+ * sinking the benchmark, and keeps its candidate pool so a later rescore can
+ * still say where each defect stopped. The adjudication file's match corrections apply over
  * every judgement. A rescore passes the pool the run saved, so it reads no
  * candidates from the server.
  */
@@ -188,13 +191,13 @@ export async function scoreRun(
 			adjudications
 		);
 
+	const pool = await poolOf(run, base, saved).catch(() => null);
+
 	try {
 		const [score, hiddenScore] = await Promise.all([
 			judged(run.findings),
 			run.unconfirmed ? judged(run.unconfirmed) : null
 		]);
-
-		const pool = await poolOf(run, base, saved);
 
 		return { ...run, score, hiddenScore, ...(await scoreStages(judged, label, run, score, pool)) };
 	} catch (error) {
@@ -202,7 +205,7 @@ export async function scoreRun(
 
 		console.error(`${label.id} judge failed: ${judgeError}`);
 
-		return { ...run, score: null, judgeError };
+		return { ...run, score: null, judgeError, ...(pool ? { pool } : {}) };
 	}
 }
 

@@ -6,6 +6,7 @@ import { partitionReviewers } from '../reviewers.js';
 import { reviewerSlices, unitRecord, type ReviewUnit } from '../units.js';
 import { askCoordinator } from './coordinator.js';
 import { independentPassUnits, isIndependentReviewer } from './independent-pass.js';
+import { isLensSplit, lensSplitUnits } from './lens-split.js';
 import { isSpecialistTree, planSpecialists, type SpecialistPlan } from './specialist-plan.js';
 
 const TASK_ID = 'specialist-plan';
@@ -13,8 +14,8 @@ const LABEL = 'Plan specialists';
 
 /**
  * Shapes the review for the experiment variant `RECODER_REVIEW_VARIANT` names, after the context stages and before
- * any reviewer runs: `independent-pass` adds a second pass over every slice, `specialist-tree` has the coordinator
- * hand the slices to specialists. Unset, it does nothing, so the review is the baseline. A resumed review keeps the
+ * any reviewer runs: `independent-pass` adds a second pass over every slice, `lens-split` gives every slice one
+ * reviewer per lens group, `specialist-tree` has the coordinator hand the slices to specialists. Unset, it does nothing, so the review is the baseline. A resumed review keeps the
  * units its checkpoint saved and only sizes the budget and deadline for them again.
  */
 export async function variantStage(run: ReviewRun): Promise<void> {
@@ -25,6 +26,7 @@ export async function variantStage(run: ReviewRun): Promise<void> {
 	run.events?.onLog?.(`Review variant: ${variant}.`);
 
 	if (variant === 'independent-pass') addIndependentPass(run);
+	else if (variant === 'lens-split') splitByLens(run);
 	else await planSpecialistTree(run);
 
 	sizeForVariant(run);
@@ -37,6 +39,17 @@ function addIndependentPass(run: ReviewRun): void {
 	if (run.units.some((unit) => isIndependentReviewer(unit.id))) return;
 
 	for (const unit of independentPassUnits(reviewerSlices(run.units))) queueUnit(run, unit);
+}
+
+/** Replaces every slice's reviewer with one reviewer per lens group, unless a resumed review already has them. */
+function splitByLens(run: ReviewRun): void {
+	if (isLensSplit(run.units)) return;
+
+	const slices = run.units;
+
+	dropQueuedUnits(run);
+
+	for (const unit of lensSplitUnits(slices)) queueUnit(run, unit);
 }
 
 /**

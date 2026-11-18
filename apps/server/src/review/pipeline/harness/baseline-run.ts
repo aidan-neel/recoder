@@ -4,6 +4,7 @@ import { withSandboxTier } from '../../../sandbox/host-load.js';
 import type { CheckInputs, ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import type { SetupReport } from '../../../sandbox/workspace-setup.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { showsPassedTest } from '../verify/cause.js';
 import { baselineCacheEnabled, readCachedCheck, writeCachedCheck } from './baseline-cache.js';
 import { installCommand } from './baseline-checks.js';
 import type { BaselineResult, HarnessEvents, TaskFn } from './types.js';
@@ -64,6 +65,15 @@ export async function runBaselineChecks(commands: string[], host: BaselineHost):
 	);
 
 	return results;
+}
+
+/**
+ * Whether a baseline check shows the repository's code running here: it passed, or it failed with tests that ran
+ * and passed. A pull request under review often fails its own checks (an unformatted file, a lint error, one test
+ * the change or the sandbox breaks), and that is no sign that a verifier's repro could not run.
+ */
+export function ranCode(check: BaselineResult): boolean {
+	return check.exitCode === 0 || showsPassedTest(check.output);
 }
 
 /** One baseline check in a prep slot, cut short at `baselineCheckTimeoutMs`; null when it did not run. */

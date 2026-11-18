@@ -86,10 +86,12 @@ export async function streamTurn<T>(
 		pauseSignal?.removeEventListener('abort', forwardAbort);
 	};
 
-	const onReasoning = (chunk: string) => {
-		reasoningText = (reasoningText + chunk).slice(0, 64_000);
+	const reasoningCap = opts.maxReasoningChars ?? REVIEW_POLICY.maxReasoningChars;
 
-		if (!overthought && (reasoningText.length > REVIEW_POLICY.maxReasoningChars || isLooping(reasoningText))) {
+	const onReasoning = (chunk: string) => {
+		reasoningText = (reasoningText + chunk).slice(0, 2 * reasoningCap);
+
+		if (!overthought && (reasoningText.length > reasoningCap || isLooping(reasoningText))) {
 			overthought = true;
 			opts.onLog?.(`${opts.label} reasoning ran long; asking for an answer`);
 			callAbort.abort();

@@ -1,7 +1,16 @@
 import type { FindingVerification } from '@recoder/shared';
 import type { EvidenceRecord, EvidenceStore } from '../../../evidence/evidence.js';
 import type { VerdictOutput } from '../verify.js';
-import { brokeInSetup, claimedOutput, failedOnTarget, observedExcerpt, ownRuns, showsDefect } from './runs.js';
+import {
+	brokeInSetup,
+	citedRecords,
+	claimedOutput,
+	failedOnTarget,
+	observedExcerpt,
+	ownRuns,
+	showsDefect,
+	uncitedRunsNote
+} from './runs.js';
 
 /** The verification of a finding the verifier could not prove. */
 function inconclusive(reason: string): FindingVerification {
@@ -67,7 +76,7 @@ export function settleVerdict(
 	agentId: string,
 	mutation = false
 ): FindingVerification | 'refuted' {
-	const cited = output.evidenceIds.map((id) => evidence.get(id)).filter((record) => record !== undefined);
+	const cited = citedRecords(output.evidenceIds, evidence, agentId);
 	const runs = ownRuns(output.evidenceIds, evidence, agentId);
 
 	if (output.verdict === 'unverified') return inconclusive(output.reason);
@@ -117,7 +126,8 @@ export function withOutcome(verification: FindingVerification): FindingVerificat
  * own runs failed or printed what it quotes rests on the model's reading of
  * printed values, so it is asked for a repro that fails by itself. A
  * `mutation` verifier's proof is a passing run, so only a refutation is
- * checked: it needs a run the planted bug made fail.
+ * checked: it needs a run the planted bug made fail. A verifier on its CLI's
+ * own tools that cited no run of its own is first shown the runs to cite.
  */
 export function verifierPushBack(
 	output: VerdictOutput,
@@ -130,6 +140,10 @@ export function verifierPushBack(
 		return mutation
 			? 'You have not run anything yet. Plant the bug in the code under test and run the test in the same command, then give your verdict citing that run.'
 			: 'You have not run anything yet. Write a small script or test that exercises the finding and run it (or run the existing tests or type check for this code), then give your verdict citing that run.';
+
+	const uncited = output.verdict === 'unverified' ? null : uncitedRunsNote(output.evidenceIds, evidence, agentId);
+
+	if (uncited) return uncited;
 
 	if (mutation) {
 		const cited = ownRuns(output.evidenceIds, evidence, agentId);

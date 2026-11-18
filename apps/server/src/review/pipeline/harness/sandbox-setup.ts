@@ -9,7 +9,7 @@ import { runBaselineChecks } from './baseline-run.js';
 import { installedTool, pickBaselineChecks } from './baseline-checks.js';
 import { extendDeadlines, type ReviewRun } from './context.js';
 import { describePrep, packagePrepEnabled, preparePackages, type PrepReport } from './package-prep.js';
-import { diffPaths } from './run-outcome.js';
+import { diffPaths, unresolved } from './run-outcome.js';
 import type { BaselineResult, HarnessEvents, TaskFn } from './types.js';
 
 /** The dependency install, started early, and the time its commands spent waiting for a sandbox slot. */
@@ -268,6 +268,8 @@ async function prepareChanged(
 			return null;
 		})
 	);
+
+	run.smokeReached = report?.steps.some((step) => step.outcome !== undefined && !unresolved(step.outcome)) ?? false;
 
 	const generated = report?.steps.filter((step) => step.kind === 'generate' && step.exitCode === 0) ?? [];
 

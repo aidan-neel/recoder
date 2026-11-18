@@ -140,6 +140,8 @@ function sessionRouter(handlers: SessionHandlers): (event: unknown, session: str
 export class V1Api implements OpenCodeApi {
 	readonly structuredOutput = true;
 
+	readonly ownTools = null;
+
 	readonly events: SessionEvents = {
 		path: (directory) => `/event?directory=${encodeURIComponent(directory)}`,
 		router: sessionRouter

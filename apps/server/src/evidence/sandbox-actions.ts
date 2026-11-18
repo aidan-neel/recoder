@@ -42,7 +42,7 @@ export async function runCommand(
 		? `timed out after ${(result.elapsedMs / 1000).toFixed(1)}s`
 		: `exit ${result.exitCode} · ${(result.elapsedMs / 1000).toFixed(1)}s`;
 
-	const content = `$ ${command}\n${result.output}${result.output.endsWith('\n') || !result.output ? '' : '\n'}[${status}]`;
+	const content = runContent(command, result.output, status);
 
 	return {
 		result: {
@@ -57,6 +57,11 @@ export async function runCommand(
 		},
 		record: runRecord(command, content, result.truncated, result.exitCode, owner, result.outcome)
 	};
+}
+
+/** A run as evidence text: the command on its first line, its output, and a status line last. */
+export function runContent(command: string, output: string, status: string): string {
+	return `$ ${command}\n${output}${output.endsWith('\n') || !output ? '' : '\n'}[${status}]`;
 }
 
 /** The evidence record of a finished run of `command`, whose `content` is the command, its output and its status line. */

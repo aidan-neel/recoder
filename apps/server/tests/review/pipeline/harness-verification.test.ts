@@ -194,6 +194,31 @@ test.skipIf((await execUnavailableReason()) !== null)(
 	}
 );
 
+/** Reviews a repo with `base` that raises one bug, and expects a verifier to have run and proven it. */
+async function expectVerifiedByRun(base: Record<string, string>): Promise<void> {
+	const { result, verifiers } = await reviewOneBug(base);
+
+	expect(verifiers).toBeGreaterThan(0);
+	expect(result.findings[0].verification).toMatchObject({ status: 'verified', method: 'run' });
+}
+
+test.skipIf((await execUnavailableReason()) !== null)(
+	'a bug is still verified by a run when the only check fails after tests ran and passed',
+	() =>
+		expectVerifiedByRun({
+			'package.json': JSON.stringify({ scripts: { test: 'echo " 12 pass" && echo " 1 fail" && exit 1' } })
+		})
+);
+
+test.skipIf((await execUnavailableReason()) !== null)(
+	'a bug is still verified by a run when the test script stops at lint but one test file runs',
+	() =>
+		expectVerifiedByRun({
+			'package.json': JSON.stringify({ scripts: { test: 'false && bun test' } }),
+			'src/a.test.ts': "import { expect, test } from 'bun:test';\n\ntest('adds', () => expect(1 + 1).toBe(2));\n"
+		})
+);
+
 test.skipIf((await execUnavailableReason()) !== null)(
 	'a bug in a review with no check to run is shown unverified as not run, with no verifier call',
 	async () => {

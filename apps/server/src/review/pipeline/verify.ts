@@ -35,6 +35,9 @@ const VERDICT_ALIASES: Record<string, 'confirmed' | 'refuted' | 'unverified'> = 
 	unproven: 'unverified'
 };
 
+/** The longest citation a verdict may hold: an evidence id is short, a cited shell command is not. */
+const CITATION_CHARS = 400;
+
 const ruleCheckReplySchema = z.object({
 	applicability: z
 		.object({
@@ -57,7 +60,8 @@ const verdictSchema = z.object({
 	message: z.string().max(12000).optional(),
 	verdict: z.enum(['confirmed', 'refuted', 'unverified']),
 	reason: z.string().trim().min(1).max(600),
-	evidenceIds: z.array(z.string().min(1).max(40)).max(12).default([]),
+	/** Evidence ids, or the command of a run the verifier made with its CLI's own shell (`citedRecords`). */
+	evidenceIds: z.array(z.string().min(1).max(CITATION_CHARS)).max(12).default([]),
 	/** A stated non-goal (`N2`) or stacked pull request (`#31`) that already covers the problem. */
 	coveredBy: z.string().trim().min(1).max(40).optional(),
 	/** What the cited run should show if the claim is true; optional because weak models leave it out. */

@@ -101,6 +101,7 @@ OpenCode (`apps/server/src/agents/opencode/`):
 - Models are listed live from the CLI.
 - `opencode.complete()` runs a plain call through that server. Sign-in and provider keys go through its HTTP API; Recoder never reads OpenCode's credential file.
 - `RECODER_OPENCODE_BIN` pins the binary. With no process per call it shares the endpoint ceiling.
+- A run handed a workspace (`RECODER_AGENT_TOOLS=cli`) opens its session in that directory with OpenCode's own `read`, `grep` and `glob` allowed, plus `shell`, `edit` and `write` when it may run code (`ownTools` in `opencode-agent-session.ts`, the names in `V2Api.ownTools`). Every other permission stays denied, and a final-turn prompt denies them all. `sessionRouter` in `api/v2-events.ts` reads the `session.tool.*` events, and `ownToolHandlers` in `opencode-events.ts` reports a `shell` call as the command it ran. OpenCode 1 cannot run this way and refuses.
 
 Claude Code (`apps/server/src/agents/claude-code/`):
 

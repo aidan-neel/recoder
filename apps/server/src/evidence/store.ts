@@ -1,10 +1,11 @@
 import type { ReviewInventory } from '../review/pipeline/inventory.js';
 import { REVIEW_POLICY } from '../review/session/review-policy.js';
 import type { ExecWorkspace } from '../sandbox/exec-workspace.js';
+import { evidenceId } from './citations.js';
 import { actionCommand, finishedReport, reportedInput } from './format.js';
 import { normalizeActions } from './parse-actions.js';
 import { existingFiles, retrieve } from './retrieval.js';
-import { runCommand, runRecord, writeSandboxFile } from './sandbox-actions.js';
+import { runCommand, runContent, runRecord, writeSandboxFile } from './sandbox-actions.js';
 import {
 	failure,
 	type EvidenceRecord,
@@ -15,6 +16,18 @@ import {
 	type ToolCallReport,
 	type ToolResult
 } from './types.js';
+
+/** A shell command an agent CLI ran with its own tool, as the CLI reported it. */
+export interface AgentShellRun {
+	command: string;
+	output: string;
+	/** Null when the command never exited: it timed out or was stopped. */
+	exitCode: number | null;
+	elapsedMs: number;
+}
+
+/** The shortest text a verdict may cite a run by; anything shorter matches commands it does not mean. */
+const MIN_CITED_COMMAND_CHARS = 8;
 
 /** Calls the dashboard observer; observers cannot break retrieval, so their errors are swallowed. */
 function notify(onTool: ((tool: ToolCallReport) => void) | undefined, tool: ToolCallReport): void {
@@ -173,16 +186,6 @@ export class EvidenceStore {
 		stored: { exitCode: number; content: string; elapsedMs: number },
 		onTool?: (tool: ToolCallReport) => void
 	): ToolResult {
-		const action: RetrievalAction = { action: 'run', command };
-		const startedMs = Date.now();
-
-		const started = {
-			id: `tool_${++this.toolSeq}`,
-			command: actionCommand(action),
-			input: reportedInput(action),
-			startedAt: new Date(startedMs).toISOString()
-		};
-
 		const result: ToolResult = {
 			action: 'run',
 			ok: true,
@@ -193,7 +196,70 @@ export class EvidenceStore {
 			cached: true
 		};
 
-		result.evidenceId = this.remember(runRecord(command, stored.content, false, stored.exitCode)).id;
+		return this.reportRun(command, result, Date.now(), onTool);
+	}
+
+	/**
+	 * Records a command `owner`'s agent CLI ran with its own shell as that agent's evidence. Recoder did not run
+	 * it: the output and exit code are what the CLI reported. Output past one round's budget keeps its end, where a
+	 * failure shows.
+	 */
+	recordAgentRun(run: AgentShellRun, owner: string, onTool?: (tool: ToolCallReport) => void): ToolResult {
+		const seconds = `${(run.elapsedMs / 1000).toFixed(1)}s`;
+		const status = run.exitCode === null ? `no exit code · ${seconds}` : `exit ${run.exitCode} · ${seconds}`;
+		const output = run.output.slice(-REVIEW_POLICY.maxToolRoundChars);
+
+		const result: ToolResult = {
+			action: 'run',
+			ok: run.exitCode !== null,
+			content: runContent(run.command, output, status),
+			truncated: output.length < run.output.length,
+			exitCode: run.exitCode,
+			elapsedMs: run.elapsedMs,
+			agentId: owner
+		};
+
+		return this.reportRun(run.command, result, Date.now() - run.elapsedMs, onTool);
+	}
+
+	/**
+	 * The latest run `owner` made whose command is `cited` or holds it, for a verdict that cites a run by its
+	 * command because the agent's own shell gave it no evidence id.
+	 */
+	runByCommand(owner: string, cited: string): EvidenceRecord | undefined {
+		const wanted = cited.trim();
+
+		if (wanted.length < MIN_CITED_COMMAND_CHARS) return undefined;
+
+		return this.runsBy(owner)
+			.reverse()
+			.find((record) => record.command?.includes(wanted));
+	}
+
+	/** Every run `owner` made, oldest first. */
+	runsBy(owner: string): EvidenceRecord[] {
+		return [...this.records.values()].filter((record) => record.kind === 'run' && record.agentId === owner);
+	}
+
+	/** Stores a run that already finished and reports it to the dashboard as started at `startedMs` and done now. */
+	private reportRun(
+		command: string,
+		result: ToolResult,
+		startedMs: number,
+		onTool: ((tool: ToolCallReport) => void) | undefined
+	): ToolResult {
+		const action: RetrievalAction = { action: 'run', command };
+
+		const started = {
+			id: `tool_${++this.toolSeq}`,
+			command: actionCommand(action),
+			input: reportedInput(action),
+			startedAt: new Date(startedMs).toISOString()
+		};
+
+		const record = runRecord(command, result.content, result.truncated, result.exitCode ?? null, result.agentId);
+
+		result.evidenceId = this.remember(record).id;
 
 		notify(onTool, { ...started, status: 'running', exitCode: null });
 		notify(onTool, finishedReport(started, startedMs, result));
@@ -287,7 +353,7 @@ export class EvidenceStore {
 			if (sameRecord(existing, record)) return existing;
 		}
 
-		const stored: EvidenceRecord = { ...record, id: `ev_${++this.seq}` };
+		const stored: EvidenceRecord = { ...record, id: evidenceId(++this.seq) };
 
 		this.records.set(stored.id, stored);
 

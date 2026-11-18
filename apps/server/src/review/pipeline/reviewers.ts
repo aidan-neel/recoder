@@ -27,14 +27,16 @@ function reviewableChars(inventory: ReviewInventory, files: InventoryFile[]): nu
 
 /**
  * How many reviewers read this change: the budget's count for a small change, its larger count when the
- * reviewable patch is over `REVIEW_POLICY.largeChangeChars`. A change of documentation only has one, since
- * only two lenses apply to it. It never exceeds the hunks there are to read.
+ * reviewable patch is over `REVIEW_POLICY.largeChangeChars`, and more when the limits cap a slice's size
+ * (`ReviewLimits.sliceChars`). A change of documentation only has one, since only two lenses apply to it. It
+ * never exceeds the hunks there are to read.
  */
 export function reviewerCount(inventory: ReviewInventory, limits: ReviewLimits): number {
 	const files = reviewableFiles(inventory);
 	const hunks = files.reduce((sum, file) => sum + file.hunks.length, 0);
-	const large = reviewableChars(inventory, files) > REVIEW_POLICY.largeChangeChars;
-	const wanted = large ? limits.reviewers.large : limits.reviewers.small;
+	const chars = reviewableChars(inventory, files);
+	const budgeted = chars > REVIEW_POLICY.largeChangeChars ? limits.reviewers.large : limits.reviewers.small;
+	const wanted = limits.sliceChars ? Math.max(budgeted, Math.ceil(chars / limits.sliceChars)) : budgeted;
 
 	return files.length && files.every((file) => isDocsPath(file.path)) ? 1 : Math.min(wanted, hunks);
 }

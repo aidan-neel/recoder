@@ -90,6 +90,59 @@ test('a confirmed verdict is proven by a failing run, traced by cited reads, and
 	});
 });
 
+test("a verdict that cites a run by its command is proven by the verifier's own shell run, never another agent's", () => {
+	const evidence = new EvidenceStore(null, buildInventory(''), 1000);
+
+	evidence.recordAgentRun(
+		{ command: 'bun test src/a.test.ts', output: '3 pass\n', exitCode: 0, elapsedMs: 5 },
+		'other'
+	);
+
+	evidence.recordAgentRun(
+		{ command: 'cd pkg && bun test src/repro.test.ts', output: '1 fail\n', exitCode: 1, elapsedMs: 5 },
+		'v'
+	);
+
+	const confirm = (cited: string) =>
+		settleVerdict({ verdict: 'confirmed', reason: 'The repro fails.', evidenceIds: [cited] }, evidence, 'v');
+
+	expect(confirm('bun test src/repro.test.ts')).toMatchObject({
+		status: 'verified',
+		method: 'run',
+		command: 'cd pkg && bun test src/repro.test.ts',
+		exitCode: 1
+	});
+
+	expect(confirm('bun test src/a.test.ts')).toMatchObject({ status: 'unverified' });
+	expect(confirm('bun')).toMatchObject({ status: 'unverified' });
+});
+
+test("a verifier on its CLI's own tools that cites no run is shown the ids of the runs it made", () => {
+	const evidence = new EvidenceStore(null, buildInventory(''), 1000);
+	const original = process.env.RECODER_AGENT_TOOLS;
+
+	evidence.recordAgentRun(
+		{ command: 'bun test src/a.test.ts', output: '3 pass\n', exitCode: 0, elapsedMs: 5 },
+		'other'
+	);
+
+	evidence.recordAgentRun({ command: 'bun repro.ts', output: 'AssertionError\n', exitCode: 1, elapsedMs: 5 }, 'v');
+
+	const pushBack = (evidenceIds: string[]) =>
+		verifierPushBack({ verdict: 'confirmed', reason: 'The repro fails.', evidenceIds }, { runs: 1 }, evidence, 'v');
+
+	process.env.RECODER_AGENT_TOOLS = 'cli';
+
+	try {
+		expect(pushBack([])).toContain('- ev_2: `bun repro.ts` (exit 1)');
+		expect(pushBack([])).not.toContain('bun test src/a.test.ts');
+		expect(pushBack(['ev_2'])).toBeNull();
+	} finally {
+		if (original === undefined) delete process.env.RECODER_AGENT_TOOLS;
+		else process.env.RECODER_AGENT_TOOLS = original;
+	}
+});
+
 test('a confirmation citing its own passing run is kept however the reason is worded', () => {
 	const evidence = store();
 

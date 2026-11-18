@@ -32,6 +32,7 @@ import {
 	type VerifierNotes
 } from '../verify.js';
 import { isMutationFinding } from '../verify/runs.js';
+import { ranCode } from './baseline-run.js';
 import { publishBudget, publishCandidates, type ReviewRun } from './context.js';
 import { checkPatches } from './patch-check.js';
 import type { HarnessEvents, TaskFn } from './types.js';
@@ -116,7 +117,9 @@ export function startVerification(run: ReviewRun, checks: () => Promise<void>): 
 /**
  * A verifier can only prove a bug where the repository's own code runs, so a
  * review runs bugs only when one baseline check (type check, lint or tests)
- * passed. Asked once, after the checks finish; the answer is kept.
+ * passed or ran passing tests ({@link ranCode}), or when package prep's smoke
+ * run reached its assertions. Asked once, after the checks finish; the answer
+ * is kept.
  */
 function whyCodeCannotRun(run: ReviewRun, checks: () => Promise<void>): () => Promise<string | null> {
 	let answer: Promise<string | null> | undefined;
@@ -127,7 +130,7 @@ function whyCodeCannotRun(run: ReviewRun, checks: () => Promise<void>): () => Pr
 		await checks();
 
 		if (!run.baseline.length) return 'no type check, lint or test command was found to run here';
-		if (run.baseline.some((check) => check.exitCode === 0)) return null;
+		if (run.smokeReached || run.baseline.some(ranCode)) return null;
 
 		return `none of this repository's checks passed here (${run.baseline.map((check) => check.command).join(', ')})`;
 	};

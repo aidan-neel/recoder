@@ -5,12 +5,12 @@ import { LlmError, cancelledError } from '../../models/llm/errors';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import { promptPrefix } from '../../models/prompt-prefix';
 import { emptyDirectory } from '../cli-process';
-import type { AgentPromptOptions, AgentReply, AgentRun, AgentRunOptions } from '../contract';
+import type { AgentPromptOptions, AgentReply, AgentRun, AgentRunOptions, AgentWorkspace } from '../contract';
 import type { SessionToolLease } from '../tools/mcp-host';
 import { OPENCODE_EMPTY_DIR, isEmptyObject, variantFor, type OpenCodeChatHost } from './opencode-chat';
 import type { OpenCodeApi } from './api/types';
 import { OpenCodeError, providerError } from './opencode-error';
-import { eventHandlers, followSession } from './opencode-events';
+import { eventHandlers, followSession, ownToolHandlers } from './opencode-events';
 import { leaseOpenCodeTools } from './opencode-mcp';
 import { abortSession, createSession, deleteSession, type SessionScope } from './opencode-session';
 
@@ -36,10 +36,23 @@ function asLlmError(error: unknown, aborted: boolean): LlmError {
 }
 
 /**
+ * OpenCode's own tools a run that works in a checkout may call: the reads and searches, and the shell and file
+ * writes when it may run code. None for a run on Recoder's tools.
+ */
+function ownTools(api: OpenCodeApi, workspace: AgentWorkspace | undefined): string[] {
+	if (!workspace) return [];
+
+	if (!api.ownTools)
+		throw new OpenCodeError('This OpenCode version cannot run an agent with its own tools. Update OpenCode to 2.');
+
+	return workspace.exec ? [...api.ownTools.read, ...api.ownTools.exec] : api.ownTools.read;
+}
+
+/**
  * One OpenCode session that runs an agent: OpenCode drives the model through
- * its steps and calls Recoder's tools itself. Each prompt is a whole run, up
- * to the final answer; a later prompt continues the same session, so the
- * provider's prompt cache carries over.
+ * its steps and calls Recoder's tools itself, or its own in a run's workspace.
+ * Each prompt is a whole run, up to the final answer; a later prompt continues
+ * the same session, so the provider's prompt cache carries over.
  */
 export class OpenCodeAgentRun implements AgentRun {
 	private readonly events = new AbortController();
@@ -49,6 +62,7 @@ export class OpenCodeAgentRun implements AgentRun {
 	private stopped = new AbortController();
 	/** The brief's images, until the first prompt sends them; the session holds them after that. */
 	private unsentImages: readonly ImageUpload[];
+	private readonly own: string[];
 
 	private constructor(
 		private readonly host: OpenCodeAgentHost,
@@ -61,11 +75,19 @@ export class OpenCodeAgentRun implements AgentRun {
 		private readonly warmStart: OpenCodeWarmStart
 	) {
 		this.unsentImages = options.images ?? [];
+		this.own = ownTools(api, options.workspace);
 	}
 
 	static async open(host: OpenCodeAgentHost, options: AgentRunOptions): Promise<OpenCodeAgentRun> {
-		const scope = { server: host.server, directory: await emptyDirectory(OPENCODE_EMPTY_DIR) };
+		const { workspace } = options;
+
+		const scope = {
+			server: host.server,
+			directory: workspace?.directory ?? (await emptyDirectory(OPENCODE_EMPTY_DIR))
+		};
+
 		const api = await host.server.api();
+		const own = ownTools(api, workspace);
 		const variant = await variantFor(host, options);
 		let answerOnly = false;
 
@@ -86,13 +108,14 @@ export class OpenCodeAgentRun implements AgentRun {
 		let root: string | undefined;
 
 		try {
-			const id = await createSession(
-				{ ...scope, model: options.model, system: options.system, variant, signal: options.signal },
-				lease ? [`${lease.name}_*`] : [],
-				(id) => {
-					root = id;
-				}
-			);
+			const request = { ...scope, model: options.model, system: options.system, variant, signal: options.signal };
+
+			/** A run in a workspace is deleted with its directory, so it does not join the review's shared cache root. */
+			const id = workspace
+				? await api.createSession({ ...request, allow: own })
+				: await createSession(request, lease ? [`${lease.name}_*`] : [], (id) => {
+						root = id;
+					});
 
 			lease?.bindSession(id);
 
@@ -110,6 +133,7 @@ export class OpenCodeAgentRun implements AgentRun {
 				() => id,
 				{
 					...eventHandlers(options.onEvent),
+					...(workspace ? ownToolHandlers(options.onEvent) : {}),
 					onStepEnd: () => warmStart.release()
 				},
 				session.events.signal
@@ -124,15 +148,21 @@ export class OpenCodeAgentRun implements AgentRun {
 		}
 	}
 
-	private toolNames(): string[] {
-		return this.lease ? this.options.tools.map((name) => `${this.lease!.name}_${name}`) : [];
+	/**
+	 * The tools a prompt may call. Recoder's stay listed on the final turn, where the lease refuses them, so the
+	 * cached prefix holds; OpenCode's own have nothing to refuse them, so they are taken away.
+	 */
+	private toolNames(prompt: AgentPromptOptions): string[] {
+		if (this.lease) return this.options.tools.map((name) => `${this.lease!.name}_${name}`);
+
+		return prompt.tools ? this.own : [];
 	}
 
 	/** The tool part of the cached prefix: the catalog, and the answer format OpenCode adds as a tool. */
 	private toolsFingerprint(prompt: AgentPromptOptions, structured: boolean): string {
 		const format = structured && prompt.schema ? JSON.stringify(prompt.schema) : '';
 
-		return `${this.lease?.name ?? ''}\n${format}`;
+		return `${this.lease?.name ?? this.own.join(',')}\n${format}`;
 	}
 
 	private async send(text: string, prompt: AgentPromptOptions, structured: boolean): Promise<AgentReply> {
@@ -162,7 +192,7 @@ export class OpenCodeAgentRun implements AgentRun {
 				model: this.options.model,
 				system: this.options.system,
 				variant: this.variant,
-				tools: this.toolNames(),
+				tools: this.toolNames(prompt),
 				schema: structured ? prompt.schema : undefined,
 				timeoutMs: prompt.timeoutMs,
 				signal

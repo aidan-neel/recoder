@@ -3,10 +3,11 @@ import { decodeSecretKey } from './secrets/key-format';
 
 /**
  * The review shapes an experiment compares with the baseline (issue #95): `specialist-tree` has a coordinator
- * assign the reviewers' slices to domain specialists, and `independent-pass` adds a second review of every slice
- * that never sees the first pass's findings.
+ * assign the reviewers' slices to domain specialists, `independent-pass` adds a second review of every slice
+ * that never sees the first pass's findings, and `lens-split` gives every slice one reviewer per lens group in
+ * place of one reviewer of every lens, cut without a model call.
  */
-const REVIEW_VARIANTS = ['specialist-tree', 'independent-pass'] as const;
+const REVIEW_VARIANTS = ['specialist-tree', 'independent-pass', 'lens-split'] as const;
 
 type ReviewVariant = (typeof REVIEW_VARIANTS)[number];
 
@@ -14,6 +15,32 @@ const reviewVariantSchema = z.preprocess(
 	(value) => (value === '' ? undefined : value),
 	z.enum(REVIEW_VARIANTS).optional()
 );
+
+/**
+ * The tools a review's reviewers and subagents get, an experiment (`RECODER_REVIEWER_TOOLS`). Unset, they have
+ * every tool. `read` leaves them the reads and searches: no shell, no scratch files and no workers. `none` gives
+ * reviewers no tool at all: each answers in one call from the patch of its slice and the context the harness
+ * gathered, and the review sends no subagent, since a subagent exists to follow a question with tools.
+ */
+const REVIEWER_TOOLS = ['read', 'none'] as const;
+
+type ReviewerTools = (typeof REVIEWER_TOOLS)[number];
+
+const reviewerToolsSchema = z.preprocess(
+	(value) => (value === '' ? undefined : value),
+	z.enum(REVIEWER_TOOLS).optional()
+);
+
+/**
+ * Whose tools an agent that runs code works with, an experiment (`RECODER_AGENT_TOOLS`). Unset, every agent calls
+ * Recoder's tools. `cli` gives an agent on an agent CLI that can work in a checkout the CLI's own tools instead: it
+ * reads, searches, writes and runs commands in a private copy of the PR head.
+ */
+const AGENT_TOOLS = ['cli'] as const;
+
+type AgentTools = (typeof AGENT_TOOLS)[number];
+
+const agentToolsSchema = z.preprocess((value) => (value === '' ? undefined : value), z.enum(AGENT_TOOLS).optional());
 
 /** An OAuth application's client id: public, so only its shape is checked. Blank means the forge is not set up. */
 const oauthClientIdSchema = z.preprocess(
@@ -69,6 +96,8 @@ const envSchema = z.object({
 	RECODER_ALLOWED_COMMANDS: z.string().default('echo,git,gh,glab,bun'),
 	RECODER_COMMAND_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
 	RECODER_REVIEW_VARIANT: reviewVariantSchema,
+	RECODER_REVIEWER_TOOLS: reviewerToolsSchema,
+	RECODER_AGENT_TOOLS: agentToolsSchema,
 	RECODER_GITHUB_CLIENT_ID: oauthClientIdSchema,
 	RECODER_GITLAB_CLIENT_ID: oauthClientIdSchema,
 	RECODER_GITHUB_CLIENT_SECRET: oauthClientSecretSchema,
@@ -161,4 +190,34 @@ export function configuredSecretKey(): Buffer | undefined {
 	if (!key) throw new Error('RECODER_SECRET_KEY must be 32 bytes as base64 (`openssl rand -base64 32`).');
 
 	return key;
+}
+
+/**
+ * The tools this review's reviewers get (`RECODER_REVIEWER_TOOLS`), or null for every tool when it is unset. Read
+ * per review, so a test can switch it; a value that names no setting throws rather than run with every tool.
+ */
+export function reviewerTools(): ReviewerTools | null {
+	const value = process.env.RECODER_REVIEWER_TOOLS;
+	const parsed = reviewerToolsSchema.safeParse(value);
+
+	if (!parsed.success) {
+		throw new Error(`RECODER_REVIEWER_TOOLS is "${value}"; it must be one of ${REVIEWER_TOOLS.join(', ')}`);
+	}
+
+	return parsed.data ?? null;
+}
+
+/**
+ * Whose tools an agent that runs code works with (`RECODER_AGENT_TOOLS`), or null for Recoder's when it is unset.
+ * Read per agent, so a test can switch it; a value that names no setting throws rather than run with Recoder's tools.
+ */
+export function agentTools(): AgentTools | null {
+	const value = process.env.RECODER_AGENT_TOOLS;
+	const parsed = agentToolsSchema.safeParse(value);
+
+	if (!parsed.success) {
+		throw new Error(`RECODER_AGENT_TOOLS is "${value}"; it must be one of ${AGENT_TOOLS.join(', ')}`);
+	}
+
+	return parsed.data ?? null;
 }
