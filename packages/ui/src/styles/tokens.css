@@ -104,6 +104,7 @@
 	--fill-well: rgb(0 0 0 / 0.22);
 	--primary-sheen: rgb(255 255 255 / 0.45);
 	--primary-ring: rgb(0 0 0 / 0.5);
+	--primary-ring-tint: 0%;
 	--primary-drop: 0 2px 4px rgb(0 0 0 / 0.32);
 	--scrim: rgba(8, 7, 6, 0.6);
 
@@ -216,8 +217,9 @@
 	--fill-raised-press: #f1f1f2;
 	--fill-well: rgb(0 0 0 / 0.045);
 	--primary-sheen: rgb(255 255 255 / 0.14);
-	--primary-ring: rgb(0 0 0 / 0.22);
-	--primary-drop: 0 2px 4px rgb(0 0 0 / 0.14);
+	--primary-ring: black;
+	--primary-ring-tint: 86%;
+	--primary-drop: 0 1px 2px rgb(0 0 0 / 0.1);
 	--scrim: rgba(30, 25, 20, 0.35);
 }
 
@@ -298,14 +300,15 @@
 	--size-icon-md: 28px;
 
 	/*
-	 * Corners, small and few. A surface's radius is its inset plus the radius of the rows in it, so
-	 * a 4px row in a menu with a 4px inset sits in an 8px panel.
+	 * Corners, soft and few, a step rounder than Capy Desktop's (6px buttons, 8px cards, 12px panels).
+	 * A surface's radius is its inset plus the radius of the rows in it, so a 6px row in a menu with
+	 * a 4px inset sits in a 10px panel, and a 6px segment in a track with a 2px inset in an 8px track.
 	 */
-	--radius-chip: 4px; /* badges, keycaps, checkboxes, menu rows, sm buttons */
-	--radius-control: 5px; /* buttons, fields, select triggers, tabs, tooltips */
-	--radius-row: 6px; /* list rows and their highlight, radio cards, textareas, code blocks */
-	--radius-card: 8px; /* cards, menus, popovers, toasts, modals, the palette */
-	--radius-composer: 14px; /* the composer, the one soft box: a message field reads as a place to write, not a card */
+	--radius-chip: 6px; /* badges, keycaps, checkboxes, menu rows, sm buttons, segments */
+	--radius-control: 7px; /* buttons, fields, select triggers, tabs, tooltips */
+	--radius-row: 8px; /* list rows and their highlight, segmented tracks, radio cards, textareas, code blocks */
+	--radius-card: 10px; /* cards, menus, popovers, toasts, the palette */
+	--radius-composer: 16px; /* the composer, the one soft box: a message field reads as a place to write, not a card */
 
 	--font-size-title: 15px;
 	--font-size-body: 13.5px;
@@ -355,7 +358,9 @@
  * - card: hairline, highlight and outline, flat in dark, a breath of lift in light.
  * - menu, modal, composer: the edge plus the lift of what floats over the page.
  * - primary: the region's one action, a soft gradient of the primary with a sheen, a ring and a
- *   short drop shadow.
+ *   short drop shadow. In dark the ring is the black outline every control has; in light, where
+ *   nothing else has one, it is the primary a shade darker (`--primary-ring-tint`), so it reads as
+ *   the button's own edge, as Capy's filled buttons do.
  */
 :root,
 .app-skin,
@@ -382,7 +387,8 @@
 	--shadow-modal: inset 0 0 0 1px var(--edge), 0 0 0 1px var(--edge-outline), var(--lift-sheet);
 	--shadow-composer: inset 0 0 0 1px var(--edge), 0 0 0 1px var(--edge-outline), var(--lift-composer);
 	--shadow-composer-focus: inset 0 0 0 1px var(--edge-focus), 0 0 0 1px var(--edge-outline), var(--lift-composer);
-	--shadow-primary: inset 0 1px 0 var(--primary-sheen), 0 0 0 1px var(--primary-ring), var(--primary-drop);
+	--primary-edge: color-mix(in oklab, var(--primary) var(--primary-ring-tint), var(--primary-ring));
+	--shadow-primary: inset 0 1px 0 var(--primary-sheen), 0 0 0 1px var(--primary-edge), var(--primary-drop);
 	--fill-primary: linear-gradient(180deg, color-mix(in oklab, var(--primary) 88%, white), var(--primary));
 	--fill-primary-hover: linear-gradient(
 		180deg,

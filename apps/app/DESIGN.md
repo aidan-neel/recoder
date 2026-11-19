@@ -599,16 +599,19 @@ side an icon sits on gets 2px less padding than a side with text.
 
 ## Corners and controls
 
-Corners are small and there are four of them, as kit tokens. A surface's
-radius is its inset plus the radius of the rows in it, so a 4px row in a menu
-with a 4px inset sits in an 8px panel. Use the tokens, never a raw radius.
+Corners are soft, a step rounder than Capy Desktop's (6px buttons, 8px cards,
+12px panels), and come from five kit tokens. A surface's radius is its inset
+plus the radius of the rows in it, so a 6px row in a menu with a 4px inset
+sits in a 10px panel, and a 6px segment in a track with a 2px inset in an 8px
+track. Use the tokens, never a raw radius.
 
-| Token              | Radius | On                                                                      |
-| ------------------ | ------ | ----------------------------------------------------------------------- |
-| `--radius-chip`    | 4px    | Badges, keycaps, checkboxes, menu rows, `sm` buttons, segments          |
-| `--radius-control` | 5px    | Buttons, fields, select triggers, tabs, tooltips                        |
-| `--radius-row`     | 6px    | List rows and their highlight, segmented tracks, textareas, code blocks |
-| `--radius-card`    | 8px    | Cards, menus, popovers, toasts, dialogs, the palette                    |
+| Token               | Radius | On                                                                      |
+| ------------------- | ------ | ----------------------------------------------------------------------- |
+| `--radius-chip`     | 6px    | Badges, keycaps, checkboxes, menu rows, `sm` buttons, segments          |
+| `--radius-control`  | 7px    | Buttons, fields, select triggers, tabs, tooltips                        |
+| `--radius-row`      | 8px    | List rows and their highlight, segmented tracks, textareas, code blocks |
+| `--radius-card`     | 10px   | Cards, menus, popovers, toasts, the palette                             |
+| `--radius-composer` | 16px   | The composer; the controls in its bar take its radius less the inset    |
 
 - **Tabs** are text, 26px tall. The open tab is brighter on a quiet fill
   (`--bg-hover`) drawn in place. Every tab has the same weight, so nothing

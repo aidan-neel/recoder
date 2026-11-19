@@ -50,14 +50,14 @@
 		background-color: var(--on-primary);
 	}
 
-	/* ───────── Checkbox: the box fills, the check draws in ───────── */
+	/* ───────── Checkbox: the box fills, the check draws in; a 14px box takes a smaller corner so it stays square ───────── */
 	[data-ui='checkbox'] {
 		display: inline-grid;
 		width: 14px;
 		height: 14px;
 		flex-shrink: 0;
 		place-items: center;
-		border-radius: var(--radius-chip);
+		border-radius: calc(var(--radius-chip) - 2px);
 		background-color: var(--bg-field);
 		box-shadow: var(--shadow-field-hover);
 		color: var(--on-primary);
