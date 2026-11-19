@@ -9,6 +9,7 @@ permissions:
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}
+  UPDATER_IMAGE: ghcr.io/${{ github.repository }}-updater
 
 jobs:
   build:
@@ -83,6 +84,20 @@ jobs:
       - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
       - name: Sign the image index (keyless, through GitHub's OIDC)
         run: cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
+      - id: push-updater
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: apps/server/Updater.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ${{ env.UPDATER_IMAGE }}:${{ github.ref_name }}
+            ${{ env.UPDATER_IMAGE }}:${{ env.CHANNEL }}
+      - name: Sign the updater image index (keyless, through GitHub's OIDC)
+        run: cosign sign --yes "${UPDATER_IMAGE}@${{ steps.push-updater.outputs.digest }}"
       - id: digests
         name: Read the per-platform digests the index points at
         run: |
