@@ -157,10 +157,10 @@ async function tlsStatus(stored: StoredAddress, deps: AddressDeps): Promise<TlsS
 	const issued = stored.issued;
 	const fresh = issued !== undefined && Date.parse(issued.expiresAt) - now > REPROBE_MARGIN_MS;
 
+	if (fresh) return { state: 'issued', domain, issuer: issued.issuer, expiresAt: issued.expiresAt };
+
 	if (now - (stored.probedAt ?? 0) < PROBE_THROTTLE_MS) {
-		if (fresh && issued) {
-			return { state: 'issued', domain, issuer: issued.issuer, expiresAt: issued.expiresAt };
-		}
+		if (issued) return { state: 'issued', domain, issuer: issued.issuer, expiresAt: issued.expiresAt };
 
 		return pendingOrFailed(stored, domain, now);
 	}
@@ -179,6 +179,10 @@ async function tlsStatus(stored: StoredAddress, deps: AddressDeps): Promise<TlsS
 			...state,
 			address: state.address && { ...state.address, probedAt: now }
 		}));
+
+		if (issued && Date.parse(issued.expiresAt) > now) {
+			return { state: 'issued', domain, issuer: issued.issuer, expiresAt: issued.expiresAt };
+		}
 
 		return pendingOrFailed(stored, domain, now);
 	}
@@ -265,8 +269,8 @@ async function resolveDnsReal(domain: string): Promise<string[]> {
 async function loadCaddyReal(config: string): Promise<void> {
 	const response = await fetch(new URL('/load', caddyAdminUrl()), {
 		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ adapter: 'caddyfile', config }),
+		headers: { 'content-type': 'text/caddyfile' },
+		body: config,
 		signal: AbortSignal.timeout(10_000)
 	});
 

@@ -28,7 +28,16 @@ fail() {
 }
 
 usage() {
-	sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+	echo 'Usage: curl -fsSL https://recoder.dev/server.sh | sh [-s --] [flags]'
+	echo ''
+	echo 'Flags:'
+	echo '  --domain recoder.example.com   the domain Caddy serves (asked for when omitted)'
+	echo '  --internal-tls                 issue the certificate from Caddy'\''s internal CA (air-gapped or test installs)'
+	echo '  --yes                          answer yes to every question'
+	echo ''
+	echo 'Environment:'
+	echo '  RECODER_VERSION      a release tag to pin, like v0.3.0 (default: the latest release)'
+	echo '  RECODER_INSTALL_DIR  where everything is written (default: /opt/recoder)'
 	exit 0
 }
 
@@ -149,9 +158,9 @@ public_ips() {
 # The secret key seals every saved credential; losing it loses them, so it is generated once and kept.
 if ! grep -q '^RECODER_SECRET_KEY=' "$env_file" 2>/dev/null; then
 	if command -v openssl >/dev/null 2>&1; then
-		secret="$(openssl rand -base64 32)"
+		secret="$(openssl rand -base64 32 | tr -d '\n')"
 	else
-		secret="$(head -c 32 /dev/urandom | base64)"
+		secret="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
 	fi
 
 	set_env RECODER_SECRET_KEY "$secret"
@@ -171,6 +180,10 @@ fi
 chmod 600 "$token_file"
 
 set_env RECODER_IMAGE_TAG "$(docker_tag)"
+
+# The public addresses of this server, so the setup wizard can check a domain's DNS against them. These can
+# change (a server that moves), so unlike the other keys this one is refreshed on every run.
+sed -i '/^RECODER_PUBLIC_IPS=/d' "$env_file" 2>/dev/null || true
 set_env RECODER_PUBLIC_IPS "$(public_ips)"
 
 if [ -z "$domain_arg" ] && grep -q '^RECODER_DOMAIN=' "$env_file" 2>/dev/null; then
@@ -274,6 +287,7 @@ services:
     image: caddy:2
     container_name: recoder-caddy
     restart: unless-stopped
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile --resume
     networks:
       edge:
       internal:
@@ -315,6 +329,19 @@ fi
 write_caddyfile "${domain_arg:-}"
 write_compose
 
+# Caddy resumes the last live configuration over the Caddyfile, so a changed Caddyfile needs the stale
+# autosave gone and the container recreated; the server's own changes to the live config resume fine.
+caddyfile_sha="$(sha256sum "$caddyfile" | cut -d ' ' -f1)"
+old_sha="$(sed -n 's/^RECODER_CADDYFILE_SHA=//p' "$env_file" 2>/dev/null || true)"
+caddy_changed=no
+
+if [ -n "$old_sha" ] && [ "$caddyfile_sha" != "$old_sha" ]; then
+	caddy_changed=yes
+	docker run --rm -v recoder_caddy-config:/config caddy:2 sh -c 'rm -f /config/caddy/autosave.json' 2>/dev/null || true
+fi
+
+set_env RECODER_CADDYFILE_SHA "$caddyfile_sha"
+
 cd "$install_dir"
 
 image_tag="$(docker_tag)"
@@ -327,6 +354,10 @@ if ! docker compose pull --quiet; then
 fi
 
 docker compose up -d
+
+if [ "$caddy_changed" = yes ]; then
+	docker compose up -d --force-recreate caddy
+fi
 
 wait_for_health() {
 	health() {

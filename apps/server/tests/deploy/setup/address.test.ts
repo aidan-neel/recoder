@@ -217,3 +217,61 @@ test('a stored issued certificate that is close to expiry is probed again', asyn
 	expect(probes).toBe(1);
 	expect(answer.tls.issuer).toBe('renewed');
 });
+
+test('a failed re-probe does not turn an issued certificate into failed or pending', async () => {
+	const stored: StoredAddress = {
+		publicUrl: `https://${DOMAIN}`,
+		domain: DOMAIN,
+		requestedAt: NOW,
+		probedAt: NOW - 60_000,
+		issued: { issuer: "Let's Encrypt", expiresAt: new Date(NOW + 90 * 24 * 60_000).toISOString(), seenAt: NOW - 60_000 }
+	};
+
+	await updateDeploymentState((state) => ({ ...state, address: stored }));
+
+	const answer = await readSetupAddress(
+		'https://10.0.0.1',
+		deps({ probeTls: async () => Promise.reject(new Error('reset')) })
+	);
+
+	expect(answer.tls.state).toBe('issued');
+	expect(answer.tls.issuer).toBe("Let's Encrypt");
+});
+
+test('an issued certificate that has expired and no longer handshakes reports failed', async () => {
+	const stored: StoredAddress = {
+		publicUrl: `https://${DOMAIN}`,
+		domain: DOMAIN,
+		requestedAt: NOW - 200 * 24 * 60_000,
+		probedAt: NOW - 60_000,
+		issued: { issuer: "Let's Encrypt", expiresAt: new Date(NOW - 60_000).toISOString(), seenAt: NOW - 60_000 }
+	};
+
+	await updateDeploymentState((state) => ({ ...state, address: stored }));
+
+	const answer = await readSetupAddress(
+		'https://10.0.0.1',
+		deps({ probeTls: async () => Promise.reject(new Error('reset')) })
+	);
+
+	expect(answer.tls.state).toBe('failed');
+});
+
+test('a near-expiry certificate inside the probe throttle is still reported as issued', async () => {
+	const soon = new Date(NOW + 3 * 24 * 60_000).toISOString();
+
+	const stored: StoredAddress = {
+		publicUrl: `https://${DOMAIN}`,
+		domain: DOMAIN,
+		requestedAt: NOW - 200 * 24 * 60_000,
+		probedAt: NOW,
+		issued: { issuer: "Let's Encrypt", expiresAt: soon, seenAt: NOW }
+	};
+
+	await updateDeploymentState((state) => ({ ...state, address: stored }));
+
+	const answer = await readSetupAddress('https://10.0.0.1', deps({ now: () => NOW + 10_000 }));
+
+	expect(answer.tls.state).toBe('issued');
+	expect(answer.tls.expiresAt).toBe(soon);
+});
