@@ -1,7 +1,7 @@
 'use client';
 
 import { Composer, ComposerSend, ComposerStop, type ComposerCommand, type ComposerMenuItem } from '@recoder/ui';
-import type { ReactNode } from 'react';
+import { useImperativeHandle, type ReactNode, type Ref } from 'react';
 
 import { useDraft } from '@/lib/ask/use-draft';
 import type { ImageDraft } from '@/lib/compose/use-image-draft';
@@ -9,7 +9,21 @@ import { useLinkFacts } from '@/lib/pulls/use-link-facts';
 
 import { AttachImages } from '@/components/compose/attach-images';
 
+/** What a conversation can do to its composer from outside it. */
+export interface ChatComposerHandle {
+	/** Puts `text` at the top of the draft as a Markdown quote, over anything already written. */
+	quote: (text: string) => void;
+}
+
+/** `text` as a Markdown quote with a blank line after it, ready for an answer under it. */
+function quoted(text: string): string {
+	const lines = text.trim().split('\n');
+
+	return `${lines.map((line) => (line ? `> ${line}` : '>')).join('\n')}\n\n`;
+}
+
 interface ChatComposerProps {
+	ref?: Ref<ChatComposerHandle>;
 	/** What the field is for, read out by a screen reader. */
 	label: string;
 	placeholder: string;
@@ -41,6 +55,7 @@ interface ChatComposerProps {
  * send stops it. Text over the limit, or a refused send, says so in the bar.
  */
 export function ChatComposer({
+	ref,
 	label,
 	placeholder,
 	onSend,
@@ -57,6 +72,9 @@ export function ChatComposer({
 	images
 }: ChatComposerProps) {
 	const draft = useDraft({ onSend, limit, busy });
+
+	useImperativeHandle(ref, () => ({ quote: (text) => draft.setText(quoted(text) + draft.text) }), [draft]);
+
 	const linkFacts = useLinkFacts();
 
 	const action =

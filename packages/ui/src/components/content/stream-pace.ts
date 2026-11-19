@@ -131,24 +131,3 @@ export function revealStep(
 
 	return { length, budget: 0 };
 }
-
-/** When each stretch of shown text went out: the text's length after a step, and the time of that step. */
-export interface Arrival {
-	end: number;
-	at: number;
-}
-
-/** When the character at `offset` went out: the first step whose text reached past it, else the latest. */
-export function arrivalAt(arrivals: readonly Arrival[], offset: number): number {
-	let low = 0;
-	let high = arrivals.length - 1;
-
-	while (low < high) {
-		const middle = (low + high) >> 1;
-
-		if (arrivals[middle].end > offset) high = middle;
-		else low = middle + 1;
-	}
-
-	return arrivals[low]?.at ?? 0;
-}

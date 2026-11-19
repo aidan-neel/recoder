@@ -468,7 +468,7 @@ comment field. There is no second implementation.
   named by tooltips), then the note, then the caller's controls (the models)
   and the action. The action is `ComposerSend`, the region's one primary
   button, which spins in place while sending; while a reply arrives it is
-  `ComposerStop`. The note is right-aligned meta text, danger for what stops
+  `ComposerStop`, a square in the same primary fill, as in Capy. The note is right-aligned meta text, danger for what stops
   Enter, secondary for what Enter does first.
 - **Sizes.** `lg` is a page's main field (New): 15px text, two rows, and it
   grows to eight before it scrolls. `md` is everything else, two rows. The `row` layout puts the field and the
@@ -497,6 +497,36 @@ comment field. There is no second implementation.
 - **Keys.** Enter sends, Shift+Enter starts a line. Text over the server's
   limit says by how much and cannot send; a refused send says why and keeps
   the text.
+
+## Thread
+
+A repository chat reads like a Capy thread (Paper variant D, "Line", in the
+AID-8 file).
+
+- **Turns.** The person's question sits on a tint at the right. The hour
+  shows centred over a question that opens a conversation or follows a rest
+  of more than five minutes. Recoder's reply is prose on the page.
+- **What it did.** Under the question, one centred line with no rule:
+  `Working for 8s`, which sweeps while the reply works and whose seconds
+  roll like Capy's counters (`AnimatedNumber`), then `Worked for 13s`. While the reply works, its steps arrive
+  under that line, one quiet line each, ending in how long the step took.
+  They fold away once the answer begins, and pressing the line opens them
+  again. A step with more to show (the files a search or a read found, a
+  command and its output, a thought's text) opens under its own line on
+  request, and only a failed command starts open.
+- **A reply's toolbar.** Capy's pill at the reply's top right: a 1px
+  `--line-control` ring on the canvas, holding the hour it arrived, Reply
+  (quotes the reply in the composer, where one sits beside the thread), Copy
+  (the Markdown) and a menu with Copy as plain text and Ask again. Its icons
+  are 14px in 28px targets. It shows while the reply is hovered or holds
+  focus and while its menu is open, and takes no pointer at rest.
+- **Streaming.** The reply's text goes out a few words at a time, and each
+  stretch that arrives fades from transparent to its colour over 160ms on a
+  strong ease-out, drawn with CSS custom highlights so nothing moves or
+  blurs (`useStreamFade`). Code stands at once.
+- **Scroll.** The thread follows a reply while the person reads the end.
+  Scrolling up stops the following and shows a Scroll to end pill centred
+  over the composer, which brings the end back and follows again.
 
 ## Motion
 

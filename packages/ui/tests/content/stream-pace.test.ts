@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { arrivalAt, revealStep } from '../../src/components/content/stream-pace';
+import { revealStep } from '../../src/components/content/stream-pace';
 
 /** What `revealStep` shows of `text` from nothing with an unlimited budget. */
 function shownOf(text: string, done = false): string {
@@ -37,18 +37,5 @@ describe('revealStep', () => {
 
 	test('drops the budget while it waits on text still to come, so a pause never releases a burst', () => {
 		expect(revealStep('one tw', 4, 500, false)).toEqual({ length: 4, budget: 0 });
-	});
-});
-
-describe('arrivalAt', () => {
-	test('times a character by the first step that showed it, and anything past the end by the latest', () => {
-		const arrivals = [
-			{ end: 4, at: 100 },
-			{ end: 8, at: 200 }
-		];
-
-		expect(arrivalAt(arrivals, 0)).toBe(100);
-		expect(arrivalAt(arrivals, 4)).toBe(200);
-		expect(arrivalAt(arrivals, 99)).toBe(200);
 	});
 });
