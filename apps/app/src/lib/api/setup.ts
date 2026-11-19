@@ -1,4 +1,4 @@
-import type { SetAddress, SetupAddress, SetupChecklist, StorageTest, UpdateStatus } from '@recoder/shared';
+import type { SetAddress, SetupAddress, SetupChecklist, StorageTest } from '@recoder/shared';
 
 import { post, request } from './http';
 
@@ -12,9 +12,7 @@ export const setupApi = {
 	address: () => request<SetupAddress>('/api/setup/address'),
 	setAddress: (address: SetAddress) => post<SetupAddress>('/api/setup/address', address),
 	useBuiltinStorage: () => post<SetupChecklist>('/api/setup/storage', { kind: 'builtin' }),
-	/** Moves the data to PostgreSQL: the server restarts through its updater, so the answer is the updater's status. */
-	moveToPostgres: (url: string, copy: boolean) =>
-		post<UpdateStatus>('/api/setup/storage', { kind: 'postgres', url, import: copy }),
+	/** Tries a PostgreSQL URL; a running install moves to it only offline, with the import the docs describe. */
 	testStorage: (url: string) => post<StorageTest>('/api/server/storage/test', { url }),
 	finish: () => post<SetupChecklist>('/api/setup/finish')
 };

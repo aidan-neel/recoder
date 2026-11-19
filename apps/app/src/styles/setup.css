@@ -117,11 +117,6 @@
 	color: var(--text-secondary);
 	text-wrap: pretty;
 }
-.setup-waiting {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
 .setup-form {
 	display: flex;
 	width: 100%;
@@ -152,12 +147,14 @@
 	flex-direction: column;
 	gap: 12px;
 }
-.setup-check {
+.setup-moves {
 	display: flex;
-	align-items: center;
-	gap: 8px;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding-left: 20px;
+	list-style: decimal;
 	color: var(--text-secondary);
-	cursor: pointer;
 }
 .setup-modal-note {
 	margin: 0;

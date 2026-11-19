@@ -1,20 +1,8 @@
 'use client';
 
 import type { SetupStep as Step } from '@recoder/shared';
-import {
-	Button,
-	Checkbox,
-	Field,
-	Input,
-	Modal,
-	ModalBody,
-	ModalClose,
-	ModalContent,
-	ModalFooter,
-	ModalTitle,
-	Spinner
-} from '@recoder/ui';
-import { useId, type FormEvent } from 'react';
+import { Button, Field, Input, Modal, ModalBody, ModalClose, ModalContent, ModalFooter, ModalTitle } from '@recoder/ui';
+import type { FormEvent } from 'react';
 
 import { anyFailed } from '@/lib/server/checks';
 import { useChecks } from '@/lib/server/use-checks';
@@ -34,78 +22,91 @@ interface StepProps {
 
 const POSTGRES_FORM = 'setup-postgres';
 
-/** The PostgreSQL move: a URL tried before anything moves, and whether the built-in data goes with it. */
+/** Where the offline move to PostgreSQL is written down, step by step. */
+const POSTGRES_GUIDE =
+	'https://github.com/aidan-neel/recoder/blob/main/docs/ha-operating.md#import-a-standalone-installation';
+
+/** The offline move, in short, once the database has answered; the guide has the commands. */
+function PostgresSteps({ version }: { version: string | undefined }) {
+	return (
+		<div className="setup-form">
+			<p className="setup-text">
+				{version ? `PostgreSQL ${version} answered.` : 'PostgreSQL answered.'} Recoder moves to it while it is stopped:
+			</p>
+			<ol className="setup-moves">
+				<li>Stop Recoder and back up its data directory.</li>
+				<li>Set RECODER_DATABASE_URL to this database and RECODER_SECRET_KEY to this server’s key.</li>
+				<li>Run the import, then start Recoder again.</li>
+			</ol>
+			<p className="setup-modal-note">Until then, finish setup on the built-in database.</p>
+		</div>
+	);
+}
+
+/** PostgreSQL: a URL tried here, then the offline move, since a running install cannot switch from the browser. */
 function PostgresModal({ dialog }: { dialog: PostgresDialog }) {
-	const copyId = useId();
-	const ready = dialog.tested?.ok === true;
+	const answered = dialog.tested?.ok === true;
 
 	function submit(event: FormEvent): void {
 		event.preventDefault();
-		if (ready) dialog.move();
-		else dialog.test();
+		dialog.test();
 	}
 
 	return (
 		<Modal open={dialog.open} onOpenChange={dialog.setOpen}>
 			<ModalContent size="md">
-				<ModalTitle context="Set up Recoder">Use PostgreSQL</ModalTitle>
+				<ModalTitle context="Set up Recoder">PostgreSQL</ModalTitle>
 				<ModalBody>
-					<form id={POSTGRES_FORM} className="setup-form" noValidate onSubmit={submit}>
-						<Field
-							label="Connection URL"
-							hint={
-								dialog.tested?.ok
-									? `PostgreSQL ${dialog.tested.version ?? ''} answered.`.replace('  ', ' ')
-									: 'Sealed with this server’s key before it is saved.'
-							}
-							error={dialog.error ?? undefined}
-						>
-							<Input
-								type="password"
-								value={dialog.url}
-								placeholder="postgresql://recoder@db.example.com/recoder"
-								autoComplete="off"
-								spellCheck={false}
-								onChange={(event) => dialog.setUrl(event.target.value)}
-							/>
-						</Field>
-						<label className="setup-check" htmlFor={copyId}>
-							<Checkbox
-								id={copyId}
-								checked={dialog.copy}
-								onCheckedChange={(checked) => dialog.setCopy(checked === true)}
-							/>
-							Copy what the built-in database holds
-						</label>
-						<p className="setup-modal-note">Recoder restarts on PostgreSQL, which takes about a minute.</p>
-					</form>
+					{answered ? (
+						<PostgresSteps version={dialog.tested?.version} />
+					) : (
+						<form id={POSTGRES_FORM} className="setup-form" noValidate onSubmit={submit}>
+							<p className="setup-text">
+								PostgreSQL lets more than one Recoder server run on the same data. Try the database first.
+							</p>
+							<Field label="Connection URL" error={dialog.error ?? undefined}>
+								<Input
+									type="password"
+									value={dialog.url}
+									placeholder="postgresql://recoder@db.example.com/recoder"
+									autoComplete="off"
+									spellCheck={false}
+									onChange={(event) => dialog.setUrl(event.target.value)}
+								/>
+							</Field>
+						</form>
+					)}
 				</ModalBody>
 				<ModalFooter>
 					<ModalClose>
-						<Button variant="ghost">Cancel</Button>
+						<Button variant="ghost">Close</Button>
 					</ModalClose>
-					<Button
-						variant={ready ? 'outline' : 'primary'}
-						onClick={dialog.test}
-						status={dialog.testStatus}
-						disabled={!dialog.url.trim()}
-					>
-						Test
-					</Button>
-					{ready ? (
-						<Button variant="primary" type="submit" form={POSTGRES_FORM} status={dialog.moveStatus}>
-							Move to PostgreSQL
+					{answered ? (
+						<Button variant="primary" asChild>
+							<a href={POSTGRES_GUIDE} target="_blank" rel="noreferrer">
+								Open the guide
+							</a>
 						</Button>
-					) : null}
+					) : (
+						<Button
+							variant="primary"
+							type="submit"
+							form={POSTGRES_FORM}
+							status={dialog.testStatus}
+							disabled={!dialog.url.trim()}
+						>
+							Test
+						</Button>
+					)}
 				</ModalFooter>
 			</ModalContent>
 		</Modal>
 	);
 }
 
-/** Step six: where the data lives, the built-in database unless the person moves it to PostgreSQL. */
+/** Step six: where the data lives. The built-in database finishes it; PostgreSQL is an offline move for later. */
 export function StorageStep({ step, current }: StepProps) {
-	const view = useStorageStep(step.done);
+	const view = useStorageStep();
 
 	return (
 		<SetupStep
@@ -114,27 +115,21 @@ export function StorageStep({ step, current }: StepProps) {
 			current={current}
 			hint="Built-in database on this server"
 			body={
-				view.moving ? (
-					<p className="setup-text setup-waiting">
-						<Spinner /> Moving to PostgreSQL. Recoder restarts and comes back here.
+				<>
+					<p className="setup-text">
+						Reviews, settings and sealed credentials stay in a database on this server. To run more than one Recoder
+						server on the same data, move to PostgreSQL later.
 					</p>
-				) : (
-					<>
-						<p className="setup-text">
-							Reviews, settings and sealed credentials stay in a database on this server. Use PostgreSQL to run more
-							than one Recoder server on the same data.
-						</p>
-						<div className="setup-actions">
-							<Button variant="primary" onClick={view.useBuiltin} status={view.builtinStatus}>
-								Use the built-in database
-							</Button>
-							<Button variant="outline" onClick={() => view.postgres.setOpen(true)}>
-								Use PostgreSQL
-							</Button>
-						</div>
-						<PostgresModal dialog={view.postgres} />
-					</>
-				)
+					<div className="setup-actions">
+						<Button variant="primary" onClick={view.useBuiltin} status={view.builtinStatus}>
+							Use the built-in database
+						</Button>
+						<Button variant="ghost" onClick={() => view.postgres.setOpen(true)}>
+							About PostgreSQL
+						</Button>
+					</div>
+					<PostgresModal dialog={view.postgres} />
+				</>
 			}
 		/>
 	);
