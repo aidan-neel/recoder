@@ -133,7 +133,7 @@ Parsed with zod in `apps/server/src/env.ts`.
 
 **HOST**: Listen address. Default `0.0.0.0`.
 
-**FRONTEND_URL**: The web app's origin. Default `http://localhost:3000`. `trustedOrigin` in `apps/server/src/routes/trusted-origin.ts` lets it call routes that sign in or hold credentials. It is also returned by `GET /`. It is also the one origin that may send the session cookie: CORS allows credentials for it (and for loopback origins outside production), and answers every other origin with `*`, which browsers refuse to combine with credentials (`apps/server/src/app.ts`). The session cookie is `SameSite=Lax`, so the app and the API must be on the same site (the same registrable domain; ports may differ, as with `app.example.org:8443` and `app.example.org:8444`, or `localhost:5190` and `localhost:3001`).
+**FRONTEND_URL**: The web app's origin. Default `http://localhost:5180`, the port `bun run dev` serves the app on (`apps/app/package.json`). `trustedOrigin` in `apps/server/src/routes/trusted-origin.ts` lets it call routes that sign in or hold credentials. It is also returned by `GET /`. It is also the one origin that may send the session cookie: CORS allows credentials for it (and for loopback origins outside production), and answers every other origin with `*`, which browsers refuse to combine with credentials (`apps/server/src/app.ts`). The session cookie is `SameSite=Lax`, so the app and the API must be on the same site (the same registrable domain; ports may differ, as with `app.example.org:8443` and `app.example.org:8444`, or `localhost:5190` and `localhost:3001`).
 
 **NODE_ENV**: `production` stops `trustedOrigin` from trusting any `http://localhost` or `http://127.0.0.1` origin. Read in `apps/server/src/routes/trusted-origin.ts`.
 
@@ -146,7 +146,7 @@ Parsed with zod in `apps/server/src/env.ts`.
 - `https://<api host>/api/auth/oauth/github/callback`
 - `https://<api host>/api/auth/oauth/gitlab/callback`
 
-**RECODER_PUBLIC_URL**: The address people reach the API at, such as `https://recoder.example.ts.net`. The callback URL is built from it. Unset, the server builds it from the request's own host, with `https` when the request or its proxy (`X-Forwarded-Proto`) says so; set it when a proxy changes the host. The URL sent to the forge must match the registered one exactly.
+**RECODER_PUBLIC_URL**: The address people reach the API at, such as `https://recoder.example.ts.net`. The callback URL is built from it. Unset, the server builds it from the request's own host, with `https` when the request or its proxy (`X-Forwarded-Proto`) says so; set it when a proxy changes the host. The URL sent to the forge must match the registered one exactly. When `FRONTEND_URL` is unset, the setup-code log prints this address, since it is where the app is reached once one image serves it.
 
 **RECODER_API_TOKEN**: A fixed bearer token (32 to 200 characters) for programs that call the API without a browser, such as `eval:benchmark`, once an account exists. Unset, the server keeps a random one in `api-token` in the data dir (mode 0600, not sealed, since the eval tools read it from there). With shared PostgreSQL there is no shared data dir, so replicas accept a bearer token only when this is set.
 

@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomInt } from 'node:crypto';
-import { rmSync, writeFileSync } from 'node:fs';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { env } from '../env';
+import { env, publicOrigin } from '../env';
 import { collection, postgres } from '../storage/backend';
 import { serverDataDir } from '../util/data-dir';
 import { sameSecret } from '../util/same-secret';
@@ -33,6 +33,32 @@ export interface SetupGrant {
 
 const records = collection<SetupRecord>('setup');
 
+/** The app's port under `bun run dev`: Next serves it there while the API listens on 3001 (`apps/app/package.json`). */
+const DEV_APP_PORT = 5180;
+
+/** Whether this runs as a deployed server (a container, Kubernetes or `NODE_ENV=production`) rather than a checkout. */
+function deployedServer(): boolean {
+	return (
+		process.env.NODE_ENV === 'production' ||
+		existsSync('/.dockerenv') ||
+		process.env.KUBERNETES_SERVICE_HOST !== undefined
+	);
+}
+
+/**
+ * The address a person opens to enter the code — the web app's origin. A deployment that sets `FRONTEND_URL`
+ * (Compose, Helm, the install script) is trusted, since it names the app wherever it lives. `RECODER_PUBLIC_URL`
+ * is next: once one image serves the app beside the API it is that origin. A container with neither gets this
+ * server's own port, which one image serves the app on; a checkout gets the dev app's port.
+ */
+export function setupLogUrl(): string {
+	const frontend = process.env.FRONTEND_URL?.trim();
+
+	if (frontend) return frontend;
+
+	return publicOrigin() ?? (deployedServer() ? `http://localhost:${env.PORT}` : `http://localhost:${DEV_APP_PORT}`);
+}
+
 /**
  * Makes the one-time setup code at server start while no account exists, and retires any left over once one does.
  * Alone, the server makes a new code on every start. With shared PostgreSQL the first replica to start creates the
@@ -55,7 +81,7 @@ export async function startSetupCode(hasAccount: boolean): Promise<void> {
 	if (!created) return;
 
 	writeFileSync(join(serverDataDir(), FILE_NAME), `${code}\n`, { mode: 0o600 });
-	console.log(`[recoder] setup code: ${code} (enter it at ${env.FRONTEND_URL} to claim this server)`);
+	console.log(`[recoder] setup code: ${code} (enter it at ${setupLogUrl()} to claim this server)`);
 }
 
 /** Whether `candidate` is the setup code. Case, spaces and dashes are ignored; the comparison takes constant time. */
