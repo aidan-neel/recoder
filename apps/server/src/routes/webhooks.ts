@@ -4,6 +4,7 @@ import { env } from '../env';
 import { handlePullHook, type HookOutcome, type PullHook } from '../forge/watch/webhook-event';
 import { githubHook, gitlabHook } from '../forge/watch/webhook-payloads';
 import { sameSecret } from '../util/same-secret';
+import { recordWebhookDelivery } from '../deploy/diagnostics/webhooks';
 
 function verifySignature(secret: string, signature: string | null | undefined, raw: string): boolean {
 	if (!signature?.startsWith('sha256=')) return false;
@@ -58,6 +59,8 @@ app.post('/github', async (c) => {
 
 	if (!payload.ok) return c.json({ error: 'invalid json' }, 400);
 
+	await recordWebhookDelivery();
+
 	const event = c.req.header('x-github-event');
 
 	if (event === 'ping') return c.json({ received: true, message: 'pong' });
@@ -78,6 +81,8 @@ app.post('/gitlab', async (c) => {
 	const payload = parseJson(await c.req.text());
 
 	if (!payload.ok) return c.json({ error: 'invalid json' }, 400);
+
+	await recordWebhookDelivery();
 
 	return await answer(c, gitlabHook(payload.value));
 });

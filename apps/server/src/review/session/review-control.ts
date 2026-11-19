@@ -64,6 +64,11 @@ export class ReviewControl {
 			});
 		}
 	}
+
+	/** True when some pipeline work has acknowledged the pause at its wait point. */
+	isAtPausePoint(): boolean {
+		return this.paused && this.waiters.length > 0;
+	}
 }
 
 const controls = new Map<string, ReviewControl>();

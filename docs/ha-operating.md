@@ -150,6 +150,21 @@ destination stopped. Restore the matching external key separately.
 Removing the Helm release leaves the external database and Secrets under infrastructure control.
 Restoring PostgreSQL does not roll back messages already sent to a forge or model charges already incurred.
 
+### Container updates on a single SQLite server
+
+Configure the optional updater only for the single-server SQLite deployment. Kubernetes and PostgreSQL remain
+managed: redeploy them with the platform’s tools. The updater takes a checkpoint backup even when updating within
+one data version. A rollback across a data-version change uses the original pre-update archive and discards writes
+made after it. Backups that are required for an update or a rollback are exempt from pruning.
+
+Build the separate updater from `apps/server/Updater.Dockerfile`. Run it on the private Recoder network without
+published ports. It alone mounts `/var/run/docker.sock`; it also needs a durable `/var/lib/recoder-updater` journal
+and a read-only view of the server’s `/app/data` volume. Both containers mount `/run/recoder-updater` and receive the
+same private token file at `/run/secrets/recoder-updater-token` (32–200 printable, non-space characters).
+The two container processes must use the same effective UID for the private socket. The server container name and
+private network alias must be `recoder-server`, with the label `dev.recoder.updater-managed=true`. Do not mount hosts’
+Docker sockets or grant privileged mode to Recoder itself.
+
 ## Verify the installation
 
 Run the PostgreSQL integration checks only against an isolated test database.

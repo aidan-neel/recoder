@@ -1,5 +1,7 @@
 import { Hono, type Context } from 'hono';
+import { currentAccount } from '../accounts/enforcement';
 import { refuseWhileLocked } from '../accounts/setup-gate';
+import { protectDeploymentMutation } from '../deploy/setup/access';
 import { secretKey } from '../secrets/secret-key';
 import {
 	backupPolicySchema,
@@ -11,16 +13,21 @@ import {
 } from '../storage/backups/service';
 import { downloadBackup, findBackup, isMissingFile } from '../storage/backups/store';
 import { serverDataDir } from '../util/data-dir';
+import { configuredUpdater } from '../update/container/connection';
+import { updaterTerminal, UpdaterRefused } from '../update/container/protocol';
+import { beginContainer, containerOperationPreparing, containerStatus } from '../update/container/server';
 
 const app = new Hono();
 
 app.use('*', async (c, next) => (await refuseWhileLocked(c)) ?? next());
+app.use('*', protectDeploymentMutation);
 
 async function controlled(c: Context, work: () => Response | Promise<Response>): Promise<Response> {
 	try {
 		return await work();
 	} catch (error) {
-		if (error instanceof BackupRefusedError) return c.json({ error: error.message }, 409);
+		if (error instanceof BackupRefusedError || error instanceof UpdaterRefused)
+			return c.json({ error: error.message }, 409);
 		if (isMissingFile(error)) return c.json({ error: 'Backup not found.' }, 404);
 		throw error;
 	}
@@ -48,6 +55,11 @@ app.put('/policy', (c) =>
 
 app.delete('/:id', (c) =>
 	controlled(c, async () => {
+		const socket = await configuredUpdater();
+
+		if (containerOperationPreparing() || (socket && !updaterTerminal((await containerStatus(socket)).state)))
+			return c.json({ error: 'Backups are held while an update or restore is running.' }, 409);
+
 		const state = await deleteBackup(c.req.param('id'));
 
 		return state ? c.json(state) : c.json({ error: 'Backup not found.' }, 404);
@@ -71,6 +83,27 @@ app.get('/:id/download', (c) =>
 			'Content-Type': 'application/zstd',
 			'X-Content-Type-Options': 'nosniff'
 		});
+	})
+);
+
+app.post('/:id/restore', (c) =>
+	controlled(c, async () => {
+		const socket = await configuredUpdater();
+
+		if (!socket)
+			return c.json(
+				{ error: 'This deployment cannot restore while it is running. Use the offline operator command.' },
+				409
+			);
+
+		const backup = c.req.param('id');
+
+		if (!(await findBackup(serverDataDir(), backup))) return c.json({ error: 'Backup not found.' }, 404);
+
+		return c.json(
+			await beginContainer(socket, { action: 'restore', backup }, (await currentAccount(c))?.name ?? null),
+			202
+		);
 	})
 );
 

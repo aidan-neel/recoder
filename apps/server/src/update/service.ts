@@ -14,6 +14,8 @@ import { restartThroughSuccessor } from './restart';
 import { spawnProcess, requireSuccess, type RunProcess } from './run';
 import { detectWebRestart } from './webapp';
 import { classifyPaths, readWorkspaceGraph } from './workspace';
+import { configuredUpdater } from './container/connection';
+import { checkContainer, containerStatus } from './container/server';
 
 /** How long `bun install` may take on a cold cache. */
 const INSTALL_TIMEOUT_MS = 300_000;
@@ -118,6 +120,10 @@ export function createUpdateService(deps: UpdateDeps) {
 	}
 
 	async function status(): Promise<UpdateStatus> {
+		const socket = await configuredUpdater();
+
+		if (socket) return containerStatus(socket);
+
 		const saved = await read();
 
 		if (saved) return toStatus(saved);
@@ -129,7 +135,10 @@ export function createUpdateService(deps: UpdateDeps) {
 			current: detectionResult.mode === 'git' ? await current.get('head', gitCurrent) : { version: VERSION },
 			available: null,
 			state: 'idle',
-			...(detectionResult.managedNote !== undefined ? { managedNote: detectionResult.managedNote } : {})
+			...(detectionResult.managedNote !== undefined ? { managedNote: detectionResult.managedNote } : {}),
+			...(detectionResult.mode === 'managed' && process.env.RECODER_MANAGED_COMMAND
+				? { managedCommand: process.env.RECODER_MANAGED_COMMAND }
+				: {})
 		};
 	}
 
@@ -198,6 +207,10 @@ export function createUpdateService(deps: UpdateDeps) {
 	 * are fresher than a check's.
 	 */
 	async function check(): Promise<UpdateStatus> {
+		const socket = await configuredUpdater();
+
+		if (socket) return checkContainer(socket);
+
 		const saved = await read();
 
 		if (saved && APPLYING.has(saved.state)) return toStatus(saved);

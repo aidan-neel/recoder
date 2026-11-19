@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
+import { matchedRoutes } from 'hono/route';
 import { env } from './env';
 import { requireSession } from './accounts/enforcement';
 import accounts from './routes/accounts';
@@ -29,6 +29,12 @@ import reviews from './routes/reviews';
 import runs from './routes/runs';
 import update from './routes/update';
 import backups from './routes/backups';
+import serverLogs from './routes/server-logs';
+import { createServerInfoRoutes } from './routes/server-info';
+import { createSetupChecklistRoutes } from './routes/setup-checklist';
+import { serverLog } from './deploy/logs/stream';
+import { SAFE_METHODS } from './accounts/admin-routes';
+import { containerOperationPreparing } from './update/container/server';
 import webhooks from './routes/webhooks';
 import { VERSION } from './version';
 import { ModelConfigError } from './models/models';
@@ -61,6 +67,7 @@ function handleError(err: Error, c: Context): Response {
 	if (err instanceof SharedSettingsConflictError) return c.json({ error: err.message }, 409);
 	if (err instanceof UnknownSkillError) return c.json({ error: err.message }, 400);
 	if (err instanceof RepoFilesError) return c.json({ error: err.message }, err.status);
+	serverLog('error', 'A server request failed.');
 	if (postgres) console.error('[recoder] shared API operation failed', err.name);
 	else console.error('[recoder] unhandled error', redacted(err.stack ?? err.message, []));
 
@@ -69,11 +76,28 @@ function handleError(err: Error, c: Context): Response {
 
 export const app = new Hono();
 
-app.use('*', logger());
+app.use('*', async (c, next) => {
+	await next();
+
+	const route =
+		matchedRoutes(c)
+			.filter((match) => match.method === c.req.method)
+			.at(-1)?.path ?? 'unmatched route';
+
+	serverLog(c.res.status >= 500 ? 'error' : 'info', `${c.req.method} ${route} ${c.res.status}`);
+});
 
 app.use('*', cors(corsOptions));
 app.use('/api/*', jsonCompression());
 app.use('/api/*', requireSession);
+
+app.use('/api/*', async (c, next) => {
+	if (containerOperationPreparing() && !SAFE_METHODS.has(c.req.method))
+		return c.json({ error: 'Recoder is preparing an update or restore. Try again shortly.' }, 409);
+
+	return next();
+});
+
 app.use('/api/*', async (_c, next) => settingsOperation(next));
 
 app.use('/api/reviews/:id/*', async (c, next) => {
@@ -109,6 +133,9 @@ app.route('/api/reviews', reviews);
 app.route('/api/runs', runs);
 app.route('/api/update', update);
 app.route('/api/server/backups', backups);
+app.route('/api/server/logs', serverLogs);
+app.route('/api/server', createServerInfoRoutes());
+app.route('/api/setup', createSetupChecklistRoutes());
 app.route('/api/webhooks', webhooks);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));

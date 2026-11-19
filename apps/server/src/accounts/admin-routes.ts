@@ -25,5 +25,8 @@ const ADMIN_ONLY_PATHS = /^\/api\/(members|usage|telemetry|update|server)(\/|$)/
 
 /** Whether a request changes server configuration or members, and so needs the admin. */
 export function isAdminOnly(method: string, path: string): boolean {
+	if (/^\/api\/setup(?:\/|$)/.test(path))
+		return !((method === 'GET' || method === 'HEAD') && (path === '/api/setup' || path === '/api/setup/'));
+
 	return ADMIN_ONLY_PATHS.test(path) || (!SAFE_METHODS.has(method) && ADMIN_WRITE_PATHS.test(path));
 }

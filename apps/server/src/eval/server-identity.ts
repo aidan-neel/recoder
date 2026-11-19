@@ -11,6 +11,7 @@ import { fileVersion, sourceVersion } from './source-hash';
 
 /** Variables that place the server's files or reach its model, and never change what a review does. */
 const NOT_FLAGS = new Set([
+	'RECODER_MANAGED_COMMAND',
 	'RECODER_DATA_DIR',
 	'RECODER_WORKDIR',
 	'RECODER_OPENCODE_BIN',
