@@ -75,14 +75,19 @@
 	flex: 1;
 	overflow-y: auto;
 }
-/* The column starts on the bar's gutter at every width, so the bar's first text and the column's line up. */
+/*
+ * A page's one content column: every page's body, its header and its tab row sit in one, so their edges are the
+ * bar's. Its edges are the gutter; a page that sets --page-measure centres its column at that width instead, and
+ * still never comes closer to the panel's sides than the gutter. A part that spans the panel, like a rule, is the
+ * column itself, so its line runs edge to edge while its content keeps to the edges.
+ */
 .page-column {
-	width: 100%;
-	max-width: 1180px;
-	padding: 20px var(--page-gutter) 48px var(--page-gutter);
+	--page-inline: max(var(--page-gutter), (100cqw - var(--page-measure, 100cqw)) / 2);
+
+	padding-inline: var(--page-inline);
 }
 .page-column[data-width='reading'] {
-	max-width: 768px;
+	--page-measure: 768px;
 }
 
 .page-title {

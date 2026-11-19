@@ -183,6 +183,7 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 					<Button
 						variant="quiet"
 						size="icon"
+						className="changes-fold"
 						aria-label={shut ? 'Expand every file' : 'Collapse every file'}
 						onClick={() => nav.foldAll(shut)}
 					>

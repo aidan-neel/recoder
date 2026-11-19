@@ -1,8 +1,7 @@
 /* ───────── Pull request list: one row a pull request, one fact that needs you ───────── */
 /* The list fills the page. Labels start and end on the bar's gutter; quiet controls and row fills reach past it. */
 .pulls-column {
-	width: 100%;
-	padding: 12px var(--page-gutter) 48px var(--page-gutter);
+	padding-block: 12px 48px;
 }
 /*
  * The bar's quiet controls have no box at rest, so their text or ink sits on the gutter: they reach out by their

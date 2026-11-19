@@ -133,7 +133,7 @@ export function PullsScreen() {
 			}
 		>
 			<div className="page-scroll">
-				<div className="pulls-column">
+				<div className="page-column pulls-column">
 					<Strips failures={view.failures} />
 					<div className="pulls-head">
 						<h1 className="contents">

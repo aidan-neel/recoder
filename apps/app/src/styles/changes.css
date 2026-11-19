@@ -23,11 +23,21 @@
 	flex-direction: column;
 	border-right: 1px solid var(--line-subtle);
 }
-/* The rows' fill reaches 8px past the page's gutter, as the tab row's first tab does. */
+/*
+ * The sidebar keeps the page's gutter on both sides of its rule: the filter's box, a top row's chevron and a row's
+ * last letter sit 20px in, and a row's fill reaches 8px past them, as the shell sidebar's rows do. The filter's top
+ * lines up with the first file card's, and the rows start 8px under it, one 28px row after another.
+ */
 .changes-tree {
 	min-height: 0;
 	flex: 1;
-	padding: 8px 4px 24px calc(var(--page-gutter) - 14px);
+	padding: 8px calc(var(--page-gutter) - 8px) 24px;
+}
+.changes-tree [role='tree'] {
+	padding: 0;
+}
+.changes-tree [data-tree-row] {
+	padding-inline: calc(4px + var(--depth, 0) * 14px) 8px;
 }
 .changes-main {
 	min-width: 0;
@@ -45,12 +55,11 @@
 	--changes-column: none;
 }
 
-/* The filter over the tree lines up with the tree's rows. */
 .changes-filter {
-	padding: 10px 8px 2px calc(var(--page-gutter) - 14px);
+	padding: 12px var(--page-gutter) 0;
 }
 .changes-filter-empty {
-	padding: 12px 8px 0 calc(var(--page-gutter) - 6px);
+	padding: 12px 8px 0 var(--page-gutter);
 	color: var(--text-faint);
 	font-size: var(--font-size-label);
 }
@@ -79,7 +88,10 @@
 	gap: 8px;
 }
 
-/* Tools in the tab row. */
+/* Tools in the tab row. The last, the fold, has no box at rest: its 6px padding and the icon's 2px margin reach out. */
+.changes-fold {
+	margin-right: -8px;
+}
 .changes-files .meta {
 	margin-left: 2px;
 }

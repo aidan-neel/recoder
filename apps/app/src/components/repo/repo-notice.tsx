@@ -15,7 +15,7 @@ import { OfflineNotice } from '@/components/common/offline-notice';
 export function RepoNotice({ view }: { view: RepoPageView }) {
 	if (view.offline) {
 		return (
-			<div className="repo-page">
+			<div className="page-column repo-page">
 				<OfflineNotice onRetry={view.retry} />
 			</div>
 		);
@@ -28,7 +28,7 @@ export function RepoNotice({ view }: { view: RepoPageView }) {
 	);
 
 	return (
-		<div className="repo-page">
+		<div className="page-column repo-page">
 			{view.phase === 'missing' ? (
 				<StatusNotice
 					variant="banner"

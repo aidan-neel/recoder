@@ -2,7 +2,7 @@
 
 import { SkeletonProvider, Toaster, TooltipProvider } from '@recoder/ui';
 import { MotionConfig } from 'motion/react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type TransitionEvent } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import { leaveSettings, openSettings } from '@/lib/settings/open-settings';
@@ -117,14 +117,34 @@ export function AppShell({ model, children }: AppShellProps) {
  * overlays: the slide starts on the next frame instead of after a render.
  * On a narrow window the sidebar is a drawer over the page (`data-drawer`,
  * narrow.css): a press on the scrim, Escape or going to another page shuts it.
+ * A toggle marks the frame `data-sliding` until the slide ends, so the page
+ * holds one width through it (shell.css); the first render does not slide.
  */
 function Frame({ children }: { children: ReactNode }) {
 	const sidebarOpen = useChrome((state) => state.sidebarOpen);
 	const drawerOpen = useChrome((state) => state.drawerOpen);
 	const setDrawerOpen = useChrome((state) => state.setDrawerOpen);
 	const pathname = usePathname();
+	const frame = useRef<HTMLDivElement>(null);
+	const slidFrom = useRef(sidebarOpen);
+	const [sliding, setSliding] = useState(false);
 
 	useEffect(() => setDrawerOpen(false), [pathname, setDrawerOpen]);
+
+	useLayoutEffect(() => {
+		if (slidFrom.current === sidebarOpen || !frame.current) return;
+
+		slidFrom.current = sidebarOpen;
+
+		if (getComputedStyle(frame.current).transitionProperty !== 'none') setSliding(true);
+	}, [sidebarOpen]);
+
+	/** The slide is over when it ends, or when it is cut short with nothing taking its place (a window gone narrow). */
+	function onSlideStop(event: TransitionEvent<HTMLDivElement>): void {
+		if (event.target !== event.currentTarget || event.propertyName !== 'grid-template-columns') return;
+
+		if (event.type === 'transitionend' || event.currentTarget.getAnimations().length === 0) setSliding(false);
+	}
 
 	useEffect(() => {
 		if (!drawerOpen) return;
@@ -141,9 +161,13 @@ function Frame({ children }: { children: ReactNode }) {
 
 	return (
 		<div
+			ref={frame}
 			className="app-frame"
 			data-sidebar={sidebarOpen ? 'open' : 'closed'}
 			data-drawer={drawerOpen ? 'open' : undefined}
+			data-sliding={sliding || undefined}
+			onTransitionEnd={onSlideStop}
+			onTransitionCancel={onSlideStop}
 		>
 			{children}
 			<div className="sidebar-scrim" aria-hidden onClick={() => setDrawerOpen(false)} />

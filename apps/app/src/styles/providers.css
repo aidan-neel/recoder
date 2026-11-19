@@ -199,7 +199,7 @@
 
 /* The list and the details need more room than the 704px column of the other sections. */
 .settings-page:has(.providers) {
-	--settings-column: 920px;
+	--page-measure: 920px;
 }
 .providers {
 	display: grid;

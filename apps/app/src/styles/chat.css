@@ -8,16 +8,16 @@
 	flex: 1;
 	overflow-y: auto;
 }
-.chat-column {
-	width: min(720px, 100% - 2 * var(--page-gutter));
-	margin-inline: auto;
+.chat-thread,
+.chat-dock {
+	--page-measure: 720px;
 }
 .chat-thread {
-	padding: 32px 0 24px;
+	padding-block: 32px 24px;
 }
 .chat-dock {
 	flex-shrink: 0;
-	padding: 8px 0 20px;
+	padding-block: 8px 20px;
 }
 .chat-dock-column {
 	position: relative;

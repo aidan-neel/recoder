@@ -158,7 +158,7 @@ export function ReposScreen() {
 			}
 		>
 			<div className="page-scroll">
-				<div className="fleet">
+				<div className="page-column fleet">
 					{view.phase === 'loading' ? (
 						<div className="fleet-grid">
 							{Array.from({ length: LOADING_TILES }, (_, index) => (

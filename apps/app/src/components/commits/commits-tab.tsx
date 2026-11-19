@@ -54,7 +54,7 @@ export function CommitsTab() {
 
 	return (
 		<div className="reading">
-			<div className="reading-column">
+			<div className="page-column reading-column">
 				{commits.phase === 'failed' ? (
 					<div className="page-notice">
 						<StatusNotice

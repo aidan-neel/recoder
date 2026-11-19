@@ -49,7 +49,7 @@ export function PullHeader({ page, actions, merge, children }: PullHeaderProps) 
 	const { base, headRef } = page.pull;
 
 	return (
-		<header className="pull-head">
+		<header className="page-column pull-head">
 			<Collapsible>
 				<div className="pull-title-row">
 					<h1 className="page-title">

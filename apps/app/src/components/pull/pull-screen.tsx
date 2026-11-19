@@ -183,7 +183,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 								<LoadingHeader />
 							)}
 						</Skeleton>
-						<div className="pull-tabs-row">
+						<div className="page-column pull-tabs-row">
 							<PullTabs repoId={repoId} number={number} tab={tab} counts={view.counts} />
 							<div className="pull-tools">{tools[tab]}</div>
 						</div>
