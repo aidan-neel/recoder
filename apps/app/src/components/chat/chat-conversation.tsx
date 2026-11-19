@@ -74,7 +74,7 @@ export function ChatSkeleton() {
 		<div className="chat-scroll" aria-hidden>
 			<div className="page-column chat-thread chat-skeleton">
 				<SkeletonBox className="chat-skeleton-question" />
-				<SkeletonText lineHeight={22} />
+				<SkeletonText lineHeight={20} />
 			</div>
 		</div>
 	);

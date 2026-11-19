@@ -54,6 +54,10 @@
 	box-shadow: var(--shadow-edge);
 	font-size: 0.8em;
 }
+/* A list's numbers and bullets in the reply's own ink, as Capy sets them. */
+.ask-message[data-from='recoder'] [data-ui='markdown'] :where(li)::marker {
+	color: inherit;
+}
 /* Links read as links, in the accent, as Capy's do; the underline comes back under the pointer. */
 .ask-message[data-from='recoder'] [data-ui='markdown'] :where(a) {
 	color: var(--accent-text);

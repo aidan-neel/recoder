@@ -6,6 +6,7 @@
  * face at the same optical size. These tokens are the only sizes, inks and gaps below.
  */
 .trail {
+	--trail-reach: 6px;
 	--trail-font: var(--font-size-body);
 	--trail-line: 20px;
 	--trail-row: 32px;
@@ -21,6 +22,7 @@
 	display: flex;
 	min-width: 0;
 	flex-direction: column;
+	margin-inline: calc(-1 * var(--trail-reach));
 	color: var(--trail-label);
 	font-size: var(--trail-font);
 	line-height: var(--trail-line);
@@ -42,6 +44,7 @@
 	display: flex;
 	align-items: center;
 	gap: 12px;
+	margin-inline: var(--trail-reach);
 	padding: 0;
 	border: 0;
 	border-radius: var(--radius-chip);
@@ -117,7 +120,14 @@
 	overflow-wrap: anywhere;
 }
 
-/* ───────── Steps: one line each, the time it took at the end ───────── */
+/*
+ * ───────── Steps: one line each, the time it took at the end ─────────
+ * The fold clips what it holds, so the body reaches past the column by --trail-reach and pads back in: a step's
+ * focus ring and its pull to the left fall inside the clip.
+ */
+.trail-body {
+	padding-inline: var(--trail-reach);
+}
 .trail-steps {
 	display: flex;
 	flex-direction: column;

@@ -42,7 +42,7 @@ export function ChatTrail({ steps, startedAt, endedAt, working }: ChatTrailProps
 			<CollapsibleTrigger className="trail-head" disabled={empty}>
 				<TrailHead steps={steps} startedAt={startedAt} endedAt={endedAt} working={working} />
 			</CollapsibleTrigger>
-			<CollapsibleContent>
+			<CollapsibleContent className="trail-body">
 				{empty ? null : (
 					<ol className="trail-steps" aria-live={working ? 'polite' : undefined}>
 						{steps.map((step) => (

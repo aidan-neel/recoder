@@ -45,14 +45,21 @@
 	background: var(--bg-canvas);
 }
 
-/* Capy's way back down: a small raised button centred over the composer while the end is out of view. */
+/*
+ * Capy's way back down: a small raised button centred over the composer while the end is out of view. The kit's
+ * secondary fill is a tint, so the page's own ground sits under it and the text it floats over stays out of sight.
+ */
 .chat-to-end {
 	position: absolute;
 	bottom: calc(100% + 8px);
 	left: 50%;
 	z-index: 1;
 	translate: -50% 0;
+	height: 30px;
+	gap: 6px;
+	padding-inline: 12px;
 	border-radius: var(--radius-row);
+	background-color: var(--bg-canvas);
 	color: var(--text-muted);
 }
 .chat-to-end:hover {
@@ -67,7 +74,7 @@
 }
 .chat-skeleton-question {
 	width: 300px;
-	max-width: 85%;
-	height: 32px;
+	max-width: 77%;
+	height: 34px;
 	align-self: flex-end;
 }
