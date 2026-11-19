@@ -37,11 +37,6 @@ export function workedSeconds(startedAt: string | null, steps: readonly ChatTrai
 	return Math.max(0, Math.round((end - Date.parse(startedAt)) / 1000));
 }
 
-/** The trail's line while the reply works: `Working for 8s`, or `Working` in its first second. */
-export function workingLabel(seconds: number | null): string {
-	return seconds === null || seconds < 1 ? 'Working' : `Working for ${spanLabel(seconds)}`;
-}
-
 /** The trail's line once the reply is done: `Worked for 13s`, or `Worked` when the time is unknown or under a second. */
 export function workedLabel(seconds: number | null): string {
 	return seconds === null || seconds < 1 ? 'Worked' : `Worked for ${spanLabel(seconds)}`;
@@ -100,7 +95,7 @@ export function opensDetail(step: ToolStep): boolean {
 }
 
 /** `1s`, `12s`, `1m 5s`: a span as a row shows it. */
-function spanLabel(seconds: number): string {
+export function spanLabel(seconds: number): string {
 	if (seconds < 60) return `${seconds}s`;
 
 	return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;

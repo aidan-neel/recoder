@@ -1,6 +1,6 @@
 /* ───────── Chat trail: what a reply did before it answered, over the answer ───────── */
 /*
- * Capy's shape: one line across the column (`Working for 8s`, then `Worked for 13s`) with the steps under it, one
+ * Capy's shape: one centred line (`Working for 8s`, then `Worked for 13s`) with the steps under it, one
  * quiet line each, ending in how long the step took. A step with more to show opens under its line. The whole trail
  * speaks in one size: labels in the muted ink, a thought's text and a call's files a step stronger, code in the code
  * face at the same optical size. These tokens are the only sizes, inks and gaps below.
@@ -16,7 +16,6 @@
 	--trail-label: var(--text-muted);
 	--trail-body: var(--text-secondary);
 	--trail-quiet: var(--text-faint);
-	--trail-rule: var(--line-subtle);
 
 	position: relative;
 	display: flex;
@@ -35,10 +34,11 @@
 	stroke-width: var(--trail-stroke);
 }
 
-/* ───────── The line across the column: hairlines either side of how long it worked ───────── */
+/* ───────── The line over the steps: how long it worked, centred, with no rule ───────── */
 .trail-head {
 	display: flex;
 	align-items: center;
+	justify-content: center;
 	gap: 6px;
 	padding: 0;
 	border: 0;
@@ -48,19 +48,6 @@
 	font: inherit;
 	cursor: pointer;
 	transition: color var(--dur-hover) ease-out;
-}
-.trail-head::before,
-.trail-head::after {
-	height: 1px;
-	flex: 1;
-	background: var(--trail-rule);
-	content: '';
-}
-.trail-head::before {
-	margin-right: 6px;
-}
-.trail-head::after {
-	margin-left: 6px;
 }
 .trail-head .trail-chevron {
 	width: 12px;
