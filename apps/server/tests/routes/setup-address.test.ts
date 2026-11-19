@@ -30,6 +30,15 @@ function setupApp(overrides: Partial<AddressDeps> = {}): Hono {
 	return app;
 }
 
+/** Posts a body to the address step, from the loopback when `local`. */
+function postAddress(app: Hono, body: object, local = false): Promise<Response> {
+	return app.request(
+		'/api/setup/address',
+		{ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) },
+		local ? LOOPBACK : undefined
+	) as Promise<Response>;
+}
+
 beforeEach(async () => {
 	await collection('update_state').clear();
 });
@@ -62,11 +71,7 @@ test('a domain that does not point anywhere is answered with 409 and why', async
 test('a locked remote browser may not set the address', async () => {
 	process.env.RECODER_PUBLIC_IPS = '203.0.113.7';
 
-	const response = await setupApp().request('/api/setup/address', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({ domain: 'recoder.example.com' })
-	});
+	const response = await postAddress(setupApp(), { domain: 'recoder.example.com' });
 
 	expect(response.status).toBe(403);
 	expect(((await response.json()) as { kind?: string }).kind).toBe('setup-locked');
@@ -75,15 +80,7 @@ test('a locked remote browser may not set the address', async () => {
 test('a local browser sets the domain and the answer reports it as pending', async () => {
 	process.env.RECODER_PUBLIC_IPS = '203.0.113.7';
 
-	const response = await setupApp().request(
-		'/api/setup/address',
-		{
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ domain: 'recoder.example.com' })
-		},
-		LOOPBACK
-	);
+	const response = await postAddress(setupApp(), { domain: 'recoder.example.com' }, true);
 
 	expect(response.status).toBe(200);
 

@@ -218,16 +218,21 @@ test('a stored issued certificate that is close to expiry is probed again', asyn
 	expect(answer.tls.issuer).toBe('renewed');
 });
 
-test('a failed re-probe does not turn an issued certificate into failed or pending', async () => {
+/** Stores an address the way a previous poll left it, with the issued certificate and when it was probed. */
+async function storeIssued(expiresAt: Date, requestedAt = NOW, probedAt = NOW - 60_000): Promise<void> {
 	const stored: StoredAddress = {
 		publicUrl: `https://${DOMAIN}`,
 		domain: DOMAIN,
-		requestedAt: NOW,
-		probedAt: NOW - 60_000,
-		issued: { issuer: "Let's Encrypt", expiresAt: new Date(NOW + 90 * 24 * 60_000).toISOString(), seenAt: NOW - 60_000 }
+		requestedAt,
+		probedAt,
+		issued: { issuer: "Let's Encrypt", expiresAt: expiresAt.toISOString(), seenAt: probedAt }
 	};
 
 	await updateDeploymentState((state) => ({ ...state, address: stored }));
+}
+
+test('a failed re-probe does not turn an issued certificate into failed or pending', async () => {
+	await storeIssued(new Date(NOW + 90 * 24 * 60_000));
 
 	const answer = await readSetupAddress(
 		'https://10.0.0.1',
@@ -239,15 +244,7 @@ test('a failed re-probe does not turn an issued certificate into failed or pendi
 });
 
 test('an issued certificate that has expired and no longer handshakes reports failed', async () => {
-	const stored: StoredAddress = {
-		publicUrl: `https://${DOMAIN}`,
-		domain: DOMAIN,
-		requestedAt: NOW - 200 * 24 * 60_000,
-		probedAt: NOW - 60_000,
-		issued: { issuer: "Let's Encrypt", expiresAt: new Date(NOW - 60_000).toISOString(), seenAt: NOW - 60_000 }
-	};
-
-	await updateDeploymentState((state) => ({ ...state, address: stored }));
+	await storeIssued(new Date(NOW - 60_000), NOW - 200 * 24 * 60_000);
 
 	const answer = await readSetupAddress(
 		'https://10.0.0.1',
