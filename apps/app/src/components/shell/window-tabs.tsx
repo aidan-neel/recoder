@@ -25,10 +25,11 @@ import {
 	type Icon
 } from '@phosphor-icons/react';
 import { Reorder } from 'motion/react';
-import { useEffect, useRef, useState, type MouseEvent, type WheelEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as KeyEvent, type MouseEvent, type WheelEvent } from 'react';
 
 import { useApi } from '@/lib/api/client';
-import { closeTabs, openTab, reopenTab, reorderTabs, switchTab } from '@/lib/shell/navigation';
+import { copyLink } from '@/lib/shell/copy-link';
+import { closeTabs, duplicateTab, openTab, reopenTab, reorderTabs, switchTab } from '@/lib/shell/navigation';
 import { newReviewHref, pullsHref, routeOf, titleOf, type Route } from '@/lib/shell/routes';
 import { useTabNames, type TabName } from '@/lib/shell/tab-names';
 import { currentHref, pathOf, useTabs, type WindowTab } from '@/lib/shell/tabs';
@@ -71,6 +72,27 @@ function keepActiveInView(strip: HTMLElement): void {
 
 	if (box.left < view.left) strip.scrollLeft -= view.left - box.left;
 	else if (box.right > view.right) strip.scrollLeft += box.right - view.right;
+}
+
+/**
+ * Shift+F10 opens a tab's menu under it, as the Menu key does. Chromium on a Mac sends no `contextmenu` for either, so
+ * without this a keyboard could not reach Duplicate tab or Close other tabs there.
+ */
+function openMenuFromKeys(event: KeyEvent<HTMLButtonElement>): void {
+	if (event.key !== 'F10' || !event.shiftKey) return;
+
+	event.preventDefault();
+
+	const box = event.currentTarget.getBoundingClientRect();
+
+	event.currentTarget.dispatchEvent(
+		new globalThis.MouseEvent('contextmenu', {
+			bubbles: true,
+			cancelable: true,
+			clientX: box.left + 8,
+			clientY: box.bottom
+		})
+	);
 }
 
 /** Tabs that `alt+1`…`alt+8` reach by place; `alt+9` is always the last. */
@@ -122,6 +144,7 @@ export function WindowTabs() {
 	const { base } = useApi();
 	const tabs = useTabs((state) => state.tabs);
 	const activeId = useTabs((state) => state.activeId);
+	const reopenable = useTabs((state) => state.closed.length > 0);
 	const names = useTabNames();
 	const ordinals = useAltHeld();
 	const strip = useRef<HTMLElement>(null);
@@ -159,6 +182,8 @@ export function WindowTabs() {
 						name={names.get(pathOf(currentHref(tab))) ?? null}
 						route={routeOf(pathOf(currentHref(tab)), base)}
 						home={pullsHref(base)}
+						fresh={newReviewHref(base)}
+						reopenable={reopenable}
 					/>
 				))}
 			</Reorder.Group>
@@ -186,10 +211,14 @@ interface WindowTabItemProps {
 	route: Route;
 	/** Where a window goes when its last tab closes. */
 	home: string;
+	/** Where a new tab opens. */
+	fresh: string;
+	/** Whether a closed tab can come back. */
+	reopenable: boolean;
 }
 
 /** One tab: its mark, its page's name, a review's state at the end, and the X that closes it in that place on hover. */
-function WindowTabItem({ tab, tabs, ordinal, active, name, route, home }: WindowTabItemProps) {
+function WindowTabItem({ tab, tabs, ordinal, active, name, route, home, fresh, reopenable }: WindowTabItemProps) {
 	const Icon = ICONS[route.screen];
 	const label = name?.label ?? titleOf(route);
 	const glyph = name?.review ? GLYPHS[name.review] : undefined;
@@ -222,6 +251,7 @@ function WindowTabItem({ tab, tabs, ordinal, active, name, route, home }: Window
 						className="window-tab-main"
 						aria-current={active ? 'page' : undefined}
 						onClick={() => switchTab(tab.id)}
+						onKeyDown={openMenuFromKeys}
 					>
 						<span className="window-tab-mark">
 							<Icon aria-hidden />
@@ -234,12 +264,16 @@ function WindowTabItem({ tab, tabs, ordinal, active, name, route, home }: Window
 						<span className="window-tab-label">{label}</span>
 					</button>
 				</ContextMenuTrigger>
-				<ContextMenuContent className="w-[248px]">
-					<ContextMenuItem
-						icon={<XIcon />}
-						shortcut={active ? 'alt+w' : undefined}
-						onSelect={() => closeTabs([tab.id], home)}
-					>
+				<ContextMenuContent className="w-[220px]">
+					<ContextMenuItem shortcut="alt+t" onSelect={() => openTab(fresh)}>
+						New tab
+					</ContextMenuItem>
+					<ContextMenuItem onSelect={() => duplicateTab(tab.id)}>Duplicate tab</ContextMenuItem>
+					<ContextMenuItem onSelect={() => copyLink(new URL(currentHref(tab), location.origin).href)}>
+						Copy link
+					</ContextMenuItem>
+					<ContextMenuSeparator />
+					<ContextMenuItem shortcut={active ? 'alt+w' : undefined} onSelect={() => closeTabs([tab.id], home)}>
 						Close tab
 					</ContextMenuItem>
 					<ContextMenuItem disabled={others.length === 0} onSelect={() => closeTabs(others, home)}>
@@ -249,7 +283,7 @@ function WindowTabItem({ tab, tabs, ordinal, active, name, route, home }: Window
 						Close tabs to the right
 					</ContextMenuItem>
 					<ContextMenuSeparator />
-					<ContextMenuItem shortcut="alt+shift+t" onSelect={reopenTab}>
+					<ContextMenuItem shortcut="alt+shift+t" disabled={!reopenable} onSelect={reopenTab}>
 						Reopen closed tab
 					</ContextMenuItem>
 				</ContextMenuContent>

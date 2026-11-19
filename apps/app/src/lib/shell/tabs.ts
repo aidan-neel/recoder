@@ -93,6 +93,17 @@ export function open(state: TabsState, href: string, id = newTabId()): TabsState
 	return { ...state, tabs: [...state.tabs, { id, entries: [href], index: 0 }], activeId: id };
 }
 
+/** A copy of a tab, with its history, right after it and on screen. */
+export function duplicate(state: TabsState, id: string, copyId = newTabId()): TabsState {
+	const index = state.tabs.findIndex((tab) => tab.id === id);
+
+	if (index < 0) return state;
+
+	const tabs = state.tabs.toSpliced(index + 1, 0, { ...state.tabs[index], id: copyId });
+
+	return { ...state, tabs, activeId: copyId };
+}
+
 /** The tab on screen steps `delta` pages back (negative) or forward through its own history. */
 export function step(state: TabsState, delta: number): TabsState {
 	const tab = activeTab(state);

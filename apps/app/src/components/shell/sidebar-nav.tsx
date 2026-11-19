@@ -1,18 +1,11 @@
 'use client';
 
-import { HoverList, Keycap, RowButton } from '@recoder/ui';
-import {
-	BookOpenIcon,
-	ClockIcon,
-	FolderSimpleIcon,
-	GitPullRequestIcon,
-	MagnifyingGlassIcon
-} from '@phosphor-icons/react';
+import { HoverList, RowButton } from '@recoder/ui';
+import { BookOpenIcon, ClockIcon, FolderSimpleIcon, GitPullRequestIcon } from '@phosphor-icons/react';
 import { usePathname } from '@/lib/shell/navigation';
 import type { ComponentType } from 'react';
 
 import { useApi } from '@/lib/api/client';
-import { useChrome } from '@/lib/shell/chrome';
 import { useIntent } from '@/lib/shell/intent';
 import { AUTOMATIONS_HREF, GUIDELINES_HREF, isLiveApp, pullsHref, reposHref } from '@/lib/shell/routes';
 
@@ -57,13 +50,12 @@ function placeOf(pathname: string, base: string): Place | null {
 }
 
 /**
- * Search, then the places. Search opens the palette; the place on screen sits on a still fill; the count beside
- * Pull requests is the open ones. The sample lists only the places it has.
+ * The places. The place on screen sits on a still fill; the count beside Pull requests is the open ones. The sample
+ * lists only the places it has.
  */
 export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	const { base } = useApi();
 	const active = placeOf(usePathname(), base);
-	const setPaletteOpen = useChrome((state) => state.setPaletteOpen);
 
 	const rows: NavRow[] = [
 		{ id: 'pulls', label: 'Pull requests', href: pullsHref(base), icon: GitPullRequestIcon },
@@ -74,11 +66,6 @@ export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	return (
 		<nav aria-label="Main">
 			<HoverList className="sidebar-nav" itemSelector="[data-nav]">
-				<RowButton data-nav className="nav-item sidebar-search" onClick={() => setPaletteOpen(true)}>
-					<MagnifyingGlassIcon aria-hidden />
-					Search
-					<Keycap k="mod+k" />
-				</RowButton>
 				{rows.map((row) => (
 					<NavItem key={row.id} row={row} active={active === row.id} openPulls={openPulls} />
 				))}

@@ -98,8 +98,8 @@
 }
 /*
  * The part over the sidebar keeps the sidebar's width, so the first tab starts on the page's left edge, as in Capy.
- * The account and the toggle sit together at its start. With the sidebar hidden it closes up to what it holds, on the
- * sidebar's clock where the browser can animate to a content width.
+ * The account sits at its start, Search and the toggle at its right edge. With the sidebar hidden it closes up to what
+ * it holds, on the sidebar's clock where the browser can animate to a content width.
  */
 .topbar-lead {
 	display: flex;
@@ -117,12 +117,19 @@
 .topbar .account {
 	margin-right: 0;
 }
+.topbar-tools {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+	margin-left: auto;
+}
 .window-tabs {
 	display: flex;
 	min-width: 0;
 	flex: 1;
 	align-items: center;
-	gap: 6px;
+	gap: 4px;
 	padding-right: 8px;
 }
 /* Tabs narrow to fit, then scroll sideways with no bar; the wheel scrolls them too. 2px of room keeps their edges unclipped. */
@@ -130,7 +137,7 @@
 	display: flex;
 	min-width: 0;
 	align-items: center;
-	gap: 6px;
+	gap: 2px;
 	margin: -2px;
 	padding: 2px;
 	overflow-x: auto;
@@ -141,8 +148,10 @@
 	display: none;
 }
 /*
- * A fixed width, so every tab measures the same in every engine and the + sits right after the last. A tab at rest is
- * a flat well a step off the frame; the one on screen is raised, with the kit's hairline and, in dark, its outline.
+ * A fixed width, so every tab measures the same in every engine and the + sits right after the last. Tabs read like
+ * the sidebar's rows: bare at rest, a wash when pointed at, and the one on screen on the same still fill as the
+ * sidebar's selected row. Only colours change between them, never a weight, a border or a padding, so selecting a tab
+ * moves nothing.
  */
 .window-tab {
 	position: relative;
@@ -153,19 +162,17 @@
 	flex: 0 1 auto;
 	align-items: center;
 	border-radius: var(--radius-row);
-	background: color-mix(in oklab, var(--bg-canvas) 55%, var(--bg-chrome));
-	color: var(--text-muted);
+	color: var(--text-secondary);
 	transition:
 		background-color var(--dur-hover) ease-out,
 		color var(--dur-hover) ease-out;
 }
 .window-tab:hover {
-	background: var(--bg-hover);
-	color: var(--text-secondary);
+	background: color-mix(in oklab, var(--bg-hover) 45%, transparent);
+	color: var(--text-primary);
 }
 .window-tab[data-active] {
-	background: var(--fill-raised);
-	box-shadow: var(--shadow-raised);
+	background: var(--bg-hover);
 	color: var(--text-primary);
 }
 /* The tab's name and mark are one button; the right 28px stays free for the review's state or the X. */
@@ -182,9 +189,6 @@
 	line-height: 18px;
 	outline: none;
 }
-.window-tab[data-active] .window-tab-main {
-	font-weight: 500;
-}
 .window-tab-main:focus-visible {
 	box-shadow: var(--focus-ring);
 }
@@ -194,8 +198,8 @@
 	flex-shrink: 0;
 	color: var(--text-subtle);
 }
-.window-tab[data-active] .window-tab-mark {
-	color: var(--text-secondary);
+.window-tab:is(:hover, [data-active]) .window-tab-mark {
+	color: var(--text-primary);
 }
 .window-tab-mark svg {
 	width: 14px;
@@ -264,13 +268,6 @@
 	padding: 4px 8px 0;
 }
 
-/* Search is the first row of the places: it reads as a row, not a field, and opens the palette. */
-.sidebar-search {
-	color: var(--text-secondary);
-}
-.sidebar-search [data-ui='keycap'] {
-	margin-left: auto;
-}
 /* Settings' way back sits on the rows' lanes: its arrow in the icon lane, the word on the text lane. */
 .settings-back {
 	min-width: 0;

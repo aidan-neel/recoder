@@ -76,8 +76,9 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
 
 - **Topbar** (40px, `--topbar-height`) across the whole window, on the
   window's tint. Over the sidebar, in the sidebar's width: the account menu
-  at the window's left edge with the sidebar's toggle right beside it, so the
-  top-left is never empty. There are no Back and Forward buttons: Cmd/Ctrl+[
+  at the window's left edge, so the top-left is never empty, and at the
+  sidebar's right edge a small Search button (Cmd/Ctrl+K, it opens the
+  palette) left of the sidebar's toggle. There are no Back and Forward buttons: Cmd/Ctrl+[
   and Cmd/Ctrl+] and the browser's own walk the tab on screen. The first tab
   starts on the page panel's left edge. With the sidebar hidden the part over
   it closes up to what it holds, so the tabs start right after it. After the
@@ -85,11 +86,12 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   there is no labelled New review button anywhere. The design is variant V1,
   "Window bar", of the Paper file
   https://app.paper.design/file/01M7S67WPYQ32KY5VF219H93M0.
-- **Window tabs** are 200px by 28px with `--radius-row` corners and 6px
-  between them. A tab at rest is a flat well a step lighter than the window's
-  tint; hovered it takes `--bg-hover`; the tab on screen is raised with the
-  kit's `--fill-raised` and `--shadow-raised` (the hairline and, in dark,
-  the dark outline), its name in 500 weight and its X always shown. Each tab
+- **Window tabs** are 200px by 28px with `--radius-row` corners and 2px
+  between them, and read like the sidebar's rows: bare at rest, a light wash
+  of `--bg-hover` when pointed at, and the tab on screen flat on
+  `--bg-hover`, the sidebar's selected-row fill, with no shadow or lift and
+  its X always shown. Only colours change between these states, never a
+  weight, border or padding, so selecting a tab moves nothing. Each tab
   holds any page and its own Back and Forward history, and every tab, its history and the tab on screen are kept in this
   browser, so a reload comes back to them (the sample keeps its own). A tab
   shows its screen's icon, the page's own name (a pull request's or chat's
@@ -97,8 +99,11 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   and at its end the state of a running review, a review with bugs, or one
   that failed; pointed at or focused, an X takes that place. Tabs narrow to
   112px and then scroll sideways, the one on screen kept in view. A drag
-  reorders them; a middle click or the X closes one; a right click offers
-  Close, Close other tabs, Close tabs to the right and Reopen closed tab.
+  reorders them; a middle click or the X closes one. A right click opens the
+  tab's menu in three groups, text only with shortcuts at the right, as in a
+  browser: New tab (Alt+T), Duplicate tab, Copy link; Close tab (Alt+W on the
+  tab on screen), Close other tabs, Close tabs to the right; Reopen closed tab
+  (Alt+Shift+T). A duplicate opens right after its tab with its history.
   Closing the last tab leaves one on the pull request list. While Alt (Option)
   is held the first nine tabs show the number that reaches them.
 - **How a link opens**, as in Capy: a plain click opens the page in the tab
@@ -119,8 +124,7 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   field too; Alt with a bracket stays with the field, as on a Mac it types
   quotes.
 - **Sidebar** (248px, `--sidebar-width`) starts under the topbar with no head
-  of its own: a Search row that opens the palette (its ⌘K keycap at the
-  right), then Pull requests (with the open count), Repositories, Automations
+  of its own: Pull requests (with the open count), Repositories, Automations
   and Guidelines, all rows of one kind; then Reviews,
   Chats and Repositories, each under a title that folds it, with a + that
   starts one (a new review, a new chat, Add repository) and a ⋯ that hides

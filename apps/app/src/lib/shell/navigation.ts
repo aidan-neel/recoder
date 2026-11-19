@@ -8,6 +8,7 @@ import {
 	activeTab,
 	close,
 	currentHref,
+	duplicate,
 	follow,
 	open,
 	reopen,
@@ -178,6 +179,11 @@ export function switchTab(id: string): void {
 /** Closes tabs; closing the last leaves one new tab on `fallback`. */
 export function closeTabs(ids: readonly string[], fallback: string): void {
 	show((state) => close(state, ids, addressOf(fallback)), 'push');
+}
+
+/** Opens a copy of a tab, with its history, right after it. */
+export function duplicateTab(id: string): void {
+	show((state) => duplicate(state, id), 'push');
 }
 
 /** Brings back the tab closed last. */

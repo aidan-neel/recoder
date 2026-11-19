@@ -4,6 +4,7 @@ import {
 	arrive,
 	close,
 	currentHref,
+	duplicate,
 	follow,
 	open,
 	parseTabs,
@@ -56,6 +57,16 @@ describe('close', () => {
 
 		expect(state.activeId).toBe('a');
 		expect(state.tabs.at(-1)).toEqual({ id: 'a', entries: ['/', '/pulls/api/214'], index: 1 });
+	});
+});
+
+describe('duplicate', () => {
+	test('a copy keeps the history and opens on screen right after the tab it copies', () => {
+		const state = duplicate(twoTabs(), 'a', 'c');
+
+		expect(state.tabs.map((tab) => tab.id)).toEqual(['a', 'c', 'b']);
+		expect(state.tabs[1]).toEqual({ id: 'c', entries: ['/', '/pulls/api/214'], index: 1 });
+		expect(state.activeId).toBe('c');
 	});
 });
 
