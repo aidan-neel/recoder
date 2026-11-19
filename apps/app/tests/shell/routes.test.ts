@@ -35,6 +35,13 @@ describe('routeOf', () => {
 		expect(routeOf('/pulls/r1/12/files', '')).toEqual({ screen: 'missing' });
 	});
 
+	test('opens Settings on the section its address names, its first section for none, live only', () => {
+		expect(routeOf('/settings/limits', '')).toEqual({ screen: 'settings', section: 'limits' });
+		expect(routeOf('/settings', '')).toEqual({ screen: 'settings', section: 'models' });
+		expect(routeOf('/settings/nope', '')).toEqual({ screen: 'missing' });
+		expect(routeOf('/sample/settings/models', '/sample')).toEqual({ screen: 'missing' });
+	});
+
 	test('keeps the live-only pages out of the sample', () => {
 		expect(routeOf('/automations', '')).toEqual({ screen: 'automations' });
 		expect(routeOf('/sample/automations', '/sample')).toEqual({ screen: 'missing' });

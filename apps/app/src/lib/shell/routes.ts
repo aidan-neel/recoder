@@ -1,4 +1,5 @@
 import { PULL_TABS, type PullTab } from '../pull/types';
+import { SETTINGS_SECTIONS, sectionLabel, type SettingsSection } from '../settings/sections';
 
 /**
  * Page addresses. Each takes the client's `base` (`''` live, `'/sample'` for
@@ -49,6 +50,11 @@ export function reposHref(base: string): string {
 	return `${base}/repos`;
 }
 
+/** The Repositories page with its Add repository dialog open. */
+export function addRepoHref(base: string): string {
+	return `${reposHref(base)}?add`;
+}
+
 /** A tracked repository's page: what needs a person there, and how its reviews have gone. */
 export function repoHref(base: string, repoId: string): string {
 	return `${base}/repos/${encodeURIComponent(repoId)}`;
@@ -64,13 +70,29 @@ export function chatHref(base: string, chatId: string): string {
 	return `${base}/chats/${encodeURIComponent(chatId)}`;
 }
 
+/** A section of Settings, which opens in the tab on screen; live only. The first section when none is named. */
+export function settingsHref(section: SettingsSection = SETTINGS_SECTIONS[0].id): string {
+	return `/settings/${section}`;
+}
+
+/** True for an address of Settings, whose sections take over the sidebar. */
+export function inSettings(pathname: string): boolean {
+	return pathname === '/settings' || pathname.startsWith('/settings/');
+}
+
+/** The section an address of Settings names, or null for one Settings does not have. */
+function sectionOf(id: string | undefined): SettingsSection | null {
+	return SETTINGS_SECTIONS.find((section) => section.id === (id ?? SETTINGS_SECTIONS[0].id))?.id ?? null;
+}
+
 /** The screen an address opens, with the parts of the address that screen reads. */
 export type Route =
 	| { screen: 'pulls' | 'new' | 'repos' | 'automations' | 'guidelines' | 'missing' }
 	| { screen: 'repo'; repoId: string }
 	| { screen: 'pull'; repoId: string; number: number }
 	| { screen: 'chat'; chatId: string }
-	| { screen: 'review'; reviewId: string };
+	| { screen: 'review'; reviewId: string }
+	| { screen: 'settings'; section: SettingsSection };
 
 /** A pull request number as an address writes it: digits, and never zero. */
 const PULL_NUMBER = /^[1-9]\d*$/;
@@ -109,9 +131,17 @@ function screenOf(parts: string[], live: boolean): Route | null {
 			return live ? { screen: 'automations' } : null;
 		case 'guidelines/1':
 			return live ? { screen: 'guidelines' } : null;
+		case 'settings/1':
+		case 'settings/2':
+			return live ? settingsRoute(sectionOf(first)) : null;
 		default:
 			return null;
 	}
+}
+
+/** The Settings screen on `section`; null for a section Settings does not have. */
+function settingsRoute(section: SettingsSection | null): Route | null {
+	return section ? { screen: 'settings', section } : null;
 }
 
 /**
@@ -146,6 +176,8 @@ export function titleOf(route: Route): string {
 			return 'Automations';
 		case 'guidelines':
 			return 'Guidelines';
+		case 'settings':
+			return sectionLabel(route.section);
 		case 'missing':
 			return 'Not found';
 	}

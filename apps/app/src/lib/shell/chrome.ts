@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 
-import { SETTINGS_SECTIONS, type SettingsSection } from '../settings/sections';
 import { readStored, writeStored } from './browser-storage';
 
 /** Where the sidebar's open state is kept in this browser. */
@@ -31,16 +30,11 @@ interface ChromeState {
 	drawerOpen: boolean;
 	paletteOpen: boolean;
 	shortcutsOpen: boolean;
-	/** The section the Settings dialog shows, or null while it is closed. */
-	settingsSection: SettingsSection | null;
 	/** Hides or shows the sidebar in the form the window's width gives it. */
 	toggleSidebar: () => void;
 	setDrawerOpen: (open: boolean) => void;
 	setPaletteOpen: (open: boolean) => void;
 	setShortcutsOpen: (open: boolean) => void;
-	/** Opens Settings over the page, on `section` or the first one. */
-	openSettings: (section?: SettingsSection) => void;
-	closeSettings: () => void;
 }
 
 /** True when the sidebar is on screen, as a column or as an open drawer. */
@@ -53,7 +47,6 @@ export const useChrome = create<ChromeState>((set, get) => ({
 	sidebarOpen: typeof window === 'undefined' ? true : readSidebar(),
 	paletteOpen: false,
 	shortcutsOpen: false,
-	settingsSection: null,
 	drawerOpen: false,
 	toggleSidebar() {
 		if (narrowQuery()?.matches) {
@@ -69,8 +62,5 @@ export const useChrome = create<ChromeState>((set, get) => ({
 	},
 	setDrawerOpen: (drawerOpen) => set({ drawerOpen }),
 	setPaletteOpen: (paletteOpen) => set({ paletteOpen, shortcutsOpen: false }),
-	setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen, paletteOpen: false }),
-	openSettings: (section = SETTINGS_SECTIONS[0].id) =>
-		set({ settingsSection: section, paletteOpen: false, shortcutsOpen: false }),
-	closeSettings: () => set({ settingsSection: null })
+	setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen, paletteOpen: false })
 }));

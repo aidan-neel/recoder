@@ -180,7 +180,7 @@ export function exportsProgress(review: Review): ReviewProgress {
 				input: { action: 'run', command }
 			}
 		],
-		orchestratorModel: 'claude-opus-5-5',
+		orchestratorModel: 'grok-4.6',
 		updatedAt: at(298),
 		planVersion: 1,
 		assignments,

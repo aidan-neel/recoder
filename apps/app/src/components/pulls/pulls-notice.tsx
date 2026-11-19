@@ -6,7 +6,7 @@ import { Link } from '@/components/common/link';
 import { OfflineNotice } from '@/components/common/offline-notice';
 import { useApi } from '@/lib/api/client';
 import type { PullListView } from '@/lib/pulls/types';
-import { useChrome } from '@/lib/shell/chrome';
+import { openSettings } from '@/lib/settings/open-settings';
 import { newReviewHref, SAMPLE_HREF } from '@/lib/shell/routes';
 
 /** True when a filter, a repository or search text narrows the list. */
@@ -49,7 +49,7 @@ export function PullsNotice({ view }: { view: PullListView }) {
 				detail="Connect one and its open pull requests show here."
 				actions={
 					<>
-						<Button variant="primary" onClick={() => useChrome.getState().openSettings('connections')}>
+						<Button variant="primary" onClick={() => openSettings('connections')}>
 							Connect a repository
 						</Button>
 						<Button asChild variant="outline">

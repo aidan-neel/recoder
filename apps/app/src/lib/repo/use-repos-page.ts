@@ -1,6 +1,6 @@
 'use client';
 
-import { useSearchParams } from '../shell/navigation';
+import { replaceAddress, useSearchParams } from '../shell/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -104,9 +104,11 @@ export function useReposPage(): ReposPageView {
 	const { base } = useApi();
 	const store = useListStore();
 	const entries = useRowEntries();
-	const scope = fleetScopeOf(useSearchParams().get('scope'));
+	const params = useSearchParams();
+	const scope = fleetScopeOf(params.get('scope'));
+	const asked = params.has('add');
 	const [query, setQuery] = useState('');
-	const [adding, setOpen] = useState(false);
+	const [opened, setOpen] = useState(false);
 
 	const data = useStore(
 		store.state,
@@ -134,10 +136,15 @@ export function useReposPage(): ReposPageView {
 	const counts = scopeCounts(named);
 	const [answered] = all.flatMap((tile) => (tile.overview.phase === 'ready' ? [tile.overview.days] : []));
 
+	/** Opens or closes the Add repository dialog; an address that asked for it (`?add`) forgets it once it closes. */
 	function setAdding(open: boolean): void {
 		setOpen(open);
 
-		if (!open) store.reload();
+		if (open) return;
+
+		store.reload();
+
+		if (asked) replaceAddress(reposHref(base));
 	}
 
 	let phase: ReposPageView['phase'] = 'ready';
@@ -156,7 +163,7 @@ export function useReposPage(): ReposPageView {
 		setQuery,
 		days: answered ?? null,
 		retryOverviews: overviews.retry,
-		adding,
+		adding: opened || asked,
 		setAdding,
 		stop: (tile) => stopTracking(store, { id: tile.id, name: tile.owner ? `${tile.owner}/${tile.name}` : tile.name })
 	};

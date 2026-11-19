@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 
 import type { EditorNote as Note } from '@/lib/guidelines/editor-note';
 import { formatCount } from '@/lib/shell/format';
-import { useChrome } from '@/lib/shell/chrome';
+import { openSettings } from '@/lib/settings/open-settings';
 
 interface EditorNoteProps {
 	/** What the line says, or null when there is nothing to say. */
@@ -23,7 +23,7 @@ function noteWords(note: Note): ReactNode {
 	return (
 		<>
 			Connect a token with write access in{' '}
-			<button type="button" className="text-link" onClick={() => useChrome.getState().openSettings('connections')}>
+			<button type="button" className="text-link" onClick={() => openSettings('connections')}>
 				Connections
 			</button>{' '}
 			to open a pull request.

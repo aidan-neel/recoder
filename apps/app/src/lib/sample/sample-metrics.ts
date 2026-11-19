@@ -108,8 +108,8 @@ export function sampleReviewMetrics(review: Review, messages: readonly ReviewCha
 				? [
 						makeCall({
 							id: `${review.id}-p1`,
-							model: 'claude-opus-4-6',
-							provider: 'claude-code',
+							model: 'grok-4.6',
+							provider: 'grok',
 							scope: 'pipeline',
 							stage: 'reviewer',
 							input: 42_800,
@@ -130,8 +130,8 @@ export function sampleReviewMetrics(review: Review, messages: readonly ReviewCha
 						}),
 						makeCall({
 							id: `${review.id}-p3`,
-							model: 'claude-opus-4-6',
-							provider: 'claude-code',
+							model: 'grok-4.6',
+							provider: 'grok',
 							scope: 'pipeline',
 							stage: 'verifier',
 							status: 'pending',
@@ -143,8 +143,8 @@ export function sampleReviewMetrics(review: Review, messages: readonly ReviewCha
 				: [
 						makeCall({
 							id: `${review.id}-p1`,
-							model: 'claude-opus-4-6',
-							provider: 'claude-code',
+							model: 'grok-4.6',
+							provider: 'grok',
 							scope: 'pipeline',
 							stage: 'reviewer',
 							input: 64_200,
@@ -165,8 +165,8 @@ export function sampleReviewMetrics(review: Review, messages: readonly ReviewCha
 						}),
 						makeCall({
 							id: `${review.id}-p3`,
-							model: 'claude-sonnet-4-6',
-							provider: 'claude-code',
+							model: 'gpt-6-luna',
+							provider: 'codex',
 							scope: 'pipeline',
 							stage: 'subagent',
 							input: 38_400,
@@ -176,8 +176,8 @@ export function sampleReviewMetrics(review: Review, messages: readonly ReviewCha
 						}),
 						makeCall({
 							id: `${review.id}-p4`,
-							model: 'claude-opus-4-6',
-							provider: 'claude-code',
+							model: 'grok-4.6',
+							provider: 'grok',
 							scope: 'pipeline',
 							stage: 'verifier',
 							input: 27_900,
@@ -189,8 +189,8 @@ export function sampleReviewMetrics(review: Review, messages: readonly ReviewCha
 	const discussion = replies.map((reply, index) =>
 		makeCall({
 			id: `${review.id}-d${index + 1}`,
-			model: 'claude-sonnet-4-6',
-			provider: 'claude-code',
+			model: 'gpt-6-luna',
+			provider: 'codex',
 			scope: 'discussion',
 			status: reply.status === 'streaming' ? 'pending' : reply.status === 'error' ? 'failed' : 'completed',
 			input: 18_400 + index * 6_200,
@@ -216,8 +216,8 @@ export function sampleChatMetrics(chat: RepoChat): ReviewMetrics | null {
 
 		return makeCall({
 			id: `${chat.id}-c${index + 1}`,
-			model: index % 3 === 2 ? 'claude-opus-4-6' : 'claude-sonnet-4-6',
-			provider: 'claude-code',
+			model: index % 3 === 2 ? 'grok-4.6' : 'gpt-6-luna',
+			provider: index % 3 === 2 ? 'grok' : 'codex',
 			scope: 'discussion',
 			status: streaming ? 'pending' : failed ? 'failed' : 'completed',
 			input: 14_800 + index * 8_600,

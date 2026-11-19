@@ -188,7 +188,7 @@ const START_STEP: Step = {
 	apply: (run) => {
 		run.review = { ...run.review, status: 'running', startedAt: now() };
 		run.progress.stage = 'checkout';
-		run.progress.orchestratorModel = 'claude-opus-5-5';
+		run.progress.orchestratorModel = 'grok-4.6';
 
 		setTask(run, {
 			id: 'fetch',

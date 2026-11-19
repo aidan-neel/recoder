@@ -1,8 +1,8 @@
 /* ───────── Narrow windows: the sidebar opens over the page, and each screen stacks what it laid side by side ───────── */
 
 /*
- * Under 1024px the sidebar leaves the grid and becomes a drawer: it slides in over a scrim from the left edge and
- * the page keeps the whole width. `data-drawer` opens it; the saved `data-sidebar` choice is for wide windows only,
+ * Under 1024px the sidebar leaves the grid and becomes a drawer: it slides in under the topbar, over a scrim, from
+ * the left edge, and the page keeps the whole width. The topbar stays above both, so its toggle shuts the drawer. `data-drawer` opens it; the saved `data-sidebar` choice is for wide windows only,
  * so a narrow window always starts with the page. Keep the width in step with NARROW_QUERY in lib/shell/chrome.ts.
  */
 @media (max-width: 1023px) {
@@ -15,8 +15,9 @@
 	.app-frame[data-sidebar='closed'] .sidebar {
 		position: fixed;
 		z-index: 70;
-		inset: 0 auto 0 0;
+		inset: var(--topbar-height) auto 0 0;
 		width: min(304px, calc(100vw - 48px));
+		height: auto;
 		translate: -100% 0;
 		visibility: hidden;
 		transition:
@@ -38,7 +39,7 @@
 		position: fixed;
 		z-index: 69;
 		display: block;
-		inset: 0;
+		inset: var(--topbar-height) 0 0;
 		background: var(--scrim);
 		opacity: 0;
 		pointer-events: none;
@@ -48,13 +49,10 @@
 		opacity: 1;
 		pointer-events: auto;
 	}
-	/* The button that opens the drawer is always in the bar. */
-	.sidebar-reveal,
-	.app-frame[data-sidebar='closed'] .sidebar-reveal {
-		width: var(--size-icon-md);
-		margin-right: 0;
-		margin-left: -6px;
-		opacity: 1;
+	/* With no sidebar column under it, the topbar's first part holds only what it shows. */
+	.topbar-lead,
+	.app-frame[data-sidebar='closed'] .topbar-lead {
+		width: max-content;
 		transition: none;
 	}
 

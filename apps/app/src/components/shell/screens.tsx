@@ -17,6 +17,7 @@ import { LivePulls } from '@/components/pulls/live-pulls';
 import { PullsScreen } from '@/components/pulls/pulls-screen';
 import { RepoScreen } from '@/components/repo/repo-screen';
 import { ReposScreen } from '@/components/repo/repos-screen';
+import { SettingsScreen } from '@/components/settings/settings-screen';
 
 /** The app's name, which follows the screen's own title in the browser tab. */
 const APP_NAME = 'Recoder';
@@ -42,6 +43,8 @@ function Screen({ route, live }: { route: Route; live: boolean }) {
 			return <AutomationsScreen />;
 		case 'guidelines':
 			return <GuidelinesScreen />;
+		case 'settings':
+			return <SettingsScreen section={route.section} />;
 		case 'missing':
 			return <PageMissing />;
 	}
