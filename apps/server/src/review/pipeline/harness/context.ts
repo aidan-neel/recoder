@@ -9,6 +9,7 @@ import {
 	type ReviewAssignment,
 	type ReviewContext
 } from '@recoder/shared';
+import { reviewerTools } from '../../../env.js';
 import { EvidenceStore } from '../../../evidence/evidence.js';
 import { configForOrchestrator, reviewLimits, type ModelConfig } from '../../../models/models.js';
 import { execUnavailableReason } from '../../../sandbox/exec-sandbox.js';
@@ -46,7 +47,7 @@ import { FINISHED } from './assignments.js';
 import { applyDiffLimits } from './diff-limits.js';
 import type { PoolContext } from './pool.js';
 import { emptyReceived, receivedOf, recordingReads, reviewContext, type Received } from './received.js';
-import { reviewersRunCode, shapedForReviewerTools } from './reviewer-tools.js';
+import { limitsForReviewerTools, reviewersRunCode } from './reviewer-tools.js';
 import type { AdaptiveReviewInput, BaselineResult, HarnessEvents, TaskFn } from './types.js';
 import type { VerifyQueue } from './verify-queue.js';
 
@@ -160,8 +161,8 @@ function atSpeed(input: AdaptiveReviewInput): AdaptiveReviewInput {
 
 /** Builds the run's shared state from the input, restoring what a resumed review carries over. */
 export function createRun(given: AdaptiveReviewInput, events?: HarnessEvents): ReviewRun {
-	const sped = atSpeed(given);
-	const { input, limits } = shapedForReviewerTools(sped, budgetLimits(sped.tokenBudget ?? DEFAULT_TOKEN_BUDGET));
+	const input = atSpeed(given);
+	const limits = limitsForReviewerTools(budgetLimits(input.tokenBudget ?? DEFAULT_TOKEN_BUDGET));
 	const startedAt = reviewNow();
 	const inventory = buildInventory(input.diff, extraExcludes());
 	const coverage = new CoverageLedger();
@@ -376,10 +377,16 @@ export function receivedContext(run: ReviewRun, findings: Finding[]): ReviewCont
 	);
 }
 
-/** The subagents each reviewer is asked for: its share of the cap, rounded up; none when subagents are off. */
+/**
+ * The subagents each reviewer is asked for: its share of the cap, rounded up. None when subagents are off, and none
+ * for a reviewer without tools: its subagent could read no more than the reviewer did, so the cap goes to the brief's
+ * open questions instead.
+ */
 function requestsPerReviewer(run: ReviewRun): number {
 	const cap = run.input.subagentCap ?? DEFAULT_SUBAGENT_CAP;
 	const reviewers = Math.max(1, reviewerSlices(run.units).length);
+
+	if (reviewerTools() === 'none') return 0;
 
 	return cap === 'uncapped' ? UNCAPPED_REQUESTS : Math.ceil(cap / reviewers);
 }

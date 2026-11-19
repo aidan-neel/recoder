@@ -333,7 +333,11 @@ function systemPrompt(item: ReviewUnit, subagent: boolean, ctx: PoolContext, off
 	if (item.purpose) return secondLookSystemPrompt(item.purpose, ctx.directive) + selected;
 
 	if (subagent) {
-		return subagentSystemPrompt(offer.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0) + selected;
+		const followUp = followedUpBy(ctx.questions, item.id).length > 0;
+
+		return (
+			subagentSystemPrompt(ctx.directive, { exec: offer.exec, followUp, single: reviewerTools() === 'none' }) + selected
+		);
 	}
 
 	return reviewerSystemPrompt(offer.exec, ctx.directive, {
