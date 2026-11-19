@@ -636,6 +636,12 @@ Motion explains a change and never makes the person wait.
   slide ends. A column centres on 100% of the page, not 100cqw, which lagged a
   frame behind a snap. A reload never slides, and under reduced motion it
   snaps.
+- A window tab that closes gets out of the way: its name fades in 120ms while
+  it narrows to nothing in 150ms, gap and all, so the tabs after it and the +
+  close up behind it; the page it leaves for shows at once. The fill of the tab
+  on screen moves to the next tab in one frame, never crossing two fills.
+  Closing the last tab puts the new one in its place at once, and under
+  reduced motion a tab goes at once.
 - Things that move: the sidebar slides, the highlight under the pointer in a
   menu or list follows it, collapsibles and the provider dialog change height.
   Menus, selects, the palette, dialogs, tooltips and the link card fade in
