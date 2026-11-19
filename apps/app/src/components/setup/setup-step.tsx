@@ -44,6 +44,7 @@ const FOCUSABLE =
 /**
  * The step's body, which takes focus as the step becomes current when the step before took it down with it: the
  * control that finished that step unmounts, so focus would fall to the page and the keyboard would lose its place.
+ * Its first control takes it, or the body itself while every control waits, as the checks' buttons do while they run.
  */
 function useTakeFocus(current: boolean) {
 	const body = useRef<HTMLDivElement>(null);
@@ -56,7 +57,7 @@ function useTakeFocus(current: boolean) {
 
 		if (!became || document.activeElement !== document.body) return;
 
-		body.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+		(body.current?.querySelector<HTMLElement>(FOCUSABLE) ?? body.current)?.focus();
 	}, [current]);
 
 	return body;
@@ -93,7 +94,7 @@ export function SetupStep({ name, step, current, hint, code, state, body, open, 
 				{children}
 			</SettingsRow>
 			{opened && body ? (
-				<div ref={focusBody} className="setup-body">
+				<div ref={focusBody} className="setup-body" tabIndex={-1}>
 					{body}
 				</div>
 			) : null}

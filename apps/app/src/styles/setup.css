@@ -111,6 +111,9 @@
 	gap: 12px;
 	padding: 0 16px 16px 46px;
 }
+.setup-body:focus {
+	outline: none;
+}
 .setup-text {
 	max-width: 60ch;
 	margin: 0;
