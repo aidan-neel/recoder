@@ -5,7 +5,7 @@ The source of truth for Recoder's UI.
 ## Principles
 - **Warm near-black surfaces, flat by default.** Depth comes from 1px rings and a few surface steps. Shadows are for floating things only (menus, modals, toasts, the composer). This holds for apps/web; the React apps (apps/app, apps/site) take Capy's edges and lift from the kit's surface recipes, described in `apps/app/DESIGN.md` → Surfaces.
 - **Two voices.** The UI speaks in Cal Sans (Geist as fallback). The AI speaks in Lora serif in summaries, findings and the Home brief; chat replies use the UI sans. Never mix them in one block.
-- **Quiet chrome.** Controls stay transparent until they're hovered. There is one primary action per region: cream in apps/web, light blue in the React apps (`apps/app/DESIGN.md`).
+- **Quiet chrome.** Controls stay transparent until they're hovered. There is one primary action per region: cream in apps/web, blue in the React apps (`apps/app/DESIGN.md`).
 - **No brand mark on AI output.** The serif alone tells you who is speaking.
 
 ## Color
@@ -49,7 +49,7 @@ The source of truth for Recoder's UI.
 
 ### Primary
 - apps/web: `primary` `#ede9e3` (cream), `on-primary` `#141312`.
-- apps/app and apps/site (the kit): `primary` `#93c5fd` (light blue), `on-primary` `#0b1a2e`; in light, `#2259dc` with white. Both pass 4.5:1 for text on the primary and for the primary as text.
+- apps/app and apps/site (the kit): `primary` `#4062e2` with white `on-primary` in both themes (5.2:1). Links and the selected line use the accent (`--accent`, `--accent-text`), never the primary as text.
 - Hover: `filter: brightness(1.08)`. No press scale.
 - Primary must stay swappable. If a light color is picked, on-primary is computed by luminance: dark text when L > 0.3.
 
@@ -93,7 +93,7 @@ Vivid, not pastel: chroma sits at 70–95% of the sRGB maximum for each hue (OKL
 
 ### Buttons
 Heights are 28 (panel), 30 (default) and 32–34 (toolbar or hero).
-- **Primary**: the primary background (cream in apps/web, light blue in the React apps).
+- **Primary**: the primary background (cream in apps/web, blue in the React apps).
 - **Secondary**: transparent with an inset 1px `#2e2b28` ring. On hover: bg `#1f1e1c`, ring `#3a3632`.
 - **Ghost**: `#8a857d` text. On hover: bg `#1c1b19`, text `#ede9e3`.
 - **Icon button**: 28–32 square, same hover as ghost.

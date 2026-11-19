@@ -256,7 +256,7 @@ function StatusAnnouncer({ children }: { children: ReactNode }) {
 
 /**
  * The kit's button. Quiet at rest: ghost and quiet variants have no background
- * until hovered, and one light-blue primary button leads each region. Pass `status`
+ * until hovered, and one blue primary button leads each region. Pass `status`
  * for an async action; clicks are ignored while it is pending. A held Enter
  * presses it once.
  */

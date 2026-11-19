@@ -19,8 +19,9 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   hashes and aligned numbers are Geist Mono.
 - **Near-neutral surfaces.** Near-black panels with white hairlines in dark,
   white and light grey in light, all with a faint cool tint. The sidebar sits
-  a step darker than the page and menus a step lighter. One light-blue primary
-  button (`#93c5fd` with navy ink in dark, `#2259dc` with white ink in light;
+  a step darker than the page and menus a step lighter. One blue primary
+  button (`#4062e2` with white ink in both themes, its hover the same blue a
+  step darker;
   the palettes in Settings → Appearance bring their own) and one indigo-blue (`#3777ec`) accent (links, the selected line,
   hunk headers).
 - **Phosphor icons in their bold weight**, set once by the kit's `IconRoot`,
@@ -557,7 +558,7 @@ Motion explains a change and never makes the person wait.
 - **Every async action shows its state**: idle, pending (same width), then
   success or failure with the server's reason. A change shows at once and
   goes back when the save fails.
-- **One primary button per region**, in light blue. Ghost, quiet and icon
+- **One primary button per region**, in blue. Ghost, quiet and icon
   buttons are quiet at rest: no background until hover. Secondary and outline
   buttons carry their edge at rest (see Surfaces).
 

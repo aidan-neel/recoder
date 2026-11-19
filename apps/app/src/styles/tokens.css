@@ -1,7 +1,7 @@
 /*
  * The app's palette. The kit's tokens keep their names and get near-neutral
  * values: near-black surfaces with a faint cool tint, a sidebar a step darker
- * than the page, menus a step lighter, hairlines of white, one light-blue primary
+ * than the page, menus a step lighter, hairlines of white, one blue primary
  * and one indigo-blue accent. Scoped to `.app-skin`, on <html> here and in
  * apps/site.
  */
@@ -48,9 +48,9 @@
 	--text-ghost: #555556;
 	--text-brief-body: #8f8f90;
 
-	--primary: #93c5fd;
-	--primary-hover: #b4d6fe;
-	--on-primary: #0b1a2e;
+	--primary: #4062e2;
+	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
+	--on-primary: #ffffff;
 
 	/* The one accent: links, the selected line, the hunk header. */
 	--accent: #3777ec;
@@ -167,8 +167,8 @@
 	--text-ghost: #a8a8aa;
 	--text-brief-body: #6b6b6c;
 
-	--primary: #2259dc;
-	--primary-hover: #1a4cc4;
+	--primary: #4062e2;
+	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
 	--on-primary: #ffffff;
 
 	--accent: #3777ec;
