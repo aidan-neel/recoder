@@ -8,7 +8,7 @@ import {
 	CommandInput,
 	CommandItem,
 	CommandList,
-	Keycap,
+	Tooltip,
 	type CommandHint
 } from '@recoder/ui';
 import { FileTextIcon, HashIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
@@ -30,8 +30,8 @@ function isSearchKey(event: KeyboardEvent): boolean {
 }
 
 /**
- * The site's search: a field-shaped button in the sidebar (an icon on narrow
- * screens) and ⌘K both open a palette over every page and every section of
+ * The site's search: the app's ghost search button at the end of the sidebar's
+ * head row and ⌘K both open a palette over every page and every section of
  * the docs. Choosing a row goes there.
  */
 export function SiteSearch({ pages }: { pages: NavPage[] }) {
@@ -63,17 +63,18 @@ export function SiteSearch({ pages }: { pages: NavPage[] }) {
 
 	return (
 		<>
-			<Button
-				variant="outline"
-				className="site-search"
-				aria-label="Search"
-				aria-keyshortcuts="Meta+K Control+K"
-				onClick={() => setOpen(true)}
-			>
-				<MagnifyingGlassIcon aria-hidden />
-				<span className="site-search-label">Search</span>
-				<Keycap k="mod+k" className="site-search-key" />
-			</Button>
+			<Tooltip content="Search" shortcut="mod+k">
+				<Button
+					variant="ghost"
+					size="icon"
+					className="site-search"
+					aria-label="Search"
+					aria-keyshortcuts="Meta+K Control+K"
+					onClick={() => setOpen(true)}
+				>
+					<MagnifyingGlassIcon />
+				</Button>
+			</Tooltip>
 			<CommandDialog open={open} onOpenChange={setOpen} label="Search Recoder">
 				<CommandInput placeholder="Search the docs" />
 				<CommandList>

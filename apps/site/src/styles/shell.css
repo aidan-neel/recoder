@@ -47,12 +47,20 @@ body {
 	flex-direction: column;
 	padding: 0 10px 10px;
 }
+/* The head row, as the app's: the wordmark, then the search as a quiet icon at its end. */
+.site-head {
+	display: flex;
+	height: var(--bar-height);
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	gap: 2px;
+}
 .site-wordmark {
 	display: flex;
 	height: var(--bar-height);
 	flex: none;
 	align-items: center;
-	align-self: flex-start;
 	padding: 0 8px;
 	border-radius: var(--radius-control);
 	color: var(--text-primary);
@@ -63,23 +71,6 @@ body {
 }
 .site-wordmark:focus-visible {
 	box-shadow: var(--focus-ring);
-}
-
-/* The search is a button shaped like a field: it opens the palette. */
-.site-search {
-	width: 100%;
-	flex: none;
-	justify-content: flex-start;
-	gap: 8px;
-	padding: 0 5px 0 8px;
-	color: var(--text-faint);
-}
-.site-search svg {
-	color: var(--text-faint);
-}
-.site-search-label {
-	flex: 1;
-	text-align: left;
 }
 
 .site-nav {
@@ -144,12 +135,6 @@ body {
 }
 .site-page-toggle[data-state='closed'] .site-page-chevron {
 	rotate: -90deg;
-}
-.site-nav-label {
-	display: flex;
-	height: 34px;
-	align-items: flex-end;
-	padding: 0 8px 6px;
 }
 
 /* The open page's sections hang on a track under its row; a bright stretch of it slides to the one in view. */
@@ -221,8 +206,8 @@ body {
 }
 
 /*
- * Narrow screens: the sidebar becomes a head row (the wordmark, then search
- * and GitHub as icons) over a row of pages that scrolls sideways. The
+ * Narrow screens: the sidebar becomes a head row (the wordmark, then search,
+ * the theme and GitHub as icons) over a row of pages that scrolls sideways. The
  * sections move into the page bar.
  */
 @media (max-width: 900px) {
@@ -247,29 +232,26 @@ body {
 		column-gap: 2px;
 		padding: 0 8px;
 	}
+	.site-head {
+		display: contents;
+	}
 	.site-wordmark {
 		height: 48px;
 		grid-area: wordmark;
 		justify-self: start;
 		padding: 0 10px;
 	}
-	.site-search,
+	.site-search {
+		width: 32px;
+		height: 32px;
+		grid-area: search;
+	}
 	.nav-item.site-github {
 		width: 32px;
 		height: 32px;
 		justify-content: center;
 		padding: 0;
 		color: var(--text-muted);
-	}
-	.site-search {
-		--button-shadow: 0 0 transparent;
-
-		grid-area: search;
-	}
-	.site-search svg {
-		width: 16px;
-		height: 16px;
-		color: inherit;
 	}
 	.nav-item.site-github {
 		flex: none;
@@ -287,11 +269,8 @@ body {
 		width: 16px;
 		height: 16px;
 	}
-	.site-search-label,
-	.site-search-key,
 	.site-github .site-github-label,
 	.nav-item.site-github .site-github-arrow,
-	.site-nav-label,
 	.site-page-toggle,
 	.site-sections {
 		display: none;

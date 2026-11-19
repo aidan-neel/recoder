@@ -153,8 +153,8 @@ function SidebarFoot() {
 }
 
 /**
- * The site's sidebar, on the chrome beside the page's card: the wordmark,
- * the search, Home and the docs pages (each folding its sections, the open
+ * The site's sidebar, on the chrome beside the page's card: the wordmark
+ * and the search, Home and the docs pages (each folding its sections, the open
  * one unfolded), and GitHub and the theme at the foot. On narrow screens it
  * is a head row and a row of pages that scrolls sideways; the sections then
  * open from the page bar.
@@ -169,17 +169,16 @@ export function SiteSidebar({ pages }: { pages: NavPage[] }) {
 
 	return (
 		<aside className="site-sidebar">
-			<Link href="/" className="site-wordmark">
-				Recoder
-			</Link>
-			<SiteSearch pages={[HOME, ...pages]} />
+			<div className="site-head">
+				<Link href="/" className="site-wordmark">
+					Recoder
+				</Link>
+				<SiteSearch pages={[HOME, ...pages]} />
+			</div>
 			<nav ref={row} className="site-nav" aria-label="Site">
 				<HoverList as="ul" itemSelector=".nav-row" className="site-nav-list">
 					<li className="nav-row">
 						<PageLink page={HOME} active={current === HOME.href} />
-					</li>
-					<li role="presentation" className="site-nav-label section-label">
-						Docs
 					</li>
 					{pages.map((page) => (
 						<DocsPageItem
