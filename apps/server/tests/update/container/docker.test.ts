@@ -31,6 +31,7 @@ let server: ReturnType<typeof Bun.serve>;
 let containers: Map<string, Container>;
 let pulled: { RepoDigests: string[]; Os: string; Architecture: string };
 let changes: string[];
+let inspectedImages = 0;
 let created: Record<string, unknown>[];
 
 function managed(
@@ -66,7 +67,7 @@ beforeAll(async () => {
 			}
 
 			if (request.method === 'GET' && url.pathname === `/images/${encodeURIComponent(AMD64)}/json`)
-				return Response.json(pulled);
+				return (inspectedImages++, Response.json(pulled));
 
 			changes.push(`${request.method} ${url.pathname}${url.search}`);
 
@@ -93,6 +94,7 @@ beforeEach(() => {
 	pulled = { RepoDigests: [AMD64], Os: 'linux', Architecture: 'amd64' };
 	changes = [];
 	created = [];
+	inspectedImages = 0;
 });
 
 function driver() {
@@ -153,6 +155,8 @@ test('the image pull uses the signed platform digest and accepts the matching im
 	expect(changes).toEqual([
 		`POST /images/create?${new URLSearchParams({ fromImage: AMD64, platform: 'linux/amd64' })}`
 	]);
+
+	expect(inspectedImages).toBe(1);
 });
 
 test.each([
