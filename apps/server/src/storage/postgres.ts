@@ -7,7 +7,7 @@ type RecordTable = Table | 'review_diffs';
 type WriteGuard = (transaction: TransactionSQL) => Promise<void>;
 
 export async function initializePostgresStore(database: SQL): Promise<void> {
-	await database.begin(async (transaction) => {
+	await withPostgresTransaction(database, async (transaction) => {
 		await transaction`SELECT pg_advisory_xact_lock(hashtextextended('recoder:records:schema', 0))`;
 
 		await transaction`

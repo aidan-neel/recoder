@@ -1,6 +1,7 @@
 import { SQL, type TransactionSQL } from 'bun';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
+import { withPostgresTransaction } from './postgres-transactions';
 
 const commentSchema = z.object({ id: z.string().min(1), url: z.string().min(1), inline: z.boolean() });
 
@@ -51,7 +52,7 @@ export class PublicationUncertainError extends Error {
 }
 
 export async function initializePublication(database: SQL): Promise<void> {
-	await database.begin(async (transaction) => {
+	await withPostgresTransaction(database, async (transaction) => {
 		await transaction`SELECT pg_advisory_xact_lock(hashtextextended('recoder:publication:schema', 0))`;
 
 		await transaction`

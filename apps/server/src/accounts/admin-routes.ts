@@ -21,7 +21,7 @@ const ADMIN_WRITE_PATHS = /^\/api\/(settings|agent)(\/|$)|^\/api\/auth\/token\/[
  * the usage and telemetry reports, which show per-person activity and spend, and the update action, which swaps the
  * server out underneath everyone.
  */
-const ADMIN_ONLY_PATHS = /^\/api\/(members|usage|telemetry|update)(\/|$)/;
+const ADMIN_ONLY_PATHS = /^\/api\/(members|usage|telemetry|update|server)(\/|$)/;
 
 /** Whether a request changes server configuration or members, and so needs the admin. */
 export function isAdminOnly(method: string, path: string): boolean {

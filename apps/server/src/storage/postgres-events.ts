@@ -11,7 +11,7 @@ type EventInput = Omit<ReviewEvent, 'at' | 'sequence'>;
 type Reducer = (snapshot: ReviewProgress, event: StoredReviewEvent) => ReviewProgress;
 
 export async function initializePostgresEvents(database: SQL): Promise<void> {
-	await database.begin(async (transaction) => {
+	await withPostgresTransaction(database, async (transaction) => {
 		await transaction`SELECT pg_advisory_xact_lock(hashtextextended('recoder:events:schema', 0))`;
 
 		await transaction`

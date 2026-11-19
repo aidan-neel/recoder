@@ -30,6 +30,7 @@ import { interruptLocalReplies } from './repo-chat/chat-reply';
 import { loadPriceLookup } from './models/model-prices';
 import { updateService } from './update/service';
 import { backfillModelCalls, pruneModelCalls } from './usage/model-calls';
+import { startNightlyBackups } from './storage/backups/service';
 
 /**
  * Start the agents' checks now so Settings never waits on a cold start:
@@ -95,7 +96,8 @@ const LONG_LIVED = [
 	/^\/api\/home\/brief$/,
 	/^\/api\/settings\/providers\/[^/]+\/(connect|catalog)$/,
 	/^\/api\/settings\/models(\/discover)?$/,
-	/^\/api\/settings\/vllm(\/refresh)?$/
+	/^\/api\/settings\/vllm(\/refresh)?$/,
+	/^\/api\/server\/backups\/[^/]+\/download$/
 ];
 
 function isLongLived(path: string): boolean {
@@ -143,6 +145,7 @@ logStrayRejections();
 
 console.log(`recoder secret key: ${describeSecretKeySource(secretKey().source)}`);
 await initializeStorage();
+startNightlyBackups();
 await deleteChatGptTokens(serverDataDir());
 await backfillModelCalls();
 await pruneModelCalls();

@@ -12,7 +12,11 @@ import { initializePostgresStore, PostgresStore } from './postgres';
 import { initializePostgresEvents, PostgresEvents } from './postgres-events';
 import { withPostgresTransaction } from './postgres-transactions';
 import { initializePublication, closePublicationStorage } from './postgres-publication';
-import { sqliteCollection, closeSqlite } from './sqlite';
+import { sqlite, sqliteCollection, closeSqlite } from './sqlite';
+import { migratePostgres, postgresDataVersion } from './postgres-migrations';
+import { sqliteDataVersion } from './sqlite-migrations';
+import { serverDataDir } from '../util/data-dir';
+import { finishSqliteRestore } from './backups/restore';
 
 export const postgres = env.RECODER_DATABASE_URL
 	? new SQL(env.RECODER_DATABASE_URL, {
@@ -50,13 +54,29 @@ export function collection<T extends { id: string }>(table: Table): Collection<T
 }
 
 export async function initializeStorage(): Promise<void> {
-	if (!postgres || !coordinator) return;
+	const sql = postgres;
+	const reviewCoordinator = coordinator;
 
-	await initializePostgresStore(postgres);
-	await initializePostgresEvents(postgres);
-	await initializeSharedSettings(postgres);
-	await coordinator.initialize();
-	await initializePublication(postgres);
+	if (!sql || !reviewCoordinator) {
+		await finishSqliteRestore(serverDataDir());
+		sqlite();
+
+		return;
+	}
+
+	await migratePostgres(sql, [
+		async () => {
+			await initializePostgresStore(sql);
+			await initializePostgresEvents(sql);
+			await initializeSharedSettings(sql);
+			await reviewCoordinator.initialize();
+			await initializePublication(sql);
+		}
+	]);
+}
+
+export async function storageDataVersion(): Promise<number> {
+	return postgres ? postgresDataVersion(postgres) : sqliteDataVersion(sqlite());
 }
 
 export async function closeStorage(): Promise<void> {

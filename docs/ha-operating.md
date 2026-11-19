@@ -111,6 +111,8 @@ Machine-local repositories and provider login files are not portable between pod
 
 Back up PostgreSQL and the deployment's external Secrets before an upgrade.
 Use immutable image tags and keep all replicas on compatible schema and protocol versions during a rolling update.
+Recoder records the schema version in `recoder_migrations`, applying the ledger and schema in the same transaction
+under a PostgreSQL advisory lock. A server cannot start on a data version newer than it can read.
 Let active reviews finish when possible. A replacement executor can recover persisted checkpoints, but an interrupted provider call can repeat.
 
 Use your PostgreSQL provider's consistent backup and restore process for the entire application database.
@@ -121,6 +123,29 @@ The API pods' temporary directories are disposable and do not replace a database
 To restore, stop API replicas, restore the database and matching external Secrets, and start compatible images against the restored writable endpoint.
 Keep the previous deployment stopped so it cannot execute work against the restored installation.
 Verify readiness, saved reviews, model settings, and forge publication state before starting another review.
+
+### Portable snapshots
+
+The built-in database offers nightly and manual backups. Archives in `<data dir>/backups/<id>/backup.tar.zst` include
+the committed SQLite database and saved settings, not worktrees, caches, the local bearer token, or the encryption key.
+Keep the matching key in your secret manager; sealed credentials cannot be recovered without it. An admin can request
+a one-time download with the key included. Treat that download like a plaintext credential bundle.
+
+For an offline restore, stop Recoder, every other writer that uses this data directory, and any API replicas first.
+Set `RECODER_DATA_DIR` to the actual data directory. Use only a backup you trust.
+
+```sh
+bun apps/server/src/storage/backups/operator.ts restore --archive /path/to/backup.tar.zst --stopped
+```
+
+For PostgreSQL, provider backups remain the normal HA recovery path. To make a portable snapshot of a stopped
+installation, install `pg_dump` and `pg_restore` for your database version, set `RECODER_DATABASE_URL` from your secret
+manager, and run `bun apps/server/src/storage/backups/operator.ts backup --stopped`. The archive includes a consistent
+database dump and local settings. To restore it, point `RECODER_DATABASE_URL` at a dedicated, empty PostgreSQL database
+and run the same restore command. It refuses a nonempty database. PostgreSQL commits the dump in one transaction
+before the command restores local files, which PostgreSQL does not use for shared settings. If local file
+restoration fails, correct the filesystem issue and retry into another empty database; keep the failed
+destination stopped. Restore the matching external key separately.
 
 Removing the Helm release leaves the external database and Secrets under infrastructure control.
 Restoring PostgreSQL does not roll back messages already sent to a forge or model charges already incurred.

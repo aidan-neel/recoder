@@ -3,6 +3,9 @@ import { SQL } from 'bun';
 import { initializePostgresStore, PostgresStore } from '../../src/storage/postgres';
 import { initializePostgresEvents, PostgresEvents } from '../../src/storage/postgres-events';
 import { withPostgresTransaction } from '../../src/storage/postgres-transactions';
+import { DATA_VERSION } from '../../src/storage/data-version';
+import { migratePostgres, postgresDataVersion } from '../../src/storage/postgres-migrations';
+import type { TransactionSQL } from 'bun';
 
 const testUrl = process.env.RECODER_POSTGRES_TEST_URL;
 const schema = `recoder_storage_${crypto.randomUUID().replaceAll('-', '')}`;
@@ -31,6 +34,20 @@ afterAll(async () => {
 
 const integration = test.skipIf(!testUrl);
 const unrestricted = async () => {};
+
+integration('concurrent PostgreSQL startup applies and records the migration once', async () => {
+	let applied = 0;
+
+	const migration = async (transaction: TransactionSQL) => {
+		applied += 1;
+		await transaction`CREATE TABLE migration_fixture (id int)`;
+	};
+
+	await Promise.all([migratePostgres(first, [migration]), migratePostgres(second, [migration])]);
+
+	expect(applied).toBe(1);
+	expect(await postgresDataVersion(second)).toBe(DATA_VERSION);
+});
 
 integration('a committed record is visible to an independent database client', async () => {
 	const writer = new PostgresStore(first, unrestricted).collection<{ id: string; count: number }>('reviews');

@@ -33,13 +33,11 @@ export function prepareReviewList(handle: Database): void {
 		}
 	}
 
-	dropOtherShapes(handle);
+	handle.run('CREATE TABLE IF NOT EXISTS review_list_shape (id INTEGER PRIMARY KEY, shape TEXT NOT NULL)');
 }
 
 /** Drops projections made by another version of `reviewListItem`. */
-function dropOtherShapes(handle: Database): void {
-	handle.run('CREATE TABLE IF NOT EXISTS review_list_shape (id INTEGER PRIMARY KEY, shape TEXT NOT NULL)');
-
+export function refreshReviewListShape(handle: Database): void {
 	handle
 		.transaction(() => {
 			const stored = handle.query<{ shape: string }, []>('SELECT shape FROM review_list_shape WHERE id = 1').get();
