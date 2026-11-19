@@ -1,24 +1,41 @@
 /* ───────── Pull request page: the header, the review's badge, the merge facts, the tabs, one tab's body ───────── */
 /* The page fills the window. The header, the tab row and each tab's body are page columns, on the bar's edges. */
 .pull-head {
+	/*
+	 * The row's width once the page settles (`--page-rest`, shell.css), and 1 where that width would cut the title
+	 * short, else 0. Keyed to where the page is going, not where it is, so a sidebar sliding past the breakpoint never
+	 * moves the badges, or the tabs under them, mid-slide.
+	 */
+	--pull-head-rest: calc(var(--page-rest, 100vw) - 2 * var(--page-gutter));
+	--pull-head-split: max(0, sign(1219.5px - var(--pull-head-rest)));
+
 	flex-shrink: 0;
 	padding-block: 10px;
-	container-type: inline-size;
 }
-/* One dense row: the title, its badges and the buttons at the end. A long title gives way first. */
+/*
+ * One dense row: the title, its badges and the buttons at the end. A long title gives way first. Split, the badges
+ * take the line under it. The title keeps 280px, less whatever the row lacks while the page passes through a
+ * narrower width than it settles at, so the row never wraps on the way.
+ */
 .pull-title-row {
 	display: flex;
 	min-height: 32px;
 	min-width: 0;
+	flex-wrap: wrap;
 	align-items: center;
-	gap: 12px;
+	gap: 8px 12px;
 }
 .pull-head .page-title {
-	min-width: 280px;
-	flex: 0 1 auto;
+	min-width: clamp(0px, 280px - (var(--pull-head-rest) - 100%) * (1 - var(--pull-head-split)), 280px);
+	max-width: max-content;
+	flex: 1 1 0;
 	gap: 8px;
 	font-size: 15px;
 	line-height: 22px;
+}
+/* Under reduced motion the kit gives every property a 1ms transition, which would hold the split a frame behind. */
+.pull-title-row > * {
+	transition-property: none;
 }
 .pull-actions {
 	display: flex;
@@ -44,22 +61,13 @@
 }
 .pull-facts {
 	display: flex;
-	min-width: 0;
+	min-width: calc(100% * var(--pull-head-split));
+	max-width: 100%;
 	flex-shrink: 0;
+	flex-wrap: wrap;
 	align-items: center;
+	order: var(--pull-head-split);
 	gap: 6px;
-}
-/* Where the row would cut the title short, the badges take the line under it. */
-@container (max-width: 1219px) {
-	.pull-title-row {
-		flex-wrap: wrap;
-		row-gap: 8px;
-	}
-	.pull-facts {
-		flex-wrap: wrap;
-		flex-basis: 100%;
-		order: 1;
-	}
 }
 
 /*

@@ -633,9 +633,13 @@ Motion explains a change and never makes the person wait.
   frame, as a Mac app's content does beside its sidebar: what sits on the
   gutter moves with the edge, a centred column (Settings, Chat, New) glides at
   half the pace, what sits at the right holds still, and nothing snaps when the
-  slide ends. A column centres on 100% of the page, not 100cqw, which lagged a
-  frame behind a snap. A reload never slides, and under reduced motion it
-  snaps.
+  slide ends. A column centres on 100% of the page, not 100cqw, whose padding
+  the kit's 1ms reduced-motion transition held a frame behind a snap. A page
+  that changes layout at a width keys it to `--page-rest`, the width the page
+  settles at, which the frame sets the moment the sidebar toggles: the pull
+  request header splits its badges onto their own line from it, so they move
+  with the click, never mid-slide. A reload never slides, and under reduced
+  motion it snaps.
 - A window tab that closes gets out of the way: its name fades in 120ms while
   it narrows to nothing in 150ms, gap and all, so the tabs after it and the +
   close up behind it; the page it leaves for shows at once. The fill of the tab

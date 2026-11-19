@@ -80,8 +80,9 @@
  * bar's. Its edges are the gutter; a page that sets --page-measure centres its column at that width instead, and
  * still never comes closer to the panel's sides than the gutter. A part that spans the panel, like a rule, is the
  * column itself, so its line runs edge to edge while its content keeps to the edges. Every column spans the page, so
- * its padding centres on 100% of it, which layout resolves in the frame the page's width changes; 100cqw, read in
- * style, lagged a frame behind a sidebar that snaps (reduced motion) and painted the column off centre.
+ * its padding centres on 100% of it, which layout resolves in the frame the page's width changes. 100cqw resolved in
+ * style, so every resize changed the padding, and the kit's 1ms reduced-motion transition held it a frame behind a
+ * sidebar that snaps, painting the column off centre.
  */
 .page-column {
 	padding-inline: max(var(--page-gutter), (100% - var(--page-measure, 100%)) / 2);

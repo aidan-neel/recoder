@@ -214,6 +214,7 @@
 	}
 	.pull-head .page-title {
 		display: block;
+		max-width: none;
 		flex-basis: 100%;
 	}
 	.pull-head .page-title-text {
