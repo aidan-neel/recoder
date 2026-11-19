@@ -1,0 +1,50 @@
+/* ───────── The server's checks: one line each, its glyph, its name, what was found ───────── */
+.server-checks {
+	display: flex;
+	width: 100%;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.server-check {
+	display: grid;
+	grid-template-columns: 18px 160px minmax(0, 1fr);
+	align-items: start;
+	column-gap: 12px;
+	padding-block: 5px;
+}
+.server-check [data-ui='status-glyph'] {
+	height: 20px;
+	justify-content: center;
+}
+.server-check-name {
+	color: var(--text-primary);
+	line-height: 20px;
+}
+.server-check-text {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+}
+.server-check-detail {
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+	line-height: 20px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.server-check-fix {
+	color: var(--text-secondary);
+	font-size: var(--font-size-meta);
+	text-wrap: pretty;
+}
+.server-check[data-state='fail'] .server-check-detail {
+	color: var(--danger);
+}
+.server-check-error {
+	margin: 0;
+	color: var(--danger);
+}

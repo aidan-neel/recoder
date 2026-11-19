@@ -6,7 +6,7 @@ import { useEffect, useRef, type FormEvent } from 'react';
 import { useUnlockSetup } from '@/lib/account/use-unlock-setup';
 import type { AuthApi } from '@/lib/api/accounts';
 
-/** The first step of a locked setup: the code the server printed, and Continue. */
+/** The claim step's one question: the code the server printed, and Continue beside it. */
 export function SetupCodeForm({ api }: { api: AuthApi }) {
 	const view = useUnlockSetup(api);
 	const field = useRef<HTMLInputElement>(null);
@@ -21,7 +21,7 @@ export function SetupCodeForm({ api }: { api: AuthApi }) {
 	}
 
 	return (
-		<form className="forge-choices" noValidate onSubmit={submit}>
+		<form className="setup-code" noValidate onSubmit={submit}>
 			<Field label="Setup code" error={view.error ?? undefined}>
 				<Input
 					ref={field}
@@ -33,13 +33,7 @@ export function SetupCodeForm({ api }: { api: AuthApi }) {
 					onChange={(event) => view.setCode(event.target.value)}
 				/>
 			</Field>
-			<Button
-				type="submit"
-				variant="primary"
-				className="forge-continue"
-				status={view.status}
-				disabled={!view.code.trim()}
-			>
+			<Button type="submit" variant="primary" status={view.status} disabled={!view.code.trim()}>
 				Continue
 			</Button>
 		</form>

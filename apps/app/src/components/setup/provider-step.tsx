@@ -1,59 +1,64 @@
 'use client';
 
+import type { SetupStep as Step } from '@recoder/shared';
 import { Button } from '@recoder/ui';
 import { useState } from 'react';
 
 import { cliFix } from '@/lib/settings/providers/agent-cli';
+import { recheckSetup } from '@/lib/setup/setup-gate';
 import { useProviderStep } from '@/lib/setup/use-provider-step';
 
 import { CheckAgain, Command } from '@/components/settings/providers/provider-notice';
+import { ProviderModal } from '@/components/settings/providers/provider-modal';
 import { VllmConnectModal } from '@/components/settings/vllm-connect';
 
 import { SetupStep } from './setup-step';
 
-interface ProviderStepProps {
-	done: boolean;
-	current: boolean;
-	/** Opens the provider dialog. */
-	onAdd: () => void;
-}
+/** The provider step's dialogs: a provider through the agent, or a vLLM server, which needs no agent. */
+type ProviderDialog = 'provider' | 'vllm';
 
 /**
- * Step one: a model provider. Providers are added through the agent, so
- * while it is missing the step shows the command that installs it and a way
- * to check again. A vLLM server needs no agent, so it can be connected either way.
+ * Step four: a model provider. Providers are added through the agent, so while it is missing the step shows the
+ * command that installs it and a way to check again. A vLLM server needs no agent, so it can be connected either way.
  */
-export function ProviderStep({ done, current, onAdd }: ProviderStepProps) {
-	const step = useProviderStep(done);
-	const [connecting, setConnecting] = useState(false);
-	const fix = !done && !step.ready && step.manager ? cliFix(step.manager) : null;
+export function ProviderStep({ step, current }: { step: Step; current: boolean }) {
+	const view = useProviderStep(step.done);
+	const [dialog, setDialog] = useState<ProviderDialog | null>(null);
+	const fix = !view.ready && view.manager ? cliFix(view.manager) : null;
+
+	function openChange(open: boolean): void {
+		if (open) return;
+
+		setDialog(null);
+		recheckSetup();
+	}
 
 	return (
 		<SetupStep
 			name="Model provider"
-			detail={step.description}
-			done={done}
+			step={step}
 			current={current}
-			below={
-				fix ? (
-					<div className="setup-command">
-						<Command command={fix} />
+			hint="xAI, OpenAI, OpenRouter or your own endpoint"
+			body={
+				<>
+					{view.description ? <p className="setup-text">{view.description}</p> : null}
+					{fix ? <Command command={fix} /> : null}
+					<div className="setup-actions">
+						{view.ready ? (
+							<Button variant="primary" onClick={() => setDialog('provider')}>
+								Add a provider
+							</Button>
+						) : (
+							<CheckAgain label="Check again" />
+						)}
+						<Button variant={view.ready ? 'ghost' : 'outline'} onClick={() => setDialog('vllm')}>
+							Connect vLLM server
+						</Button>
 					</div>
-				) : null
+					<ProviderModal open={dialog === 'provider'} providerId={null} onOpenChange={openChange} />
+					<VllmConnectModal open={dialog === 'vllm'} onOpenChange={openChange} />
+				</>
 			}
-		>
-			{!done && step.ready ? (
-				<Button variant={current ? 'primary' : 'outline'} onClick={onAdd}>
-					Add a provider
-				</Button>
-			) : null}
-			{!done && !step.ready ? <CheckAgain label="Check again" /> : null}
-			{!done ? (
-				<Button variant={step.ready ? 'ghost' : 'outline'} onClick={() => setConnecting(true)}>
-					Connect vLLM server
-				</Button>
-			) : null}
-			<VllmConnectModal open={connecting} onOpenChange={setConnecting} />
-		</SetupStep>
+		/>
 	);
 }

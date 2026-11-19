@@ -1,21 +1,21 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { create, useStore } from 'zustand';
 
 import { useListStore } from '../api/client';
-import { useConnections } from '../connections/connections-store';
 import { useSettings } from '../settings/settings-store';
-import { gateOf, setupSteps, stepsLeft, type SetupSteps } from './setup-steps';
+import { useChecklist } from './checklist-store';
+import { gateOf } from './setup-steps';
 
-/** Whether the pull request list can show yet: `needed` while a provider, model or repository is missing. */
+/** Whether the pull request list can show yet: `needed` until the server says setup is finished. */
 export type SetupGate = 'checking' | 'needed' | 'done';
 
 interface GateState {
-	/** True while first run is on screen, so the gate stays `needed` through its closing beat. */
+	/** True while the checklist is on screen, so the gate stays `needed` through its closing beat. */
 	holding: boolean;
 	/**
-	 * The reload of the settings and repositories after the server came back:
+	 * The reload of the checklist and settings after the server came back:
 	 * `spent` once it ran and they still failed, so the gate stops waiting on them.
 	 */
 	retry: 'idle' | 'running' | 'spent';
@@ -23,67 +23,52 @@ interface GateState {
 
 const useGate = create<GateState>(() => ({ holding: false, retry: 'idle' }));
 
-/** First run holds the gate while it shows, and lets go once its last step has settled. */
+/** The checklist holds the gate while it shows, and lets go once setup has finished and faded. */
 export function holdSetup(holding: boolean): void {
 	useGate.setState({ holding });
 }
 
-/** True while the settings or the repositories have failed to load: the server was down or answered with an error. */
+/** True while the checklist or the settings failed to load: the server was down or answered with an error. */
 function setupDown(): boolean {
-	const { reposStatus } = useConnections.getState();
+	const checklist = useChecklist.getState().status;
 
-	return useSettings.getState().status === 'offline' || reposStatus === 'offline' || reposStatus === 'error';
+	return useSettings.getState().status === 'offline' || checklist === 'offline' || checklist === 'error';
 }
 
-/** Loads the settings and the repositories again once the server answers, then lets the gate decide. */
+/** Loads the checklist and the settings again once the server answers, then lets the gate decide. */
 async function recover(): Promise<void> {
 	useGate.setState({ retry: 'running' });
-	await Promise.allSettled([useSettings.getState().load(true), useConnections.getState().loadRepos()]);
+	await Promise.allSettled([useSettings.getState().load(true), useChecklist.getState().load()]);
 	useGate.setState({ retry: setupDown() ? 'spent' : 'idle' });
 }
 
-/** Checks everything again: the agent and its providers, the models, the repositories and the forges. */
+/** Checks everything again: the checklist, and the agent, providers and models its steps show. */
 export function recheckSetup(): void {
+	void useChecklist.getState().load();
 	void useSettings.getState().load(true);
-	void useConnections.getState().loadRepos();
-	void useConnections.getState().loadAuth();
 }
 
 /**
- * First run's steps, or null until the settings and the repositories have loaded. The models land before the
- * agents' providers do, so the steps wait for the whole settings load rather than judge the providers too early.
- */
-export function useSetupSteps(): SetupSteps | null {
-	const models = useSettings((state) => (state.status === 'ready' ? state.models : null));
-	const providers = useSettings((state) => state.providers);
-	const repos = useConnections((state) => state.repos);
-
-	return useMemo(() => (models && repos ? setupSteps(models, providers, repos) : null), [models, providers, repos]);
-}
-
-/**
- * Reads what first run still needs. It loads the settings and the tracked
- * repositories on mount, and checks the forges only when first run will show.
- * While first run is up, it checks again whenever the window regains focus.
- * When the server was down on load and the pull request list then reaches
- * it, the settings and repositories load again, so first run can still appear.
+ * Reads whether setup is finished. It loads the checklist and the settings on mount; while the checklist is up, it
+ * checks again whenever the window regains focus, since a provider or a certificate can arrive from elsewhere. When
+ * the server was down on load and the pull request list then reaches it, both load again, so the checklist can
+ * still appear.
  */
 export function useSetupGate(): SetupGate {
-	const steps = useSetupSteps();
+	const steps = useChecklist((state) => state.checklist);
+	const checklist = useChecklist((state) => state.status);
 	const settings = useSettings((state) => state.status);
-	const repos = useConnections((state) => state.reposStatus);
-	const auth = useConnections((state) => state.authStatus);
 	const holding = useGate((state) => state.holding);
 	const retry = useGate((state) => state.retry);
 	const answered = useStore(useListStore().state, (state) => state.phase === 'ready');
-	const down = settings === 'offline' || repos === 'offline' || repos === 'error';
+	const down = settings === 'offline' || checklist === 'offline' || checklist === 'error';
 	const recovering = down && answered && retry !== 'spent';
-	const gate = gateOf({ settings, repos, auth, steps, holding, recovering });
-	const showing = gate === 'needed' || (steps !== null && stepsLeft(steps) > 0);
+	const gate = gateOf({ checklist, settings, steps, holding, recovering });
+	const showing = gate === 'needed';
 
 	useEffect(() => {
 		void useSettings.getState().load();
-		void useConnections.getState().loadRepos();
+		void useChecklist.getState().load();
 	}, []);
 
 	useEffect(() => {
@@ -93,7 +78,6 @@ export function useSetupGate(): SetupGate {
 	useEffect(() => {
 		if (!showing) return;
 
-		void useConnections.getState().loadAuth();
 		window.addEventListener('focus', recheckSetup);
 
 		return () => window.removeEventListener('focus', recheckSetup);

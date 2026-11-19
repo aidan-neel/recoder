@@ -1,62 +1,78 @@
-import type { AgentProvider, ModelSettings, Repo } from '@recoder/shared';
+import type { SetupChecklist, SetupStep, SetupStepId } from '@recoder/shared';
 
-import type { LoadStatus } from '../connections/connections-store';
 import type { useSettings } from '../settings/settings-store';
+import type { ChecklistStatus } from './checklist-store';
 import type { SetupGate } from './setup-gate';
 
 /** Where the settings load stands (`offline`: the server did not answer). */
 type SettingsStatus = ReturnType<typeof useSettings.getState>['status'];
 
-/** First run's three steps, true once done. */
-export interface SetupSteps {
-	provider: boolean;
-	model: boolean;
-	repo: boolean;
+/** The checklist's steps, in order. */
+export const STEP_ORDER: readonly SetupStepId[] = [
+	'claim',
+	'address',
+	'admin',
+	'provider',
+	'model',
+	'storage',
+	'check'
+];
+
+/** Who can work on each step: `out` before the admin account exists, `in` once it is signed in, `any` either way. */
+const STEP_WHO: Record<SetupStepId, 'out' | 'in' | 'any'> = {
+	claim: 'out',
+	address: 'any',
+	admin: 'out',
+	provider: 'in',
+	model: 'in',
+	storage: 'in',
+	check: 'in'
+};
+
+/** One step as the server reported it; a step the server left out counts as not done. */
+export function stepOf(checklist: SetupChecklist, id: SetupStepId): SetupStep {
+	return checklist.steps.find((step) => step.id === id) ?? { id, done: false };
 }
 
-/**
- * What first run still needs. A provider counts as connected when OpenCode
- * has one, or when any agent (Claude Code, Devin) already offers models, or
- * when a model is configured some other way (the RECODER_REVIEW_* variables).
- */
-export function setupSteps(models: ModelSettings, providers: AgentProvider[], repos: Repo[]): SetupSteps {
-	return {
-		provider: providers.some((provider) => provider.connected) || models.models.length > 0 || models.configured,
-		model: models.configured,
-		repo: repos.length > 0
-	};
+/** The first step not done yet, which the page leads with; null once all are. */
+export function currentStep(checklist: SetupChecklist): SetupStepId | null {
+	return STEP_ORDER.find((id) => !stepOf(checklist, id).done) ?? null;
 }
 
-/** How many steps are left, 0 to 3. */
-export function stepsLeft(steps: SetupSteps): number {
-	return [steps.provider, steps.model, steps.repo].filter((done) => !done).length;
+/** How many steps are left, 0 to 7. */
+export function stepsLeft(checklist: SetupChecklist): number {
+	return STEP_ORDER.filter((id) => !stepOf(checklist, id).done).length;
+}
+
+/** Whether a step can be worked on: the claim and admin before an account exists, the server's own steps after. */
+export function stepOpen(id: SetupStepId, signedIn: boolean): boolean {
+	const who = STEP_WHO[id];
+
+	return who === 'any' || (who === 'in') === signedIn;
 }
 
 interface GateInput {
+	checklist: ChecklistStatus;
 	settings: SettingsStatus;
-	repos: LoadStatus;
-	auth: LoadStatus;
-	/** Null until the settings and the repositories have loaded. */
-	steps: SetupSteps | null;
-	/** True while first run is on screen; it lets go a beat after its last step is done. */
+	/** Null until the checklist has loaded. */
+	steps: SetupChecklist | null;
+	/** True while the checklist is on screen; it lets go a beat after setup is finished. */
 	holding: boolean;
-	/** True while the settings and repositories load again because the server came back after failing them. */
+	/** True while the checklist and settings load again because the server came back after failing them. */
 	recovering: boolean;
 }
 
 /**
- * The gate. A server that is down, or that fails the repository list, lets
- * the pull request list through so it can show its own notice; once the server answers
- * again, the gate checks until the settings and repositories have reloaded.
- * First run waits for the forge check too, so it paints with the right
- * actions in place.
+ * The gate. A server that is down, or that cannot say where setup stands, lets the pull request list through so it
+ * can show its own notice; once the server answers again, the gate checks until the checklist has reloaded. The
+ * checklist waits for the settings too, so its provider and model steps paint with their controls in place.
  */
-export function gateOf({ settings, repos, auth, steps, holding, recovering }: GateInput): SetupGate {
+export function gateOf({ checklist, settings, steps, holding, recovering }: GateInput): SetupGate {
 	if (recovering) return 'checking';
-	if (settings === 'offline' || repos === 'offline' || repos === 'error') return 'done';
+	if (checklist === 'offline' || checklist === 'error' || settings === 'offline') return 'done';
 	if (!steps) return 'checking';
-	if (stepsLeft(steps) === 0 && !holding) return 'done';
-	if (auth === 'idle' || auth === 'loading') return 'checking';
+	if (steps.complete && !holding) return 'done';
+	if (settings !== 'ready') return 'checking';
 
 	return 'needed';
 }

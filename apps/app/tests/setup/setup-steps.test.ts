@@ -1,37 +1,44 @@
+import type { SetupChecklist } from '@recoder/shared';
 import { describe, expect, test } from 'bun:test';
 
-import { gateOf } from '../../src/lib/setup/setup-steps';
+import { currentStep, gateOf } from '../../src/lib/setup/setup-steps';
 
-const NONE = { provider: false, model: false, repo: false };
+const OPEN: SetupChecklist = { complete: false, steps: [{ id: 'claim', done: true }] };
 
-const ALL = { provider: true, model: true, repo: true };
+const FINISHED: SetupChecklist = { complete: true, steps: [] };
 
 describe('gateOf', () => {
 	test('a server that does not answer lets the pull request list through to show its own notice', () => {
-		expect(
-			gateOf({ settings: 'offline', repos: 'loading', auth: 'idle', steps: null, holding: false, recovering: false })
-		).toBe('done');
+		expect(gateOf({ checklist: 'offline', settings: 'idle', steps: null, holding: false, recovering: false })).toBe(
+			'done'
+		);
 	});
 
-	test('a server that comes back holds the gate until the settings and repositories load again', () => {
-		expect(
-			gateOf({ settings: 'offline', repos: 'offline', auth: 'idle', steps: null, holding: false, recovering: true })
-		).toBe('checking');
+	test('a server that comes back holds the gate until the checklist and settings load again', () => {
+		expect(gateOf({ checklist: 'offline', settings: 'offline', steps: null, holding: false, recovering: true })).toBe(
+			'checking'
+		);
 	});
 
-	test('first run waits for the forge check before it shows', () => {
-		expect(
-			gateOf({ settings: 'ready', repos: 'ready', auth: 'loading', steps: NONE, holding: false, recovering: false })
-		).toBe('checking');
+	test('the checklist waits for the settings before it shows', () => {
+		expect(gateOf({ checklist: 'ready', settings: 'loading', steps: OPEN, holding: false, recovering: false })).toBe(
+			'checking'
+		);
 	});
 
-	test('first run keeps the gate while it holds it after the last step', () => {
-		expect(
-			gateOf({ settings: 'ready', repos: 'ready', auth: 'ready', steps: ALL, holding: true, recovering: false })
-		).toBe('needed');
+	test('the checklist keeps the gate while it holds it after setup finishes', () => {
+		expect(gateOf({ checklist: 'ready', settings: 'ready', steps: FINISHED, holding: true, recovering: false })).toBe(
+			'needed'
+		);
 
-		expect(
-			gateOf({ settings: 'ready', repos: 'ready', auth: 'ready', steps: ALL, holding: false, recovering: false })
-		).toBe('done');
+		expect(gateOf({ checklist: 'ready', settings: 'ready', steps: FINISHED, holding: false, recovering: false })).toBe(
+			'done'
+		);
+	});
+});
+
+describe('currentStep', () => {
+	test('a step the server left out counts as not done', () => {
+		expect(currentStep(OPEN)).toBe('address');
 	});
 });
