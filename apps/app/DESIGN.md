@@ -601,7 +601,7 @@ side an icon sits on gets 2px less padding than a side with text.
 ## Corners and controls
 
 Corners are soft, a step rounder than Capy Desktop's (6px buttons, 8px cards,
-12px panels), and come from five kit tokens. A surface's radius is its inset
+12px panels), and come from six kit tokens. A surface's radius is its inset
 plus the radius of the rows in it, so a 6px row in a menu with a 4px inset
 sits in a 10px panel, and a 6px segment in a track with a 2px inset in an 8px
 track. Use the tokens, never a raw radius.
@@ -612,6 +612,7 @@ track. Use the tokens, never a raw radius.
 | `--radius-control`  | 7px    | Buttons, fields, select triggers, tabs, tooltips                        |
 | `--radius-row`      | 8px    | List rows and their highlight, segmented tracks, textareas, code blocks |
 | `--radius-card`     | 10px   | Cards, menus, popovers, toasts, the palette                             |
+| `--radius-modal`    | 14px   | Dialogs, a sheet over the page that is rounder than the cards in it     |
 | `--radius-composer` | 16px   | The composer; the controls in its bar take its radius less the inset    |
 
 - **Tabs** are text, 26px tall. The open tab is brighter on a quiet fill
@@ -621,8 +622,12 @@ track. Use the tokens, never a raw radius.
 - **Menus and selects**: rows 26px tall with a 14px icon, on a 4px inset in
   a panel at least 160px wide, 4px from the trigger. The palette's rows are
   30px, with icons in a 16px lane so every label starts at the same x.
-- **Dialogs**: 16px padding, the title 4px over its description, the close
-  button 12px in from the corner, footer buttons 6px apart. Popovers have
+- **Dialogs** follow Capy's: 20px padding, the title 4px over its
+  description, the close button 12px in from the corner. A dialog that
+  belongs to a section names it first, as a breadcrumb in quieter ink
+  (`ModalTitle`'s `context`: Providers › Add provider). The footer is the
+  panel's last row, full width under a hairline, with Back or Check again at
+  the left (`start`) and the actions at the right, 6px apart. Popovers have
   10px padding, 6px from their trigger.
 - **Fields** are 28px tall with 9px side padding, like a `md` button. They
   are wells, not plates: the field recipe, whose hairline brightens on hover

@@ -21,7 +21,9 @@ export function LinkForgeDialog({ link }: { link: LinkForgeView }) {
 	return (
 		<Modal open={link.open} onOpenChange={(open) => (open ? undefined : link.close())}>
 			<ModalContent size="sm" showClose={state.phase !== 'signed-in'}>
-				<ModalTitle>{state.phase === 'idle' ? `Link ${forgeLabel(provider)}` : deviceTitle(state)}</ModalTitle>
+				<ModalTitle context="Account">
+					{state.phase === 'idle' ? `Link ${forgeLabel(provider)}` : deviceTitle(state)}
+				</ModalTitle>
 				<ModalBody>
 					{state.phase === 'idle' ? (
 						<ForgeChoices providers={[provider]} available={new Set([provider])} start={signIn.start} />

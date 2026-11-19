@@ -68,7 +68,7 @@ function TokenPanel({ forge, open, onOpenChange, onSaved }: TokenPanelProps) {
 	return (
 		<Modal open={open} onOpenChange={view.changeOpen}>
 			<ModalContent size="sm" showClose={false}>
-				<ModalTitle>Connect {view.info.label}</ModalTitle>
+				<ModalTitle context="Connections">Connect {view.info.label}</ModalTitle>
 				<ModalBody>
 					<form id={formId} className="token-form" noValidate onSubmit={submit}>
 						{view.info.id === 'gitlab' ? <HostField view={view} /> : null}

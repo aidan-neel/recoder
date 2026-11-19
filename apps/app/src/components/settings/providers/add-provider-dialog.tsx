@@ -127,7 +127,7 @@ function DialogPanel({ firstInstallRef, onAdded }: DialogPanelProps) {
 
 	return (
 		<>
-			<ModalTitle>Add provider</ModalTitle>
+			<ModalTitle context="Providers">Add provider</ModalTitle>
 			<ModalBody className="add-provider">
 				{view.items.length === 0 ? (
 					<StatusNotice
@@ -149,8 +149,11 @@ function DialogPanel({ firstInstallRef, onAdded }: DialogPanelProps) {
 					</ScrollArea>
 				)}
 			</ModalBody>
-			<ModalFooter className="add-provider-footer">
-				{view.hasUninstalled ? <CheckAgain label="Check again" variant="ghost" className="add-provider-check" /> : null}
+			<ModalFooter
+				start={
+					view.hasUninstalled ? <CheckAgain label="Check again" variant="ghost" className="add-provider-check" /> : null
+				}
+			>
 				<ModalClose>
 					<Button variant="secondary">Done</Button>
 				</ModalClose>

@@ -1,6 +1,6 @@
 'use client';
 
-import { XIcon } from '@phosphor-icons/react';
+import { CaretRightIcon, XIcon } from '@phosphor-icons/react';
 import { AnimatePresence } from 'motion/react';
 import { Dialog } from 'radix-ui';
 import { createContext, useContext, type ComponentProps, type ReactElement, type ReactNode } from 'react';
@@ -129,7 +129,26 @@ function CloseButton() {
 	);
 }
 
+interface ModalTitleProps extends ComponentProps<'h2'> {
+	/** What the dialog belongs to, shown before the title as a breadcrumb in quieter ink: Providers › Add provider. */
+	context?: ReactNode;
+}
+
 /** The modal's title; it names the dialog for assistive tech. */
-export function ModalTitle({ className, ...props }: ComponentProps<'h2'>) {
-	return <Dialog.Title data-ui="modal-title" className={cn(TITLE_CLASS, className)} {...props} />;
+export function ModalTitle({ context, className, children, ...props }: ModalTitleProps) {
+	return (
+		<Dialog.Title
+			data-ui="modal-title"
+			className={cn(TITLE_CLASS, context ? 'flex items-center gap-1.5' : null, className)}
+			{...props}
+		>
+			{context ? (
+				<>
+					<span className="font-normal text-fg-subtle">{context}</span>
+					<CaretRightIcon aria-hidden className="size-3 shrink-0 text-fg-faint" />
+				</>
+			) : null}
+			{children}
+		</Dialog.Title>
+	);
 }

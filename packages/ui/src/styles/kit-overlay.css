@@ -18,7 +18,7 @@
  * height live here, so the X can centre on the title's first line at any title size a skin sets.
  */
 [data-ui='modal-panel'] {
-	--modal-inset: 16px;
+	--modal-inset: 20px;
 	--modal-title-line: calc(var(--font-size-title) * 1.375);
 
 	translate: -50% -50%;

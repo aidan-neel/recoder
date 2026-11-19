@@ -308,6 +308,7 @@
 	--radius-control: 7px; /* buttons, fields, select triggers, tabs, tooltips */
 	--radius-row: 8px; /* list rows and their highlight, segmented tracks, radio cards, textareas, code blocks */
 	--radius-card: 10px; /* cards, menus, popovers, toasts, the palette */
+	--radius-modal: 14px; /* modals: a sheet over the page, rounder than the cards in it */
 	--radius-composer: 16px; /* the composer, the one soft box: a message field reads as a place to write, not a card */
 
 	--font-size-title: 15px;

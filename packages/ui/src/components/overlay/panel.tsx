@@ -42,7 +42,7 @@ const SIZES: Record<ModalSize, string> = {
  */
 const PANEL = [
 	'fixed top-1/2 left-1/2 flex w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-3 p-(--modal-inset)',
-	'overflow-y-auto overscroll-contain rounded-(--radius-card) bg-raised-2 text-fg shadow-(--shadow-modal) outline-none',
+	'overflow-y-auto overscroll-contain rounded-(--radius-modal) bg-raised-2 text-fg shadow-(--shadow-modal) outline-none',
 	'data-[state=closed]:pointer-events-none!'
 ].join(' ');
 
