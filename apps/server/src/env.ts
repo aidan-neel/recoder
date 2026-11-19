@@ -66,7 +66,7 @@ const apiTokenSchema = z.preprocess(
 const envSchema = z.object({
 	PORT: z.coerce.number().int().positive().default(3001),
 	HOST: z.string().default('0.0.0.0'),
-	FRONTEND_URL: z.string().default('http://localhost:3000'),
+	FRONTEND_URL: z.string().default('http://localhost:5180'),
 	GITHUB_WEBHOOK_SECRET: z.string().optional(),
 	GITLAB_WEBHOOK_SECRET: z.string().optional(),
 	RECODER_DATABASE_URL: z.preprocess(
