@@ -1,52 +1,52 @@
 /*
- * The app's palette. The kit's tokens keep their names and get near-neutral
- * values: near-black surfaces with a faint cool tint, a sidebar a step darker
- * than the page, menus a step lighter, hairlines of white, one blue primary
+ * The app's palette, copied from Capy Desktop. The kit's tokens keep their
+ * names and get near-neutral values: near-black surfaces with a faint cool
+ * tint, a sidebar a step darker than the page, menus a step lighter, hairlines of white, one blue primary
  * and one indigo-blue accent. Scoped to `.app-skin`, on <html> here and in
  * apps/site.
  */
 .app-skin {
 	color-scheme: dark;
 	--wash-rgb: 255 255 255;
-	--ink-rgb: 236 236 237;
+	--ink-rgb: 235 235 236;
 	--shade-rgb: 0 0 0;
 
 	/* Surfaces */
-	--bg-chrome: #0f0f10;
-	--bg-canvas: #111112;
-	--bg-panel: #151516;
+	--bg-chrome: #09090a;
+	--bg-canvas: #121213;
+	--bg-panel: #161617;
 	--bg-raised: #1a1a1b;
-	--bg-raised-2: #181819;
-	--bg-menu: #1f1f20;
-	--bg-hover: #232324;
-	--bg-selected: #2a2a2b;
-	--bg-bubble: #1f1f20;
-	--bg-field: #181819;
-	--bg-search: #181819;
+	--bg-raised-2: #161617;
+	--bg-menu: #222223;
+	--bg-hover: #1e1e1f;
+	--bg-selected: #252526;
+	--bg-bubble: #2c2c2d;
+	--bg-field: #1a1a1b;
+	--bg-search: #1a1a1b;
 
 	/* Lines */
-	--line-divider: #1c1c1d;
+	--line-divider: #1e1e1f;
 	--line-subtle: #1f1f20;
 	--line-subtle-2: #212122;
 	--line-canvas: #222223;
 	--line-card: #252526;
-	--line-tab: #272728;
-	--line-control: #2b2b2c;
+	--line-tab: #29292a;
+	--line-control: #2e2e2f;
 	--line-menu: #323233;
-	--line-strong: #353536;
+	--line-strong: #383839;
 	--line-hover: #3d3d3e;
 	--line-focus: #474748;
 
 	/* Text */
-	--text-primary: #ececed;
-	--text-ai: #e4e4e5;
+	--text-primary: #ebebec;
+	--text-ai: #e3e3e4;
 	--text-secondary: #cfcfd0;
-	--text-tertiary: #bdbdbe;
-	--text-muted: #a1a1a2;
-	--text-subtle: #8a8a8b;
-	--text-faint: #737374;
-	--text-ghost: #555556;
-	--text-brief-body: #8f8f90;
+	--text-tertiary: #bcbcbd;
+	--text-muted: #99999a;
+	--text-subtle: #939394;
+	--text-faint: #777778;
+	--text-ghost: #535355;
+	--text-brief-body: #939394;
 
 	--primary: #2f6bf0;
 	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
@@ -131,22 +131,22 @@
 :root:not(.dark) .app-skin {
 	color-scheme: light;
 	--wash-rgb: 0 0 0;
-	--ink-rgb: 26 26 28;
+	--ink-rgb: 30 30 32;
 	--shade-rgb: 0 0 0;
 
-	--bg-chrome: #f4f4f5;
-	--bg-canvas: #fcfcfd;
-	--bg-panel: #f9f9fa;
+	--bg-chrome: #f2f2f4;
+	--bg-canvas: #fafafb;
+	--bg-panel: #f6f6f7;
 	--bg-raised: #ffffff;
-	--bg-raised-2: #f9f9fa;
+	--bg-raised-2: #f8f7f9;
 	--bg-menu: #ffffff;
-	--bg-hover: #efeff0;
-	--bg-selected: #e7e7e8;
-	--bg-bubble: #f1f1f2;
+	--bg-hover: #e7e7e9;
+	--bg-selected: #e1e1e3;
+	--bg-bubble: #ebebec;
 	--bg-field: #ffffff;
-	--bg-search: #f5f5f6;
+	--bg-search: #f2f2f4;
 
-	--line-divider: #efeff0;
+	--line-divider: #f0f0f1;
 	--line-subtle: #ededee;
 	--line-subtle-2: #ebebec;
 	--line-canvas: #e9e9ea;
@@ -154,26 +154,26 @@
 	--line-tab: #e2e2e3;
 	--line-control: #dededf;
 	--line-menu: #dadadb;
-	--line-strong: #cfcfd0;
+	--line-strong: #d4d4d5;
 	--line-hover: #bdbdbe;
 	--line-focus: #a3a3a4;
 
-	--text-primary: #1a1a1c;
-	--text-ai: #1f1f20;
-	--text-secondary: #333334;
-	--text-tertiary: #454546;
-	--text-muted: #5c5c5d;
-	--text-subtle: #6b6b6c;
-	--text-faint: #858586;
-	--text-ghost: #a8a8aa;
-	--text-brief-body: #6b6b6c;
+	--text-primary: #1e1e20;
+	--text-ai: #232325;
+	--text-secondary: #333335;
+	--text-tertiary: #454547;
+	--text-muted: #5c5c5e;
+	--text-subtle: #646466;
+	--text-faint: #7d7d7f;
+	--text-ghost: #9e9ea0;
+	--text-brief-body: #646466;
 
 	--primary: #2f6bf0;
 	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
 	--on-primary: #ffffff;
 
 	--accent: #3777ec;
-	--accent-text: #2a65d9;
+	--accent-text: #245cca;
 	--accent-tint: rgba(55, 119, 236, 0.09);
 
 	--sev-high: #b3261e;
@@ -211,7 +211,7 @@
 	--syn-plain: #2a2a2a;
 	--syn-string: #8a5a00;
 
-	--scrim: rgba(0, 0, 0, 0.3);
+	--scrim: rgba(0, 0, 0, 0.4);
 	--focus-color: rgb(var(--ink-rgb) / 0.5);
 }
 

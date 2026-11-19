@@ -1,51 +1,52 @@
 /*
- * Recoder design tokens, shared by apps/app and apps/site. The values match
- * apps/web (DESIGN.md) so both stacks read as one product. Components
+ * Recoder design tokens, shared by apps/app and apps/site. Surfaces, lines and
+ * text copy Capy Desktop's palette: a near-black sidebar (chrome), a lifted
+ * grey page (canvas), soft white text with muted greys for metadata. Components
  * reference these, never raw hex. Dark is the default; `html.dark` is set by
  * the theme script before first paint.
  */
 :root {
 	color-scheme: dark;
-	--wash-rgb: 255 245 230;
-	--ink-rgb: 237 233 227;
+	--wash-rgb: 255 255 255;
+	--ink-rgb: 235 235 236;
 	--shade-rgb: 0 0 0;
 
 	/* Surfaces */
-	--bg-chrome: #0d0c0b;
-	--bg-canvas: #141312;
-	--bg-panel: #131211;
-	--bg-raised: #1a1918;
-	--bg-raised-2: #161514;
-	--bg-menu: #1c1b19;
-	--bg-hover: #232120;
-	--bg-selected: #2a2826;
-	--bg-bubble: #211f1d;
-	--bg-field: #181716;
-	--bg-search: #151413;
+	--bg-chrome: #09090a;
+	--bg-canvas: #121213;
+	--bg-panel: #161617;
+	--bg-raised: #1a1a1b;
+	--bg-raised-2: #161617;
+	--bg-menu: #222223;
+	--bg-hover: #1e1e1f;
+	--bg-selected: #252526;
+	--bg-bubble: #2c2c2d;
+	--bg-field: #1a1a1b;
+	--bg-search: #1a1a1b;
 
 	/* Lines */
-	--line-divider: #1d1c1a;
-	--line-subtle: #1f1e1c;
-	--line-subtle-2: #211f1d;
-	--line-canvas: #201f1d;
-	--line-card: #242220;
-	--line-tab: #262422;
-	--line-control: #2a2826;
-	--line-menu: #2e2b28;
-	--line-strong: #34312d;
-	--line-hover: #3a3632;
-	--line-focus: #3d3935;
+	--line-divider: #1e1e1f;
+	--line-subtle: #1f1f20;
+	--line-subtle-2: #212122;
+	--line-canvas: #222223;
+	--line-card: #252526;
+	--line-tab: #29292a;
+	--line-control: #2e2e2f;
+	--line-menu: #323233;
+	--line-strong: #383839;
+	--line-hover: #3d3d3e;
+	--line-focus: #474748;
 
 	/* Text */
-	--text-primary: #ede9e3;
-	--text-ai: #e4dfd8;
-	--text-secondary: #cfcac2;
-	--text-tertiary: #bdb8b0;
-	--text-muted: #a39e96;
-	--text-subtle: #8a857d;
-	--text-faint: #6f6a63;
-	--text-ghost: #57534d;
-	--text-brief-body: #8f8a82;
+	--text-primary: #ebebec;
+	--text-ai: #e3e3e4;
+	--text-secondary: #cfcfd0;
+	--text-tertiary: #bcbcbd;
+	--text-muted: #99999a;
+	--text-subtle: #939394;
+	--text-faint: #777778;
+	--text-ghost: #535355;
+	--text-brief-body: #939394;
 
 	/* Primary (swappable; on-primary follows luminance) */
 	--primary: #2f6bf0;
@@ -110,7 +111,7 @@
 	--primary-ring: rgb(0 0 0 / 0.5);
 	--primary-ring-tint: 0%;
 	--primary-drop: 0 2px 4px rgb(0 0 0 / 0.32);
-	--scrim: rgba(8, 7, 6, 0.6);
+	--scrim: rgba(0, 0, 0, 0.55);
 
 	/* Motion: tuned for a tool opened thousands of times a day. Hover eases in
 	   and out over a short 120ms, so a pointer crossing a list leaves a soft
@@ -142,46 +143,46 @@
 	--font-ai: 'Lora', Georgia, serif;
 }
 
-/* Light theme: same tokens, warm paper. Applied when `html.dark` is absent. */
+/* Light theme: same tokens, Capy's light greys. Applied when `html.dark` is absent. */
 :root:not(.dark) {
 	color-scheme: light;
-	--wash-rgb: 60 45 30;
-	--ink-rgb: 29 27 24;
+	--wash-rgb: 0 0 0;
+	--ink-rgb: 30 30 32;
 	--shade-rgb: 60 45 30;
 
-	--bg-chrome: #ebe8e2;
-	--bg-canvas: #f7f5f1;
-	--bg-panel: #f4f2ee;
-	--bg-raised: #fffefc;
-	--bg-raised-2: #fbfaf7;
+	--bg-chrome: #f2f2f4;
+	--bg-canvas: #fafafb;
+	--bg-panel: #f6f6f7;
+	--bg-raised: #ffffff;
+	--bg-raised-2: #f8f7f9;
 	--bg-menu: #ffffff;
-	--bg-hover: #ece9e3;
-	--bg-selected: #e4e0d9;
-	--bg-bubble: #ece9e3;
+	--bg-hover: #e7e7e9;
+	--bg-selected: #e1e1e3;
+	--bg-bubble: #ebebec;
 	--bg-field: #ffffff;
-	--bg-search: #efece7;
+	--bg-search: #f2f2f4;
 
-	--line-divider: #e6e2db;
-	--line-subtle: #e9e5de;
-	--line-subtle-2: #e9e5de;
-	--line-canvas: #e4e0d9;
-	--line-card: #dfdad2;
-	--line-tab: #dbd6ce;
-	--line-control: #d6d1c8;
-	--line-menu: #d3cec5;
-	--line-strong: #c9c3b9;
-	--line-hover: #bdb7ac;
-	--line-focus: #a9a398;
+	--line-divider: #f0f0f1;
+	--line-subtle: #ededee;
+	--line-subtle-2: #ebebec;
+	--line-canvas: #e9e9ea;
+	--line-card: #e6e6e7;
+	--line-tab: #e2e2e3;
+	--line-control: #dededf;
+	--line-menu: #dadadb;
+	--line-strong: #d4d4d5;
+	--line-hover: #bdbdbe;
+	--line-focus: #a3a3a4;
 
-	--text-primary: #1d1b18;
-	--text-ai: #26231f;
-	--text-secondary: #35322d;
-	--text-tertiary: #47433d;
-	--text-muted: #5c5750;
-	--text-subtle: #6a655e;
-	--text-faint: #86817a;
-	--text-ghost: #a8a39b;
-	--text-brief-body: #6a655e;
+	--text-primary: #1e1e20;
+	--text-ai: #232325;
+	--text-secondary: #333335;
+	--text-tertiary: #454547;
+	--text-muted: #5c5c5e;
+	--text-subtle: #646466;
+	--text-faint: #7d7d7f;
+	--text-ghost: #9e9ea0;
+	--text-brief-body: #646466;
 
 	--primary: #2f6bf0;
 	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
@@ -232,7 +233,7 @@
 	--primary-ring: black;
 	--primary-ring-tint: 86%;
 	--primary-drop: 0 1px 2px rgb(0 0 0 / 0.1);
-	--scrim: rgba(30, 25, 20, 0.35);
+	--scrim: rgba(0, 0, 0, 0.4);
 }
 
 /* Tailwind utilities for the tokens: bg-canvas, text-fg-faint, ring-line-card… */
