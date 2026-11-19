@@ -1,17 +1,24 @@
 'use client';
 
-import { HoverList, RowButton } from '@recoder/ui';
-import { BookOpenIcon, ClockIcon, FolderSimpleIcon, GitPullRequestIcon, PlusIcon } from '@phosphor-icons/react';
+import { HoverList, Keycap, RowButton } from '@recoder/ui';
+import {
+	BookOpenIcon,
+	ClockIcon,
+	FolderSimpleIcon,
+	GitPullRequestIcon,
+	MagnifyingGlassIcon
+} from '@phosphor-icons/react';
 import { usePathname } from '@/lib/shell/navigation';
 import type { ComponentType } from 'react';
 
 import { useApi } from '@/lib/api/client';
+import { useChrome } from '@/lib/shell/chrome';
 import { useIntent } from '@/lib/shell/intent';
-import { AUTOMATIONS_HREF, GUIDELINES_HREF, isLiveApp, newReviewHref, pullsHref, reposHref } from '@/lib/shell/routes';
+import { AUTOMATIONS_HREF, GUIDELINES_HREF, isLiveApp, pullsHref, reposHref } from '@/lib/shell/routes';
 
 import { Link } from '@/components/common/link';
 
-type Place = 'new' | 'pulls' | 'repos' | 'automations' | 'guidelines';
+type Place = 'pulls' | 'repos' | 'automations' | 'guidelines';
 
 interface NavRow {
 	id: Place;
@@ -37,12 +44,11 @@ const LIVE_ROWS: NavRow[] = [
 	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpenIcon }
 ];
 
-/** The place the address belongs to, or null on a page the sidebar does not list (Settings). */
+/** The place the address belongs to, or null on a page the sidebar does not list, such as New review. */
 function placeOf(pathname: string, base: string): Place | null {
 	const path = pathname.slice(base.length) || '/';
 
 	if (path === '/' || path.startsWith('/pulls')) return 'pulls';
-	if (path.startsWith('/new')) return 'new';
 	if (path === '/repos') return 'repos';
 	if (pathname.startsWith(AUTOMATIONS_HREF)) return 'automations';
 	if (pathname.startsWith(GUIDELINES_HREF)) return 'guidelines';
@@ -51,15 +57,15 @@ function placeOf(pathname: string, base: string): Place | null {
 }
 
 /**
- * The places. The one on screen sits on a still fill; the count beside Pull requests is the open ones. The
- * sample lists only the places it has.
+ * Search, then the places. Search opens the palette; the place on screen sits on a still fill; the count beside
+ * Pull requests is the open ones. The sample lists only the places it has.
  */
 export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	const { base } = useApi();
 	const active = placeOf(usePathname(), base);
+	const setPaletteOpen = useChrome((state) => state.setPaletteOpen);
 
 	const rows: NavRow[] = [
-		{ id: 'new', label: 'New review', href: newReviewHref(base), icon: PlusIcon },
 		{ id: 'pulls', label: 'Pull requests', href: pullsHref(base), icon: GitPullRequestIcon },
 		{ id: 'repos', label: 'Repositories', href: reposHref(base), icon: FolderSimpleIcon },
 		...(isLiveApp(base) ? LIVE_ROWS : [])
@@ -68,6 +74,11 @@ export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	return (
 		<nav aria-label="Main">
 			<HoverList className="sidebar-nav" itemSelector="[data-nav]">
+				<RowButton data-nav className="nav-item sidebar-search" onClick={() => setPaletteOpen(true)}>
+					<MagnifyingGlassIcon aria-hidden />
+					Search
+					<Keycap k="mod+k" />
+				</RowButton>
 				{rows.map((row) => (
 					<NavItem key={row.id} row={row} active={active === row.id} openPulls={openPulls} />
 				))}

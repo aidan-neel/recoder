@@ -1,4 +1,4 @@
-/* ───────── Page: one frame, the sidebar beside one column that scrolls on its own ───────── */
+/* ───────── Page: one frame, the topbar over the sidebar and one column that scrolls on its own ───────── */
 .app-skin body {
 	overflow: hidden;
 	background: var(--bg-canvas);
@@ -8,11 +8,10 @@
 }
 
 /*
- * A page, and the Settings dialog's pane: a 44px bar, then a column that scrolls. Every text, icon and box on it
- * starts and ends on --page-gutter from its sides; quiet controls and row fills reach past it so their text lands on it.
+ * A page: a 44px bar, then a column that scrolls. Every text, icon and box on it starts and ends on --page-gutter
+ * from its sides; quiet controls and row fills reach past it so their text lands on it.
  */
-.page,
-.settings-modal-main {
+.page {
 	--page-gutter: 20px;
 }
 
@@ -28,7 +27,7 @@
 .page:focus {
 	outline: none;
 }
-/* The way past the sidebar's rows for a keyboard: off screen until it takes focus, then a chip in the corner. */
+/* The way past the topbar and the sidebar for a keyboard: off screen until it takes focus, then a chip in the corner. */
 .skip-link {
 	position: fixed;
 	z-index: 200;

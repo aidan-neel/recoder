@@ -18,9 +18,18 @@ import { useNow } from './use-now';
 /** How often rows are checked for having rested long enough to settle, in ms. */
 const SETTLE_TICK = 60_000;
 
-/** The repositories with an open pull request that has an open high-severity bug. */
-function alertedRepos(entries: readonly RowEntry[]): ReadonlySet<string> {
-	return new Set(entries.filter((entry) => highBugs(entry) > 0).map((entry) => entry.listed.item.repoId));
+/** Each repository's open pull requests and the open high-severity bugs across them, by repository id. */
+function repoCounts(entries: readonly RowEntry[]): ReadonlyMap<string, { open: number; highBugs: number }> {
+	const counts = new Map<string, { open: number; highBugs: number }>();
+
+	for (const entry of entries) {
+		const id = entry.listed.item.repoId;
+		const count = counts.get(id) ?? { open: 0, highBugs: 0 };
+
+		counts.set(id, { open: count.open + 1, highBugs: count.highBugs + highBugs(entry) });
+	}
+
+	return counts;
 }
 
 /** What the sidebar shows: the account, the open pull request count, the tracked repositories, the recent reviews and chats, and the settled ones. */
@@ -51,7 +60,7 @@ export function useShell(): ShellView {
 		[data.reviews, data.repos, base]
 	);
 
-	const alerted = useMemo(() => alertedRepos(entries), [entries]);
+	const counts = useMemo(() => repoCounts(entries), [entries]);
 
 	const repos = useMemo(
 		() =>
@@ -61,10 +70,11 @@ export function useShell(): ShellView {
 					name: shortRepoName(data.repos, repo.id),
 					href: repoHref(base, repo.id),
 					provider: repo.provider,
-					alert: alerted.has(repo.id)
+					open: counts.get(repo.id)?.open ?? 0,
+					highBugs: counts.get(repo.id)?.highBugs ?? 0
 				}))
 				.sort(byName),
-		[data.repos, base, alerted]
+		[data.repos, base, counts]
 	);
 
 	const allChats = useMemo(

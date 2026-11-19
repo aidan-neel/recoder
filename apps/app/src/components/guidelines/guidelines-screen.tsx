@@ -5,7 +5,7 @@ import { Button } from '@recoder/ui';
 
 import { useGuidelines } from '@/lib/guidelines/guidelines-store';
 import { useGuidelinesSection, type GuidelinesSection } from '@/lib/guidelines/use-guidelines-section';
-import { useChrome } from '@/lib/shell/chrome';
+import { openSettings } from '@/lib/settings/open-settings';
 
 import { SectionNotice } from '@/components/settings/section-notice';
 import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
@@ -24,7 +24,7 @@ function Repositories({ overview }: { overview: GuidelinesOverview }) {
 		return (
 			<SettingsGroup title="Repositories">
 				<SettingsRow name="No repositories yet" detail="Connect a repository to give it its own guidelines.">
-					<Button variant="outline" onClick={() => useChrome.getState().openSettings('connections')}>
+					<Button variant="outline" onClick={() => openSettings('connections')}>
 						Open Connections
 					</Button>
 				</SettingsRow>

@@ -1,6 +1,6 @@
-/* ───────── Frame: the sidebar's column beside the page ───────── */
+/* ───────── Frame: the topbar across the window, the sidebar's column beside the page under it ───────── */
 /*
- * Hiding the sidebar shrinks its column to 0. The sidebar keeps its width and rides the column's right edge, so it
+ * The topbar spans both columns. Hiding the sidebar shrinks its column to 0. The sidebar keeps its width and rides the column's right edge, so it
  * slides out whole, its text never rewraps, and the page's left edge stays glued to it: one property on one clock,
  * nothing fades or overlaps. Every row in the sidebar keeps one lane: icons centred 24px in, text 40px in.
  */
@@ -11,7 +11,7 @@
 	display: grid;
 	height: 100dvh;
 	grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-	grid-template-rows: minmax(0, 1fr);
+	grid-template-rows: var(--topbar-height) minmax(0, 1fr);
 	overflow: clip;
 	background: var(--bg-canvas);
 	color: var(--text-primary);
@@ -26,7 +26,7 @@
 .sidebar {
 	display: flex;
 	width: var(--sidebar-width);
-	height: 100dvh;
+	height: 100%;
 	flex-direction: column;
 	justify-self: end;
 	border-right: 1px solid var(--line-subtle);
@@ -42,37 +42,10 @@
 }
 
 /*
- * The page bar's button that brings the sidebar back. It opens from zero width at the bar's left edge as the sidebar
- * leaves, on the sidebar's clock, so the breadcrumb beside it slides instead of jumping.
- */
-.sidebar-reveal {
-	display: flex;
-	width: 0;
-	flex-shrink: 0;
-	margin-right: -8px;
-	clip-path: inset(-4px);
-	opacity: 0;
-	transition:
-		width var(--dur-sidebar) var(--ease-sidebar),
-		margin var(--dur-sidebar) var(--ease-sidebar),
-		opacity var(--dur-hover) ease-out;
-}
-.app-frame[data-sidebar='closed'] .sidebar-reveal {
-	width: var(--size-icon-md);
-	margin-right: 0;
-	margin-left: -6px;
-	opacity: 1;
-	transition:
-		width var(--dur-sidebar) var(--ease-sidebar),
-		margin var(--dur-sidebar) var(--ease-sidebar),
-		opacity var(--dur-sidebar) ease-out;
-}
-
-/*
- * Inset: the sidebar has no surface of its own and sits on the frame's tint; the page is a panel 8px in from the
- * window's edges, with a hairline and rounded corners, and scrolls inside itself. With the sidebar hidden the panel
- * keeps the same 8px on its left, on the sidebar's clock. The sidebar takes the same 8px above and below, so its rows
- * stay level with the page bar. Under 1024px the page fills the window (narrow.css).
+ * Inset: the topbar and the sidebar have no surface of their own and sit on the frame's tint; the page is a panel
+ * under the topbar, 8px in from the window's other edges, with a hairline and rounded corners, and scrolls inside
+ * itself. With the sidebar hidden the panel keeps the same 8px on its left, on the sidebar's clock. The sidebar takes
+ * the same 8px below. Under 1024px the page fills the width (narrow.css).
  */
 @media (min-width: 1024px) {
 	.app-frame {
@@ -82,13 +55,13 @@
 		background: var(--bg-chrome);
 	}
 	.app-frame .sidebar {
-		padding-block: var(--frame-inset);
+		padding-bottom: var(--frame-inset);
 		border-right: 0;
 		background: transparent;
 	}
 	.app-frame > .page {
-		height: calc(100% - 2 * var(--frame-inset));
-		margin: var(--frame-inset) var(--frame-inset) var(--frame-inset) 0;
+		height: calc(100% - var(--frame-inset));
+		margin: 0 var(--frame-inset) var(--frame-inset) 0;
 		overflow: hidden;
 		border-radius: var(--frame-radius);
 		box-shadow: 0 0 0 1px var(--line-subtle);
@@ -100,27 +73,212 @@
 }
 
 /* A drag follows the pointer with no easing; the open and close slide is untouched. */
-.app-frame:has([data-ui='resize-handle'][data-dragging]) {
+.app-frame:has([data-ui='resize-handle'][data-dragging]),
+.app-frame:has([data-ui='resize-handle'][data-dragging]) .topbar-lead {
 	transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
 	.app-frame,
 	.app-frame .sidebar,
-	.app-frame .sidebar-reveal,
+	.app-frame .topbar-lead,
 	.app-frame > .page {
 		transition: none;
 	}
 }
 
-.sidebar-head {
+/* ───────── Topbar: the account and the sidebar's toggle, then the window's tabs and the + for a new review ───────── */
+.topbar {
 	display: flex;
-	height: var(--bar-height);
+	min-width: 0;
+	height: var(--topbar-height);
+	grid-column: 1 / -1;
+	align-items: center;
+	background: var(--bg-chrome);
+}
+/*
+ * The part over the sidebar keeps the sidebar's width, so the first tab starts on the page's left edge, as in Capy.
+ * The account and the toggle sit together at its start. With the sidebar hidden it closes up to what it holds, on the
+ * sidebar's clock where the browser can animate to a content width.
+ */
+.topbar-lead {
+	display: flex;
+	width: var(--sidebar-width);
 	flex-shrink: 0;
 	align-items: center;
 	gap: 2px;
-	/* The text of an Inter line sits a little low in its box, and the page bar loses 1px to its border; 2px lifts the row onto whole pixels, level with the bar's title. */
-	padding: 0 8px 2px;
+	padding: 0 8px;
+	interpolate-size: allow-keywords;
+	transition: width var(--dur-sidebar) var(--ease-sidebar);
+}
+.app-frame[data-sidebar='closed'] .topbar-lead {
+	width: max-content;
+}
+.topbar .account {
+	margin-right: 0;
+}
+.window-tabs {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 6px;
+	padding-right: 8px;
+}
+/* Tabs narrow to fit, then scroll sideways with no bar; the wheel scrolls them too. 2px of room keeps their edges unclipped. */
+.window-tab-strip {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	margin: -2px;
+	padding: 2px;
+	overflow-x: auto;
+	overscroll-behavior-x: contain;
+	scrollbar-width: none;
+}
+.window-tab-strip::-webkit-scrollbar {
+	display: none;
+}
+/*
+ * A fixed width, so every tab measures the same in every engine and the + sits right after the last. A tab at rest is
+ * a flat well a step off the frame; the one on screen is raised, with the kit's hairline and, in dark, its outline.
+ */
+.window-tab {
+	position: relative;
+	display: flex;
+	width: 200px;
+	min-width: 112px;
+	height: 28px;
+	flex: 0 1 auto;
+	align-items: center;
+	border-radius: var(--radius-row);
+	background: color-mix(in oklab, var(--bg-canvas) 55%, var(--bg-chrome));
+	color: var(--text-muted);
+	transition:
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
+}
+.window-tab:hover {
+	background: var(--bg-hover);
+	color: var(--text-secondary);
+}
+.window-tab[data-active] {
+	background: var(--fill-raised);
+	box-shadow: var(--shadow-raised);
+	color: var(--text-primary);
+}
+/* The tab's name and mark are one button; the right 28px stays free for the review's state or the X. */
+.window-tab-main {
+	display: flex;
+	min-width: 0;
+	height: 100%;
+	flex: 1;
+	align-items: center;
+	gap: 8px;
+	padding: 0 28px 0 10px;
+	border-radius: inherit;
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	outline: none;
+}
+.window-tab[data-active] .window-tab-main {
+	font-weight: 500;
+}
+.window-tab-main:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.window-tab-mark {
+	position: relative;
+	display: flex;
+	flex-shrink: 0;
+	color: var(--text-subtle);
+}
+.window-tab[data-active] .window-tab-mark {
+	color: var(--text-secondary);
+}
+.window-tab-mark svg {
+	width: 14px;
+	height: 14px;
+}
+/* While Alt (Option) is held, the first nine tabs show the number that reaches them in place of their mark. */
+.window-tab-ordinal {
+	position: absolute;
+	inset: -2px;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+	background: var(--bg-selected);
+	color: var(--text-primary);
+	font-family: var(--font-mono);
+	font-size: 10px;
+	font-weight: 500;
+}
+.window-tab-strip[data-ordinals] .window-tab-ordinal {
+	display: flex;
+}
+.window-tab-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.window-tab-status,
+.window-tab-close {
+	position: absolute;
+	right: 2px;
+}
+.window-tab-status {
+	display: flex;
+	width: 24px;
+	justify-content: center;
+	pointer-events: none;
+}
+/* The X: always on the tab on screen, on the others once pointed at. Smaller than a toolbar button, so the name keeps its room. */
+.window-tab-close {
+	width: 24px;
+	height: 24px;
+	color: var(--text-subtle);
+	opacity: 0;
+	transition: opacity var(--dur-hover) ease-out;
+}
+.window-tab-close svg {
+	width: 13px;
+	height: 13px;
+}
+.window-tab:is(:hover, :focus-within, [data-active]) .window-tab-close {
+	opacity: 1;
+}
+.window-tab:is(:hover, :focus-within, [data-active]) .window-tab-status {
+	opacity: 0;
+}
+
+/* The row at the top of the sidebar: Settings' way back, under the topbar. */
+.sidebar-head {
+	display: flex;
+	height: 36px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+	padding: 4px 8px 0;
+}
+
+/* Search is the first row of the places: it reads as a row, not a field, and opens the palette. */
+.sidebar-search {
+	color: var(--text-secondary);
+}
+.sidebar-search [data-ui='keycap'] {
+	margin-left: auto;
+}
+/* Settings' way back sits on the rows' lanes: its arrow in the icon lane, the word on the text lane. */
+.settings-back {
+	min-width: 0;
+	flex: 1;
+	justify-content: flex-start;
+	gap: 8px;
+	padding: 0 8px;
+	color: var(--text-primary);
 }
 
 /* The app's lists between the head and the foot scroll as one, so neither ever moves and no list is squeezed shut. */
@@ -213,26 +371,17 @@
 .nav-item[data-active] {
 	background: var(--bg-hover);
 }
-.nav-count {
-	margin-left: auto;
-	color: var(--text-faint);
-	font-size: var(--font-size-meta);
-	font-variant-numeric: tabular-nums;
-}
-/* A label in a nav row that may not fit, such as a repository's name, ends in an ellipsis. */
 .nav-label {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-/* A forge's mark fills its box where an outline icon leaves a margin, so it draws at 14px centred in the 16px lane. */
 .nav-item .nav-forge {
 	width: 14px;
 	height: 14px;
 	margin: 0 1px;
 }
-/* A repository with an open high-severity bug: a dot where the count sits on Pull requests. */
 .nav-alert {
 	width: 6px;
 	height: 6px;
@@ -241,13 +390,14 @@
 	border-radius: 999px;
 	background: var(--sev-high);
 }
-/* The tracked repositories: a folding section on the places' lanes, at its own height above the recent lists. */
-.sidebar-repos {
-	flex: none;
-	margin-top: 20px;
-}
 .sidebar-repos .sidebar-nav {
-	padding-top: 0;
+	padding: 0 8px;
+}
+.nav-count {
+	margin-left: auto;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	font-variant-numeric: tabular-nums;
 }
 /* A group label in a nav (Settings' Admin) stands clear of the rows above and sits on the icon lane. */
 .nav-group-label {
@@ -255,7 +405,7 @@
 	padding: 0 8px 3px;
 }
 
-/* Recent chats and reviews: a section of cards under a title that folds it. */
+/* Recent reviews and chats, and the repositories: a section of two-line rows under a title that folds it. */
 .recent {
 	display: flex;
 	flex: none;
@@ -288,12 +438,49 @@
 .section-head[data-state='closed'] .section-chevron {
 	rotate: -90deg;
 }
+/* A section that starts things has its + and ⋯ at the title's right; its chevron moves beside the title to make room. */
+.section-row {
+	position: relative;
+}
+.section-row:has(.section-tools) .section-label {
+	margin-right: 0;
+}
+.section-row:has(.section-tools) .section-chevron {
+	margin-right: auto;
+	opacity: 0;
+	transition:
+		rotate var(--dur-toggle) var(--ease-menu),
+		opacity var(--dur-hover) ease-out;
+}
+.section-row:has(.section-tools) :is(.section-head:hover, .section-head[data-state='closed']) .section-chevron {
+	opacity: 1;
+}
+.section-tools {
+	position: absolute;
+	top: 50%;
+	right: 10px;
+	display: flex;
+	opacity: 0;
+	translate: 0 -50%;
+	transition: opacity var(--dur-hover) ease-out;
+}
+.section-row:is(:hover, :focus-within, :has(.section-tools [data-state='open'])) .section-tools {
+	opacity: 1;
+}
+.section-tools [data-ui='button'] {
+	color: var(--text-subtle);
+}
+@media (hover: none) {
+	.section-tools {
+		opacity: 1;
+	}
+}
 /* The 2px on top keeps the first row's focus ring clear of the title above it. */
 .recent-list {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
-	padding: 2px 8px 12px;
+	gap: 2px;
+	padding: 2px 8px 0;
 }
 .recent-item {
 	--row-button-radius: var(--radius-row);
@@ -358,76 +545,6 @@
 	color: var(--text-primary);
 }
 
-/* A chat or review as a card: the repository and age, the title, then its state and pull request. The whole card opens it. */
-.recent-card {
-	position: relative;
-	display: flex;
-	flex-direction: column;
-	gap: 2px;
-	padding: 8px 10px;
-	border-radius: var(--radius-card);
-	background: rgb(var(--wash-rgb) / 0.035);
-	transition: background-color var(--dur-hover) ease-out;
-}
-.recent-card:hover {
-	background: rgb(var(--wash-rgb) / 0.06);
-}
-.recent-card[data-active] {
-	background: rgb(var(--wash-rgb) / 0.085);
-}
-/* Chats sit bare until pointed at or open. */
-.recent-chats .recent-card:not(:hover, [data-active]) {
-	background: none;
-}
-.recent-card-head,
-.recent-card-foot {
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	gap: 8px;
-	white-space: nowrap;
-}
-.recent-card-head .repo-label {
-	margin-right: auto;
-}
-.recent-card .recent-tools {
-	top: 4px;
-	right: 4px;
-	transform: none;
-}
-.recent-card-title {
-	--row-button-radius: var(--radius-card);
-
-	color: var(--text-secondary);
-	font-size: var(--font-size-body);
-	line-height: 20px;
-}
-.recent-card:hover .recent-card-title,
-.recent-card[data-active] .recent-card-title {
-	color: var(--text-primary);
-}
-.recent-state {
-	display: inline-flex;
-	min-width: 0;
-	align-items: center;
-	gap: 6px;
-	margin-right: auto;
-}
-.recent-pull {
-	display: inline-flex;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 3px;
-	font-variant-numeric: tabular-nums;
-}
-.recent-pull svg {
-	width: 12px;
-	height: 12px;
-}
-/* Chats sit close over the reviews under them. */
-.recent-chats .recent-list {
-	padding-bottom: 0;
-}
 .recent-title {
 	overflow: hidden;
 	color: var(--text-secondary);
@@ -436,6 +553,72 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	transition: color var(--dur-hover) ease-out;
+}
+
+/* A row on two lines beside its tile: the title and its age, then its state or counts. The whole row opens it. */
+.recent-card {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 6px 8px;
+	border-radius: var(--radius-row);
+	transition: background-color var(--dur-hover) ease-out;
+}
+.recent-card:hover {
+	background: rgb(var(--wash-rgb) / 0.04);
+}
+.recent-card[data-active] {
+	background: var(--bg-hover);
+}
+.recent-card-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 1px;
+}
+.recent-card-head,
+.recent-card-foot {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	white-space: nowrap;
+}
+.recent-card-title {
+	--row-button-radius: var(--radius-row);
+
+	min-width: 0;
+	flex: 1;
+}
+.recent-card:hover .recent-title,
+.recent-card[data-active] .recent-title {
+	color: var(--text-primary);
+}
+.recent-age {
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.recent-card .recent-tools {
+	top: 3px;
+	right: 4px;
+	transform: none;
+}
+/* Pointed at, the title stops short of Settle and the "more" button, so they never sit over its text. */
+.recent-card:has(.recent-tools):is(:hover, :focus-within, :has([data-state='open'])) .recent-card-head {
+	padding-right: 84px;
+}
+.recent-card-foot {
+	color: var(--text-faint);
+}
+.recent-foot-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.recent-alert {
+	color: var(--sev-high);
 }
 
 .sidebar-foot {

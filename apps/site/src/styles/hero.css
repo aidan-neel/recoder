@@ -120,6 +120,17 @@
 .demo-app .sidebar {
 	height: 100%;
 }
+/* The window shows the sidebar and the page without the app's topbar, so the frame keeps one row and its insets on all sides. */
+.demo-app .app-frame {
+	grid-template-rows: minmax(0, 1fr);
+}
+.demo-app .sidebar {
+	padding-top: var(--frame-inset, 0px);
+}
+.demo-app .app-frame > .page {
+	height: calc(100% - 2 * var(--frame-inset, 0px));
+	margin-top: var(--frame-inset, 0px);
+}
 /* At tablet size the page takes the whole window; the sidebar would leave it too narrow to read. */
 @container (max-width: 900px) {
 	.demo-window {

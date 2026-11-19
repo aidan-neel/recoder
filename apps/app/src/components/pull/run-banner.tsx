@@ -8,7 +8,7 @@ import type { ComponentProps } from 'react';
 import type { RunStage, RunView } from '@/lib/run/types';
 import { plural } from '@/lib/shell/format';
 import { errorToast } from '@/lib/shell/notify';
-import { useChrome } from '@/lib/shell/chrome';
+import { openSettings } from '@/lib/settings/open-settings';
 import { useAction } from '@/lib/shell/use-action';
 import { useKeys } from '@/lib/shell/use-keys';
 
@@ -145,7 +145,7 @@ function FailureLink({ action }: { action: NonNullable<RunView['failure']>['acti
 	if (!action) return null;
 
 	return (
-		<Button variant="outline" onClick={() => useChrome.getState().openSettings('models')}>
+		<Button variant="outline" onClick={() => openSettings('models')}>
 			Open settings
 		</Button>
 	);

@@ -14,6 +14,7 @@ import { CaretDownIcon, KeyboardIcon, SignOutIcon, PlusIcon, GearIcon } from '@p
 import { useAccountMenu, type AccountMenuView } from '@/lib/account/use-account-menu';
 import { forgeLabel } from '@/lib/connections/forges';
 import { useApi } from '@/lib/api/client';
+import { openSettings } from '@/lib/settings/open-settings';
 import { useChrome } from '@/lib/shell/chrome';
 import { isLiveApp } from '@/lib/shell/routes';
 
@@ -64,12 +65,11 @@ function ForgeRows({ view, onOpen }: { view: AccountMenuView; onOpen: () => void
 }
 
 /**
- * The account row and its menu: the forges linked, settings, the shortcuts and sign out. The sample's menu keeps
+ * The account at the left end of the topbar, and its menu: the forges linked, settings, the shortcuts and sign out. The sample's menu keeps
  * only what it has: no forges to link and no settings to open.
  */
 export function AccountMenu({ account }: { account: string | null }) {
 	const setShortcutsOpen = useChrome((state) => state.setShortcutsOpen);
-	const openSettings = useChrome((state) => state.openSettings);
 	const view = useAccountMenu(account ?? LOCAL_ACCOUNT);
 	const live = isLiveApp(useApi().base);
 

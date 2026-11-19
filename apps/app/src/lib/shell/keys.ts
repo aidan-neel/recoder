@@ -1,5 +1,6 @@
 /**
- * A handler per key, as `KeyboardEvent.key` names it (`j`, `ArrowDown`, `Enter`, `mod+k`, `' '` for Space).
+ * A handler per key, as `KeyboardEvent.key` names it (`j`, `ArrowDown`, `Enter`, `mod+k`, `' '` for Space), or with
+ * Alt (Option) held as the key's place on the keyboard names it (`alt+t`, `alt+shift+t`, `alt+1`, `alt+[`).
  * A handler that returns exactly `false` passes the key on: the browser keeps its default and no keycap presses.
  */
 export type KeyMap = Record<string, (event: KeyboardEvent) => unknown>;
@@ -31,8 +32,26 @@ function typing(target: EventTarget | null): boolean {
 	return !!element && (element.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(element.tagName));
 }
 
-/** The key map name for a press: `mod+k` with Cmd or Ctrl held, else the key itself, letters lowercased. */
+/** Keys an Alt shortcut names by their place on the keyboard, beyond letters and digits. */
+const CODE_KEYS: Record<string, string> = { BracketLeft: '[', BracketRight: ']' };
+
+/**
+ * The key a press with Alt held names. Option on a Mac types another character (`†` for T), so the key's place on
+ * the keyboard names it: a letter, a digit or a bracket.
+ */
+function altKey(event: KeyboardEvent): string {
+	const key = /^(Key[A-Z]|Digit\d)$/.test(event.code) ? event.code.slice(-1).toLowerCase() : CODE_KEYS[event.code];
+
+	return `alt+${event.shiftKey ? 'shift+' : ''}${key ?? event.code}`;
+}
+
+/**
+ * The key map name for a press: `mod+k` with Cmd or Ctrl held, `alt+t` with Alt held alone, else the key itself,
+ * letters lowercased.
+ */
 function name(event: KeyboardEvent): string {
+	if (event.altKey) return altKey(event);
+
 	const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
 
 	return event.metaKey || event.ctrlKey ? `mod+${key}` : key;
@@ -100,6 +119,14 @@ function flashKey(key: string): void {
 	}
 }
 
+/**
+ * True for a shortcut that fires even in a field: `mod+` keys, and Alt with a letter or a digit, whose characters
+ * (`†`, `™` on a Mac) nobody types on purpose. Alt with a bracket stays with the field, as on a Mac it types quotes.
+ */
+function firesWhileTyping(key: string): boolean {
+	return key.startsWith('mod+') || /^alt\+(shift\+)?[a-z0-9]$/.test(key);
+}
+
 /** True when a plain key should stand down: the person types, a dialog is open, or a focused control owns the key. */
 function standsDown(event: KeyboardEvent, key: string): boolean {
 	return typing(event.target) || overlayOpen() || activates(event) || keepsArrow(key, event.target);
@@ -108,15 +135,19 @@ function standsDown(event: KeyboardEvent, key: string): boolean {
 /**
  * Listen for page shortcuts on the window. Plain keys are ignored while the
  * person types, a dialog is open or a focused control owns the key, and a
- * held key repeats only when it moves or scrolls; `mod+` keys always fire,
- * and Esc leaves a text field so the keyboard flow can carry on. Returns the
- * cleanup.
+ * held key repeats only when it moves or scrolls; `mod+` keys and Alt with a
+ * letter or digit always fire,
+ * and Esc leaves a text field so the keyboard flow can carry on. Alt held with
+ * Cmd or Ctrl is left alone: on Windows that is AltGr, which types characters.
+ * Returns the cleanup.
  */
 export function listenKeys(map: () => KeyMap): () => void {
 	function onKey(event: KeyboardEvent): void {
 		const key = name(event);
 
-		if (event.defaultPrevented || event.isComposing || event.altKey || (event.repeat && !REPEATS.has(key))) return;
+		const altGr = event.altKey && (event.ctrlKey || event.metaKey);
+
+		if (event.defaultPrevented || event.isComposing || altGr || (event.repeat && !REPEATS.has(key))) return;
 
 		if (event.key === 'Escape' && typing(event.target)) {
 			(event.target as HTMLElement).blur();
@@ -124,7 +155,7 @@ export function listenKeys(map: () => KeyMap): () => void {
 			return;
 		}
 
-		if (!key.startsWith('mod+') && standsDown(event, key)) return;
+		if (!firesWhileTyping(key) && standsDown(event, key)) return;
 
 		const handler = map()[key];
 

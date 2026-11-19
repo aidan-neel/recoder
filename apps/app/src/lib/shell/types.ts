@@ -54,8 +54,10 @@ export interface SidebarRepo {
 	href: string;
 	/** Where the repository lives, for the mark on the row. */
 	provider: Provider;
-	/** One of its open pull requests has an open high-severity bug. */
-	alert: boolean;
+	/** Its open pull requests. */
+	open: number;
+	/** The open high-severity bugs across its open pull requests. */
+	highBugs: number;
 }
 
 /** What the sidebar shows around the pages. */
