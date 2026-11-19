@@ -1,4 +1,5 @@
 /* recoder.dev's own styles, one file per part. The tokens and every control come from @recoder/ui. */
+@import './motion.css';
 @import './shell.css';
 @import './home.css';
 @import './hero.css';

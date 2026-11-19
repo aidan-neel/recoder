@@ -1,12 +1,16 @@
 /* ───────── Docs ───────── */
 /*
- * A page arrives top-down (the kit's `data-enter='stagger'`, a little further
- * than in the app: docs are read, not worked in). Past the fourth block a
- * section rises in as it scrolls into view instead, once; a browser without
- * scroll timelines shows it as it is.
+ * A page arrives top-down (the kit's `data-enter='stagger'`, further and on
+ * the site's settle spring: docs are read, not worked in), on every move
+ * between pages. Past the fourth block a section rises in as it scrolls into
+ * view instead, once; a browser without scroll timelines shows it as it is.
  */
 .docs-column {
-	--enter-rise: 10px;
+	--enter-rise: 14px;
+}
+.docs-column[data-enter='stagger'] > * {
+	animation-duration: var(--site-dur-settle);
+	animation-timing-function: var(--site-ease-settle);
 }
 @supports (animation-timeline: view()) {
 	.docs-column > .docs-section:nth-child(n + 5) {
@@ -163,7 +167,7 @@
 }
 /* The section a link lands on lights up for a moment, so the eye finds where it arrived. */
 .docs-section:target > .docs-heading {
-	animation: docs-arrive 1.6s var(--ease-out);
+	animation: docs-arrive var(--site-dur-arrive) var(--ease-out);
 }
 @keyframes docs-arrive {
 	from {
@@ -196,7 +200,12 @@
 	outline: none;
 	transition:
 		background-color var(--dur-hover) ease-out,
-		box-shadow var(--dur-hover) ease-out;
+		box-shadow var(--dur-hover) ease-out,
+		scale var(--site-dur-settle) var(--site-ease-settle);
+}
+.docs-pager-link:active {
+	scale: var(--site-press-scale);
+	transition-duration: var(--dur-hover);
 }
 .docs-pager-link:hover {
 	background-color: var(--bg-raised);

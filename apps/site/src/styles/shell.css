@@ -97,6 +97,54 @@ body {
 .site-nav [data-ui='hover-list-highlight'] {
 	border-radius: var(--radius-row);
 }
+/* A row is its link and, on a docs page with sections, the chevron at its end. */
+.nav-row {
+	position: relative;
+}
+/* The open page's fill is a pill that travels from the page before (`NavPill` with a layout id), not the row's own fill. */
+.site-nav .nav-item[data-active] {
+	background: none;
+}
+.site-nav [data-ui='nav-pill'] {
+	background-color: var(--bg-hover);
+}
+/* A press sinks the row a little; it lets go on the settle spring. */
+.site-nav .nav-item,
+.site-section {
+	transition:
+		color var(--dur-hover) ease-out,
+		scale var(--site-dur-settle) var(--site-ease-settle);
+}
+.site-nav .nav-item:active,
+.site-section:active {
+	scale: var(--site-press-scale);
+	transition-duration: var(--dur-hover);
+}
+.nav-row:has(.site-page-toggle) .nav-item {
+	padding-right: 32px;
+}
+.site-page-toggle {
+	position: absolute;
+	top: 0;
+	right: 0;
+	color: var(--text-faint);
+}
+/* Open is its resting state here, not a pressed one: no fill until hovered. */
+.site-page-toggle[data-state='open']:not(:hover) {
+	background-color: transparent;
+}
+.site-page-toggle:hover {
+	color: var(--text-primary);
+}
+/* The chevron points down while the sections show and turns to point at its row while they are folded, on the travel spring. */
+.site-page-toggle .site-page-chevron {
+	width: 12px;
+	height: 12px;
+	transition: rotate var(--site-dur-travel) var(--site-ease-travel);
+}
+.site-page-toggle[data-state='closed'] .site-page-chevron {
+	rotate: -90deg;
+}
 .site-nav-label {
 	display: flex;
 	height: 34px;
@@ -121,8 +169,8 @@ body {
 }
 .site-section-marker[data-placed] {
 	transition:
-		transform 260ms var(--ease-out),
-		height 260ms var(--ease-out),
+		transform var(--site-dur-travel) var(--site-ease-travel),
+		height var(--site-dur-travel) var(--site-ease-travel),
 		opacity var(--dur-hover) ease-out;
 }
 .site-section {
@@ -134,7 +182,6 @@ body {
 	font-size: var(--font-size-label);
 	line-height: 16px;
 	outline: none;
-	transition: color var(--dur-hover) ease-out;
 }
 .site-section:hover {
 	color: var(--text-primary);
@@ -245,6 +292,7 @@ body {
 	.site-github .site-github-label,
 	.nav-item.site-github .site-github-arrow,
 	.site-nav-label,
+	.site-page-toggle,
 	.site-sections {
 		display: none;
 	}
@@ -259,7 +307,8 @@ body {
 		flex-direction: row;
 		gap: 2px;
 	}
-	.site-nav .nav-item {
+	.site-nav .nav-item,
+	.site-nav .nav-row:has(.site-page-toggle) .nav-item {
 		width: auto;
 		height: 30px;
 		padding: 0 10px;

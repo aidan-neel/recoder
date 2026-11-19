@@ -1,6 +1,6 @@
 'use client';
 
-import { motion, useReducedMotionConfig } from 'motion/react';
+import { motion, useReducedMotionConfig, type Transition } from 'motion/react';
 import { Collapsible as CollapsiblePrimitive } from 'radix-ui';
 import { createContext, use, useId, useState, type ComponentProps, type ReactNode } from 'react';
 
@@ -71,18 +71,37 @@ export function CollapsibleTrigger({ className, ...props }: CollapsibleTriggerPr
 interface CollapsibleContentProps {
 	children: ReactNode;
 	className?: string;
+	/**
+	 * How the body opens and closes, in place of the kit's quiet unfold. It
+	 * may time `height` and `opacity` apart and stagger the children that
+	 * follow the body's `expanded` and `collapsed` variants. Reduced motion
+	 * still snaps.
+	 */
+	transition?: Transition;
 }
 
+/** The kit's unfold: the height over 230ms on the kit's ease-out while the body fades in over 210ms. */
+const UNFOLD: Transition = {
+	height: { duration: DURATION.disclose, ease: EASE_OUT },
+	opacity: { duration: DURATION.toggle, ease: EASE_OUT }
+};
+
+const SNAP: Transition = { duration: 0 };
+
 /**
- * The body. Its height unfolds from 0 to auto (230ms, the kit's ease-out)
- * while it fades in (210ms). It mounts on first open and then stays mounted,
- * so streamed text grows in place and a closed body keeps its state. Reduced
- * motion snaps.
+ * The body. Its height unfolds from 0 to auto while it fades in, as the
+ * `expanded` variant; closing plays `collapsed`. Motion children with
+ * variants of those names follow it, so a caller can bring rows in one
+ * after another. A body that mounts open shows its children in place;
+ * one that mounts closed brings them in on its first open. It mounts its
+ * children on first open and then keeps them, so streamed text grows in
+ * place and a closed body keeps its state. Reduced motion snaps.
  */
-export function CollapsibleContent({ children, className }: CollapsibleContentProps) {
+export function CollapsibleContent({ children, className, transition = UNFOLD }: CollapsibleContentProps) {
 	const { open, contentId } = useCollapsible();
 	const reduced = useReducedMotionConfig();
 	const [opened, setOpened] = useState(open);
+	const [initial] = useState(open ? false : 'collapsed');
 
 	if (open && !opened) setOpened(true);
 
@@ -92,12 +111,10 @@ export function CollapsibleContent({ children, className }: CollapsibleContentPr
 			data-ui="collapsible-content"
 			data-state={open ? 'open' : 'closed'}
 			inert={!open}
-			initial={false}
-			animate={{ height: open ? 'auto' : 0, opacity: open ? 1 : 0 }}
-			transition={{
-				height: { duration: reduced ? 0 : DURATION.disclose, ease: EASE_OUT },
-				opacity: { duration: reduced ? 0 : DURATION.toggle, ease: EASE_OUT }
-			}}
+			initial={initial}
+			animate={open ? 'expanded' : 'collapsed'}
+			variants={{ expanded: { height: 'auto', opacity: 1 }, collapsed: { height: 0, opacity: 0 } }}
+			transition={reduced ? SNAP : transition}
 			className="overflow-hidden"
 		>
 			<div data-ui="collapsible-body" className={cn(className)}>
