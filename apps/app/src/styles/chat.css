@@ -41,6 +41,7 @@
 	z-index: 1;
 	translate: -50% 0;
 	border-radius: 999px;
+	background-color: var(--bg-canvas);
 }
 
 /* Loading: the first question at the right, the start of its reply under it. */
