@@ -2,6 +2,9 @@ import { Card } from '@recoder/ui';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import { APPEARANCE_SCRIPT } from '@/lib/appearance/appearance-script';
+import { CHROME_VIEWPORT } from '@/lib/appearance/viewport';
+
 import { MotionRoot } from '~/components/shell/motion-root';
 import { SiteSidebar } from '~/components/shell/site-sidebar';
 import { DOC_NAV } from '~/lib/docs';
@@ -14,13 +17,20 @@ export const metadata: Metadata = {
 	title: 'Recoder'
 };
 
+export const viewport = CHROME_VIEWPORT;
+
 /**
- * Dark only, in the app's skin (`app-skin`): the sidebar on the chrome and
- * the page in one canvas card beside it.
+ * The app's skin (`app-skin`) in the app's themes: the sidebar on the chrome
+ * and the page in one canvas card beside it. The app's appearance script
+ * picks dark or light before the first paint, from the visitor's choice or
+ * the device.
  */
 export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
-		<html lang="en" className="dark app-skin">
+		<html lang="en" className="dark app-skin" suppressHydrationWarning>
+			<head>
+				<script dangerouslySetInnerHTML={{ __html: APPEARANCE_SCRIPT }} />
+			</head>
 			<body>
 				<MotionRoot>
 					<div className="site-shell">

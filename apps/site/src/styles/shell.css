@@ -131,7 +131,7 @@ body {
 	align-items: center;
 	padding: 3px 8px 3px 12px;
 	color: var(--text-muted);
-	font-size: 12.5px;
+	font-size: var(--font-size-label);
 	line-height: 16px;
 	outline: none;
 	transition: color var(--dur-hover) ease-out;
@@ -148,9 +148,16 @@ body {
 	box-shadow: var(--focus-ring);
 }
 
-/* GitHub at the foot. Its mark is a filled glyph: it draws at 14px in the label's colour. */
-.site-github {
+/* GitHub and the theme switch at the foot. GitHub's mark is a filled glyph: it draws at 14px in the label's colour. */
+.site-foot {
+	display: flex;
 	flex: none;
+	align-items: center;
+	gap: 2px;
+}
+.site-github {
+	min-width: 0;
+	flex: 1;
 }
 .site-github .site-github-label {
 	flex: 1;
@@ -185,10 +192,10 @@ body {
 		display: grid;
 		width: 100%;
 		height: auto;
-		grid-template-columns: 1fr auto auto;
+		grid-template-columns: 1fr auto auto auto;
 		grid-template-areas:
-			'wordmark search github'
-			'nav nav nav';
+			'wordmark search theme github'
+			'nav nav nav nav';
 		align-items: center;
 		column-gap: 2px;
 		padding: 0 8px;
@@ -218,7 +225,16 @@ body {
 		color: inherit;
 	}
 	.nav-item.site-github {
+		flex: none;
 		grid-area: github;
+	}
+	.site-foot {
+		display: contents;
+	}
+	.site-theme {
+		width: 32px;
+		height: 32px;
+		grid-area: theme;
 	}
 	.nav-item.site-github svg {
 		width: 16px;

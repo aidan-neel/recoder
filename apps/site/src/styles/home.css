@@ -62,7 +62,7 @@
 	right: 1px;
 	bottom: 1px;
 	padding: 0 3px;
-	border-radius: 0 9px 9px 0;
+	border-radius: 0 calc(var(--radius-row) - 1px) calc(var(--radius-row) - 1px) 0;
 	background-color: inherit;
 	opacity: 1;
 }
@@ -80,7 +80,7 @@
 [data-ui='input'].waitlist-input {
 	width: 240px;
 	height: var(--size-control-lg);
-	border-radius: 9px;
+	border-radius: var(--radius-control);
 }
 /* The error hangs under the field in the gap above the install line, so showing it moves nothing. */
 .waitlist-error {

@@ -1,10 +1,12 @@
 'use client';
 
-import { ForgeMark, HoverList, NavPill, RowButton } from '@recoder/ui';
-import { ArrowUpRightIcon } from '@phosphor-icons/react';
+import { Button, ForgeMark, HoverList, NavPill, RowButton, Tooltip } from '@recoder/ui';
+import { ArrowUpRightIcon, MoonIcon, SunIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useLayoutEffect, useRef } from 'react';
+
+import { useTheme } from '@/lib/shell/theme';
 
 import type { NavPage } from '~/lib/docs';
 import { REPO_URL } from '~/lib/site';
@@ -111,10 +113,33 @@ function SectionList({ sections }: { sections: NavPage['sections'] }) {
 	);
 }
 
+/** GitHub and the theme switch, at the foot. */
+function SidebarFoot() {
+	const toggleTheme = useTheme((state) => state.toggle);
+
+	return (
+		<div className="site-foot">
+			<RowButton asChild className="nav-item site-github">
+				<a href={REPO_URL} target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+					<ForgeMark provider="github" />
+					<span className="site-github-label">GitHub</span>
+					<ArrowUpRightIcon aria-hidden className="site-github-arrow" />
+				</a>
+			</RowButton>
+			<Tooltip content="Switch theme">
+				<Button variant="ghost" size="icon" className="site-theme" aria-label="Switch theme" onClick={toggleTheme}>
+					<SunIcon className="hidden dark:block" />
+					<MoonIcon className="dark:hidden" />
+				</Button>
+			</Tooltip>
+		</div>
+	);
+}
+
 /**
  * The site's sidebar, on the chrome beside the page's card: the wordmark,
  * the search, Home and the docs pages (the open one with its sections), and
- * GitHub at the foot. On narrow screens it is a head row and a row of pages
+ * GitHub and the theme at the foot. On narrow screens it is a head row and a row of pages
  * that scrolls sideways; the sections then open from the page bar.
  */
 export function SiteSidebar({ pages }: { pages: NavPage[] }) {
@@ -146,13 +171,7 @@ export function SiteSidebar({ pages }: { pages: NavPage[] }) {
 					))}
 				</HoverList>
 			</nav>
-			<RowButton asChild className="nav-item site-github">
-				<a href={REPO_URL} target="_blank" rel="noopener noreferrer" aria-label="GitHub">
-					<ForgeMark provider="github" />
-					<span className="site-github-label">GitHub</span>
-					<ArrowUpRightIcon aria-hidden className="site-github-arrow" />
-				</a>
-			</RowButton>
+			<SidebarFoot />
 		</aside>
 	);
 }
