@@ -212,9 +212,11 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   reaching 12px past it then sits 8px from the panel's side, as the sidebar's
   highlight sits 8px from the window's. A part that spans the panel (the tab
   row's rule) is the column itself, its line edge to edge. Changes is a
-  workbench: its file sidebar is full height against the panel's side, its
-  filter and its chevrons on the gutter, and the diff column starts a gutter
-  past the sidebar's rule.
+  workbench: its file sidebar is full height against the panel's side and
+  keeps the gutter on both sides of its rule (the filter's box, a top row's
+  chevron and a row's last letter; the rows' fill 8px past them), its filter's
+  top on the first file card's, and the diff column starts a gutter past the
+  sidebar's rule.
 - **Pull request list**: one row a pull request. A row shows the title, the
   branch, the author, the size of the change and one fact: what the newest
   review found, that a review is running, or that there is none (with
