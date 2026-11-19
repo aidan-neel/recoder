@@ -1,4 +1,5 @@
 import { PULL_TABS, type PullTab } from '../pull/types';
+import { serverViewOf, type ServerView } from '../server/server-views';
 import { SETTINGS_SECTIONS, sectionLabel, type SettingsSection } from '../settings/sections';
 
 /**
@@ -71,8 +72,8 @@ export function chatHref(base: string, chatId: string): string {
 }
 
 /** A section of Settings, which opens in the tab on screen; live only. The first section when none is named. */
-export function settingsHref(section: SettingsSection = SETTINGS_SECTIONS[0].id): string {
-	return `/settings/${section}`;
+export function settingsHref(section: SettingsSection = SETTINGS_SECTIONS[0].id, view?: ServerView): string {
+	return view ? `/settings/${section}/${view}` : `/settings/${section}`;
 }
 
 /** True for an address of Settings, whose sections take over the sidebar. */
@@ -92,7 +93,7 @@ export type Route =
 	| { screen: 'pull'; repoId: string; number: number }
 	| { screen: 'chat'; chatId: string }
 	| { screen: 'review'; reviewId: string }
-	| { screen: 'settings'; section: SettingsSection };
+	| { screen: 'settings'; section: SettingsSection; view: ServerView | null };
 
 /** A pull request number as an address writes it: digits, and never zero. */
 const PULL_NUMBER = /^[1-9]\d*$/;
@@ -134,14 +135,21 @@ function screenOf(parts: string[], live: boolean): Route | null {
 		case 'settings/1':
 		case 'settings/2':
 			return live ? settingsRoute(sectionOf(first)) : null;
+		case 'settings/3':
+			return live && first === 'server' ? settingsRoute('server', second) : null;
 		default:
 			return null;
 	}
 }
 
-/** The Settings screen on `section`; null for a section Settings does not have. */
-function settingsRoute(section: SettingsSection | null): Route | null {
-	return section ? { screen: 'settings', section } : null;
+/** The Settings screen on `section`, and on Server one of its views; null for a section or view Settings does not have. */
+function settingsRoute(section: SettingsSection | null, viewId?: string): Route | null {
+	if (!section) return null;
+	if (section !== 'server') return { screen: 'settings', section, view: null };
+
+	const view = serverViewOf(viewId);
+
+	return view ? { screen: 'settings', section, view } : null;
 }
 
 /**

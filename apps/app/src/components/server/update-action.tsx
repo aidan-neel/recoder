@@ -21,6 +21,12 @@ export function UpdateAction({ strip }: { strip: ReadyStrip }) {
 			);
 		case 'available':
 			return <UpdateButton strip={strip} disabled={line.blockedReason !== null} />;
+		case 'rolled-back':
+			return (
+				<Button variant="outline" onClick={actions.check}>
+					Check again
+				</Button>
+			);
 		case 'failed':
 			return (
 				<Button variant="outline" onClick={() => actions.retry(line.retry)}>

@@ -48,3 +48,84 @@
 	margin: 0;
 	color: var(--danger);
 }
+
+/* ───────── Settings → Server → Overview: the facts at the end of their rows ───────── */
+.server-fact {
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+}
+.server-fact[data-face='code'] {
+	font-family: var(--font-code);
+	font-size: 12px;
+}
+.server-checks-card {
+	padding: 10px 16px;
+}
+
+/* ───────── Settings → Server → Logs: a filter bar over the lines, in the code face ───────── */
+.settings-page[data-view='logs'] {
+	--page-measure: 1080px;
+}
+.server-logs {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 12px;
+	padding-bottom: 32px;
+}
+.server-logs-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.server-logs-live {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.server-logs-live[data-live] {
+	color: var(--ok);
+}
+.server-logs-empty {
+	margin: 0;
+	color: var(--text-muted);
+}
+.server-log {
+	display: flex;
+	width: 100%;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-family: var(--font-code);
+	font-size: 12px;
+	line-height: 20px;
+}
+.server-log-line {
+	display: grid;
+	grid-template-columns: 64px 44px 56px minmax(0, 1fr);
+	gap: 12px;
+	padding-inline: 4px;
+	border-radius: var(--radius-row);
+}
+.server-log-line:hover {
+	background: var(--bg-hover);
+}
+.server-log-line time,
+.server-log-source {
+	color: var(--text-faint);
+}
+.server-log-level {
+	color: var(--text-muted);
+}
+.server-log-line[data-level='warn'] .server-log-level {
+	color: var(--sev-medium);
+}
+.server-log-line[data-level='error'] .server-log-level {
+	color: var(--danger);
+}
+.server-log-message {
+	overflow-wrap: anywhere;
+	color: var(--text-secondary);
+	white-space: pre-wrap;
+}

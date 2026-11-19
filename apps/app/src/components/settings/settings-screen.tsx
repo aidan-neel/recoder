@@ -7,10 +7,13 @@ import { canOpenSection, sectionLabel, type SettingsSection } from '@/lib/settin
 import { replaceAddress } from '@/lib/shell/navigation';
 import { settingsHref } from '@/lib/shell/routes';
 
+import type { ServerView } from '@/lib/server/server-views';
+
 import { AdminSection } from '@/components/admin/admin-section';
 import { ConnectionsSection } from '@/components/connections/connections-section';
 import { Crumbs } from '@/components/common/crumbs';
 import { Page } from '@/components/common/page';
+import { ServerSettings, ServerViews } from '@/components/server/server-settings';
 
 import { AdminControls } from './admin-controls';
 import { AppearanceSection } from './appearance-section';
@@ -23,7 +26,7 @@ import { TelemetrySection } from './telemetry/telemetry-section';
 import { UsageRange } from './usage/usage-range';
 import { UsageSection } from './usage/usage-section';
 
-const SECTIONS: Record<SettingsSection, () => ReactNode> = {
+const SECTIONS: Record<SettingsSection, (view: ServerView) => ReactNode> = {
 	models: () => <ModelsSection />,
 	providers: () => (
 		<AdminControls>
@@ -39,11 +42,13 @@ const SECTIONS: Record<SettingsSection, () => ReactNode> = {
 	usage: () => <UsageSection />,
 	telemetry: () => <TelemetrySection />,
 	admin: () => <AdminSection />,
+	server: (view) => <ServerSettings view={view} />,
 	appearance: () => <AppearanceSection />
 };
 
-/** A control for the whole section, at the right of the bar: the range Usage and Telemetry look back over. */
-function sectionEnd(section: SettingsSection): ReactNode {
+/** A control for the whole section, at the right of the bar: the range Usage and Telemetry look back over, Server's views. */
+function sectionEnd(section: SettingsSection, view: ServerView): ReactNode {
+	if (section === 'server') return <ServerViews view={view} />;
 	if (section === 'usage') return <UsageRange />;
 	if (section === 'telemetry') return <TelemetryRange />;
 
@@ -55,7 +60,8 @@ function sectionEnd(section: SettingsSection): ReactNode {
  * (`SettingsSidebar`), and the tab is named for the open one. A member sent to one of the admin's sections lands on the
  * first section instead.
  */
-export function SettingsScreen({ section }: { section: SettingsSection }) {
+export function SettingsScreen({ section, view }: { section: SettingsSection; view: ServerView | null }) {
+	const shown = view ?? 'overview';
 	const admin = useIsAdmin();
 	const allowed = canOpenSection(section, admin);
 
@@ -66,10 +72,12 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 	return (
 		<Page
 			start={<Crumbs parts={[{ label: 'Settings' }, { label: sectionLabel(section) }]} />}
-			end={sectionEnd(section)}
+			end={sectionEnd(section, shown)}
 		>
-			<div key={section} className="page-scroll">
-				<div className="page-column settings-page">{allowed ? SECTIONS[section]() : null}</div>
+			<div key={`${section}/${shown}`} className="page-scroll">
+				<div className="page-column settings-page" data-view={section === 'server' ? shown : undefined}>
+					{allowed ? SECTIONS[section](shown) : null}
+				</div>
 			</div>
 		</Page>
 	);

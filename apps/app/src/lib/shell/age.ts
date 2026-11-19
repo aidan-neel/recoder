@@ -67,6 +67,20 @@ export function clockTime(at: string | null | undefined): string {
 	return clockFormat.format(then);
 }
 
+/** Formats every short date, made once for the same reason as `fullTimeFormat`. */
+let dayFormat: Intl.DateTimeFormat | undefined;
+
+/** The month and day in the reader's locale, `Nov 18`, as a release or a backup is dated. Empty when `at` is no date. */
+export function dayDate(at: string | null | undefined): string {
+	const then = at ? Date.parse(at) : Number.NaN;
+
+	if (Number.isNaN(then)) return '';
+
+	dayFormat ??= new Intl.DateTimeFormat([], { month: 'short', day: 'numeric' });
+
+	return dayFormat.format(then);
+}
+
 /** A running clock for a review in progress: `2:14`, `1:02:09`. */
 export function runClock(ms: number): string {
 	const seconds = Math.max(0, Math.floor(ms / 1000));

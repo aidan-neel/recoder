@@ -7,6 +7,7 @@ import {
 	ChartBarIcon,
 	CpuIcon,
 	GaugeIcon,
+	HardDrivesIcon,
 	LinkSimpleIcon,
 	PaletteIcon,
 	MagnifyingGlassIcon,
@@ -25,6 +26,7 @@ const ICONS: Record<SettingsSection, Icon> = {
 	usage: ChartBarIcon,
 	telemetry: PulseIcon,
 	admin: UserGearIcon,
+	server: HardDrivesIcon,
 	appearance: PaletteIcon
 };
 

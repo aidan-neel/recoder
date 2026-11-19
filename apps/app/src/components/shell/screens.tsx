@@ -44,7 +44,7 @@ function Screen({ route, live }: { route: Route; live: boolean }) {
 		case 'guidelines':
 			return <GuidelinesScreen />;
 		case 'settings':
-			return <SettingsScreen section={route.section} />;
+			return <SettingsScreen section={route.section} view={route.view} />;
 		case 'missing':
 			return <PageMissing />;
 	}
