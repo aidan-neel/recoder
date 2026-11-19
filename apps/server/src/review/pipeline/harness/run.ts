@@ -30,6 +30,7 @@ import { understandChanges } from './understand.js';
 import { variantStage } from '../variants/stage.js';
 import { cutUnits, retryFailedUnits } from './unit-stage.js';
 import { drainVerification, finishVerification, startVerification } from './verification.js';
+import { withReviewAgentSlots } from '../agent-loop/agent-slots.js';
 
 /**
  * Custom review harness. Reviewers never change the pull request:
@@ -75,7 +76,7 @@ export async function runAdaptiveReview(
 	await openWorkspace(run);
 
 	try {
-		return await runStages(run);
+		return await withReviewAgentSlots(() => runStages(run));
 	} catch (err) {
 		return stoppedReview(run, err);
 	} finally {

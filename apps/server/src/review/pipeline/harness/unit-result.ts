@@ -10,7 +10,7 @@ import type { PoolContext, ScopedPatch } from './pool.js';
 /**
  * Records a reviewer's answer: coverage for its slice, candidates,
  * recommended checks, how it answered the brief questions it was
- * shown and its subagent requests. A reviewer
+ * shown and the subagent requests it was offered. A reviewer
  * that answered has finished; hunks it couldn't assess show up as coverage
  * gaps. A subagent's answer adds candidates, checks and its answer to the
  * brief questions it follows up: its hunks are already a reviewer's, and it
@@ -29,7 +29,7 @@ export function applyUnitResult(
 	if (role !== 'subagent') {
 		creditCoverage(item, ctx, output, initialEvidence);
 
-		for (const request of item.lenses ? output.subagents : []) {
+		for (const request of item.lenses && ctx.subagentRequests > 0 ? output.subagents : []) {
 			ctx.requests.push({ unitId: item.id, unitTitle: item.title, request });
 		}
 	}

@@ -15,6 +15,7 @@ import { DELEGATE_SHAPE, commandsRun, executeTurn } from './agent-loop/delegatio
 import { agentDeadlines, callSettleAt, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
 import { runNativeAgent } from './agent-loop/native-engine.js';
 import { agentById } from '../../agents/registry.js';
+import { withAgentSlot } from './agent-loop/agent-slots.js';
 import type { JsonAgentOptions } from './agent-loop/options.js';
 import { streamTurn, type TurnResult } from './agent-loop/stream-turn.js';
 
@@ -128,19 +129,21 @@ function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean
  * a session reuses the provider's prompt cache.
  */
 export function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
-	return withTokenStage(opts.stage, async () => {
-		const agent = agentById(opts.config.provider);
+	return withTokenStage(opts.stage, () =>
+		withAgentSlot(opts.stage, opts.signal, async () => {
+			const agent = agentById(opts.config.provider);
 
-		if (agent) return runNativeAgent(opts, agent);
+			if (agent) return runNativeAgent(opts, agent);
 
-		const conversation = new ChatConversation();
+			const conversation = new ChatConversation();
 
-		try {
-			return await runTurns(opts, conversation);
-		} finally {
-			await conversation.close();
-		}
-	});
+			try {
+				return await runTurns(opts, conversation);
+			} finally {
+				await conversation.close();
+			}
+		})
+	);
 }
 
 async function runTurns<T>(

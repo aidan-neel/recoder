@@ -102,20 +102,36 @@ export function lensSelectionNote(selection: readonly LensId[] | undefined): str
 	return `\n\nThis review applies only these lenses, so report only their categories; a finding in any other category is dropped:\n${lines.join('\n')}`;
 }
 
+/** What a subagent may do: run code, answer a brief question it follows up, or only answer in one call without tools. */
+interface SubagentOffers {
+	exec: boolean;
+	followUp: boolean;
+	single: boolean;
+}
+
+const SUBAGENT_WITH_TOOLS =
+	'Follow the code wherever the question leads, using your tools across the repository, and report findings on that question only, in any category from the closed list. The patch in your scope is where to start, not a limit on what you read.';
+
+const SUBAGENT_WITHOUT_TOOLS =
+	'Read the patch in your scope with that question in mind and report findings on that question only, in any category from the closed list.';
+
 /**
  * A subagent's prompt: one question a correctness lens handed on, answered in
  * depth. A subagent sent to follow up a brief question is also asked to
- * answer it.
+ * answer it. Without tools it answers in one call from its scoped patch.
  */
-export function subagentSystemPrompt(exec: boolean, directive: ReviewDirective | null, followUp: boolean): string {
-	const ending = followUp
+export function subagentSystemPrompt(directive: ReviewDirective | null, offers: SubagentOffers): string {
+	const ending = offers.followUp
 		? `Leave "subagents" and "gaps" empty; you cannot hand work on.\n\n${FOLLOW_UP_OFFER}`
 		: 'Leave "subagents", "unsettled", "answered" and "gaps" empty; you cannot hand work on.';
 
-	return withDirective(
-		`${reviewerContract(exec, 'defect')}
+	const contract = offers.single ? singleCallContract() : reviewerContract(offers.exec, 'defect');
+	const method = offers.single ? SUBAGENT_WITHOUT_TOOLS : SUBAGENT_WITH_TOOLS;
 
-Role: subagent. You were handed one question that a reviewer could not finish in its own turns, or that no reviewer settled. Follow the code wherever the question leads, using your tools across the repository, and report findings on that question only, in any category from the closed list. The patch in your scope is where to start, not a limit on what you read. ${ending}`,
+	return withDirective(
+		`${contract}
+
+Role: subagent. You were handed one question that a reviewer could not finish in its own turns, or that no reviewer settled. ${method} ${ending}`,
 		directive
 	);
 }

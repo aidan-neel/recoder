@@ -16,6 +16,11 @@ export const REVIEW_POLICY = {
 	/** Reviewers running at once in one review; the model limiter (`RECODER_LLM_CONCURRENCY`) throttles across reviews. */
 	maxConcurrentAssignments: 12,
 	/**
+	 * Agents running at once in one review, whatever their stage (reviewers, subagents, verifiers, brief and repair
+	 * calls; a reviewer's workers excepted), so a huge pull request runs its agents in waves.
+	 */
+	maxConcurrentAgents: 6,
+	/**
 	 * Patch characters one brief unit holds (`partitionUnits`). Matches `maxToolRoundChars`, so a brief
 	 * call reads its whole patch at once.
 	 */

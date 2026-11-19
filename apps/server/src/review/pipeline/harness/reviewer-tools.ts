@@ -1,6 +1,5 @@
 import { reviewerTools } from '../../../env.js';
 import { REVIEW_POLICY, type ReviewLimits } from '../../session/review-policy.js';
-import type { AdaptiveReviewInput } from './types.js';
 
 /** The share of a model's context window a reviewer without tools may spend on its slice's patch. */
 const OPENING_PATCH_SHARE = 0.4;
@@ -14,22 +13,16 @@ export function reviewersRunCode(): boolean {
 }
 
 /**
- * The review as its reviewers' tool setting shapes it. A reviewer without tools answers in one call from its
- * opening message, so the change is cut into slices one message holds, each reviewer gets a single turn, and no
- * subagent is sent. Subagents with the read tools were measured on the benchmark's quick set (Hy4 Flash, three
- * runs): they published no more planted defects (39, 39, 38 of 65 against 40, 40, 39), used 57% more input tokens
- * and added up to a minute and a half to a review. Every other setting leaves the shape alone.
+ * The review's limits as its reviewers' tool setting shapes them. A reviewer without tools answers in one call from its
+ * opening message, so the change is cut into slices one message holds and each reviewer and subagent gets a single
+ * turn. Subagents still follow up the brief's open questions, each answering in one call from the hunks the question
+ * is about, so a question no reviewer settled is looked at again rather than left open. Every other setting leaves
+ * the shape alone.
  */
-export function shapedForReviewerTools(
-	input: AdaptiveReviewInput,
-	limits: ReviewLimits
-): { input: AdaptiveReviewInput; limits: ReviewLimits } {
-	if (reviewerTools() !== 'none') return { input, limits };
+export function limitsForReviewerTools(limits: ReviewLimits): ReviewLimits {
+	if (reviewerTools() !== 'none') return limits;
 
-	return {
-		input: { ...input, subagentCap: 0 },
-		limits: { ...limits, reviewerTurns: 1, sliceChars: REVIEW_POLICY.unitBudgetChars }
-	};
+	return { ...limits, reviewerTurns: 1, subagentTurns: 1, sliceChars: REVIEW_POLICY.unitBudgetChars };
 }
 
 /**

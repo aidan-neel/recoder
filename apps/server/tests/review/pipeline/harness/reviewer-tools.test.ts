@@ -92,3 +92,33 @@ test('a setting that names no tool profile stops the review before any model cal
 
 	expect(runAdaptiveReview({ diff: DIFF, sandboxPath: null })).rejects.toThrow('RECODER_REVIEWER_TOOLS');
 });
+
+test('without tools, a brief question no reviewer answered gets one follow-up subagent that answers in one call', async () => {
+	process.env.RECODER_REVIEWER_TOOLS = 'none';
+	useTestModel();
+
+	const subagentSystems: string[] = [];
+
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const system = systemOf(init);
+
+		if (system.includes('You write the brief')) {
+			return modelReply({
+				openQuestions: [{ text: 'Does pkg0 reject an empty name?', file: 'pkg0/index.ts', line: 1 }]
+			});
+		}
+
+		if (system.includes('Role: subagent')) subagentSystems.push(system);
+
+		return modelReply({ message: 'ok', ...NOTHING });
+	}) as unknown as typeof fetch;
+
+	const result = await runAdaptiveReview({ diff: DIFF, sandboxPath: null, subagentCap: 3 });
+
+	expect(subagentSystems).toHaveLength(1);
+	expect(subagentSystems[0]).toContain('You have no tools');
+
+	expect(result.assignments.filter((record) => record.role === 'subagent').map((record) => record.status)).toEqual([
+		'done'
+	]);
+});
