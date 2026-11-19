@@ -1,17 +1,17 @@
 'use client';
 
 import { HoverList, RowButton } from '@recoder/ui';
-import { BookOpenIcon, ClockIcon, FolderSimpleIcon, GitPullRequestIcon } from '@phosphor-icons/react';
+import { BookOpenIcon, ClockIcon, FolderSimpleIcon, GitPullRequestIcon, PlusIcon } from '@phosphor-icons/react';
 import { usePathname } from '@/lib/shell/navigation';
 import type { ComponentType } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import { useIntent } from '@/lib/shell/intent';
-import { AUTOMATIONS_HREF, GUIDELINES_HREF, isLiveApp, pullsHref, reposHref } from '@/lib/shell/routes';
+import { AUTOMATIONS_HREF, GUIDELINES_HREF, isLiveApp, newReviewHref, pullsHref, reposHref } from '@/lib/shell/routes';
 
 import { Link } from '@/components/common/link';
 
-type Place = 'pulls' | 'repos' | 'automations' | 'guidelines';
+type Place = 'new' | 'pulls' | 'repos' | 'automations' | 'guidelines';
 
 interface NavRow {
 	id: Place;
@@ -37,10 +37,11 @@ const LIVE_ROWS: NavRow[] = [
 	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpenIcon }
 ];
 
-/** The place the address belongs to, or null on a page the sidebar does not list, such as New review. */
+/** The place the address belongs to, or null on a page the sidebar does not list, such as a chat. */
 function placeOf(pathname: string, base: string): Place | null {
 	const path = pathname.slice(base.length) || '/';
 
+	if (path.startsWith('/new')) return 'new';
 	if (path === '/' || path.startsWith('/pulls')) return 'pulls';
 	if (path === '/repos') return 'repos';
 	if (pathname.startsWith(AUTOMATIONS_HREF)) return 'automations';
@@ -50,14 +51,15 @@ function placeOf(pathname: string, base: string): Place | null {
 }
 
 /**
- * The places. The place on screen sits on a still fill; the count beside Pull requests is the open ones. The sample
- * lists only the places it has.
+ * New review, then the places. The place on screen sits on a still fill; the count beside Pull requests is the open
+ * ones. The sample lists only the places it has.
  */
 export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	const { base } = useApi();
 	const active = placeOf(usePathname(), base);
 
 	const rows: NavRow[] = [
+		{ id: 'new', label: 'New review', href: newReviewHref(base), icon: PlusIcon },
 		{ id: 'pulls', label: 'Pull requests', href: pullsHref(base), icon: GitPullRequestIcon },
 		{ id: 'repos', label: 'Repositories', href: reposHref(base), icon: FolderSimpleIcon },
 		...(isLiveApp(base) ? LIVE_ROWS : [])

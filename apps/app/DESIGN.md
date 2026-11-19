@@ -22,7 +22,7 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
 - **Near-neutral surfaces.** Near-black panels with white hairlines in dark,
   white and light grey in light, all with a faint cool tint. The sidebar sits
   a step darker than the page and menus a step lighter. One blue primary
-  button (`#4062e2` with white ink in both themes, its hover the same blue a
+  button (`#2f6bf0` with white ink in both themes, its hover the same blue a
   step darker;
   the palettes in Settings → Appearance bring their own) and one indigo-blue (`#3777ec`) accent (links, the selected line,
   hunk headers).
@@ -83,7 +83,7 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   starts on the page panel's left edge. With the sidebar hidden the part over
   it closes up to what it holds, so the tabs start right after it. After the
   last tab, a + (tooltip "New review", Alt+T) opens New review in a new tab;
-  there is no labelled New review button anywhere. The design is variant V1,
+  the sidebar's first row, New review, opens it in the tab on screen. The design is variant V1,
   "Window bar", of the Paper file
   https://app.paper.design/file/01M7S67WPYQ32KY5VF219H93M0.
 - **Window tabs** are 200px by 28px with `--radius-row` corners and 2px
@@ -124,7 +124,8 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   field too; Alt with a bracket stays with the field, as on a Mac it types
   quotes.
 - **Sidebar** (248px, `--sidebar-width`) starts under the topbar with no head
-  of its own: Pull requests (with the open count), Repositories, Automations
+  of its own: New review (a + and its label, the first row), Pull requests
+  (with the open count), Repositories, Automations
   and Guidelines, all rows of one kind; then Reviews,
   Chats and Repositories, each under a title that folds it, with a + that
   starts one (a new review, a new chat, Add repository) and a ⋯ that hides

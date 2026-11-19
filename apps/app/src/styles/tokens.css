@@ -48,7 +48,7 @@
 	--text-ghost: #555556;
 	--text-brief-body: #8f8f90;
 
-	--primary: #4062e2;
+	--primary: #2f6bf0;
 	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
 	--on-primary: #ffffff;
 
@@ -168,7 +168,7 @@
 	--text-ghost: #a8a8aa;
 	--text-brief-body: #6b6b6c;
 
-	--primary: #4062e2;
+	--primary: #2f6bf0;
 	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
 	--on-primary: #ffffff;
 
