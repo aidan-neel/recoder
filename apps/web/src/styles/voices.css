@@ -36,11 +36,17 @@
 }
 [data-ui='popover-content'].effort-menu {
 	width: 230px;
-	transform-origin: top right;
 }
 /* Sivir opens selects from the trigger's left edge; this one sits at a row's right end, so align right edges. */
 [data-floating-content]:has(> .effort-menu) {
 	translate: calc(var(--popover-trigger-width) - 100%) 0;
+}
+/* Right-aligned by hand, so it grows from the trigger's right end on whichever side it opened. */
+[data-floating-content][data-placement^='bottom']:has(> .effort-menu) {
+	--motion-menu-origin: top right;
+}
+[data-floating-content][data-placement^='top']:has(> .effort-menu) {
+	--motion-menu-origin: bottom right;
 }
 [data-ui='popover-content'].effort-menu .sivir-menu-item.effort-option {
 	height: auto;

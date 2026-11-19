@@ -223,6 +223,47 @@
 	font-weight: 400;
 	color: var(--text-primary);
 }
+/*
+ * Every popover surface (menus, submenus, context menus, selects, comboboxes, hover cards) grows from its
+ * trigger: Sivir writes the side and alignment it actually placed the panel on, flips included, to the
+ * wrapper's data-placement, and the panel scales from --motion-menu-origin.
+ */
+[data-floating-content][data-placement='bottom'] {
+	--motion-menu-origin: top;
+}
+[data-floating-content][data-placement='bottom-start'] {
+	--motion-menu-origin: top left;
+}
+[data-floating-content][data-placement='bottom-end'] {
+	--motion-menu-origin: top right;
+}
+[data-floating-content][data-placement='top'] {
+	--motion-menu-origin: bottom;
+}
+[data-floating-content][data-placement='top-start'] {
+	--motion-menu-origin: bottom left;
+}
+[data-floating-content][data-placement='top-end'] {
+	--motion-menu-origin: bottom right;
+}
+[data-floating-content][data-placement='right'] {
+	--motion-menu-origin: left;
+}
+[data-floating-content][data-placement='right-start'] {
+	--motion-menu-origin: left top;
+}
+[data-floating-content][data-placement='right-end'] {
+	--motion-menu-origin: left bottom;
+}
+[data-floating-content][data-placement='left'] {
+	--motion-menu-origin: right;
+}
+[data-floating-content][data-placement='left-start'] {
+	--motion-menu-origin: right top;
+}
+[data-floating-content][data-placement='left-end'] {
+	--motion-menu-origin: right bottom;
+}
 .sivir-menu-separator {
 	background-color: var(--line-control);
 	margin-block: 3px;

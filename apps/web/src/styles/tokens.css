@@ -380,6 +380,16 @@
 	--hl-attr: var(--syn-type);
 }
 
+/* The timings above replace Sivir's reduced-motion zeros, so menus give up their movement here and keep the fade. */
+@media (prefers-reduced-motion: reduce) {
+	:root,
+	.dark {
+		--motion-menu-y: 0px;
+		--motion-menu-scale-start: 1;
+		--motion-menu-blur: 0px;
+	}
+}
+
 html {
 	background: var(--bg-chrome);
 }
