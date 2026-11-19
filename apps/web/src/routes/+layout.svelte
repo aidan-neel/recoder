@@ -30,8 +30,10 @@
 </script>
 
 <svelte:head>
+	<link rel="icon" href="/favicon.ico" sizes="32x32" />
 	<link rel="icon" href={favicon} type="image/svg+xml" />
 	<link rel="apple-touch-icon" href={appleTouchIcon} />
+	<link rel="manifest" href="/manifest.webmanifest" />
 	<title>Recoder</title>
 	<meta
 		name="description"

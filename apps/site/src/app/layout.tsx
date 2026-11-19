@@ -14,7 +14,8 @@ import './globals.css';
 
 export const metadata: Metadata = {
 	metadataBase: new URL(SITE_URL),
-	title: 'Recoder'
+	title: 'Recoder',
+	twitter: { card: 'summary_large_image' }
 };
 
 export const viewport = CHROME_VIEWPORT;
