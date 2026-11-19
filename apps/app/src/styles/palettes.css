@@ -2,7 +2,8 @@
  * The palettes picked in Settings → Appearance, as an attribute on <html>.
  * Graphite, the tokens in tokens.css, is the default and sets no attribute.
  * Each palette sets the anchors below for each theme; the rules at the end
- * derive the other surface, line and text tokens from them. The same rules
+ * derive the other surface, line and text tokens from them. In dark, every
+ * palette's chrome sits a step below its canvas, as Capy's sidebar does. The same rules
  * match a `[data-palette]` element inside the page, so a swatch can preview
  * its palette whatever the page shows. Contrast is checked for every pair:
  * body text 4.5:1, text on the primary 4.5:1, metadata 3:1.
@@ -11,7 +12,7 @@
 /* ───────── Neutral: warm grey surfaces, a soft white primary ───────── */
 :root.app-skin.dark[data-palette='neutral'],
 .dark [data-palette='neutral'] {
-	--bg-chrome: #191918;
+	--bg-chrome: #0a0a0b;
 	--bg-canvas: #131314;
 	--bg-panel: #161616;
 	--bg-raised: #262624;
@@ -51,7 +52,7 @@
 /* ───────── Blue: warm grey surfaces, a bright blue primary ───────── */
 :root.app-skin.dark[data-palette='blue'],
 .dark [data-palette='blue'] {
-	--bg-chrome: #171716;
+	--bg-chrome: #080809;
 	--bg-canvas: #111112;
 	--bg-panel: #141414;
 	--bg-raised: #222220;
@@ -91,7 +92,7 @@
 /* ───────── Cobalt: cool black, an electric cobalt primary ───────── */
 :root.app-skin.dark[data-palette='cobalt'],
 .dark [data-palette='cobalt'] {
-	--bg-chrome: #151515;
+	--bg-chrome: #070707;
 	--bg-canvas: #101010;
 	--bg-panel: #131313;
 	--bg-raised: #171717;
@@ -131,7 +132,7 @@
 /* ───────── Stone: warm stone, a brass primary ───────── */
 :root.app-skin.dark[data-palette='stone'],
 .dark [data-palette='stone'] {
-	--bg-chrome: #1a1713;
+	--bg-chrome: #0a0806;
 	--bg-canvas: #14110d;
 	--bg-panel: #171410;
 	--bg-raised: #1f1b17;
@@ -171,7 +172,7 @@
 /* ───────── Pine: green-grey, a mint primary ───────── */
 :root.app-skin.dark[data-palette='pine'],
 .dark [data-palette='pine'] {
-	--bg-chrome: #111916;
+	--bg-chrome: #060a08;
 	--bg-canvas: #0c1410;
 	--bg-panel: #0e1613;
 	--bg-raised: #161e1a;
@@ -211,7 +212,7 @@
 /* ───────── Teal: blue-green slate, a teal primary ───────── */
 :root.app-skin.dark[data-palette='teal'],
 .dark [data-palette='teal'] {
-	--bg-chrome: #0f191b;
+	--bg-chrome: #050a0b;
 	--bg-canvas: #0a1315;
 	--bg-panel: #0c1618;
 	--bg-raised: #141e20;
@@ -251,7 +252,7 @@
 /* ───────── Violet: cool violet-grey, a violet primary ───────── */
 :root.app-skin.dark[data-palette='violet'],
 .dark [data-palette='violet'] {
-	--bg-chrome: #17161f;
+	--bg-chrome: #09080e;
 	--bg-canvas: #121019;
 	--bg-panel: #14131c;
 	--bg-raised: #1c1b24;
@@ -291,7 +292,7 @@
 /* ───────── Ember: charcoal, an ember orange primary ───────── */
 :root.app-skin.dark[data-palette='ember'],
 .dark [data-palette='ember'] {
-	--bg-chrome: #1a1615;
+	--bg-chrome: #0a0808;
 	--bg-canvas: #141110;
 	--bg-panel: #171312;
 	--bg-raised: #1f1b1a;
@@ -331,7 +332,7 @@
 /* ───────── Rose: plum-grey, an orchid pink primary ───────── */
 :root.app-skin.dark[data-palette='rose'],
 .dark [data-palette='rose'] {
-	--bg-chrome: #1c1518;
+	--bg-chrome: #0c070a;
 	--bg-canvas: #160f13;
 	--bg-panel: #191216;
 	--bg-raised: #211a1d;
