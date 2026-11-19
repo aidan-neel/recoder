@@ -468,7 +468,7 @@ comment field. There is no second implementation.
   named by tooltips), then the note, then the caller's controls (the models)
   and the action. The action is `ComposerSend`, the region's one primary
   button, which spins in place while sending; while a reply arrives it is
-  `ComposerStop`. The note is right-aligned meta text, danger for what stops
+  `ComposerStop`, a square in the same primary fill, as in Capy. The note is right-aligned meta text, danger for what stops
   Enter, secondary for what Enter does first.
 - **Sizes.** `lg` is a page's main field (New): 15px text, two rows, and it
   grows to eight before it scrolls. `md` is everything else, two rows. The `row` layout puts the field and the
@@ -497,6 +497,28 @@ comment field. There is no second implementation.
 - **Keys.** Enter sends, Shift+Enter starts a line. Text over the server's
   limit says by how much and cannot send; a refused send says why and keeps
   the text.
+
+## Thread
+
+A repository chat reads like a Capy thread (Paper variant D, "Line", in the
+AID-8 file).
+
+- **Turns.** The person's question sits on a tint at the right. The hour
+  shows centred over a question that opens a conversation or follows a rest
+  of more than five minutes. Recoder's reply is prose on the page.
+- **What it did.** Under the question, one line runs across the column with
+  hairlines either side: `Working for 8s`, which sweeps while the reply
+  works, then `Worked for 13s`. While the reply works, its steps arrive
+  under that line, one quiet line each, ending in how long the step took.
+  They fold away once the answer begins, and pressing the line opens them
+  again. A step with more to show (the files a search or a read found, a
+  command and its output, a thought's text) opens under its own line on
+  request, and only a failed command starts open.
+- **Under a reply.** The hour it arrived and a copy, faint, shown while the
+  reply is hovered or holds focus. The row keeps its room, so nothing moves.
+- **Scroll.** The thread follows a reply while the person reads the end.
+  Scrolling up stops the following and shows a Scroll to end pill centred
+  over the composer, which brings the end back and follows again.
 
 ## Motion
 

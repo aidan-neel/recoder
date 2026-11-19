@@ -47,16 +47,11 @@ export function workedLabel(seconds: number | null): string {
 	return seconds === null || seconds < 1 ? 'Worked' : `Worked for ${spanLabel(seconds)}`;
 }
 
-/**
- * The line a folded trail shows for a note or a thought while the reply works: a thought's title, else the newest
- * paragraph of what was said or thought, so a step that says two things shows the second.
- */
-export function latestLine(step: ChatTrailNote | ChatTrailThought): string {
-	if (step.kind === 'thought' && step.title) return step.title;
+/** How long a finished step took, as its row ends: `2s`, `1m 5s`. Null while it runs or when it took under a second. */
+export function stepSpan(step: ChatTrailStep): string | null {
+	const seconds = stepSeconds(step);
 
-	const paragraphs = step.text.split(/\n\s*\n/).map((paragraph) => paragraph.trim());
-
-	return paragraphs.findLast((paragraph) => paragraph !== '') ?? '';
+	return seconds === null || seconds < 1 ? null : spanLabel(seconds);
 }
 
 /** A reasoning step's label: the title the provider gave it, else how long the model thought. */
@@ -99,9 +94,9 @@ export function hasDetail(step: ToolStep): boolean {
 	return step.kind === 'run' || step.files.length > 0;
 }
 
-/** Whether a call's detail starts open: the files a search or a read found do; a command's output only once it failed. */
+/** Whether a call's detail starts open: every step is one line until a person opens it, but a failed command shows why. */
 export function opensDetail(step: ToolStep): boolean {
-	return step.kind !== 'run' || step.status === 'error';
+	return step.kind === 'run' && step.status === 'error';
 }
 
 /** `1s`, `12s`, `1m 5s`: a span as a row shows it. */

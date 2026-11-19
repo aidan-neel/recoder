@@ -33,6 +33,16 @@
 	background: var(--bg-canvas);
 }
 
+/* Capy's way back down: a small pill centred over the composer while the end is out of view. */
+.chat-to-end {
+	position: absolute;
+	bottom: calc(100% + 8px);
+	left: 50%;
+	z-index: 1;
+	translate: -50% 0;
+	border-radius: 999px;
+}
+
 /* Loading: the first question at the right, the start of its reply under it. */
 .chat-skeleton {
 	display: flex;

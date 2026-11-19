@@ -285,11 +285,11 @@ export function ComposerSend({ label = 'Send', disabled, pending, onClick }: Com
 	);
 }
 
-/** Stops the reply that is arriving; it stands where the send was. */
+/** Stops the reply that is arriving; it stands where the send was, in the same fill, as Capy's does. */
 export function ComposerStop({ label = 'Stop', onClick }: { label?: string; onClick: () => void }) {
 	return (
 		<Tooltip content={label}>
-			<Button variant="secondary" size="icon" aria-label={label} data-ui="composer-stop" onClick={onClick}>
+			<Button variant="primary" size="icon" aria-label={label} data-ui="composer-stop" onClick={onClick}>
 				<StopIcon className="size-3" weight="fill" />
 			</Button>
 		</Tooltip>

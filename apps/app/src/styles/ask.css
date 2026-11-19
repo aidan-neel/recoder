@@ -13,12 +13,44 @@
 .ask-message[data-from='person'] {
 	align-items: flex-end;
 }
-/* A reply stands a step clear of the question above it, and its trail sits tight on the words it led to. */
+/* A reply stands a step clear of the question above it, and its trail's line a step clear of the words it led to. */
 .ask-message[data-from='recoder'] {
 	padding-top: 6px;
 }
 .ask-message[data-from='recoder'] > .trail {
-	margin-bottom: -6px;
+	margin-bottom: 6px;
+}
+/* The hour a turn began, centred over the question that began it, as Capy marks one. */
+.ask-when {
+	align-self: center;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+	font-variant-numeric: tabular-nums;
+}
+/*
+ * Under a finished reply: when it arrived and a copy, quiet until the reply is hovered or holds focus. The row keeps
+ * its room while hidden, so nothing moves when it shows.
+ */
+.ask-meta {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: -4px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	font-variant-numeric: tabular-nums;
+	opacity: 0;
+	transition: opacity var(--dur-hover) ease-out;
+}
+.ask-message:hover .ask-meta,
+.ask-message:focus-within .ask-meta {
+	opacity: 1;
+}
+@media (hover: none) {
+	.ask-meta {
+		opacity: 1;
+	}
 }
 /* The person's images under their words, on the same right edge. */
 .ask-images {
