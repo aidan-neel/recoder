@@ -850,7 +850,12 @@ tree.
 - **A finding** sits under the line it ends on as one raised line: severity
   glyph, title, evidence and a caret, so the code around it stays
   readable. Pressed, it opens in place to its explanation, with Open in
-  Review. Its lines wear the bug's red wash and bar.
+  Review. Its lines wear the bug's red wash and bar. The same card is the
+  Review tab's: its header line keeps its place open or shut, so the caret
+  and title never move, and the whole line washes on hover and shuts it
+  again, as do Enter and Space on it and Escape anywhere in the card. On
+  the Review tab an open card's header stays at the top while its body
+  scrolls under it, and shutting from there keeps the header where it is.
 - **Jumps** (the file menu, the stepper, `j` and `k`, a file badge in the
   Summary) bring the file to the top and a line or finding to the middle,
   open the file and the finding, focus the finding and write the place to

@@ -17,14 +17,29 @@
 
 /*
  * A finding: the same card under its line in the diff and in the Review tab's list. Shut, it is one line that washes
- * on hover; open, a raised card with the card recipe. Its severity shows as a small square and a word in its colour.
+ * on hover; open, a raised card with the card recipe under the same line. Its severity shows as a small square and a
+ * word in its colour. The card's edge is drawn by a layer over it, so a header stuck over the body cannot cover it.
  */
 .bug-item {
 	--bug-mark: var(--sev-low);
 	--bug-ink: var(--sev-low);
 
+	position: relative;
 	border-radius: var(--radius-row);
+	isolation: isolate;
 	scroll-margin-top: 20px;
+	transition: background-color var(--dur-toggle) var(--ease-menu);
+}
+.bug-item::after {
+	position: absolute;
+	z-index: 2;
+	border-radius: inherit;
+	box-shadow: var(--shadow-card);
+	content: '';
+	inset: 0;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--dur-toggle) var(--ease-menu);
 }
 .bug-item[data-tone='high'] {
 	--bug-mark: var(--sev-high-icon);
@@ -36,7 +51,9 @@
 }
 .bug-item[data-open] {
 	background: var(--bg-raised);
-	box-shadow: var(--shadow-card);
+}
+.bug-item[data-open]::after {
+	opacity: 1;
 }
 .bug-item[data-place='diff'] {
 	max-width: 760px;
@@ -45,34 +62,45 @@
 [data-ui='code-lines'][data-layout='split'] .bug-item[data-place='diff'] {
 	max-width: none;
 }
+/*
+ * The header is the one toggle, open or shut, and keeps its geometry either way: its first line sits in the same
+ * place, so the caret and the title never move under the pointer. Open, a long title wraps under that line.
+ */
 .bug-head {
 	display: grid;
 	width: 100%;
 	min-height: 36px;
-	align-items: center;
+	align-items: start;
 	grid-template-areas: 'severity title category . where caret';
 	grid-template-columns: auto minmax(0, max-content) auto minmax(0, 1fr) auto auto;
 	column-gap: 10px;
 	padding: 7px 12px;
 	border-radius: inherit;
 	outline: none;
+	line-height: 22px;
 	text-align: left;
 	transition: background-color var(--dur-hover) var(--ease-hover);
 }
-.bug-item:not([data-open]) .bug-head:hover {
+.bug-head:hover {
 	background: rgb(var(--wash-rgb) / 0.05);
 }
 .bug-head:focus-visible {
 	box-shadow: var(--focus-ring);
 }
-/* Open, the severity line sits over the title. */
-.bug-item[data-open] .bug-head {
-	grid-template-areas:
-		'severity category . where caret'
-		'title title title title title';
-	grid-template-columns: auto auto minmax(0, 1fr) auto auto;
-	row-gap: 6px;
-	padding: 12px 14px 0;
+/* Open, the header is the card's top, opaque so it can stay in view over its own body. */
+.bug-item[data-open] > .bug-head {
+	border-bottom-right-radius: 0;
+	border-bottom-left-radius: 0;
+	background: var(--bg-raised);
+}
+.bug-item[data-open] > .bug-head:hover {
+	background: color-mix(in srgb, var(--bg-raised), rgb(var(--wash-rgb)) 5%);
+}
+/* On the Review tab a long finding scrolls under its header, so the way to shut it stays in reach. */
+.bug-item[data-place='review'][data-open] > .bug-head {
+	position: sticky;
+	z-index: 1;
+	top: 0;
 }
 .bug-severity {
 	display: inline-flex;
@@ -103,7 +131,6 @@
 	color: var(--text-primary);
 	font-size: 13.5px;
 	font-weight: 500;
-	line-height: 20px;
 	text-wrap: pretty;
 }
 .bug-item:not([data-open]) .bug-title {
@@ -121,6 +148,7 @@
 .bug-caret {
 	width: 14px;
 	height: 14px;
+	margin-top: 4px;
 	grid-area: caret;
 	color: var(--text-faint);
 	transition: rotate var(--dur-toggle) var(--ease-menu);
@@ -142,7 +170,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
-	padding: 8px 14px 14px;
+	padding: 4px 12px 14px;
 }
 .bug-body [data-ui='markdown'] {
 	max-width: 72ch;
