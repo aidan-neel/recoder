@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import { usePathname } from '@/lib/shell/navigation';
-import { isLiveApp, routeOf, titleOf, type Route } from '@/lib/shell/routes';
+import { isLiveApp, routeOf, settingsHref, titleOf, type Route } from '@/lib/shell/routes';
 
 import { AutomationsScreen } from '@/components/automations/automations-screen';
 import { ChatScreen } from '@/components/chat/chat-screen';
@@ -51,6 +51,14 @@ function Screen({ route, live }: { route: Route; live: boolean }) {
 }
 
 /**
+ * Which page a path shows. Settings → Server's views have paths of their own, so a link opens one, but they are tabs of
+ * one page: moving between them keeps it, and the view switch keeps focus.
+ */
+function pageOf(route: Route, pathname: string): string {
+	return route.screen === 'settings' && route.view ? settingsHref(route.section) : pathname;
+}
+
+/**
  * The page beside the sidebar, picked from the address in the browser. Every
  * screen's code is already here, so a click on a link renders the next page
  * in the same frame: no request, and no wait on the old page. Another path
@@ -67,5 +75,5 @@ export function Screens() {
 		document.title = `${title} · ${APP_NAME}`;
 	}, [title]);
 
-	return <Screen key={pathname} route={route} live={isLiveApp(base)} />;
+	return <Screen key={pageOf(route, pathname)} route={route} live={isLiveApp(base)} />;
 }
