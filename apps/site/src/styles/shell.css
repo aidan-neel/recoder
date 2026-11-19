@@ -47,12 +47,20 @@ body {
 	flex-direction: column;
 	padding: 0 10px 10px;
 }
+/* The head row, as the app's: the wordmark, then the search as a quiet icon at its end. */
+.site-head {
+	display: flex;
+	height: var(--bar-height);
+	flex: none;
+	align-items: center;
+	justify-content: space-between;
+	gap: 2px;
+}
 .site-wordmark {
 	display: flex;
 	height: var(--bar-height);
 	flex: none;
 	align-items: center;
-	align-self: flex-start;
 	padding: 0 8px;
 	border-radius: var(--radius-control);
 	color: var(--text-primary);
@@ -63,23 +71,6 @@ body {
 }
 .site-wordmark:focus-visible {
 	box-shadow: var(--focus-ring);
-}
-
-/* The search is a button shaped like a field: it opens the palette. */
-.site-search {
-	width: 100%;
-	flex: none;
-	justify-content: flex-start;
-	gap: 8px;
-	padding: 0 5px 0 8px;
-	color: var(--text-faint);
-}
-.site-search svg {
-	color: var(--text-faint);
-}
-.site-search-label {
-	flex: 1;
-	text-align: left;
 }
 
 .site-nav {
@@ -97,11 +88,53 @@ body {
 .site-nav [data-ui='hover-list-highlight'] {
 	border-radius: var(--radius-row);
 }
-.site-nav-label {
-	display: flex;
-	height: 34px;
-	align-items: flex-end;
-	padding: 0 8px 6px;
+/* A row is its link and, on a docs page with sections, the chevron at its end. */
+.nav-row {
+	position: relative;
+}
+/* The open page's fill is a pill that travels from the page before (`NavPill` with a layout id), not the row's own fill. */
+.site-nav .nav-item[data-active] {
+	background: none;
+}
+.site-nav [data-ui='nav-pill'] {
+	background-color: var(--bg-hover);
+}
+/* A press sinks the row a little; it lets go on the settle spring. */
+.site-nav .nav-item,
+.site-section {
+	transition:
+		color var(--dur-hover) ease-out,
+		scale var(--site-dur-settle) var(--site-ease-settle);
+}
+.site-nav .nav-item:active,
+.site-section:active {
+	scale: var(--site-press-scale);
+	transition-duration: var(--dur-hover);
+}
+.nav-row:has(.site-page-toggle) .nav-item {
+	padding-right: 32px;
+}
+.site-page-toggle {
+	position: absolute;
+	top: 0;
+	right: 0;
+	color: var(--text-faint);
+}
+/* Open is its resting state here, not a pressed one: no fill until hovered. */
+.site-page-toggle[data-state='open']:not(:hover) {
+	background-color: transparent;
+}
+.site-page-toggle:hover {
+	color: var(--text-primary);
+}
+/* The chevron points down while the sections show and turns to point at its row while they are folded, on the travel spring. */
+.site-page-toggle .site-page-chevron {
+	width: 12px;
+	height: 12px;
+	transition: rotate var(--site-dur-travel) var(--site-ease-travel);
+}
+.site-page-toggle[data-state='closed'] .site-page-chevron {
+	rotate: -90deg;
 }
 
 /* The open page's sections hang on a track under its row; a bright stretch of it slides to the one in view. */
@@ -121,8 +154,8 @@ body {
 }
 .site-section-marker[data-placed] {
 	transition:
-		transform 260ms var(--ease-out),
-		height 260ms var(--ease-out),
+		transform var(--site-dur-travel) var(--site-ease-travel),
+		height var(--site-dur-travel) var(--site-ease-travel),
 		opacity var(--dur-hover) ease-out;
 }
 .site-section {
@@ -131,10 +164,9 @@ body {
 	align-items: center;
 	padding: 3px 8px 3px 12px;
 	color: var(--text-muted);
-	font-size: 12.5px;
+	font-size: var(--font-size-label);
 	line-height: 16px;
 	outline: none;
-	transition: color var(--dur-hover) ease-out;
 }
 .site-section:hover {
 	color: var(--text-primary);
@@ -148,9 +180,16 @@ body {
 	box-shadow: var(--focus-ring);
 }
 
-/* GitHub at the foot. Its mark is a filled glyph: it draws at 14px in the label's colour. */
-.site-github {
+/* GitHub and the theme switch at the foot. GitHub's mark is a filled glyph: it draws at 14px in the label's colour. */
+.site-foot {
+	display: flex;
 	flex: none;
+	align-items: center;
+	gap: 2px;
+}
+.site-github {
+	min-width: 0;
+	flex: 1;
 }
 .site-github .site-github-label {
 	flex: 1;
@@ -167,8 +206,8 @@ body {
 }
 
 /*
- * Narrow screens: the sidebar becomes a head row (the wordmark, then search
- * and GitHub as icons) over a row of pages that scrolls sideways. The
+ * Narrow screens: the sidebar becomes a head row (the wordmark, then search,
+ * the theme and GitHub as icons) over a row of pages that scrolls sideways. The
  * sections move into the page bar.
  */
 @media (max-width: 900px) {
@@ -185,13 +224,16 @@ body {
 		display: grid;
 		width: 100%;
 		height: auto;
-		grid-template-columns: 1fr auto auto;
+		grid-template-columns: 1fr auto auto auto;
 		grid-template-areas:
-			'wordmark search github'
-			'nav nav nav';
+			'wordmark search theme github'
+			'nav nav nav nav';
 		align-items: center;
 		column-gap: 2px;
 		padding: 0 8px;
+	}
+	.site-head {
+		display: contents;
 	}
 	.site-wordmark {
 		height: 48px;
@@ -199,7 +241,11 @@ body {
 		justify-self: start;
 		padding: 0 10px;
 	}
-	.site-search,
+	.site-search {
+		width: 32px;
+		height: 32px;
+		grid-area: search;
+	}
 	.nav-item.site-github {
 		width: 32px;
 		height: 32px;
@@ -207,28 +253,25 @@ body {
 		padding: 0;
 		color: var(--text-muted);
 	}
-	.site-search {
-		--button-shadow: 0 0 transparent;
-
-		grid-area: search;
-	}
-	.site-search svg {
-		width: 16px;
-		height: 16px;
-		color: inherit;
-	}
 	.nav-item.site-github {
+		flex: none;
 		grid-area: github;
+	}
+	.site-foot {
+		display: contents;
+	}
+	.site-theme {
+		width: 32px;
+		height: 32px;
+		grid-area: theme;
 	}
 	.nav-item.site-github svg {
 		width: 16px;
 		height: 16px;
 	}
-	.site-search-label,
-	.site-search-key,
 	.site-github .site-github-label,
 	.nav-item.site-github .site-github-arrow,
-	.site-nav-label,
+	.site-page-toggle,
 	.site-sections {
 		display: none;
 	}
@@ -243,7 +286,8 @@ body {
 		flex-direction: row;
 		gap: 2px;
 	}
-	.site-nav .nav-item {
+	.site-nav .nav-item,
+	.site-nav .nav-row:has(.site-page-toggle) .nav-item {
 		width: auto;
 		height: 30px;
 		padding: 0 10px;

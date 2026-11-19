@@ -1,15 +1,28 @@
 'use client';
 
-import { ForgeMark, HoverList, NavPill, RowButton } from '@recoder/ui';
-import { ArrowUpRightIcon } from '@phosphor-icons/react';
+import {
+	Button,
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+	ForgeMark,
+	HoverList,
+	NavPill,
+	RowButton,
+	Tooltip
+} from '@recoder/ui';
+import { ArrowUpRightIcon, CaretDownIcon, MoonIcon, SunIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+import { useTheme } from '@/lib/shell/theme';
 
 import type { NavPage } from '~/lib/docs';
+import { HANDOFF_MS, SECTION_UNFOLD, TRAVEL } from '~/lib/motion';
 import { REPO_URL } from '~/lib/site';
-import { useCurrentSection } from '~/lib/use-current-section';
 
+import { SectionList } from './section-list';
 import { SiteSearch } from './site-search';
 
 const HOME: NavPage = { href: '/', title: 'Home', sections: [] };
@@ -31,121 +44,97 @@ function revealCurrent(row: HTMLElement | null): void {
 	else if (item.right > box.right) row.scrollLeft += item.right - box.right;
 }
 
-/** One page's row: the app's sidebar row, filled in place when it is the open page. */
-function PageRow({ page, active }: { page: NavPage; active: boolean }) {
+/** A page's link: the app's sidebar row. The open page's fill travels here from the page before. */
+function PageLink({ page, active }: { page: NavPage; active: boolean }) {
 	return (
 		<RowButton asChild data-active={active || undefined} className="nav-item">
 			<Link href={page.href} aria-current={active ? 'page' : undefined}>
-				{active ? <NavPill /> : null}
+				{active ? <NavPill layoutId="site-nav-pill" transition={TRAVEL} /> : null}
 				{page.title}
 			</Link>
 		</RowButton>
 	);
 }
 
-/**
- * Keeps the track's marker on the section the reader is in, hidden above the
- * first one. It lands in place on the first paint and slides from then on;
- * it moves again when the track reflows (a font arriving, a width change).
- */
-function useTrackMarker(current: string | null) {
-	const track = useRef<HTMLUListElement>(null);
-	const marker = useRef<HTMLLIElement>(null);
-
-	useLayoutEffect(() => {
-		const list = track.current;
-		const bar = marker.current;
-
-		if (!list || !bar) return;
-
-		/** Puts the marker over the current link, or fades it out when there is none. */
-		function place(): void {
-			if (!list || !bar) return;
-
-			const link = list.querySelector<HTMLElement>('[aria-current]');
-
-			bar.style.opacity = link ? '1' : '0';
-
-			if (!link) return;
-
-			bar.style.transform = `translateY(${link.offsetTop}px)`;
-			bar.style.height = `${link.offsetHeight}px`;
-		}
-
-		place();
-
-		const frame = requestAnimationFrame(() => bar.setAttribute('data-placed', ''));
-		const observer = new ResizeObserver(place);
-
-		observer.observe(list);
-
-		return () => {
-			cancelAnimationFrame(frame);
-			observer.disconnect();
-		};
-	}, [current]);
-
-	return { track, marker };
+interface DocsPageItemProps {
+	page: NavPage;
+	active: boolean;
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
 }
 
-/** The open page's sections on a track under its row. A marker slides to the one the reader is in as the page scrolls. */
-function SectionList({ sections }: { sections: NavPage['sections'] }) {
-	const current = useCurrentSection(sections.map((section) => section.id));
-	const { track, marker } = useTrackMarker(current);
+/** A docs page: its row, with a chevron at its end that unfolds the page's sections under it. */
+function DocsPageItem({ page, active, open, onOpenChange }: DocsPageItemProps) {
+	if (page.sections.length === 0) {
+		return (
+			<li className="nav-row">
+				<PageLink page={page} active={active} />
+			</li>
+		);
+	}
 
 	return (
-		<ul ref={track} className="site-sections">
-			<li ref={marker} className="site-section-marker" role="presentation" aria-hidden />
-			{sections.map((section) => (
-				<li key={section.id}>
-					<a
-						href={`#${section.id}`}
-						className="site-section"
-						aria-current={section.id === current ? 'location' : undefined}
-					>
-						{section.title}
-					</a>
-				</li>
-			))}
-		</ul>
+		<Collapsible asChild open={open} onOpenChange={onOpenChange}>
+			<li>
+				<div className="nav-row">
+					<PageLink page={page} active={active} />
+					<CollapsibleTrigger asChild>
+						<Button variant="ghost" size="icon" className="site-page-toggle" aria-label={`Sections of ${page.title}`}>
+							<CaretDownIcon aria-hidden className="site-page-chevron" />
+						</Button>
+					</CollapsibleTrigger>
+				</div>
+				<CollapsibleContent transition={SECTION_UNFOLD}>
+					<SectionList page={page} open={active} />
+				</CollapsibleContent>
+			</li>
+		</Collapsible>
 	);
 }
 
 /**
- * The site's sidebar, on the chrome beside the page's card: the wordmark,
- * the search, Home and the docs pages (the open one with its sections), and
- * GitHub at the foot. On narrow screens it is a head row and a row of pages
- * that scrolls sideways; the sections then open from the page bar.
+ * Which pages show their sections: the open page's, plus any the reader
+ * unfolded by hand. Going to another page unfolds it at once and folds the
+ * others a moment later, once the open page's fill has travelled to its row,
+ * so the fill never chases a row that is still moving. A deep link always
+ * shows where it landed.
  */
-export function SiteSidebar({ pages }: { pages: NavPage[] }) {
-	const pathname = usePathname();
-	const current = pathname.replace(/\/$/, '') || '/';
-	const row = useRef<HTMLElement>(null);
+function useUnfolded(current: string) {
+	const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(() => new Set([current]));
+	const [shownFor, setShownFor] = useState(current);
 
-	useEffect(() => revealCurrent(row.current), [current]);
+	if (shownFor !== current) {
+		setShownFor(current);
+		setUnfolded((before) => new Set(before).add(current));
+	}
+
+	useEffect(() => {
+		const timer = window.setTimeout(() => setUnfolded(new Set([current])), HANDOFF_MS);
+
+		return () => window.clearTimeout(timer);
+	}, [current]);
+
+	/** Unfolds or folds one page's sections. */
+	function toggle(href: string, open: boolean): void {
+		setUnfolded((before) => {
+			const next = new Set(before);
+
+			if (open) next.add(href);
+			else next.delete(href);
+
+			return next;
+		});
+	}
+
+	return { unfolded, toggle };
+}
+
+/** GitHub and the theme switch, at the foot. */
+function SidebarFoot() {
+	const toggleTheme = useTheme((state) => state.toggle);
 
 	return (
-		<aside className="site-sidebar">
-			<Link href="/" className="site-wordmark">
-				Recoder
-			</Link>
-			<SiteSearch pages={[HOME, ...pages]} />
-			<nav ref={row} className="site-nav" aria-label="Site">
-				<HoverList as="ul" itemSelector=".nav-item" className="site-nav-list">
-					<li>
-						<PageRow page={HOME} active={current === HOME.href} />
-					</li>
-					<li role="presentation" className="site-nav-label section-label">
-						Docs
-					</li>
-					{pages.map((page) => (
-						<li key={page.href}>
-							<PageRow page={page} active={page.href === current} />
-							{page.href === current && page.sections.length > 0 ? <SectionList sections={page.sections} /> : null}
-						</li>
-					))}
-				</HoverList>
-			</nav>
+		<div className="site-foot">
 			<RowButton asChild className="nav-item site-github">
 				<a href={REPO_URL} target="_blank" rel="noopener noreferrer" aria-label="GitHub">
 					<ForgeMark provider="github" />
@@ -153,6 +142,56 @@ export function SiteSidebar({ pages }: { pages: NavPage[] }) {
 					<ArrowUpRightIcon aria-hidden className="site-github-arrow" />
 				</a>
 			</RowButton>
+			<Tooltip content="Switch theme">
+				<Button variant="ghost" size="icon" className="site-theme" aria-label="Switch theme" onClick={toggleTheme}>
+					<SunIcon className="hidden dark:block" />
+					<MoonIcon className="dark:hidden" />
+				</Button>
+			</Tooltip>
+		</div>
+	);
+}
+
+/**
+ * The site's sidebar, on the chrome beside the page's card: the wordmark
+ * and the search, Home and the docs pages (each folding its sections, the open
+ * one unfolded), and GitHub and the theme at the foot. On narrow screens it
+ * is a head row and a row of pages that scrolls sideways; the sections then
+ * open from the page bar.
+ */
+export function SiteSidebar({ pages }: { pages: NavPage[] }) {
+	const pathname = usePathname();
+	const current = pathname.replace(/\/$/, '') || '/';
+	const row = useRef<HTMLElement>(null);
+	const { unfolded, toggle } = useUnfolded(current);
+
+	useEffect(() => revealCurrent(row.current), [current]);
+
+	return (
+		<aside className="site-sidebar">
+			<div className="site-head">
+				<Link href="/" className="site-wordmark">
+					Recoder
+				</Link>
+				<SiteSearch pages={[HOME, ...pages]} />
+			</div>
+			<nav ref={row} className="site-nav" aria-label="Site">
+				<HoverList as="ul" itemSelector=".nav-row" className="site-nav-list">
+					<li className="nav-row">
+						<PageLink page={HOME} active={current === HOME.href} />
+					</li>
+					{pages.map((page) => (
+						<DocsPageItem
+							key={page.href}
+							page={page}
+							active={page.href === current}
+							open={unfolded.has(page.href)}
+							onOpenChange={(open) => toggle(page.href, open)}
+						/>
+					))}
+				</HoverList>
+			</nav>
+			<SidebarFoot />
 		</aside>
 	);
 }

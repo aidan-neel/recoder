@@ -1,0 +1,65 @@
+/* ───────── Motion tokens ───────── */
+/*
+ * The site's springs for CSS, made from the ones in `lib/motion.ts` with
+ * motion's `spring(visualDuration, bounce)`: `travel` for things that move
+ * or turn (the chevrons, the section marker), `settle` for things that come
+ * to rest with no overshoot (a press letting go, the page bar's progress).
+ * Each curve goes with its duration. A press sinks quickly and lets go on
+ * `settle`.
+ */
+:root {
+	--site-ease-travel: linear(
+		0,
+		0.0972,
+		0.2992,
+		0.5156,
+		0.7014,
+		0.8406,
+		0.9338,
+		0.9892,
+		1.0172,
+		1.0275,
+		1.0275,
+		1.0228,
+		1.0166,
+		1.0108,
+		1.0062,
+		1.003,
+		1.0009,
+		0.9998,
+		1,
+		1
+	);
+	--site-dur-travel: 600ms;
+	--site-ease-settle: linear(
+		0,
+		0.1277,
+		0.3499,
+		0.5526,
+		0.7064,
+		0.8135,
+		0.8842,
+		0.9294,
+		0.9575,
+		0.9747,
+		0.9851,
+		0.9913,
+		0.9949,
+		0.9971,
+		0.9983,
+		0.999,
+		1
+	);
+	--site-dur-settle: 500ms;
+	--site-press-scale: 0.985;
+	--site-dur-arrive: 1.33s;
+}
+
+/* Reduced motion: things still change, nothing moves. Colors and fades keep their timing. */
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--site-dur-travel: 0ms;
+		--site-dur-settle: 0ms;
+		--site-press-scale: 1;
+	}
+}
