@@ -605,24 +605,39 @@ comment field. There is no second implementation.
 A repository chat reads like a Capy thread (Paper variant D, "Line", in the
 AID-8 file).
 
-- **Turns.** The person's question sits on a tint at the right. The hour
-  shows centred over a question that opens a conversation or follows a rest
-  of more than five minutes. Recoder's reply is prose on the page.
-- **What it did.** Under the question, one centred line with no rule:
-  `Working for 8s`, which sweeps while the reply works and whose seconds
-  roll like Capy's counters (`AnimatedNumber`), then `Worked for 13s`. While the reply works, its steps arrive
-  under that line, one quiet line each, ending in how long the step took.
-  They fold away once the answer begins, and pressing the line opens them
-  again. A step with more to show (the files a search or a read found, a
-  command and its output, a thought's text) opens under its own line on
-  request, and only a failed command starts open.
+- **Column.** The thread and the composer share one 864px column
+  (`--page-measure`), with 24px between turns.
+- **Turns.** The person's question sits on `--bg-bubble` at the right,
+  7px by 12px inside, at most 77% of the column. The hour shows centred over
+  a question that opens a conversation or follows a rest of more than five
+  minutes. Recoder's reply is prose on the page in the primary ink on 20px
+  lines; links take the accent, inline code a chip, list markers the
+  reply's own ink. A fenced block is a code block titled with its language,
+  and a table is one rounded box with hairlines between rows.
+- **What it did.** Under the question, one centred line in the meta size and
+  `--text-dim`: `Working for 8s`, which sweeps from send to done and
+  whose seconds roll like Capy's counters (`AnimatedNumber`), then crossfades
+  to `Worked for 13s`, counted to the moment the reply ended
+  (`endedAt`). The line is the same one line from send to done and its
+  height never changes. The steps start folded, while the reply works too;
+  pressing the line opens them, a hairline runs out to the column's edges on
+  either side of it while they are open, and the thread keeps the person's
+  choice. Each step is one 32px line in the muted ink ending in how long it
+  took; its chevron shows only under the pointer or once it is open. A step
+  with more to show (the files a search or a read found, a command and its
+  output, a thought's text) opens under its own line on request, and only a
+  failed command starts open. A live trail opened at the end stays in view
+  as it grows.
+- **Composer.** `--radius-card` on the composer's ground, one row tall at
+  rest, the placeholder in `--text-ghost`.
 - **Streaming.** The reply's text goes out a few words at a time, and each
   stretch that arrives fades from transparent to its colour over 160ms on a
   strong ease-out, drawn with CSS custom highlights so nothing moves or
   blurs (`useStreamFade`). Code stands at once.
 - **Scroll.** The thread follows a reply while the person reads the end.
-  Scrolling up stops the following and shows a Scroll to end pill centred
-  over the composer, which brings the end back and follows again.
+  Scrolling up stops the following and shows a Scroll to end button centred
+  over the composer, on the page's ground so the text under it stays out of
+  sight, which brings the end back and follows again.
 
 ## Motion
 
