@@ -633,8 +633,8 @@ Motion explains a change and never makes the person wait.
   frame, as a Mac app's content does beside its sidebar: what sits on the
   gutter moves with the edge, a centred column (Settings, Chat, New) glides at
   half the pace, what sits at the right holds still, and nothing snaps when the
-  slide ends. A column centres on 100% of the page, not 100cqw, whose padding
-  the kit's 1ms reduced-motion transition held a frame behind a snap. A page
+  slide ends. A column centres on 100% of the page, not 100cqw, which
+  resolves in style rather than layout. A page
   that changes layout at a width keys it to `--page-rest`, the width the page
   settles at, which the frame sets the moment the sidebar toggles: the pull
   request header splits its badges onto their own line from it, so they move
@@ -691,9 +691,12 @@ Motion explains a change and never makes the person wait.
   on release. The menu highlight still travels between items in 90ms
   (`--motion-hover`) and lands on the item before its fade ends. Nothing on
   a keyboard path runs longer than about 130ms.
-- `prefers-reduced-motion` turns movement into plain swaps. Hover's colour
-  fades stay, since they move nothing, and a menu highlight fades in on its
-  item without travelling there.
+- `prefers-reduced-motion` turns movement into plain swaps. A transition a
+  component declares lands on its end value in the frame it starts and still
+  sends `transitionend` when its time is up; nothing else gets a transition,
+  so a style change paints in its own frame. Hover's colour fades stay, since
+  they move nothing, and a menu highlight fades in on its item without
+  travelling there.
 
 ## Interaction rules
 
