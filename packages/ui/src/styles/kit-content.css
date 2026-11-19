@@ -27,7 +27,7 @@
 	min-height: 22px;
 	grid-template-columns: var(--code-columns);
 	background-image: linear-gradient(var(--code-line-wash), var(--code-line-wash));
-	transition: --code-line-wash var(--dur-hover) ease-out;
+	transition: --code-line-wash var(--dur-hover) var(--ease-hover);
 }
 [data-ui='code-line'][data-clickable]:hover {
 	--code-line-wash: rgb(var(--wash-rgb) / 0.05);
@@ -134,7 +134,7 @@
 	top: 7px;
 	right: 7px;
 	opacity: 0;
-	transition: opacity var(--dur-hover) ease-out;
+	transition: opacity var(--dur-hover) var(--ease-hover);
 }
 /* On a one-line block it sits on a strip of the block's fill at the right edge, so a long line slides under it. */
 :where([data-ui='code-block'][data-layout='single-line']) [data-ui='code-block-copy'] {
@@ -355,7 +355,7 @@
 	text-decoration-color: var(--line-hover);
 	text-decoration-thickness: 1px;
 	text-underline-offset: 2px;
-	transition: text-decoration-color var(--dur-hover) ease-out;
+	transition: text-decoration-color var(--dur-hover) var(--ease-hover);
 }
 [data-ui='markdown'] :where(a):hover {
 	text-decoration-color: currentColor;

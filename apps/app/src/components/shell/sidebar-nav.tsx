@@ -37,12 +37,12 @@ const LIVE_ROWS: NavRow[] = [
 	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpenIcon }
 ];
 
-/** The place the address belongs to, or null on a page the sidebar does not list (Settings). */
+/** The place the address belongs to, or null on a page the sidebar does not list, such as a chat. */
 function placeOf(pathname: string, base: string): Place | null {
 	const path = pathname.slice(base.length) || '/';
 
-	if (path === '/' || path.startsWith('/pulls')) return 'pulls';
 	if (path.startsWith('/new')) return 'new';
+	if (path === '/' || path.startsWith('/pulls')) return 'pulls';
 	if (path === '/repos') return 'repos';
 	if (pathname.startsWith(AUTOMATIONS_HREF)) return 'automations';
 	if (pathname.startsWith(GUIDELINES_HREF)) return 'guidelines';
@@ -51,8 +51,8 @@ function placeOf(pathname: string, base: string): Place | null {
 }
 
 /**
- * The places. The one on screen sits on a still fill; the count beside Pull requests is the open ones. The
- * sample lists only the places it has.
+ * New review, then the places. The place on screen sits on a still fill; the count beside Pull requests is the open
+ * ones. The sample lists only the places it has.
  */
 export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	const { base } = useApi();

@@ -35,17 +35,28 @@ function useMac(): boolean {
 	);
 }
 
-/** The printed label for a key name such as `a`, `Enter` or `mod+k`. */
+/** The modifiers a key name may start with (`mod+k`, `alt+shift+t`), as a Mac and as other keyboards print them. */
+const MODIFIERS: Record<string, { mac: string; other: string }> = {
+	mod: { mac: '⌘', other: 'Ctrl ' },
+	alt: { mac: '⌥', other: 'Alt ' },
+	shift: { mac: '⇧', other: 'Shift ' }
+};
+
+/** The printed label for a key name such as `a`, `Enter`, `mod+k` or `alt+shift+t`. */
 function keyLabel(key: string, mac = true): string {
 	if (key === 'mod') return mac ? '⌘' : 'Ctrl';
 	if (key === 'Alt') return mac ? '⌥' : 'Alt';
-	if (key.startsWith('mod+')) return `${mac ? '⌘' : 'Ctrl '}${keyLabel(key.slice(4), mac)}`;
+
+	const plus = key.indexOf('+', 1);
+	const modifier = plus > 0 ? MODIFIERS[key.slice(0, plus)] : undefined;
+
+	if (modifier) return `${mac ? modifier.mac : modifier.other}${keyLabel(key.slice(plus + 1), mac)}`;
 
 	return GLYPHS[key] ?? key.toUpperCase();
 }
 
 interface KeycapProps {
-	/** The key name, as the key map names it (`a`, `Enter`, `mod+k`, `?`). Presses of it flash this cap. */
+	/** The key name, as the key map names it (`a`, `Enter`, `mod+k`, `alt+t`, `?`). Presses of it flash this cap. */
 	k: string;
 	/**
 	 * Hidden from assistive tech by default, so a cap inside a button or a menu

@@ -30,8 +30,8 @@
 		text-align: left;
 		outline: none;
 		transition:
-			color var(--dur-hover) ease-out,
-			box-shadow var(--dur-hover) ease-out;
+			color var(--dur-hover) var(--ease-hover),
+			box-shadow var(--dur-hover) var(--ease-hover);
 	}
 	[data-ui='tree'] [data-tree-row]:hover,
 	[data-ui='tree'] [data-tree-row][aria-selected='true'] {

@@ -68,4 +68,26 @@ button,
 		animation-duration: var(--dur-spinner) !important;
 		animation-iteration-count: infinite !important;
 	}
+	/* Hover only changes colour on these, which is not movement, so it keeps its ease. */
+	[data-ui='button'],
+	[data-ui='row-button'],
+	[data-ui='row-button'] svg,
+	[data-ui='segmented-item'],
+	[data-ui='input'],
+	[data-ui='number-field'],
+	[data-ui='textarea'],
+	[data-ui='link-field'],
+	[data-ui='composer'],
+	[data-ui='command-bar-field'],
+	[data-ui='hover-list-highlight'],
+	[data-ui='menu-highlight'] {
+		transition-duration: var(--dur-hover) !important;
+	}
+	[data-ui='button']:active {
+		transition-duration: var(--dur-tap) !important;
+	}
+	/* A menu highlight fades in on its item and never travels there. */
+	[data-ui='menu-highlight'] {
+		transition-property: opacity !important;
+	}
 }

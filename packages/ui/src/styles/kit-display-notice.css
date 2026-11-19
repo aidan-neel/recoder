@@ -159,7 +159,7 @@
 		color: var(--text-muted);
 		font: inherit;
 		outline: none;
-		transition: color var(--dur-hover) ease-out;
+		transition: color var(--dur-hover) var(--ease-hover);
 	}
 	[data-ui='status-notice-footer'] [data-ui='collapsible-trigger']:hover {
 		color: var(--text-primary);

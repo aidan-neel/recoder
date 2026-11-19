@@ -67,7 +67,7 @@
 	line-height: 18px;
 	outline: none;
 	text-align: left;
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .tree-row:focus-visible {
 	box-shadow: inset 0 0 0 2px var(--focus-color);
@@ -292,7 +292,7 @@
 	font-weight: 500;
 	line-height: 18px;
 	outline: none;
-	transition: background-color var(--dur-hover) ease-out;
+	transition: background-color var(--dur-hover) var(--ease-hover);
 }
 .line-bug:hover {
 	background: var(--bg-hover);

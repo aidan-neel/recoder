@@ -217,7 +217,7 @@
 }
 .member-remove {
 	opacity: 0;
-	transition: opacity var(--dur-hover) ease-out;
+	transition: opacity var(--dur-hover) var(--ease-hover);
 }
 .settings-row:hover .member-remove,
 .member-remove:focus-visible,
@@ -241,29 +241,20 @@
 	border: 0;
 }
 
-/* ───────── Settings dialog: the sections on the left, the open one beside them ───────── */
-
-/*
- * The dialog fills the window but for a margin, on the page's canvas. The nav
- * keeps the sidebar's surface, lanes and rows; the open section scrolls under
- * a bar the height of the page bar, in the column the pages above use, so
- * `100cqw` is the pane's width.
- */
-.settings-modal {
-	flex-direction: row;
-	background: var(--bg-canvas);
-}
-.settings-modal-nav {
-	width: 220px;
-	flex-shrink: 0;
-	padding-top: 8px;
+/* ───────── Settings' sidebar: its sections under their search, on the sidebar's lanes ───────── */
+.settings-nav {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	padding-top: 4px;
 	overflow-y: auto;
-	border-right: 1px solid var(--line-subtle);
-	background: var(--bg-chrome);
+	overscroll-behavior: contain;
 }
 /* The search sits on the nav rows' edges, 8px in, its icon on their icon lane. */
 .settings-nav-search {
 	width: auto;
+	flex-shrink: 0;
 	margin: 0 8px 8px;
 }
 .settings-nav-empty {
@@ -271,47 +262,4 @@
 	color: var(--text-faint);
 	font-size: var(--font-size-meta);
 	line-height: 16px;
-}
-.settings-modal-nav [data-ui='hover-list-highlight'] {
-	border-radius: var(--radius-row);
-}
-.settings-modal-main {
-	display: flex;
-	min-width: 0;
-	flex: 1;
-	flex-direction: column;
-}
-.settings-modal-bar {
-	display: flex;
-	height: var(--bar-height);
-	flex-shrink: 0;
-	align-items: center;
-	gap: 8px;
-	padding: 0 8px 0 var(--page-gutter);
-	border-bottom: 1px solid var(--line-subtle);
-}
-.settings-modal-title {
-	font-weight: 400;
-	line-height: 18px;
-}
-.settings-modal-section {
-	overflow: hidden;
-	color: var(--text-primary);
-	font-weight: 500;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.settings-modal-end {
-	display: flex;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 6px;
-	margin-left: auto;
-}
-.settings-modal-scroll {
-	min-height: 0;
-	flex: 1;
-	overflow-y: auto;
-	overscroll-behavior: contain;
-	container-type: inline-size;
 }

@@ -1,4 +1,9 @@
-# Recoder
+<h1>
+	<picture>
+		<source media="(prefers-color-scheme: dark)" srcset="packages/ui/src/brand/recoder-lockup-dark.svg" />
+		<img alt="Recoder" src="packages/ui/src/brand/recoder-lockup-light.svg" height="56" />
+	</picture>
+</h1>
 
 A self-hosted pull request reviewer.
 

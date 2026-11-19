@@ -22,7 +22,8 @@
 		"./content": "./src/components/content/index.ts",
 		"./chart": "./src/components/chart/index.ts",
 		"./styles.css": "./src/styles/index.css",
-		"./px-to-rem": "./px-to-rem.ts"
+		"./px-to-rem": "./px-to-rem.ts",
+		"./brand/*": "./src/brand/*"
 	},
 	"scripts": {
 		"check": "tsc --noEmit",

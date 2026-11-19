@@ -35,10 +35,10 @@ interface SettingsNavProps {
 }
 
 /**
- * The Settings dialog's sections, on the sidebar's lanes, under a field that
- * narrows them to the ones whose name or contents hold the words typed; Enter
- * opens the first. The open one sits on a still fill. The admin's own sections
- * run under an Admin label below the rest.
+ * Settings' sections in the sidebar, on its lanes, under a field that narrows
+ * them to the ones whose name or contents hold the words typed; Enter opens
+ * the first. The open one sits on a still fill. The admin's own sections run
+ * under an Admin label below the rest.
  */
 export function SettingsNav({ active, admin, onSelect }: SettingsNavProps) {
 	const [query, setQuery] = useState('');
@@ -74,11 +74,11 @@ export function SettingsNav({ active, admin, onSelect }: SettingsNavProps) {
 	}
 
 	return (
-		<nav aria-label="Settings sections" className="settings-modal-nav">
+		<nav aria-label="Settings sections" className="settings-nav">
 			<Input
 				type="search"
 				aria-label="Search settings"
-				placeholder="Search"
+				placeholder="Search settings"
 				leading={<MagnifyingGlassIcon aria-hidden />}
 				value={query}
 				onChange={(event) => setQuery(event.target.value)}

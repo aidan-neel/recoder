@@ -51,8 +51,8 @@
 		cursor: default;
 		user-select: none;
 		transition:
-			background-color var(--dur-hover) ease-out,
-			color var(--dur-hover) ease-out;
+			background-color var(--dur-hover) var(--ease-hover),
+			color var(--dur-hover) var(--ease-hover);
 	}
 	a[data-ui='link-embed'] {
 		cursor: pointer;

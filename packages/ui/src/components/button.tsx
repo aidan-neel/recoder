@@ -33,9 +33,12 @@ export type ButtonStatus = 'idle' | 'pending' | 'success' | 'error';
  * recipes (`--shadow-raised`, `--shadow-edge`, `--shadow-primary` in
  * tokens.css) through `--button-shadow`, so the focus ring can sit over them.
  * Hover and press on the see-through variants lay a wash over whatever is
- * behind them, so they still show inside a hovered row. A press shades the
- * button; it never changes size. A failed action tints the button red while
- * its cross shows. These class lists hold no two classes that conflict, so
+ * behind them, so they still show inside a hovered row. The filled variants
+ * draw one gradient whose stops (`--button-top`, `--button-bottom`) are
+ * registered colours, so hover and press blend to darker stops instead of
+ * swapping the fill for a frame. Hover eases in and out over `--dur-hover`;
+ * a press shades in faster (`--dur-tap`) and eases back on release. A press
+ * shades the button; it never changes size. A failed action tints the button red while its cross shows. These class lists hold no two classes that conflict, so
  * they are plain strings: merging them as the module loads would set up
  * tailwind-merge on every route that imports the kit.
  */
@@ -43,7 +46,8 @@ const BASE = [
 	'relative inline-flex shrink-0 items-center justify-center whitespace-nowrap select-none outline-none',
 	'font-normal text-[length:var(--font-size-button)] leading-none',
 	'shadow-(--button-shadow) focus-visible:shadow-[var(--focus-ring),var(--button-shadow)]',
-	'transition-[background-color,color,box-shadow] duration-(--dur-hover) ease-out',
+	'transition-[background-color,color,box-shadow,filter,--button-top,--button-bottom] duration-(--dur-hover) ease-(--ease-hover)',
+	'active:duration-(--dur-tap) active:ease-out',
 	'disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none [&_svg]:pointer-events-none',
 	'data-[status=error]:[background:var(--danger-tint)] data-[status=error]:text-danger',
 	'data-[status=error]:[--button-shadow:inset_0_0_0_1px_color-mix(in_oklab,var(--danger)_30%,transparent)]'
@@ -61,15 +65,23 @@ const WASH = [
 /** The hairline and dark outline of the outline button, the edge a chip or a field draws. */
 const EDGE = '[--button-shadow:var(--shadow-edge)] hover:[--button-shadow:var(--shadow-edge-hover)]';
 
+/** The gradient a filled button draws from its two stops, which each variant and state sets. */
+const FILL = '[background:linear-gradient(180deg,var(--button-top),var(--button-bottom))]';
+
 const VARIANTS: Record<ButtonVariant, string> = {
 	primary: [
-		'[background:var(--fill-primary)] font-medium text-(--on-primary) [--button-shadow:var(--shadow-primary)]',
-		'hover:[background:var(--fill-primary-hover)] active:[background:var(--primary)] data-[state=open]:[background:var(--fill-primary-hover)]'
+		`${FILL} font-medium text-(--on-primary) [--button-shadow:var(--shadow-primary)]`,
+		'[--button-top:var(--fill-primary-top)] [--button-bottom:var(--fill-primary-bottom)]',
+		'hover:[--button-top:var(--fill-primary-hover-top)] hover:[--button-bottom:var(--fill-primary-hover-bottom)]',
+		'data-[state=open]:[--button-top:var(--fill-primary-hover-top)] data-[state=open]:[--button-bottom:var(--fill-primary-hover-bottom)]',
+		'active:[--button-top:var(--fill-primary-press-top)] active:[--button-bottom:var(--fill-primary-press-bottom)]'
 	].join(' '),
 	secondary: [
-		'[background:var(--fill-raised)] text-fg [--button-shadow:var(--shadow-raised)]',
-		'hover:[background:var(--fill-raised-hover)] hover:[--button-shadow:var(--shadow-raised-hover)]',
-		'active:[background:var(--fill-raised-press)] data-[state=open]:[background:var(--fill-raised-hover)]'
+		`${FILL} text-fg [--button-shadow:var(--shadow-raised)] hover:[--button-shadow:var(--shadow-raised-hover)]`,
+		'[--button-top:var(--fill-raised-top)] [--button-bottom:var(--fill-raised-bottom)]',
+		'hover:[--button-top:var(--fill-raised-hover-top)] hover:[--button-bottom:var(--fill-raised-hover-bottom)]',
+		'data-[state=open]:[--button-top:var(--fill-raised-hover-top)] data-[state=open]:[--button-bottom:var(--fill-raised-hover-bottom)]',
+		'active:[--button-top:var(--fill-raised-press-top)] active:[--button-bottom:var(--fill-raised-press-bottom)]'
 	].join(' '),
 	outline: `bg-transparent text-fg ${EDGE} ${WASH} data-[state=open]:bg-[rgb(var(--wash-rgb)/6%)]`,
 	ghost: [

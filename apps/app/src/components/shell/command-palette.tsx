@@ -30,6 +30,7 @@ import { useApi } from '@/lib/api/client';
 import type { PullRow, PullTarget } from '@/lib/pulls/types';
 import { useOpenPull } from '@/lib/pulls/use-open-pull';
 import { useRowEntries } from '@/lib/pulls/use-rows';
+import { openSettings } from '@/lib/settings/open-settings';
 import { useChrome } from '@/lib/shell/chrome';
 import { navigate } from '@/lib/shell/navigation';
 import { errorToast } from '@/lib/shell/notify';
@@ -88,7 +89,6 @@ export function CommandPalette() {
 	const open = useChrome((state) => state.paletteOpen);
 	const setOpen = useChrome((state) => state.setPaletteOpen);
 	const setShortcutsOpen = useChrome((state) => state.setShortcutsOpen);
-	const openSettings = useChrome((state) => state.openSettings);
 	const toggleTheme = useTheme((state) => state.toggle);
 	const admin = useIsAdmin();
 	const entries = useRowEntries();

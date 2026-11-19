@@ -202,7 +202,7 @@
 		flex-basis: 0;
 		border-radius: 2px;
 		outline: none;
-		transition: opacity var(--dur-hover) ease-out;
+		transition: opacity var(--dur-hover) var(--ease-hover);
 	}
 	[data-ui='stacked-bar']
 		[data-part='track']:is(:hover, :focus-within)

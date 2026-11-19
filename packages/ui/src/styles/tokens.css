@@ -48,7 +48,7 @@
 	--text-brief-body: #8f8a82;
 
 	/* Primary (swappable; on-primary follows luminance) */
-	--primary: #4062e2;
+	--primary: #2f6bf0;
 	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
 	--on-primary: #ffffff;
 
@@ -98,9 +98,13 @@
 	--lift-float: 0 3px 8px rgb(0 0 0 / 0.22), 0 12px 32px rgb(0 0 0 / 0.3);
 	--lift-sheet: 0 6px 18px rgb(0 0 0 / 0.3), 0 24px 64px rgb(0 0 0 / 0.42);
 	--lift-composer: 0 3px 8px rgb(0 0 0 / 0.1), 0 2px 5px rgb(0 0 0 / 0.1), 0 1px 1px rgb(0 0 0 / 0.1);
-	--fill-raised: linear-gradient(180deg, rgb(255 255 255 / 0.085), rgb(255 255 255 / 0.055));
-	--fill-raised-hover: linear-gradient(180deg, rgb(255 255 255 / 0.11), rgb(255 255 255 / 0.08));
-	--fill-raised-press: rgb(255 255 255 / 0.06);
+	--fill-raised-top: rgb(255 255 255 / 0.085);
+	--fill-raised-bottom: rgb(255 255 255 / 0.055);
+	--fill-raised-hover-top: rgb(255 255 255 / 0.11);
+	--fill-raised-hover-bottom: rgb(255 255 255 / 0.08);
+	--fill-raised-press-top: rgb(255 255 255 / 0.065);
+	--fill-raised-press-bottom: rgb(255 255 255 / 0.045);
+	--fill-raised: linear-gradient(180deg, var(--fill-raised-top), var(--fill-raised-bottom));
 	--fill-well: rgb(0 0 0 / 0.22);
 	--primary-sheen: rgb(255 255 255 / 0.45);
 	--primary-ring: rgb(0 0 0 / 0.5);
@@ -108,12 +112,16 @@
 	--primary-drop: 0 2px 4px rgb(0 0 0 / 0.32);
 	--scrim: rgba(8, 7, 6, 0.6);
 
-	/* Motion: tuned for a tool opened thousands of times a day. Hover is near
-	   instant; menus and dialogs take a short, visible fade (180ms in, 130 to 150ms out);
-	   only movement that explains a change (a panel unfolding) gets a longer
-	   ease. Tune the app's feel here. */
+	/* Motion: tuned for a tool opened thousands of times a day. Hover eases in
+	   and out over a short 120ms, so a pointer crossing a list leaves a soft
+	   wake instead of a flicker; a press shades in faster (--dur-tap), so a
+	   click still feels instant. Menus and dialogs take a short, visible fade
+	   (180ms in, 130 to 150ms out); only movement that explains a change (a
+	   panel unfolding) gets a longer ease. Tune the app's feel here. */
 	--ease-menu: cubic-bezier(0.23, 1, 0.32, 1);
-	--dur-hover: 80ms;
+	--ease-hover: cubic-bezier(0.4, 0, 0.2, 1);
+	--dur-hover: 120ms;
+	--dur-tap: 60ms;
 	--dur-press: 110ms;
 	--dur-highlight: 100ms;
 	--dur-toggle: 210ms;
@@ -175,7 +183,7 @@
 	--text-ghost: #a8a39b;
 	--text-brief-body: #6a655e;
 
-	--primary: #4062e2;
+	--primary: #2f6bf0;
 	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
 	--on-primary: #ffffff;
 
@@ -212,9 +220,13 @@
 	--lift-float: 0 3px 9px rgb(0 0 0 / 0.06), 0 12px 32px rgb(0 0 0 / 0.08);
 	--lift-sheet: 0 6px 24px rgb(0 0 0 / 0.08), 0 24px 64px rgb(0 0 0 / 0.12);
 	--lift-composer: 0 4px 12px rgb(0 0 0 / 0.025), 0 2px 6px rgb(0 0 0 / 0.03), 0 1px 1px rgb(0 0 0 / 0.04);
-	--fill-raised: linear-gradient(180deg, #ffffff, #f9f9f9);
-	--fill-raised-hover: linear-gradient(180deg, #fbfbfb, #f3f3f4);
-	--fill-raised-press: #f1f1f2;
+	--fill-raised-top: #ffffff;
+	--fill-raised-bottom: #f9f9f9;
+	--fill-raised-hover-top: #fbfbfb;
+	--fill-raised-hover-bottom: #f3f3f4;
+	--fill-raised-press-top: #f2f2f3;
+	--fill-raised-press-bottom: #ececed;
+	--fill-raised: linear-gradient(180deg, var(--fill-raised-top), var(--fill-raised-bottom));
 	--fill-well: rgb(0 0 0 / 0.045);
 	--primary-sheen: rgb(255 255 255 / 0.14);
 	--primary-ring: black;
@@ -390,10 +402,11 @@
 	--shadow-composer-focus: inset 0 0 0 1px var(--edge-focus), 0 0 0 1px var(--edge-outline), var(--lift-composer);
 	--primary-edge: color-mix(in oklab, var(--primary) var(--primary-ring-tint), var(--primary-ring));
 	--shadow-primary: inset 0 1px 0 var(--primary-sheen), 0 0 0 1px var(--primary-edge), var(--primary-drop);
-	--fill-primary: linear-gradient(180deg, color-mix(in oklab, var(--primary) 94%, white), var(--primary));
-	--fill-primary-hover: linear-gradient(
-		180deg,
-		color-mix(in oklab, var(--primary-hover) 94%, white),
-		var(--primary-hover)
-	);
+	--primary-press: color-mix(in oklab, var(--primary) 82%, black);
+	--fill-primary-top: color-mix(in oklab, var(--primary) 98%, white);
+	--fill-primary-bottom: var(--primary);
+	--fill-primary-hover-top: color-mix(in oklab, var(--primary-hover) 98%, white);
+	--fill-primary-hover-bottom: var(--primary-hover);
+	--fill-primary-press-top: color-mix(in oklab, var(--primary-press) 96%, white);
+	--fill-primary-press-bottom: var(--primary-press);
 }

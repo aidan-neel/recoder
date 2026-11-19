@@ -212,7 +212,7 @@
 		list-style: none;
 		opacity: 0;
 		pointer-events: none;
-		transition: opacity var(--dur-highlight) ease-out;
+		transition: opacity var(--dur-hover) var(--ease-hover);
 	}
 	[data-ui='hover-list-highlight'][data-state='on'] {
 		opacity: 1;
@@ -263,8 +263,8 @@
 		text-decoration: none;
 		outline: none;
 		transition:
-			color var(--dur-hover) ease-out,
-			box-shadow var(--dur-hover) ease-out;
+			color var(--dur-hover) var(--ease-hover),
+			box-shadow var(--dur-hover) var(--ease-hover);
 	}
 	[data-ui='row-button']:focus-visible {
 		box-shadow: var(--focus-ring);

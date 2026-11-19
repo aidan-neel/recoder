@@ -95,7 +95,7 @@
 	width: 16px;
 	height: 16px;
 	color: var(--text-ghost);
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .automations-link-row:hover .settings-row-end svg,
 .automations-link-row:focus-within .settings-row-end svg {
