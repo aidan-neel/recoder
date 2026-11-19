@@ -1,6 +1,6 @@
 import type { SetupStep as Step } from '@recoder/shared';
 import { StatusGlyph, SwapText } from '@recoder/ui';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 import { STEP_ORDER } from '@/lib/setup/setup-steps';
 import type { SaveState } from '@/lib/settings/use-save-state';
@@ -37,6 +37,31 @@ function StepMark({ number, done, current }: { number: number; done: boolean; cu
 	);
 }
 
+/** The controls a step's body can hand focus to, in document order. */
+const FOCUSABLE =
+	'input:not([disabled]), button:not([disabled]), select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
+
+/**
+ * The step's body, which takes focus as the step becomes current when the step before took it down with it: the
+ * control that finished that step unmounts, so focus would fall to the page and the keyboard would lose its place.
+ */
+function useTakeFocus(current: boolean) {
+	const body = useRef<HTMLDivElement>(null);
+	const was = useRef(current);
+
+	useEffect(() => {
+		const became = current && !was.current;
+
+		was.current = current;
+
+		if (!became || document.activeElement !== document.body) return;
+
+		body.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+	}, [current]);
+
+	return body;
+}
+
 /** The row's one line: the fact once done, nothing while current (the body says it), else what the step is about. */
 function detailOf(step: Step, current: boolean, hint: string): string | null {
 	if (step.done) return step.fact ?? null;
@@ -48,6 +73,7 @@ function detailOf(step: Step, current: boolean, hint: string): string | null {
 export function SetupStep({ name, step, current, hint, code, state, body, open, children }: SetupStepProps) {
 	const detail = detailOf(step, current, hint);
 	const opened = current || (open ?? false);
+	const focusBody = useTakeFocus(current);
 
 	return (
 		<div className="setup-step" data-current={current || undefined} data-done={step.done || undefined}>
@@ -66,7 +92,11 @@ export function SetupStep({ name, step, current, hint, code, state, body, open, 
 			>
 				{children}
 			</SettingsRow>
-			{opened && body ? <div className="setup-body">{body}</div> : null}
+			{opened && body ? (
+				<div ref={focusBody} className="setup-body">
+					{body}
+				</div>
+			) : null}
 		</div>
 	);
 }
