@@ -14,14 +14,14 @@ const AskContext = createContext<(() => void) | null>(null);
  * so the dialog lives here, above them, and plays its exit as usual. A
  * cancelled review keeps no findings and cannot be resumed. When the dialog
  * closes, focus returns to the Cancel button if it is still there, else to
- * the new banner's primary action.
+ * the header's Review button.
  */
 export function CancelReviewHost({ children }: { children: ReactNode }) {
 	const run = useRunView();
 	const [asking, setAsking] = useState(false);
 	const ask = useCallback(() => setAsking(true), []);
 
-	/** The Cancel button is gone once the review stopped; the banner's button marked `data-run-primary` names the next step. */
+	/** The Cancel button is gone once the review stopped; the Review button, marked `data-run-primary`, names the next step. */
 	function focusPrimary(event: Event): void {
 		const primary = document.querySelector<HTMLElement>('[data-run-primary]');
 
