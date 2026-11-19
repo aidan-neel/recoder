@@ -27,13 +27,16 @@ function FlowBody({ flow }: { flow: ProviderFlow }) {
 /** Back, Cancel, and the step's action: Connect, Sign in or Finish sign-in. The list has no action of its own. */
 function FlowFooter({ flow }: { flow: ProviderFlow }) {
 	return (
-		<ModalFooter>
-			{flow.canGoBack ? (
-				<Button variant="ghost" className="provider-back" disabled={flow.sending} onClick={flow.back}>
-					<ArrowLeftIcon aria-hidden />
-					Back
-				</Button>
-			) : null}
+		<ModalFooter
+			start={
+				flow.canGoBack ? (
+					<Button variant="ghost" disabled={flow.sending} onClick={flow.back}>
+						<ArrowLeftIcon aria-hidden />
+						Back
+					</Button>
+				) : null
+			}
+		>
 			<ModalClose>
 				<Button variant="ghost" disabled={flow.sending}>
 					Cancel
@@ -69,7 +72,7 @@ function FlowPanel({ providerId, close, onSending }: FlowPanelProps) {
 
 	return (
 		<>
-			<ModalTitle>
+			<ModalTitle context="Providers">
 				<SwapText>{flow.title}</SwapText>
 			</ModalTitle>
 			<ModalBody>

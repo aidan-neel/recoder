@@ -54,7 +54,7 @@ export function RepoBrowser({ open, onOpenChange }: RepoBrowserProps) {
 	return (
 		<Modal open={open} onOpenChange={onOpenChange}>
 			<ModalContent onOpenAutoFocus={shell.onOpenAutoFocus}>
-				<ModalTitle>Add repository</ModalTitle>
+				<ModalTitle context="Repositories">Add repository</ModalTitle>
 				<BrowserBody shell={shell} />
 			</ModalContent>
 		</Modal>

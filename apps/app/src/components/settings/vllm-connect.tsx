@@ -32,7 +32,7 @@ function ConnectForm({ close, onSending }: ConnectFormProps) {
 
 	return (
 		<>
-			<ModalTitle>Connect a vLLM server</ModalTitle>
+			<ModalTitle context="Models">Connect a vLLM server</ModalTitle>
 			<ModalBody>
 				<form id={FORM_ID} className="server-form" onSubmit={submit}>
 					<Field label="Server address" hint="Recoder adds /v1 for you." error={flow.error}>
