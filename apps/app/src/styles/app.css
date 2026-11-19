@@ -3,6 +3,7 @@
 @import './palettes.css';
 @import './base.css';
 @import './shell.css';
+@import './thread-row.css';
 @import './settled.css';
 @import './pulls.css';
 @import './pull.css';

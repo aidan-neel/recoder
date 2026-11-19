@@ -5,7 +5,7 @@ import { SegmentedControl } from '@recoder/ui';
 import { MonitorIcon, MoonIcon, SunIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
-import { TYPEFACE } from '@/lib/appearance/choices';
+import { SIDEBAR_ROWS, TYPEFACE, type SidebarRowsId } from '@/lib/appearance/choices';
 import { useAppearance } from '@/lib/settings/use-appearance';
 
 import { PalettePicker } from './palette-picker';
@@ -33,9 +33,17 @@ const TYPEFACES = TYPEFACE.options.map((option) => ({
 	)
 }));
 
-/** Settings → Appearance: the theme, the typeface and the palette. They live in this browser, so they work without the review server. */
+const ROWS = SIDEBAR_ROWS.options.map((option) => ({ value: option.id, label: option.name }));
+
+const ROWS_DETAIL: Record<SidebarRowsId, string> = {
+	detailed: 'Title over repository and state',
+	compact: 'One line each'
+};
+
+/** Settings → Appearance: the theme, the typeface, the palette and the sidebar's rows. They live in this browser, so they work without the review server. */
 export function AppearanceSection() {
-	const { theme, pickTheme, palette, pickPalette, typeface, pickTypeface } = useAppearance();
+	const { theme, pickTheme, palette, pickPalette, typeface, pickTypeface, sidebarRows, pickSidebarRows } =
+		useAppearance();
 
 	/** The control gives back a string; only one of the three themes is ever saved. */
 	function chooseTheme(value: string): void {
@@ -51,6 +59,13 @@ export function AppearanceSection() {
 		if (next) pickTypeface(next.id);
 	}
 
+	/** The control gives back a string; only a density's own id is ever saved. */
+	function chooseRows(value: string): void {
+		const next = SIDEBAR_ROWS.options.find((option) => option.id === value);
+
+		if (next) pickSidebarRows(next.id);
+	}
+
 	return (
 		<div className="settings">
 			<SettingsGroup title="Theme">
@@ -63,6 +78,11 @@ export function AppearanceSection() {
 			</SettingsGroup>
 			<SettingsGroup title="Palette">
 				<PalettePicker value={palette} onPick={pickPalette} />
+			</SettingsGroup>
+			<SettingsGroup title="Layout">
+				<SettingsRow name="Sidebar rows" detail={ROWS_DETAIL[sidebarRows]}>
+					<SegmentedControl aria-label="Sidebar rows" value={sidebarRows} onValueChange={chooseRows} options={ROWS} />
+				</SettingsRow>
 			</SettingsGroup>
 		</div>
 	);

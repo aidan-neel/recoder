@@ -1,6 +1,6 @@
 import { THEME_KEY } from '@recoder/shared';
 
-import { PALETTE, TYPEFACE, type RootChoice } from './choices';
+import { PALETTE, SIDEBAR_ROWS, TYPEFACE, type RootChoice } from './choices';
 
 /** What the script needs of a choice: where it is saved, its attribute, and the picks that set the attribute. */
 interface ScriptChoice {
@@ -13,11 +13,11 @@ function toScriptChoice<Id extends string>({ key, attribute, options, fallback }
 	return { key, attribute, ids: options.map((option) => option.id).filter((id) => id !== fallback) };
 }
 
-const CHOICES = JSON.stringify([toScriptChoice(PALETTE), toScriptChoice(TYPEFACE)]);
+const CHOICES = JSON.stringify([toScriptChoice(PALETTE), toScriptChoice(TYPEFACE), toScriptChoice(SIDEBAR_ROWS)]);
 
 /**
  * Runs in `<head>` before first paint, so the page never flashes the wrong
- * theme, palette or typeface. The theme part mirrors `applyTheme` in
+ * theme, palette, typeface or sidebar rows. The theme part mirrors `applyTheme` in
  * @recoder/shared; the rest mirrors `readChoice`: a saved pick that is not
  * one of the choice's own sets nothing. Storage the browser blocks throws
  * here; the catch lets the page paint with the defaults, and the stores take

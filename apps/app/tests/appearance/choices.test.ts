@@ -1,18 +1,9 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 import { PALETTE, readChoice } from '../../src/lib/appearance/choices';
-import { memoryStorage } from '../fixtures';
+import { useMemoryStorage } from '../fixtures';
 
-const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
-
-beforeEach(() => {
-	Object.defineProperty(globalThis, 'localStorage', { value: memoryStorage(), configurable: true });
-});
-
-afterEach(() => {
-	if (original) Object.defineProperty(globalThis, 'localStorage', original);
-	else Reflect.deleteProperty(globalThis, 'localStorage');
-});
+useMemoryStorage();
 
 describe('reading the saved palette', () => {
 	test('a saved palette comes back as the pick', () => {
