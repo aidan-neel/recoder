@@ -68,20 +68,49 @@ describe('complexityResults', () => {
 	test('flags a symbol only past both the repo p95 and the absolute floor', () => {
 		const results = complexityResults(
 			model([
-				symbol({ name: 'long', metrics: { lines: 90, maxDepth: 2, params: 1 } }),
-				symbol({ name: 'pastP95Only', metrics: { lines: 55, maxDepth: 2, params: 1 } }),
-				symbol({ name: 'deep', metrics: { lines: 20, maxDepth: 5, params: 1 } })
+				symbol({ name: 'deep', metrics: { lines: 90, maxDepth: 5, params: 1 } }),
+				symbol({ name: 'pastP95Only', metrics: { lines: 90, maxDepth: 3, params: 1 } }),
+				symbol({ name: 'tiny', metrics: { lines: 20, maxDepth: 1, params: 1 } })
 			]),
 			added
 		);
 
-		expect(results.map((result) => result.symbol)).toEqual(['long', 'deep']);
-		expect(results[0].evidence).toContain('lines 90');
+		expect(results.map((result) => result.symbol)).toEqual(['deep']);
+		expect(results[0].evidence).toContain('maxDepth 5');
+		expect(results[0].severity).toBe('info');
+	});
+
+	test('never flags line count alone, at any length', () => {
+		const results = complexityResults(
+			model([symbol({ name: 'long', metrics: { lines: 200, maxDepth: 2, params: 1 } })], {
+				lines: 40,
+				maxDepth: 3,
+				params: 3
+			}),
+			added
+		);
+
+		expect(results).toEqual([]);
+	});
+
+	test('never flags a symbol under the size floor, even when the repo p95 is tiny', () => {
+		const results = complexityResults(
+			model(
+				[
+					symbol({ name: 'long', metrics: { lines: 90, maxDepth: 2, params: 1 } }),
+					symbol({ name: 'deep', metrics: { lines: 90, maxDepth: 5, params: 1 } })
+				],
+				{ lines: 10, maxDepth: 1, params: 1 }
+			),
+			added
+		);
+
+		expect(results.map((result) => result.symbol)).toEqual(['deep']);
 	});
 
 	test('uses the repo p95 when it is above the floor', () => {
 		const results = complexityResults(
-			model([symbol({ metrics: { lines: 90, maxDepth: 2, params: 1 } })], { lines: 120, maxDepth: 3, params: 3 }),
+			model([symbol({ metrics: { lines: 90, maxDepth: 5, params: 1 } })], { lines: 120, maxDepth: 6, params: 3 }),
 			added
 		);
 

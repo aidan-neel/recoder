@@ -1,4 +1,4 @@
-import type { FindingPatch, QualityCategory } from '@recoder/shared';
+import type { FindingPatch, FindingSeverity, QualityCategory } from '@recoder/shared';
 
 /** Which deterministic check produced a result. */
 export type DetectorId =
@@ -54,6 +54,8 @@ export interface DetectorResult {
 	diagnostic?: Diagnostic;
 	/** What the detector saw: the diagnostic line, the duplicate's location, the metric against the repo's p95. */
 	evidence: string;
+	/** A finding severity to publish at, when the detector's category default is wrong. Unset keeps the default. */
+	severity?: FindingSeverity;
 	/** On a weak-test suspicion: which mutation shape proves it. Absent means `generic`. */
 	shape?: SuspicionShape;
 	relatedLocations?: { file: string; line: number; endLine?: number }[];
