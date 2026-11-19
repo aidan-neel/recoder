@@ -31,6 +31,7 @@ ENV HOSTNAME=0.0.0.0
 
 COPY --from=build --chown=bun:bun /app/apps/app/.next/standalone ./
 COPY --from=build --chown=bun:bun /app/apps/app/.next/static ./apps/app/.next/static
+COPY --from=build --chown=bun:bun /app/apps/app/public ./apps/app/public
 
 USER bun
 EXPOSE 3000
