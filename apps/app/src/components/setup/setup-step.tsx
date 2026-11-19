@@ -37,17 +37,19 @@ function StepMark({ number, done, current }: { number: number; done: boolean; cu
 	);
 }
 
-/** The controls a step's body can hand focus to, in document order. */
-const FOCUSABLE =
-	'input:not([disabled]), button:not([disabled]), select, textarea, a[href], [tabindex]:not([tabindex="-1"])';
+/**
+ * The fields a step asks for. Its buttons are left out: one that disables while it works, as Run again does while the
+ * checks run, would drop focus again.
+ */
+const FIELD = 'input:not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled])';
 
 /**
- * The step's body, which takes focus as the step becomes current when the step before took it down with it: the
- * control that finished that step unmounts, so focus would fall to the page and the keyboard would lose its place.
- * Its first control takes it, or the body itself while every control waits, as the checks' buttons do while they run.
+ * The step, which takes focus as it becomes current when the step before took it down with it: the control that
+ * finished that step unmounts, so focus would fall to the page and the keyboard would lose its place. Its first field
+ * takes it, else the step itself, so the next Tab reaches its first control.
  */
 function useTakeFocus(current: boolean) {
-	const body = useRef<HTMLDivElement>(null);
+	const step = useRef<HTMLDivElement>(null);
 	const was = useRef(current);
 
 	useEffect(() => {
@@ -57,10 +59,10 @@ function useTakeFocus(current: boolean) {
 
 		if (!became || document.activeElement !== document.body) return;
 
-		(body.current?.querySelector<HTMLElement>(FOCUSABLE) ?? body.current)?.focus();
+		(step.current?.querySelector<HTMLElement>(FIELD) ?? step.current)?.focus();
 	}, [current]);
 
-	return body;
+	return step;
 }
 
 /** The row's one line: the fact once done, nothing while current (the body says it), else what the step is about. */
@@ -74,10 +76,16 @@ function detailOf(step: Step, current: boolean, hint: string): string | null {
 export function SetupStep({ name, step, current, hint, code, state, body, open, children }: SetupStepProps) {
 	const detail = detailOf(step, current, hint);
 	const opened = current || (open ?? false);
-	const focusBody = useTakeFocus(current);
+	const focusStep = useTakeFocus(current);
 
 	return (
-		<div className="setup-step" data-current={current || undefined} data-done={step.done || undefined}>
+		<div
+			ref={focusStep}
+			className="setup-step"
+			data-current={current || undefined}
+			data-done={step.done || undefined}
+			tabIndex={-1}
+		>
 			<SettingsRow
 				leading={<StepMark number={STEP_ORDER.indexOf(step.id) + 1} done={step.done} current={current} />}
 				name={name}
@@ -93,11 +101,7 @@ export function SetupStep({ name, step, current, hint, code, state, body, open, 
 			>
 				{children}
 			</SettingsRow>
-			{opened && body ? (
-				<div ref={focusBody} className="setup-body" tabIndex={-1}>
-					{body}
-				</div>
-			) : null}
+			{opened && body ? <div className="setup-body">{body}</div> : null}
 		</div>
 	);
 }
