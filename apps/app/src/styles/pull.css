@@ -33,10 +33,6 @@
 	font-size: 15px;
 	line-height: 22px;
 }
-/* Under reduced motion the kit gives every property a 1ms transition, which would hold the split a frame behind. */
-.pull-title-row > * {
-	transition-property: none;
-}
 .pull-actions {
 	display: flex;
 	min-width: 0;

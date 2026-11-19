@@ -55,20 +55,43 @@ button,
 }
 
 /* ───────── Reduced motion: transitions snap, spinners keep turning ───────── */
+/*
+ * A declared transition keeps its duration, so its transitionend still comes, but lands on its end value in the frame
+ * it starts. Its duration is left alone because every element's transition-property is `all` until it declares one:
+ * a duration forced onto every element would give each property of each element a transition, holding any style
+ * change a frame behind. Animations only run where one is named, so shortening them touches nothing else.
+ */
 @media (prefers-reduced-motion: reduce) {
 	*,
 	*::before,
 	*::after {
-		transition-duration: 1ms !important;
 		animation-duration: 1ms !important;
 		animation-iteration-count: 1 !important;
+	}
+	:not(
+		[data-ui='button'],
+		[data-ui='row-button'],
+		[data-ui='row-button'] svg,
+		[data-ui='segmented-item'],
+		[data-ui='input'],
+		[data-ui='number-field'],
+		[data-ui='textarea'],
+		[data-ui='link-field'],
+		[data-ui='composer'],
+		[data-ui='command-bar-field'],
+		[data-ui='hover-list-highlight'],
+		[data-ui='menu-highlight']
+	),
+	::before,
+	::after {
+		transition-timing-function: steps(1, jump-start) !important;
 	}
 	[data-ui='spinner'],
 	[data-ui='spinner'] * {
 		animation-duration: var(--dur-spinner) !important;
 		animation-iteration-count: infinite !important;
 	}
-	/* Hover only changes colour on these, which is not movement, so it keeps its ease. */
+	/* Hover only changes colour on these, which is not movement, so it keeps its ease, shortened to the hover's. */
 	[data-ui='button'],
 	[data-ui='row-button'],
 	[data-ui='row-button'] svg,
