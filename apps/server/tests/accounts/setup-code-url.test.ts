@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { env } from '../../src/env';
 import { setupLogUrl } from '../../src/accounts/setup-code';
 
 /** The variables `setupLogUrl` reads, saved before each test and restored after, so none leaks into another. */
@@ -44,7 +45,7 @@ test('a public URL is printed when FRONTEND_URL is unset', () => {
 test('a container with neither set gets the server its own port', () => {
 	process.env.KUBERNETES_SERVICE_HOST = '10.0.0.1';
 
-	expect(setupLogUrl()).toBe('http://localhost:3001');
+	expect(setupLogUrl()).toBe(`http://localhost:${env.PORT}`);
 });
 
 test('a checkout with neither set gets the port bun run dev serves the app on', () => {
