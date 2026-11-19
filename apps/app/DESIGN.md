@@ -19,8 +19,9 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   hashes and aligned numbers are Geist Mono.
 - **Near-neutral surfaces.** Near-black panels with white hairlines in dark,
   white and light grey in light, all with a faint cool tint. The sidebar sits
-  a step darker than the page and menus a step lighter. One cream primary
-  button and one indigo-blue (`#3777ec`) accent (links, the selected line,
+  a step darker than the page and menus a step lighter. One light-blue primary
+  button (`#93c5fd` with navy ink in dark, `#2259dc` with white ink in light;
+  the palettes in Settings → Appearance bring their own) and one indigo-blue (`#3777ec`) accent (links, the selected line,
   hunk headers).
 - **Phosphor icons in their bold weight**, set once by the kit's `IconRoot`,
   not Lucide. Import the `*Icon` names (`MagnifyingGlassIcon`).
@@ -307,7 +308,7 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   - **Commits**.
     The merge strip under the title shows checks and mergeability and holds the
     merge button. It merges at the head commit the page shows, and never with
-    admin rights. The button is cream only when no finding is open and no
+    admin rights. The button is the primary only when no finding is open and no
     review runs; otherwise it is an outline, so the page's one primary is the
     next step. Its checks open under it as a grid of rows (glyph and name;
     the forge link shows on hover) in a scroll area capped at about eight
@@ -525,14 +526,10 @@ Motion explains a change and never makes the person wait.
   one 170ms crossfade. Where the content cannot be laid out (a settings
   group, a chart, one value), `SkeletonRows`, `SkeletonText` and
   `SkeletonBox` stand at its exact size. Never draw a bar by hand.
-- Pages arrive. `Page` gives every page the kit's entrance (`useEntrance`,
-  `kit-motion.css`): the blocks under the bar rise 4px and fade in over
-  `--dur-disclose`, top-down, 30ms apart, while the bar and sidebar stay
-  still. The main lists stagger their own rows the same way (pull requests,
-  a repository's page, the settings groups; the Repositories tiles rise
-  6px), and a block whose list does so does not rise itself. It plays once,
-  on a page's first reveal: changing tab, filtering or a refresh shows what
-  changed at once, and reduced motion keeps only the fade.
+- Pages are static. A page change shows the new page in the same frame:
+  no fade, rise, slide or stagger on the page or its lists. The only motion
+  between pages is the skeleton standing in while data loads and its
+  crossfade to the content.
 - A click changes the page in the same frame. The app renders in the browser
   only, so `Link` and `navigate` (`components/common/link.tsx`,
   `lib/shell/navigation.ts`) change the address with the History API and the
@@ -560,7 +557,7 @@ Motion explains a change and never makes the person wait.
 - **Every async action shows its state**: idle, pending (same width), then
   success or failure with the server's reason. A change shows at once and
   goes back when the save fails.
-- **One primary button per region**, in cream. Ghost, quiet and icon
+- **One primary button per region**, in light blue. Ghost, quiet and icon
   buttons are quiet at rest: no background until hover. Secondary and outline
   buttons carry their edge at rest (see Surfaces).
 
@@ -579,7 +576,7 @@ side an icon sits on gets 2px less padding than a side with text.
 
 | Variant       | At rest                          | Use                                                                                                 |
 | ------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `primary`     | Cream (ink in light), raised     | The one next step of a region: Post to pull request, Merge, Save. Never repeated down a list.       |
+| `primary`     | Light blue, raised               | The one next step of a region: Post to pull request, Merge, Save. Never repeated down a list.       |
 | `secondary`   | A raised plate                   | A standalone action with no primary beside it: Try again in an error notice, Back to pull requests. |
 | `outline`     | An edge with no fill             | The action beside a primary, and the action a list row offers (Review, Track, Connect).             |
 | `ghost`       | Muted text, nothing else         | Tertiary actions and row controls: Accept, Dismiss, Disconnect, Cancel, icon buttons.               |

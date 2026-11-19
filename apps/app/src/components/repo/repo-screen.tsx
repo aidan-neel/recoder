@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Skeleton, Tooltip, useEntrance } from '@recoder/ui';
+import { Button, Skeleton, Tooltip } from '@recoder/ui';
 import { ArrowUpRightIcon, ChatIcon, PlusIcon } from '@phosphor-icons/react';
 
 import { useRepoPage } from '@/lib/repo/use-repo-page';
@@ -58,7 +58,6 @@ export function RepoScreen({ repoId }: { repoId: string }) {
 	const painted = useAfterPaint();
 	const { data } = view;
 	const loading = view.phase === 'loading' && painted;
-	const entrance = useEntrance('stagger');
 
 	return (
 		<Page
@@ -74,7 +73,7 @@ export function RepoScreen({ repoId }: { repoId: string }) {
 				<Skeleton id="repo-page" loading={loading}>
 					{loading ? <RepoSkeleton /> : null}
 					{data ? (
-						<div className="repo-page" {...entrance}>
+						<div className="repo-page">
 							<RepoHeader repo={data.repo} figures={data.figures} />
 							<div className="repo-columns">
 								<RepoMain view={view} data={data} />

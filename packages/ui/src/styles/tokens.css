@@ -48,9 +48,9 @@
 	--text-brief-body: #8f8a82;
 
 	/* Primary (swappable; on-primary follows luminance) */
-	--primary: #ede9e3;
-	--primary-hover: #fffcf5;
-	--on-primary: #141312;
+	--primary: #93c5fd;
+	--primary-hover: #b4d6fe;
+	--on-primary: #0b1a2e;
 
 	/* Brand marks that keep their own color or adapt to the surface. */
 	--brand-claude: #d97757;
@@ -174,9 +174,9 @@
 	--text-ghost: #a8a39b;
 	--text-brief-body: #6a655e;
 
-	--primary: #1d1b18;
-	--primary-hover: #000000;
-	--on-primary: #faf8f4;
+	--primary: #2259dc;
+	--primary-hover: #1a4cc4;
+	--on-primary: #ffffff;
 
 	--brand-opencode: #1f1f1f;
 	--brand-opencode-shade: rgba(31, 31, 31, 0.2);

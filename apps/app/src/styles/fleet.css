@@ -38,8 +38,6 @@
  * beside the sidebar at its default width, so hiding the sidebar only widens them.
  */
 .fleet-grid {
-	--enter-rise: 6px;
-
 	display: grid;
 	grid-template-columns: repeat(var(--fleet-columns, 1), minmax(0, 1fr));
 	gap: 16px;

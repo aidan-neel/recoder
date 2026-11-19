@@ -51,7 +51,7 @@ export default async function DocPage({ params }: PageProps<'/docs/[slug]'>) {
 				markdown={docMarkdown(doc)}
 				editUrl={docEditUrl(doc)}
 			/>
-			<article className="docs-column" data-enter="stagger">
+			<article className="docs-column">
 				<header className="docs-intro">
 					<h1 className="docs-title">{doc.title}</h1>
 					<StaticMarkdown className="docs-prose" code={DOC_CODE}>

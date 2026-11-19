@@ -1,6 +1,6 @@
 'use client';
 
-import { HoverList, Skeleton, useEntrance } from '@recoder/ui';
+import { HoverList, Skeleton } from '@recoder/ui';
 import { useRef } from 'react';
 
 import { LOADING_PULL_ROWS } from '@/lib/pulls/loading-rows';
@@ -53,7 +53,6 @@ function rowLinks(list: HTMLElement | null): HTMLElement[] {
  */
 export function PullList({ rows, starting, onReview, onWarm, showRepo }: PullListProps) {
 	const list = useRef<HTMLDivElement | null>(null);
-	const entrance = useEntrance('stagger');
 
 	/** Moves focus `by` rows from the focused one; with none focused, to the first or the last. */
 	function step(by: 1 | -1): void {
@@ -81,13 +80,7 @@ export function PullList({ rows, starting, onReview, onWarm, showRepo }: PullLis
 
 	return (
 		<div ref={list}>
-			<HoverList
-				as="ul"
-				className="pull-list"
-				itemSelector="[data-pull-row]"
-				aria-label="Open pull requests"
-				{...entrance}
-			>
+			<HoverList as="ul" className="pull-list" itemSelector="[data-pull-row]" aria-label="Open pull requests">
 				{rows.map((row) => (
 					<PullRow
 						key={row.key}
