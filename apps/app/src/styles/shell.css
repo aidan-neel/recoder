@@ -71,16 +71,6 @@
 		margin-left: var(--frame-inset);
 	}
 }
-/*
- * While the sidebar slides (`data-sliding`), the page keeps the width it has with the sidebar hidden and rides the
- * column's left edge; the window clips what passes its right edge. So the page is laid out once, never at the
- * widths in between: nothing in it rewraps or moves on its own, and its container queries hold still.
- */
-@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
-	.app-frame[data-sliding] > .page {
-		width: calc(100vw - 2 * var(--frame-inset));
-	}
-}
 
 /* A drag follows the pointer with no easing; the open and close slide is untouched. */
 .app-frame:has([data-ui='resize-handle'][data-dragging]) {
@@ -154,7 +144,8 @@
  * A fixed width, so every tab measures the same in every engine and the + sits right after the last. Tabs read like
  * the sidebar's rows: bare at rest, a wash when pointed at, and the one on screen on the same still fill as the
  * sidebar's selected row. Only colours change between them, never a weight, a border or a padding, so selecting a tab
- * moves nothing.
+ * moves nothing. The fill of the tab on screen is its own layer and changes tabs in one frame, so a switch never shows
+ * two fills crossing; only the wash under the pointer fades.
  */
 .window-tab {
 	position: relative;
@@ -174,12 +165,26 @@
 	background: color-mix(in oklab, var(--bg-hover) 45%, transparent);
 	color: var(--text-primary);
 }
-.window-tab[data-active] {
+.window-tab::before {
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
 	background: var(--bg-hover);
+	content: '';
+	opacity: 0;
+	pointer-events: none;
+}
+.window-tab[data-active] {
+	background: transparent;
 	color: var(--text-primary);
+	transition: none;
+}
+.window-tab[data-active]::before {
+	opacity: 1;
 }
 /* The tab's name and mark are one button; the right 28px stays free for the review's state or the X. */
 .window-tab-main {
+	position: relative;
 	display: flex;
 	min-width: 0;
 	height: 100%;

@@ -15,7 +15,7 @@
 	--page-gutter: 20px;
 }
 
-/* The page is a size container, so a column can centre on the page's 100cqw. It fills the frame's one row. */
+/* The page is a size container for its screens' own queries. It fills the frame's one row. */
 .page {
 	display: flex;
 	min-width: 0;
@@ -79,12 +79,12 @@
  * A page's one content column: every page's body, its header and its tab row sit in one, so their edges are the
  * bar's. Its edges are the gutter; a page that sets --page-measure centres its column at that width instead, and
  * still never comes closer to the panel's sides than the gutter. A part that spans the panel, like a rule, is the
- * column itself, so its line runs edge to edge while its content keeps to the edges.
+ * column itself, so its line runs edge to edge while its content keeps to the edges. Every column spans the page, so
+ * its padding centres on 100% of it, which layout resolves in the frame the page's width changes; 100cqw, read in
+ * style, lagged a frame behind a sidebar that snaps (reduced motion) and painted the column off centre.
  */
 .page-column {
-	--page-inline: max(var(--page-gutter), (100cqw - var(--page-measure, 100cqw)) / 2);
-
-	padding-inline: var(--page-inline);
+	padding-inline: max(var(--page-gutter), (100% - var(--page-measure, 100%)) / 2);
 }
 .page-column[data-width='reading'] {
 	--page-measure: 768px;

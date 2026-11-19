@@ -8,6 +8,8 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 	StatusGlyph,
+	DURATION,
+	EASE_OUT,
 	Tooltip,
 	type GlyphKind
 } from '@recoder/ui';
@@ -24,7 +26,7 @@ import {
 	XIcon,
 	type Icon
 } from '@phosphor-icons/react';
-import { Reorder } from 'motion/react';
+import { AnimatePresence, Reorder, useIsPresent, useReducedMotionConfig, type Variants } from 'motion/react';
 import { useEffect, useRef, useState, type KeyboardEvent as KeyEvent, type MouseEvent, type WheelEvent } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -95,6 +97,26 @@ function openMenuFromKeys(event: KeyEvent<HTMLButtonElement>): void {
 	);
 }
 
+/**
+ * A closing tab gets out of the way at once: its name fades in the first frames while it narrows to nothing and takes
+ * the 2px gap with it, so the tabs after it and the + close up behind it with no jump.
+ */
+const TAB_MOTION: Variants = {
+	shut: {
+		width: 0,
+		minWidth: 0,
+		marginRight: -2,
+		opacity: 0,
+		pointerEvents: 'none',
+		transition: { duration: DURATION.menuOut, ease: EASE_OUT, opacity: { duration: DURATION.hover, ease: EASE_OUT } }
+	}
+};
+
+/** True when no tab of `before` is left in `after`: the row was emptied and a new tab took its place. */
+function replacedWhole(before: readonly WindowTab[], after: readonly WindowTab[]): boolean {
+	return !after.some((tab) => before.some((old) => old.id === tab.id));
+}
+
 /** Tabs that `alt+1`…`alt+8` reach by place; `alt+9` is always the last. */
 const ORDINALS = 9;
 
@@ -148,6 +170,15 @@ export function WindowTabs() {
 	const names = useTabNames();
 	const ordinals = useAltHeld();
 	const strip = useRef<HTMLElement>(null);
+	const reduced = useReducedMotionConfig();
+	const [shown, setShown] = useState(tabs);
+	const [row, setRow] = useState(0);
+
+	if (shown !== tabs) {
+		setShown(tabs);
+
+		if (replacedWhole(shown, tabs)) setRow(row + 1);
+	}
 
 	useEffect(() => {
 		if (strip.current) keepActiveInView(strip.current);
@@ -157,6 +188,21 @@ export function WindowTabs() {
 	function scrollSideways(event: WheelEvent<HTMLElement>): void {
 		if (strip.current && Math.abs(event.deltaY) > Math.abs(event.deltaX)) strip.current.scrollLeft += event.deltaY;
 	}
+
+	const items = tabs.map((tab, index) => (
+		<WindowTabItem
+			key={tab.id}
+			tab={tab}
+			tabs={tabs}
+			ordinal={ordinalOf(index, tabs.length)}
+			active={tab.id === activeId}
+			name={names.get(pathOf(currentHref(tab))) ?? null}
+			route={routeOf(pathOf(currentHref(tab)), base)}
+			home={pullsHref(base)}
+			fresh={newReviewHref(base)}
+			reopenable={reopenable}
+		/>
+	));
 
 	return (
 		<div className="window-tabs">
@@ -172,20 +218,13 @@ export function WindowTabs() {
 				data-ordinals={ordinals || undefined}
 				onWheel={scrollSideways}
 			>
-				{tabs.map((tab, index) => (
-					<WindowTabItem
-						key={tab.id}
-						tab={tab}
-						tabs={tabs}
-						ordinal={ordinalOf(index, tabs.length)}
-						active={tab.id === activeId}
-						name={names.get(pathOf(currentHref(tab))) ?? null}
-						route={routeOf(pathOf(currentHref(tab)), base)}
-						home={pullsHref(base)}
-						fresh={newReviewHref(base)}
-						reopenable={reopenable}
-					/>
-				))}
+				{reduced ? (
+					items
+				) : (
+					<AnimatePresence key={row} initial={false}>
+						{items}
+					</AnimatePresence>
+				)}
 			</Reorder.Group>
 			<Tooltip content="New review" shortcut="alt+t">
 				<Button
@@ -219,6 +258,7 @@ interface WindowTabItemProps {
 
 /** One tab: its mark, its page's name, a review's state at the end, and the X that closes it in that place on hover. */
 function WindowTabItem({ tab, tabs, ordinal, active, name, route, home, fresh, reopenable }: WindowTabItemProps) {
+	const onScreen = useIsPresent() && active;
 	const Icon = ICONS[route.screen];
 	const label = name?.label ?? titleOf(route);
 	const glyph = name?.review ? GLYPHS[name.review] : undefined;
@@ -240,7 +280,9 @@ function WindowTabItem({ tab, tabs, ordinal, active, name, route, home, fresh, r
 			as="div"
 			value={tab.id}
 			className="window-tab"
-			data-active={active || undefined}
+			data-active={onScreen || undefined}
+			variants={TAB_MOTION}
+			exit="shut"
 			onMouseDown={middle}
 			onAuxClick={middle}
 		>
@@ -249,7 +291,7 @@ function WindowTabItem({ tab, tabs, ordinal, active, name, route, home, fresh, r
 					<button
 						type="button"
 						className="window-tab-main"
-						aria-current={active ? 'page' : undefined}
+						aria-current={onScreen ? 'page' : undefined}
 						onClick={() => switchTab(tab.id)}
 						onKeyDown={openMenuFromKeys}
 					>

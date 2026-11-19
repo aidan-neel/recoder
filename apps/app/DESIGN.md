@@ -628,11 +628,20 @@ AID-8 file).
 
 Motion explains a change and never makes the person wait.
 
-- The sidebar slides on `--dur-toggle` with the strong ease-out. Through the
-  slide the page keeps the width it has with the sidebar hidden and rides the
-  sidebar's edge, the window clipping what passes it, so it is laid out once
-  and nothing in it rewraps; opening, it settles to its narrower width when the
-  slide ends. A reload never slides, and under reduced motion it snaps.
+- The sidebar slides on `--dur-toggle` with the strong ease-out. The page's
+  left edge rides the sidebar's and the page takes its true width in every
+  frame, as a Mac app's content does beside its sidebar: what sits on the
+  gutter moves with the edge, a centred column (Settings, Chat, New) glides at
+  half the pace, what sits at the right holds still, and nothing snaps when the
+  slide ends. A column centres on 100% of the page, not 100cqw, which lagged a
+  frame behind a snap. A reload never slides, and under reduced motion it
+  snaps.
+- A window tab that closes gets out of the way: its name fades in 120ms while
+  it narrows to nothing in 150ms, gap and all, so the tabs after it and the +
+  close up behind it; the page it leaves for shows at once. The fill of the tab
+  on screen moves to the next tab in one frame, never crossing two fills.
+  Closing the last tab puts the new one in its place at once, and under
+  reduced motion a tab goes at once.
 - Things that move: the sidebar slides, the highlight under the pointer in a
   menu or list follows it, collapsibles and the provider dialog change height.
   Menus, selects, the palette, dialogs, tooltips and the link card fade in
