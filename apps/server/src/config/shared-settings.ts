@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { SQL, TransactionSQL } from 'bun';
 import { z } from 'zod';
 import { assertOwnership } from '../review/runtime/ownership';
+import { withPostgresTransaction } from '../storage/postgres-transactions';
 
 const settingNameSchema = z.enum([
 	'tokens',
@@ -41,7 +42,7 @@ export class SharedSettingsConflictError extends Error {
 }
 
 export async function initializeSharedSettings(sql: SQL): Promise<void> {
-	await sql.begin(async (transaction) => {
+	await withPostgresTransaction(sql, async (transaction) => {
 		await transaction`SELECT pg_advisory_xact_lock(hashtext(current_schema()), hashtext('recoder_settings'))`;
 
 		await transaction`CREATE TABLE IF NOT EXISTS recoder_settings (

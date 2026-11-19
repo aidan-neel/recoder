@@ -179,7 +179,7 @@ describe('a member’s sign-in', () => {
 });
 
 describe('admin-only routes', () => {
-	const writes: [string, string][] = [
+	const routes: [string, string][] = [
 		['PUT', '/api/settings/models'],
 		['POST', '/api/settings/providers/openai/connect'],
 		['POST', '/api/settings/vllm'],
@@ -187,10 +187,12 @@ describe('admin-only routes', () => {
 		['PUT', '/api/agent/providers/openai/key'],
 		['POST', '/api/agent/providers/openai/oauth'],
 		['DELETE', '/api/auth/token/github'],
+		['GET', '/api/server/backups'],
+		['GET', '/api/server/backups/3a11bba0-bde7-440b-9da0-58fa0566a682/download?key=1'],
 		['DELETE', '/api/members/owner']
 	];
 
-	test.each(writes)('a member gets 403 admin-only on %s %s', async (method, path) => {
+	test.each(routes)('a member gets 403 admin-only on %s %s', async (method, path) => {
 		await adminCookie();
 
 		const member = await memberCookie();

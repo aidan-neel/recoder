@@ -1,7 +1,8 @@
 import type { SQL } from 'bun';
+import { withPostgresTransaction } from '../../storage/postgres-transactions';
 
 export async function initializeCoordinator(sql: SQL): Promise<void> {
-	await sql.begin(async (tx) => {
+	await withPostgresTransaction(sql, async (tx) => {
 		await tx`SELECT pg_advisory_xact_lock(732646852)`;
 
 		await tx`

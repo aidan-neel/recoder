@@ -20,6 +20,9 @@ import { initReviewSettings, parseSavedReviewSettings } from '../review/session/
 import { SealedValueError } from '../secrets/seal';
 import { SecretKeyError } from '../secrets/secret-key';
 import { enqueueActor, enqueueCommand } from '../review/runtime/inbox';
+import { assertReadableDataVersion } from './data-version';
+import { sqliteDataVersion } from './sqlite-migrations';
+import { localSettings } from './local-settings';
 
 const MAX_DATABASE_BYTES = 1024 * 1024 * 1024;
 const MAX_SETTING_BYTES = 4 * 1024 * 1024;
@@ -55,19 +58,6 @@ const progressSchema = recordSchema.extend({
 	reasoning: z.array(z.object({ id: z.string(), status: z.string().optional() }).passthrough()).optional()
 });
 
-const settings: { name: SharedSettingName; file: string }[] = [
-	{ name: 'tokens', file: 'tokens.json' },
-	{ name: 'gitlab-host', file: 'gitlab-host.json' },
-	{ name: 'review-settings', file: 'review-config.json' },
-	{ name: 'vllm-servers', file: 'vllm-servers.json' },
-	{ name: 'global-guidelines', file: 'review-guidelines.md' },
-	{ name: 'auto-review', file: 'auto-review.json' },
-	{ name: 'watch-state', file: 'auto-review-state.json' },
-	{ name: 'dismissals', file: 'dismissed-findings.json' },
-	{ name: 'finding-votes', file: 'finding-votes.json' },
-	{ name: 'learned-rules', file: 'learned-rules.json' }
-];
-
 async function sourceFile(directory: string, name: string, limit: number): Promise<string | undefined> {
 	let path: string;
 
@@ -99,7 +89,7 @@ function isSecretError(error: unknown): boolean {
 async function readSettings(directory: string): Promise<{ name: SharedSettingName; value: unknown }[]> {
 	const documents: { name: SharedSettingName; value: unknown }[] = [];
 
-	for (const setting of settings) {
+	for (const setting of localSettings) {
 		const path = await sourceFile(directory, setting.file, MAX_SETTING_BYTES);
 
 		if (!path) continue;
@@ -319,6 +309,7 @@ export async function importLocalData(
 
 		if (hasDatabase) {
 			database = new Database(join(snapshot, 'recoder.db'), { readonly: true });
+			assertReadableDataVersion(sqliteDataVersion(database));
 			database.exec('BEGIN');
 		}
 

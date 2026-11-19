@@ -28,6 +28,7 @@ import repos from './routes/repos';
 import reviews from './routes/reviews';
 import runs from './routes/runs';
 import update from './routes/update';
+import backups from './routes/backups';
 import webhooks from './routes/webhooks';
 import { VERSION } from './version';
 import { ModelConfigError } from './models/models';
@@ -107,6 +108,7 @@ app.route('/api/chats', chats);
 app.route('/api/reviews', reviews);
 app.route('/api/runs', runs);
 app.route('/api/update', update);
+app.route('/api/server/backups', backups);
 app.route('/api/webhooks', webhooks);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));

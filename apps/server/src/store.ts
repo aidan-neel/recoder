@@ -16,7 +16,7 @@ import type { PipelineRun, RunTokenCall } from './models/metrics';
 import type { StoredRepoChat } from './repo-chat/chat-record';
 import { isTerminalTask, settleTasks } from './review/session/task-state';
 
-async function flushPersistence(): Promise<void> {
+export async function flushPersistence(): Promise<void> {
 	await progressWrites.drainAll();
 	await metricWrites.drainAll();
 	await flushReviewProgress();

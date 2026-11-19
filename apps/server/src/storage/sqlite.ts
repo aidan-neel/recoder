@@ -2,7 +2,8 @@ import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { serverDataDir } from '../util/data-dir';
 import type { Collection, Table } from './collection';
-import { prepareReviewList } from './review-list-schema';
+import { prepareReviewList, refreshReviewListShape } from './review-list-schema';
+import { migrateSqlite } from './sqlite-migrations';
 
 let handle: Database | null = null;
 
@@ -15,41 +16,52 @@ let handle: Database | null = null;
 const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 
 export function sqlite(): Database {
-	if (!handle) {
-		handle = new Database(join(serverDataDir(), 'recoder.db'));
-		handle.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
-		handle.run('PRAGMA journal_mode = WAL');
-		handle.run('PRAGMA secure_delete = ON');
+	if (handle) return handle;
 
-		for (const table of [
-			'repos',
-			'reviews',
-			'runs',
-			'review_progress',
-			'review_metrics',
-			'review_checkpoints',
-			'review_replays',
-			'repo_chats',
-			'images',
-			'review_images',
-			'accounts',
-			'sessions',
-			'setup',
-			'oauth_redirects',
-			'member_models',
-			'update_state',
-			'pull_states',
-			'model_calls'
-		]) {
-			handle.run(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, value TEXT NOT NULL)`);
-		}
+	const database = new Database(join(serverDataDir(), 'recoder.db'));
 
-		prepareReviewList(handle);
-		handle.run("CREATE INDEX IF NOT EXISTS model_calls_at ON model_calls (substr(json_extract(value, '$.at'), 1, 10))");
-		handle.run('CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)');
+	try {
+		database.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+		migrateSqlite(database, [initializeSqliteSchema]);
+		database.run('PRAGMA journal_mode = WAL');
+		database.run('PRAGMA secure_delete = ON');
+		refreshReviewListShape(database);
+		handle = database;
+
+		return database;
+	} catch (error) {
+		database.close();
+		throw error;
+	}
+}
+
+function initializeSqliteSchema(database: Database): void {
+	for (const table of [
+		'repos',
+		'reviews',
+		'runs',
+		'review_progress',
+		'review_metrics',
+		'review_checkpoints',
+		'review_replays',
+		'repo_chats',
+		'images',
+		'review_images',
+		'accounts',
+		'sessions',
+		'setup',
+		'oauth_redirects',
+		'member_models',
+		'update_state',
+		'pull_states',
+		'model_calls'
+	]) {
+		database.run(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, value TEXT NOT NULL)`);
 	}
 
-	return handle;
+	prepareReviewList(database);
+	database.run("CREATE INDEX IF NOT EXISTS model_calls_at ON model_calls (substr(json_extract(value, '$.at'), 1, 10))");
+	database.run('CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)');
 }
 
 export async function closeSqlite(): Promise<void> {
