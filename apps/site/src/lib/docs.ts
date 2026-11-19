@@ -1,6 +1,7 @@
 import { cli } from './docs-pages/cli';
 import { gettingStarted } from './docs-pages/getting-started';
 import { mcp } from './docs-pages/mcp';
+import { server } from './docs-pages/server';
 import { splitSections } from './doc-sections';
 import { REPO_URL } from './site';
 
@@ -18,7 +19,7 @@ export interface NavPage {
 }
 
 /** Docs pages in nav order, one module each under `docs-pages/`. Bodies are GFM Markdown rendered by the kit's Markdown. */
-export const docs: DocPage[] = [gettingStarted, cli, mcp];
+export const docs: DocPage[] = [gettingStarted, server, cli, mcp];
 
 export function docBySlug(slug: string): DocPage | undefined {
 	return docs.find((doc) => doc.slug === slug);

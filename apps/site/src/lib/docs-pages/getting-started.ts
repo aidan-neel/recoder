@@ -11,7 +11,7 @@ export const gettingStarted: DocPage = {
 - **The app** (\`apps/app\`) is the web page you review in. It talks to the server from your browser.
 - **Your model provider** sees the code under review, because the reviewers send it in their prompts.
 
-Recoder is single-user. The first time you connect GitHub or GitLab, the server makes one account from it, and from then on the API needs that sign-in. Until then anyone who can reach its port can start reviews with your tokens and models, so keep it on your own machine or behind your network’s access control until you have signed in. From any other machine, the app asks for a setup code first: find it in the server log (the line that starts with \`setup code:\`) or in the \`setup-code\` file in the data directory. The server listens on every interface (\`HOST=0.0.0.0\`) unless you set \`HOST=127.0.0.1\`.
+Recoder is single-user. The first time you connect GitHub or GitLab, the server makes one account from it, and from then on the API needs that sign-in. Until then anyone who can reach its port can start reviews with your tokens and models, so keep it on your own machine or behind your network’s access control until you have signed in. From any other machine, the app asks for a setup code first: find it in the server log (the line that starts with \`setup code:\`), in the \`setup-code\` file in the data directory, or in the line the [install script](/docs/server) prints. The server listens on every interface (\`HOST=0.0.0.0\`) unless you set \`HOST=127.0.0.1\`.
 
 ## Requirements
 
@@ -35,7 +35,17 @@ bun run dev
 
 \`bun run dev\` starts the server on port 3001 and the app on [localhost:5180](http://localhost:5180). The sample review at [localhost:5180/sample](http://localhost:5180/sample) works without the server.
 
-## Run with Docker
+## Run the server with Docker
+
+On a fresh Linux server, one command installs everything — Docker if it is missing, the release image, HTTPS through Caddy, the self-updater — and prints the address to open and the setup code:
+
+\`\`\`bash
+curl -fsSL https://recoder.dev/server.sh | sh
+\`\`\`
+
+The full operator route — setup in the browser, updates, rollback, backups, uninstall — is on [Run the server](/docs/server).
+
+From a clone instead:
 
 \`\`\`bash
 git clone https://github.com/aidan-neel/recoder
@@ -55,11 +65,7 @@ Know the image’s limits before you choose it:
 
 ## First review
 
-Until reviews can run, the app shows three steps in place of the pull request list:
-
-1. **Connect a model provider.** Add one through OpenCode, or sign in to Claude Code or Devin.
-2. **Pick a model.** The Review model runs the reviewers.
-3. **Track a repository.** Connect GitHub or GitLab to browse yours, or add one by URL.
+Until the server is set up, the app shows a checklist in place of the pull request list: claim it with the setup code, point it at an address and HTTPS, sign in as the admin, connect a model provider, pick the review model, confirm storage, and run the server's checks. A server that already has an account and a review model never sees it. The whole route is on [Run the server](/docs/server).
 
 Then the pull request list shows the open pull requests of every repository you track. Select one with \`j\` and \`k\` and press \`r\`, or press its Review button. To review a pull request from somewhere else, press \`c\` for a new review and paste its link.
 
