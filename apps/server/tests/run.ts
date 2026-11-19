@@ -21,6 +21,12 @@ const BATCH_SIZE = 6;
 /** Every test has its own five-second timeout, so a batch still running after this long is hung, not slow. */
 const BATCH_TIMEOUT_MS = 240_000;
 
+/**
+ * Bun catches SIGTERM and acts on it from its event loop. A hung batch never reaches that loop (one ran on at full
+ * CPU for ten minutes, through the timeout and a second SIGTERM), so only SIGKILL stops it.
+ */
+const BATCH_KILL_SIGNAL = 'SIGKILL';
+
 interface BatchResult {
 	passed: boolean;
 	output: string;
@@ -111,7 +117,8 @@ async function runBatchIn(temp: string, batch: string[]): Promise<BatchResult> {
 		stdin: 'ignore',
 		stdout: 'pipe',
 		stderr: 'pipe',
-		timeout: BATCH_TIMEOUT_MS
+		timeout: BATCH_TIMEOUT_MS,
+		killSignal: BATCH_KILL_SIGNAL
 	});
 
 	const [stdout, stderr, exitCode] = await Promise.all([
