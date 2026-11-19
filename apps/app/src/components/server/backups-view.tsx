@@ -12,7 +12,7 @@ import {
 	Select,
 	Switch
 } from '@recoder/ui';
-import { useState } from 'react';
+import { useRef, useState, type Ref, type RefObject } from 'react';
 
 import { serverApi } from '@/lib/api/server';
 import { useBackups, type BackupsView } from '@/lib/server/use-backups';
@@ -55,16 +55,24 @@ const ASKS: Record<BackupAsk, { title: string; description: (when: string) => st
 	}
 };
 
-/** One backup: when, how big and why, and a menu to download, delete or, where the updater runs, restore it. */
-function BackupRow({ backup, view }: { backup: Backup; view: BackupsView }) {
-	const [ask, setAsk] = useState<BackupAsk | null>(null);
-	const when = fullTime(backup.createdAt);
+/** A backup the menu asked about, and where its row stood, kept through the dialog's exit. */
+interface Asked {
+	kind: BackupAsk;
+	backup: Backup;
+	index: number;
+}
 
-	async function confirm(): Promise<void> {
-		if (ask === 'key') window.location.assign(serverApi.backupUrl(backup.id, true));
-		if (ask === 'restore') await view.restore(backup);
-		if (ask === 'delete') await view.remove(backup);
-	}
+interface BackupRowProps {
+	backup: Backup;
+	restorable: boolean;
+	onAsk: (kind: BackupAsk) => void;
+	/** The row's menu button, so focus can land on a neighbour's once this backup is deleted. */
+	triggerRef: Ref<HTMLButtonElement>;
+}
+
+/** One backup: when, how big and why, and a menu to download, delete or, where the updater runs, restore it. */
+function BackupRow({ backup, restorable, onAsk, triggerRef }: BackupRowProps) {
+	const when = fullTime(backup.createdAt);
 
 	return (
 		<SettingsRow
@@ -73,7 +81,7 @@ function BackupRow({ backup, view }: { backup: Backup; view: BackupsView }) {
 		>
 			<DropdownMenu>
 				<DropdownMenuTrigger>
-					<Button variant="ghost" size="icon" aria-label={`Backup from ${when}`}>
+					<Button ref={triggerRef} variant="ghost" size="icon" aria-label={`Backup from ${when}`}>
 						<DotsThreeIcon />
 					</Button>
 				</DropdownMenuTrigger>
@@ -81,22 +89,84 @@ function BackupRow({ backup, view }: { backup: Backup; view: BackupsView }) {
 					<DropdownMenuItem onSelect={() => window.location.assign(serverApi.backupUrl(backup.id, false))}>
 						Download
 					</DropdownMenuItem>
-					<DropdownMenuItem onSelect={() => setAsk('key')}>Download with the secret key</DropdownMenuItem>
-					{view.restorable ? <DropdownMenuItem onSelect={() => setAsk('restore')}>Restore</DropdownMenuItem> : null}
-					<DropdownMenuItem onSelect={() => setAsk('delete')}>Delete</DropdownMenuItem>
+					<DropdownMenuItem onSelect={() => onAsk('key')}>Download with the secret key</DropdownMenuItem>
+					{restorable ? <DropdownMenuItem onSelect={() => onAsk('restore')}>Restore</DropdownMenuItem> : null}
+					<DropdownMenuItem onSelect={() => onAsk('delete')}>Delete</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
-			<ConfirmDialog
-				open={ask !== null}
-				onOpenChange={(open) => {
-					if (!open) setAsk(null);
-				}}
-				title={ask ? ASKS[ask].title : ''}
-				description={ask ? ASKS[ask].description(when) : ''}
-				confirmLabel={ask ? ASKS[ask].confirm : ''}
-				onConfirm={confirm}
-			/>
 		</SettingsRow>
+	);
+}
+
+/**
+ * The backups, newest first, and the one dialog their menus ask through. It lives beside the rows rather than in one,
+ * so deleting a backup leaves it to close and hand focus to the row that took its place, the one above, or Back up now.
+ */
+function BackupList({
+	view,
+	backups,
+	fallback
+}: {
+	view: BackupsView;
+	backups: Backup[];
+	fallback: RefObject<HTMLButtonElement | null>;
+}) {
+	const [asked, setAsked] = useState<Asked | null>(null);
+	const [open, setOpen] = useState(false);
+	const triggers = useRef(new Map<string, HTMLButtonElement>());
+	const when = asked ? fullTime(asked.backup.createdAt) : '';
+	const copy = ASKS[asked?.kind ?? 'delete'];
+
+	async function confirm(): Promise<void> {
+		if (!asked) return;
+		if (asked.kind === 'key') window.location.assign(serverApi.backupUrl(asked.backup.id, true));
+		if (asked.kind === 'restore') await view.restore(asked.backup);
+		if (asked.kind === 'delete') await view.remove(asked.backup);
+	}
+
+	function focusAfterDelete(event: Event): void {
+		if (!asked || backups.some((backup) => backup.id === asked.backup.id)) return;
+
+		const neighbour = backups[asked.index] ?? backups[asked.index - 1];
+
+		event.preventDefault();
+		(neighbour ? triggers.current.get(neighbour.id) : fallback.current)?.focus();
+	}
+
+	if (backups.length === 0) {
+		return (
+			<SettingsRow name="No backups yet" detail="One is made before every update, and every night when that is on" />
+		);
+	}
+
+	return (
+		<>
+			{backups.map((backup, index) => (
+				<BackupRow
+					key={backup.id}
+					backup={backup}
+					restorable={view.restorable}
+					onAsk={(kind) => {
+						setAsked({ kind, backup, index });
+						setOpen(true);
+					}}
+					triggerRef={(button) => {
+						if (button) triggers.current.set(backup.id, button);
+						else triggers.current.delete(backup.id);
+					}}
+				/>
+			))}
+			<ConfirmDialog
+				open={open}
+				onOpenChange={setOpen}
+				title={copy.title}
+				description={copy.description(when)}
+				confirmLabel={copy.confirm}
+				destructive={asked?.kind === 'delete' || asked?.kind === 'restore'}
+				onConfirm={confirm}
+				onCloseAutoFocus={focusAfterDelete}
+			/>
+		</>
 	);
 }
 
@@ -136,6 +206,7 @@ function Schedule({ view }: { view: BackupsView }) {
 /** Settings → Server → Backups: when they are made, and each one kept on this server. */
 export function BackupsView() {
 	const view = useBackups();
+	const backUpButton = useRef<HTMLButtonElement>(null);
 	const { state } = view;
 
 	if (!state) {
@@ -162,19 +233,12 @@ export function BackupsView() {
 			<SettingsGroup
 				title="Backups"
 				action={
-					<Button variant="ghost" onClick={view.backUp} status={view.backUpStatus}>
+					<Button ref={backUpButton} variant="ghost" onClick={view.backUp} status={view.backUpStatus}>
 						Back up now
 					</Button>
 				}
 			>
-				{state.backups.length > 0 ? (
-					state.backups.map((backup) => <BackupRow key={backup.id} backup={backup} view={view} />)
-				) : (
-					<SettingsRow
-						name="No backups yet"
-						detail="One is made before every update, and every night when that is on"
-					/>
-				)}
+				<BackupList view={view} backups={state.backups} fallback={backUpButton} />
 			</SettingsGroup>
 		</div>
 	);
