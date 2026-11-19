@@ -1,159 +1,146 @@
 /*
- * ───────── Changes: the file tree beside the diff ─────────
- * --changes-width is the viewer's dragged width, set on <html>; it is never declared here, or this rule would shadow
- * it. The tree never leaves the diff under 480px.
+ * ───────── Changes: the file sidebar and one reading column of diffs ─────────
+ * The diff scrolls as one column, centred and capped, so the code keeps the width and the eye keeps one lane. The
+ * file sidebar stands beside it, flat, with a hairline between. --changes-width is the viewer's dragged width, set on
+ * <html>; it is never declared here, or this rule would shadow it. The sidebar never leaves the diff under 560px.
  */
 .changes {
-	--changes-side: max(200px, min(var(--changes-width, 264px), calc(100cqw - 480px)));
+	--changes-side: max(200px, min(var(--changes-width, 264px), calc(100cqw - 560px)));
 
 	display: grid;
+	min-width: 0;
 	min-height: 0;
 	flex: 1;
+	grid-template-columns: minmax(0, 1fr);
+}
+.changes:has(> .changes-side) {
 	grid-template-columns: var(--changes-side) minmax(0, 1fr);
 }
-/*
- * The filter field starts on the page's gutter, level with the diff's first box; the rows' fill reaches 8px past
- * the gutter, so their text starts on it.
- */
 .changes-side {
 	position: relative;
 	display: flex;
 	min-height: 0;
 	flex-direction: column;
-	gap: 8px;
-	padding: 12px 8px 0 var(--page-gutter);
 	border-right: 1px solid var(--line-subtle);
 }
-.changes-side .tree {
-	margin-left: -8px;
+/* The rows' fill reaches 8px past the page's gutter, as the tab row's first tab does. */
+.changes-tree {
+	min-height: 0;
+	flex: 1;
+	padding: 8px 4px 24px calc(var(--page-gutter) - 14px);
 }
 .changes-main {
 	min-width: 0;
 	min-height: 0;
 	overflow-y: auto;
-	padding: 12px 0 48px;
+	padding: 12px var(--page-gutter) 48px;
 	scroll-padding-top: 12px;
 }
-/* The diff ends on the page's right gutter, as the header does. */
 .changes-main > .changes-stack {
-	padding: 0 var(--page-gutter);
-}
-.changes-stack {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
+	max-width: var(--changes-column);
+	margin: 0 auto;
 }
 
-/* File tree: a folder row, then its files one step in. */
-.tree {
+/* The Files button stands in for the sidebar while it is shut, and on a page too narrow for it. */
+.changes-files[data-beside] {
+	display: none;
+}
+@container (max-width: 859px) {
+	.changes:has(> .changes-side) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.changes-side,
+	.changes-side-toggle {
+		display: none;
+	}
+	.changes-files[data-beside] {
+		display: inline-flex;
+	}
+}
+.changes-stack {
+	--changes-column: 1080px;
+
 	display: flex;
-	min-height: 0;
-	flex: 1;
 	flex-direction: column;
-	overflow-y: auto;
-	padding-bottom: 12px;
+	gap: 8px;
 }
-.tree-row {
-	display: flex;
-	width: 100%;
-	height: 28px;
-	flex-shrink: 0;
+
+/* Tools in the tab row. */
+.changes-files .meta {
+	margin-left: 2px;
+}
+.changes-findings {
+	display: inline-flex;
 	align-items: center;
-	gap: 6px;
-	padding: 0 8px 0 calc(8px + var(--depth, 0) * 14px);
-	border-radius: var(--radius-row);
-	color: var(--text-muted);
-	font-size: var(--font-size-label);
-	line-height: 18px;
-	outline: none;
-	text-align: left;
-	transition: color var(--dur-hover) var(--ease-hover);
+	gap: 2px;
 }
-.tree-row:focus-visible {
-	box-shadow: inset 0 0 0 2px var(--focus-color);
-}
-.tree-row:hover {
-	color: var(--text-primary);
-}
-.tree-row[data-kind='file'] {
-	padding-left: calc(26px + var(--depth, 0) * 14px);
+.changes-findings-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	padding: 0 6px 0 4px;
 	color: var(--text-secondary);
+	font-size: var(--font-size-label);
 }
-.tree-row[data-kind='file'][data-viewed] {
+.changes-findings-label .meta {
+	min-width: 3ch;
+}
+.changes-viewed {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+.changes-viewed [data-ui='meter'] {
+	width: 44px;
+}
+
+/* The file menu: a file's row ends in its finding dot, then a check once viewed, else its size. */
+.files-menu-icon {
 	color: var(--text-faint);
 }
-.tree-row[data-kind='file'][data-current] {
-	color: var(--text-primary);
-	font-weight: 500;
+.file-end {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
 }
-.tree-row[data-change='deleted'] .tree-name {
+.file-end svg {
+	width: 12px;
+	height: 12px;
+}
+.files-menu-deleted > .flex-1 {
 	text-decoration: line-through;
 	text-decoration-color: var(--text-ghost);
-}
-.tree-chevron {
-	width: 12px;
-	height: 12px;
-	flex-shrink: 0;
-	color: var(--text-faint);
-	transition: rotate var(--dur-toggle) var(--ease-menu);
-}
-.tree-row[data-open] .tree-chevron {
-	rotate: 90deg;
-}
-.tree-name {
-	min-width: 0;
-	flex: 1;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.tree-end {
-	display: inline-flex;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 6px;
-	color: var(--text-faint);
-	font-family: var(--font-code);
-	font-size: 11px;
-	font-variant-numeric: tabular-nums;
-}
-.tree-end svg {
-	width: 12px;
-	height: 12px;
-}
-.tree-end [data-sign='add'] {
-	color: var(--success);
-}
-.tree-end [data-sign='del'] {
-	color: var(--danger);
 }
 .tree-bug {
 	width: 6px;
 	height: 6px;
+	flex-shrink: 0;
 	border-radius: 999px;
 	background: var(--sev-high-icon);
 }
-.tree-empty {
-	padding: 8px 10px;
-	color: var(--text-faint);
-	font-size: var(--font-size-meta);
-}
 
 /*
- * File card: a header that stays in view while its diff scrolls under it. Its border is a real border inside the
- * box, so the card's edge lands on the gutter like every other box, and the coloured diff lines cannot cover it;
- * the parts inside round to the radius left inside it, and the head keeps 11px of the 12px inset the border shares, so
- * "Viewed" ends where the review banner's last button does. A card off screen skips layout and paint until it nears the
- * view, and keeps its last drawn height: on a large pull request at 4x CPU throttle this cut the sidebar toggle's
- * worst layout from 26–37ms to 6–17ms.
+ * File card: a header that stays in view while its diff scrolls under it. The card's edge is the kit's card recipe
+ * drawn by a layer over the card, so the coloured diff lines and the sticky header cannot cover it. A card off screen
+ * skips layout and paint until it nears the view, and keeps its last drawn height: on a large pull request at 4x CPU
+ * throttle this cut the sidebar toggle's worst layout from 26–37ms to 6–17ms.
  */
 .file-card {
-	border: 1px solid var(--line-card);
-	border-radius: var(--radius-row);
+	position: relative;
+	border-radius: var(--radius-card);
 	background: var(--bg-canvas);
 	scroll-margin-top: 12px;
 	content-visibility: auto;
 	contain-intrinsic-size: auto 600px;
+}
+.file-card::after {
+	position: absolute;
+	z-index: 3;
+	border-radius: inherit;
+	box-shadow: var(--shadow-card);
+	content: '';
+	inset: 0;
+	pointer-events: none;
 }
 .file-head {
 	position: sticky;
@@ -163,8 +150,8 @@
 	height: 40px;
 	align-items: center;
 	gap: 8px;
-	padding: 0 11px 0 5px;
-	border-radius: calc(var(--radius-row) - 1px);
+	padding: 0 12px 0 6px;
+	border-radius: var(--radius-card);
 	background: var(--bg-raised);
 	font-size: var(--font-size-label);
 }
@@ -184,16 +171,19 @@
 	border-radius: var(--radius-control);
 	outline: none;
 	text-align: left;
+	transition: background-color var(--dur-hover) var(--ease-hover);
+}
+.file-toggle:hover {
+	background: rgb(var(--wash-rgb) / 0.05);
 }
 .file-toggle:focus-visible {
 	box-shadow: var(--focus-ring);
 }
 /*
- * The kit's optical chevron, as on its collapsible triggers: Lucide's chevron inks from a third of its width, so it
- * hangs that far out and its ink starts on the toggle's padding; it turns about its ink's centre, so the ink keeps
- * that edge open and shut.
+ * The kit's optical chevron, as on its collapsible triggers: the caret inks from a third of its width, so it hangs
+ * that far out and its ink starts on the toggle's padding; it turns about its ink's centre.
  */
-.file-toggle > svg {
+.file-caret {
 	width: 14px;
 	height: 14px;
 	flex-shrink: 0;
@@ -202,26 +192,35 @@
 	transform-origin: 56.25% 56.25%;
 	transition: rotate var(--dur-toggle) var(--ease-menu);
 }
-.file-card[data-open] .file-toggle > svg {
+.file-card[data-open] .file-caret {
 	rotate: 90deg;
 }
-.file-path {
-	overflow: hidden;
+.file-icon {
+	width: 14px;
+	height: 14px;
 	color: var(--text-muted);
-	direction: rtl;
-	font-family: var(--font-code);
-	font-size: 12.5px;
-	text-overflow: ellipsis;
+}
+.file-path {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 8px;
 	white-space: nowrap;
 }
-.file-path bdi {
-	direction: ltr;
-}
 .file-path strong {
+	flex-shrink: 0;
 	color: var(--text-primary);
+	font-size: var(--font-size-label);
 	font-weight: 500;
 }
-.file-card[data-viewed] .file-path,
+.file-dir {
+	overflow: hidden;
+	color: var(--text-faint);
+	direction: rtl;
+	font-size: 12.5px;
+	text-align: left;
+	text-overflow: ellipsis;
+}
 .file-card[data-viewed] .file-path strong {
 	color: var(--text-faint);
 }
@@ -243,14 +242,31 @@
 	user-select: none;
 }
 
-/* Hunks follow one another with a hairline where the diff skips lines; the line numbers say how many. */
-.hunk + .hunk {
+/* Where the diff skips lines: a quiet row that says how many, level with the code. */
+.hunk-gap {
+	display: flex;
+	height: 26px;
+	align-items: center;
+	padding-left: 62px;
+	border-block: 1px solid var(--line-card);
+	background: var(--bg-panel);
+	color: var(--text-faint);
+	font-size: 12px;
+	user-select: none;
+}
+.hunk:has([data-numbers='both']) > .hunk-gap {
+	padding-left: 106px;
+}
+.hunk:first-child > .hunk-gap {
+	border-top: 0;
+}
+.hunk + .hunk:not(:has(> .hunk-gap)) {
 	border-top: 1px solid var(--line-card);
 }
 .file-body > :last-child {
 	overflow: hidden;
-	border-bottom-right-radius: calc(var(--radius-row) - 1px);
-	border-bottom-left-radius: calc(var(--radius-row) - 1px);
+	border-bottom-right-radius: var(--radius-card);
+	border-bottom-left-radius: var(--radius-card);
 }
 .file-body [data-ui='code-lines'] {
 	border-radius: 0;
@@ -265,6 +281,10 @@
 	background-color: var(--sev-high-tint);
 	box-shadow: inset 2px 0 0 var(--sev-high-icon);
 }
+.file-body [data-ui='code-line-note'] {
+	padding-top: 4px;
+	padding-bottom: 6px;
+}
 
 /* What stands in a diff's place before it mounts, when it is too large to open by itself, or when it has no lines. */
 .file-quiet {
@@ -277,27 +297,36 @@
 	font-size: var(--font-size-label);
 }
 
-/* A bug where it happens: one line under the code that opens the bug. */
+/*
+ * A finding where it happens: one line under the code, a raised plate with the card recipe. Pressed, it opens in
+ * place to say what is wrong. Its severity's colour runs down its leading edge.
+ */
 .line-bug {
-	display: flex;
 	max-width: 760px;
-	align-items: center;
-	gap: 10px;
-	padding: 7px 10px 7px 12px;
 	border-radius: var(--radius-row);
 	background: var(--bg-raised);
 	box-shadow: var(--shadow-card);
+}
+.line-bug-head {
+	display: flex;
+	width: 100%;
+	min-height: 34px;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 10px 6px 12px;
+	border-radius: var(--radius-row);
 	color: var(--text-primary);
 	font-size: var(--font-size-label);
 	font-weight: 500;
 	line-height: 18px;
 	outline: none;
+	text-align: left;
 	transition: background-color var(--dur-hover) var(--ease-hover);
 }
-.line-bug:hover {
-	background: var(--bg-hover);
+.line-bug-head:hover {
+	background: rgb(var(--wash-rgb) / 0.04);
 }
-.line-bug:focus-visible {
+.line-bug-head:focus-visible {
 	box-shadow: var(--focus-ring);
 }
 .line-bug-title {
@@ -306,6 +335,33 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.line-bug-caret {
+	width: 13px;
+	height: 13px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.line-bug-head[data-state='open'] .line-bug-caret {
+	rotate: 180deg;
+}
+.line-bug-body {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 0 14px 12px 36px;
+}
+.line-bug-text {
+	max-width: 68ch;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	line-height: 20px;
+}
+.line-bug-foot {
+	display: flex;
+	align-items: center;
+	gap: 12px;
 }
 .file-bugs {
 	display: flex;
@@ -347,14 +403,4 @@
 	color: var(--text-muted);
 	font-size: var(--font-size-label);
 	line-height: 19px;
-}
-.guide-row {
-	height: auto;
-	min-height: 32px;
-	align-items: baseline;
-	gap: 10px;
-	padding: 6px 8px;
-}
-.guide-row .tree-name {
-	white-space: normal;
 }

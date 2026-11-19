@@ -1,7 +1,6 @@
 'use client';
 
-import type { FileDiff } from '@recoder/shared';
-import { HoverList, Pill } from '@recoder/ui';
+import { Pill } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import type { GuidePart } from '@/lib/changes/types';
@@ -11,9 +10,9 @@ import { findingsLabel, plural } from '@/lib/shell/format';
 const REST_ID = 'rest';
 
 /** The guide's parts, with one more at the end for the files none of them names. */
-export function partsWithRest(parts: GuidePart[], files: FileDiff[]): GuidePart[] {
+export function partsWithRest(parts: GuidePart[], paths: string[]): GuidePart[] {
 	const named = new Set(parts.flatMap((part) => part.paths));
-	const rest = files.map((file) => file.path).filter((path) => !named.has(path));
+	const rest = paths.filter((path) => !named.has(path));
 
 	if (rest.length === 0) return parts;
 
@@ -28,31 +27,6 @@ export function partsWithRest(parts: GuidePart[], files: FileDiff[]): GuidePart[
 			suggestions: 0
 		}
 	];
-}
-
-interface GuideSideProps {
-	parts: GuidePart[];
-	onOpenPart: (part: GuidePart) => void;
-}
-
-/** The guide beside the diff: the parts in reading order. A click scrolls to the part's first file. */
-export function GuideSide({ parts, onOpenPart }: GuideSideProps) {
-	return (
-		<HoverList as="ol" className="tree" itemSelector="[data-tree-row]">
-			{parts.map((part, index) => (
-				<li key={part.id}>
-					<button type="button" data-tree-row className="tree-row guide-row" onClick={() => onOpenPart(part)}>
-						<span className="guide-number">{index + 1}</span>
-						<span className="tree-name">{part.title}</span>
-						<span className="tree-end">
-							{part.bugs > 0 ? <span className="tree-bug" role="img" aria-label={`${part.bugs} open bugs`} /> : null}
-							{part.paths.length}
-						</span>
-					</button>
-				</li>
-			))}
-		</HoverList>
-	);
 }
 
 interface GuidePartSectionProps {

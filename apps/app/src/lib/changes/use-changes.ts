@@ -1,14 +1,14 @@
 'use client';
 
 import type { FileDiff } from '@recoder/shared';
+import type { TreeRow } from '@recoder/ui';
 import { useCallback, useMemo } from 'react';
 
 import { useSession, useSessionData } from '../pull/pull-session';
 import { loaded } from '../pull/session-state';
-import { withKey, withoutKey } from '../shell/key-set';
-import { treeOrder, treeRows } from './file-tree';
+import { fileGroups, sideRows, treeOrder } from './file-tree';
 import { guideParts, openBugsByFile, openSuggestionsByFile } from './guide';
-import type { FileTreeView, GuidePart, ViewedFilesView } from './types';
+import type { ChangesNav, FileTreeView, GuidePart, ViewedFilesView } from './types';
 import { isViewedAt, toggleViewed, viewedKey, writeViewed } from './viewed-files';
 
 const NO_FILES: FileDiff[] = [];
@@ -60,38 +60,38 @@ export function useViewedFiles(): ViewedFilesView {
 	);
 }
 
-/** The file tree beside the diff. */
+/** The changed files by folder for the file menu, and the order the diff reads in. */
 export function useFileTree(): FileTreeView {
-	const session = useSession();
 	const files = useDiffFiles();
-	const filter = useSessionData((data) => data.treeFilter);
-	const closed = useSessionData((data) => data.closedFolders);
 	const viewed = useViewedFiles();
 	const bugs = useBugsByFile();
 	const isViewed = viewed.isViewed;
-
-	const rows = useMemo(
-		() => treeRows(files, { filter, closed }, { isViewed, bugs }),
-		[files, filter, closed, isViewed, bugs]
-	);
-
+	const groups = useMemo(() => fileGroups(files, { isViewed, bugs }), [files, isViewed, bugs]);
 	const order = useMemo(() => treeOrder(files), [files]);
-	const setFilter = useCallback((next: string) => session.state.setState({ treeFilter: next }), [session]);
+
+	return useMemo(() => ({ groups, order }), [groups, order]);
+}
+
+/** The file sidebar's visible rows, and how to open or shut one of its folders. */
+export function useSideRows(): { rows: TreeRow[]; toggleFolder: (path: string) => void } {
+	const session = useSession();
+	const files = useDiffFiles();
+	const closed = useSessionData((data) => data.changesClosed);
+	const isViewed = useViewedFiles().isViewed;
+	const rows = useMemo(() => sideRows(files, closed, isViewed), [files, closed, isViewed]);
 
 	const toggleFolder = useCallback(
-		(id: string) =>
-			session.state.setState((current) => ({
-				closedFolders: current.closedFolders.has(id)
-					? withoutKey(current.closedFolders, id)
-					: withKey(current.closedFolders, id)
-			})),
+		(path: string) => {
+			const next = new Set(session.state.getState().changesClosed);
+
+			if (!next.delete(path)) next.add(path);
+
+			session.state.setState({ changesClosed: next });
+		},
 		[session]
 	);
 
-	return useMemo(
-		() => ({ rows, filter, setFilter, toggleFolder, order }),
-		[rows, filter, setFilter, toggleFolder, order]
-	);
+	return { rows, toggleFolder };
 }
 
 /** The review plan's parts in plan order; empty until the review planned. */
@@ -107,5 +107,19 @@ export function useGuide(): GuidePart[] {
 				suggestions: openSuggestionsByFile(review?.status === 'passed' ? review.findings : [])
 			}),
 		[assignments, bugs, review]
+	);
+}
+
+/** The asks that move the Changes tab; a tab or a tool calls them and the tab acts on them when it is shown. */
+export function useChangesNav(): ChangesNav {
+	const session = useSession();
+
+	return useMemo(
+		() => ({
+			goTo: (path, line = null, findingId = null) =>
+				session.state.setState({ changesTarget: { path, line, findingId, done: false } }),
+			foldAll: (open) => session.state.setState({ changesFold: { open } })
+		}),
+		[session]
 	);
 }

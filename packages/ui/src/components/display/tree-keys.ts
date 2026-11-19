@@ -9,6 +9,8 @@ export interface TreeRow {
 	open?: boolean;
 	/** Whether a folder is still reading what is in it. */
 	loading?: boolean;
+	/** A row the person is done with, such as a file already read; it is drawn quieter. */
+	muted?: boolean;
 }
 
 /** What a key does to the tree: move the focus, open or shut a folder, or choose a file. */

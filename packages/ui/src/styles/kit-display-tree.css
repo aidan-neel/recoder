@@ -33,6 +33,9 @@
 			color var(--dur-hover) var(--ease-hover),
 			box-shadow var(--dur-hover) var(--ease-hover);
 	}
+	[data-ui='tree'] [data-tree-row][data-muted] {
+		color: var(--text-faint);
+	}
 	[data-ui='tree'] [data-tree-row]:hover,
 	[data-ui='tree'] [data-tree-row][aria-selected='true'] {
 		color: var(--text-primary);
@@ -67,6 +70,20 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	[data-ui='tree'] [data-ui='tree-end'] {
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-faint);
+		font-family: var(--font-code);
+		font-size: 11px;
+		font-variant-numeric: tabular-nums;
+	}
+	[data-ui='tree'] [data-ui='tree-end'] svg {
+		width: 12px;
+		height: 12px;
 	}
 	[data-ui='tree'] [data-tree-row] > [data-ui='spinner'] {
 		color: var(--text-faint);

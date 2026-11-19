@@ -75,9 +75,18 @@
 	background-color: var(--diff-focus);
 	box-shadow: inset 2px 0 0 var(--sev-medium-solid);
 }
+/* The line a link points at: the accent's wash and bar. */
+[data-ui='code-line'][data-marked] {
+	background-color: var(--accent-tint);
+	box-shadow: inset 2px 0 0 var(--accent);
+}
+[data-ui='code-line'][data-marked] > [data-ui='code-line-number'] {
+	background-color: transparent;
+	color: var(--accent-text);
+}
 
 /* A new file is all additions: the green says nothing, so it steps back. */
-[data-ui='code-lines'][data-fresh] [data-ui='code-line'][data-type='add']:not([data-flagged]),
+[data-ui='code-lines'][data-fresh] [data-ui='code-line'][data-type='add']:not([data-flagged], [data-marked]),
 [data-ui='code-lines'][data-fresh] [data-ui='code-line'][data-type='add'] > [data-ui='code-line-number'] {
 	background-color: transparent;
 }

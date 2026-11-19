@@ -1,17 +1,12 @@
 import type { FileDiff } from '@recoder/shared';
+import type { TreeRow } from '@recoder/ui';
 
-import type { FileChange, TreeRow } from './types';
+import type { FileChange, FileEntry, FileGroup } from './types';
 
-/** What each file row shows beyond the diff: whether it was viewed and its open findings. */
+/** What each file shows beyond the diff: whether it was viewed and its open findings. */
 export interface FileMarks {
 	isViewed: (path: string) => boolean;
 	bugs: ReadonlyMap<string, number>;
-}
-
-/** How the tree is shown: the search text and the folders the person closed. */
-export interface TreeShape {
-	filter: string;
-	closed: ReadonlySet<string>;
 }
 
 interface Folder {
@@ -19,8 +14,6 @@ interface Folder {
 	folders: Map<string, Folder>;
 	files: FileDiff[];
 }
-
-type FileRow = Extract<TreeRow, { kind: 'file' }>;
 
 /** How a file changed: every hunk starts from nothing (added), or leaves nothing (deleted). */
 function fileChange(file: FileDiff): FileChange {
@@ -37,6 +30,11 @@ function folder(path: string): Folder {
 
 function nameOf(path: string): string {
 	return path.slice(path.lastIndexOf('/') + 1);
+}
+
+/** The folder a path sits in; empty at the top of the repository. */
+function folderOf(path: string): string {
+	return path.slice(0, Math.max(0, path.lastIndexOf('/')));
 }
 
 /** The files placed in nested folders by their paths. */
@@ -61,7 +59,24 @@ function nest(files: FileDiff[]): Folder {
 	return root;
 }
 
-/** A folder with a lone child folder and no files joins it, so `apps/server/src` reads as one row. */
+function byName(a: string, b: string): number {
+	return a.localeCompare(b);
+}
+
+function sortedFolders(at: Folder): Folder[] {
+	return [...at.folders.values()].sort((a, b) => byName(a.path, b.path));
+}
+
+function sortedFiles(at: Folder): FileDiff[] {
+	return [...at.files].sort((a, b) => byName(nameOf(a.path), nameOf(b.path)));
+}
+
+/** The files under a folder: its folders' first, each by path, then its own, each by name. */
+function filesUnder(at: Folder): FileDiff[] {
+	return [...sortedFolders(at).flatMap(filesUnder), ...sortedFiles(at)];
+}
+
+/** A folder with a lone child folder and no files of its own joins it, so `apps/server/src` reads as one row. */
 function joined(start: Folder): { folder: Folder; label: string } {
 	let at = start;
 	let label = nameOf(start.path);
@@ -76,28 +91,47 @@ function joined(start: Folder): { folder: Folder; label: string } {
 	return { folder: at, label };
 }
 
-function byName(a: string, b: string): number {
-	return a.localeCompare(b);
+/**
+ * The file sidebar's visible rows, in the diff's order: folders first, each by path, then files by name. A closed
+ * folder hides what is in it, and a viewed file is muted.
+ */
+export function sideRows(
+	files: FileDiff[],
+	closed: ReadonlySet<string>,
+	isViewed: (path: string) => boolean
+): TreeRow[] {
+	function rowsUnder(at: Folder, depth: number): TreeRow[] {
+		const folders = sortedFolders(at).flatMap((child): TreeRow[] => {
+			const { folder: end, label } = joined(child);
+			const open = !closed.has(end.path);
+			const row: TreeRow = { kind: 'folder', id: end.path, label, depth, open };
+
+			return open ? [row, ...rowsUnder(end, depth + 1)] : [row];
+		});
+
+		const own = sortedFiles(at).map((file): TreeRow => ({
+			kind: 'file',
+			id: file.path,
+			label: nameOf(file.path),
+			depth,
+			muted: isViewed(file.path)
+		}));
+
+		return [...folders, ...own];
+	}
+
+	return rowsUnder(nest(files), 0);
 }
 
-function sortedFolders(at: Folder): Folder[] {
-	return [...at.folders.values()].sort((a, b) => byName(a.path, b.path));
+/** The paths in tree order, folders before files: the order to read the diff in. */
+export function treeOrder(files: FileDiff[]): string[] {
+	return filesUnder(nest(files)).map((file) => file.path);
 }
 
-function sortedFiles(at: Folder): FileDiff[] {
-	return [...at.files].sort((a, b) => byName(nameOf(a.path), nameOf(b.path)));
-}
-
-function countFiles(at: Folder): number {
-	return at.files.length + sortedFolders(at).reduce((sum, child) => sum + countFiles(child), 0);
-}
-
-function fileRow(file: FileDiff, depth: number, marks: FileMarks): FileRow {
+function entry(file: FileDiff, marks: FileMarks): FileEntry {
 	return {
-		kind: 'file',
-		id: file.path,
+		path: file.path,
 		name: nameOf(file.path),
-		depth,
 		additions: file.additions,
 		deletions: file.deletions,
 		change: fileChange(file),
@@ -106,30 +140,15 @@ function fileRow(file: FileDiff, depth: number, marks: FileMarks): FileRow {
 	};
 }
 
-/** The rows under a folder: its folders first, then its files, each by name; a closed folder hides what is in it. */
-function rowsUnder(at: Folder, depth: number, closed: ReadonlySet<string>, marks: FileMarks): TreeRow[] {
-	const folders = sortedFolders(at).flatMap((child): TreeRow[] => {
-		const { folder: end, label } = joined(child);
-		const open = !closed.has(end.path);
-		const row: TreeRow = { kind: 'folder', id: end.path, label, depth, open, files: countFiles(end) };
+/** The files in tree order, gathered under the folder each sits in, so the file menu reads like the tree. */
+export function fileGroups(files: FileDiff[], marks: FileMarks): FileGroup[] {
+	const groups = new Map<string, FileEntry[]>();
 
-		return open ? [row, ...rowsUnder(end, depth + 1, closed, marks)] : [row];
-	});
+	for (const file of filesUnder(nest(files))) {
+		const at = folderOf(file.path);
 
-	return [...folders, ...sortedFiles(at).map((file) => fileRow(file, depth, marks))];
-}
+		groups.set(at, [...(groups.get(at) ?? []), entry(file, marks)]);
+	}
 
-/** The file tree's visible rows: files whose path holds the filter text, in folders the person did not close. */
-export function treeRows(files: FileDiff[], shape: TreeShape, marks: FileMarks): TreeRow[] {
-	const needle = shape.filter.trim().toLowerCase();
-	const shown = needle ? files.filter((file) => file.path.toLowerCase().includes(needle)) : files;
-
-	return rowsUnder(nest(shown), 0, shape.closed, marks);
-}
-
-/** The paths in tree order with every folder open: the order to read the diff in. */
-export function treeOrder(files: FileDiff[]): string[] {
-	const none: FileMarks = { isViewed: () => false, bugs: new Map() };
-
-	return rowsUnder(nest(files), 0, new Set(), none).flatMap((row) => (row.kind === 'file' ? [row.id] : []));
+	return [...groups].map(([path, entries]) => ({ folder: path, files: entries }));
 }

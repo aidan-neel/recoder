@@ -14,6 +14,8 @@ export interface CodeLine {
 	text: string;
 	/** Inside the range a decision points at: tinted, with an amber bar on the left. */
 	flagged?: boolean;
+	/** The line a link points at: tinted in the accent until another line is. */
+	marked?: boolean;
 }
 
 interface CodeLinesProps {
@@ -61,6 +63,8 @@ function Row({ line, html, showOldNumbers, onClick }: RowProps) {
 			data-ui="code-line"
 			data-type={line.type}
 			data-flagged={line.flagged || undefined}
+			data-marked={line.marked || undefined}
+			data-new-line={line.newNo ?? undefined}
 			data-clickable={onClick ? '' : undefined}
 			onClick={onClick}
 		>

@@ -62,8 +62,3 @@ export function useCurrentFile(scroller: RefObject<HTMLElement | null>, revision
 
 	return current;
 }
-
-/** Scrolls a file's card to the top of its scroller. */
-export function scrollToFile(scroller: HTMLElement | null, path: string): void {
-	scroller?.querySelector(`[data-file="${CSS.escape(path)}"]`)?.scrollIntoView({ block: 'start' });
-}
