@@ -4,7 +4,6 @@ services:
   server:
     build:
       context: .
-      dockerfile: apps/server/Dockerfile
     container_name: recoder-server
     restart: unless-stopped
     ports:
@@ -14,11 +13,14 @@ services:
       HOST: 0.0.0.0
       RECODER_DATABASE_URL: ${RECODER_DATABASE_URL:-}
       RECODER_SECRET_KEY: ${RECODER_SECRET_KEY:-}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      RECODER_PUBLIC_URL: ${RECODER_PUBLIC_URL:-}
+      FRONTEND_URL: ${RECODER_PUBLIC_URL:-http://localhost:${PORT:-3001}}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
       GITLAB_WEBHOOK_SECRET: ${GITLAB_WEBHOOK_SECRET:-}
       RECODER_GITHUB_CLIENT_ID: ${RECODER_GITHUB_CLIENT_ID:-}
       RECODER_GITLAB_CLIENT_ID: ${RECODER_GITLAB_CLIENT_ID:-}
+      RECODER_GITHUB_CLIENT_SECRET: ${RECODER_GITHUB_CLIENT_SECRET:-}
+      RECODER_GITLAB_CLIENT_SECRET: ${RECODER_GITLAB_CLIENT_SECRET:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITLAB_TOKEN: ${GITLAB_TOKEN:-}
       GITLAB_HOST: ${GITLAB_HOST:-}
@@ -31,25 +33,6 @@ services:
       - recoder-work:/tmp/recoder-work
       - recoder-data:/app/data
       - recoder-config:/app/config
-    healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health > /dev/null']
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
-  app:
-    build:
-      context: .
-      dockerfile: apps/app/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3001}
-    container_name: recoder-app
-    restart: unless-stopped
-    ports:
-      - '3000:3000'
-    depends_on:
-      server:
-        condition: service_healthy
 
 volumes:
   recoder-work:

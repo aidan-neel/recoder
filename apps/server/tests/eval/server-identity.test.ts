@@ -13,6 +13,7 @@ const saved = Object.fromEntries(PLANTED_NAMES.map((name) => [name, process.env[
 /** Read by the server but never a flag: where it keeps files, how it reaches its model and how API clients sign in. */
 const NOT_A_FLAG = [
 	'RECODER_API_TOKEN',
+	'RECODER_APP_DIR',
 	'RECODER_SECRET_KEY',
 	'RECODER_INSTANCE_ID',
 	'RECODER_PUBLIC_URL',

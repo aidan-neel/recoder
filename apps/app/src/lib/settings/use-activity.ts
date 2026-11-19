@@ -65,12 +65,13 @@ export interface WebhookActivity {
  */
 export function useWebhookActivity(): WebhookActivity {
 	const paths = useAutoReview((state) => state.payload?.webhookPaths ?? null);
+	const origin = API_BASE || (typeof window !== 'undefined' ? window.location.origin : '');
 
 	return {
 		rows: paths
 			? [
-					{ forge: 'GitLab', url: `${API_BASE}${paths.gitlab}` },
-					{ forge: 'GitHub', url: `${API_BASE}${paths.github}` }
+					{ forge: 'GitLab', url: `${origin}${paths.gitlab}` },
+					{ forge: 'GitHub', url: `${origin}${paths.github}` }
 				]
 			: null
 	};

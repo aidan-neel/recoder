@@ -95,7 +95,7 @@ async function finishSignIn(c: Context, redirect: ClaimedRedirect, code: string)
 	if (outcome.kind === 'rejected') return failureRedirect(c, 'removed');
 	if (outcome.signIn.session) setSessionCookie(c, outcome.signIn.session);
 
-	return c.redirect(new URL(redirect.returnPath, env.FRONTEND_URL).href);
+	return c.redirect(frontendAddress(redirect.returnPath));
 }
 
 function signInProvider(value: string): SignInForge | undefined {
@@ -119,16 +119,18 @@ function sanitizeReturnPath(value: string | undefined): string {
 
 	const parsed = new URL(value, PROBE_ORIGIN);
 
-	return parsed.origin === PROBE_ORIGIN ? parsed.pathname + parsed.search : '/';
+	return parsed.origin === PROBE_ORIGIN && !parsed.pathname.startsWith('//') ? parsed.pathname + parsed.search : '/';
 }
 
 /** Back to the app's start with a short code, never a JSON page: the browser is mid-navigation. */
 function failureRedirect(c: Context, code: SignInErrorCode): Response {
-	const url = new URL('/', env.FRONTEND_URL);
+	return c.redirect(frontendAddress(`/?signin-error=${code}`));
+}
 
-	url.searchParams.set('signin-error', code);
+function frontendAddress(path: string): string {
+	const destination = sanitizeReturnPath(path);
 
-	return c.redirect(url.href);
+	return env.RECODER_APP_DIR ? destination : new URL(destination, env.FRONTEND_URL).href;
 }
 
 /** A thrown failure as `failed`. Only a failure that is not a typed sign-in error is logged, by its name alone. */

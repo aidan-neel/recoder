@@ -4,7 +4,7 @@ import { takeEarly } from './early-fetch';
 import { plainError } from './server-error';
 import { reportSessionRefused } from './session-refused';
 
-/** The review server. Every call is cross-origin, and carries the session cookie (`credentials: 'include'`). */
+/** Empty when Bun serves the bundled app and API on the same origin. */
 export const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
 interface ErrorBody {

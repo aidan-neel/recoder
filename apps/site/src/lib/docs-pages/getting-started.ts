@@ -41,17 +41,16 @@ bun run dev
 git clone https://github.com/aidan-neel/recoder
 cd recoder
 cp .env.example .env
-docker compose up --build
+docker compose up --build --remove-orphans
 \`\`\`
 
-The app opens on [localhost:3000](http://localhost:3000) and the server listens on port 3001. Settings, tokens and reviews are kept in the \`recoder-data\` volume, mounted at \`/app/data\`.
+The app and API share [localhost:3001](http://localhost:3001). Settings, tokens and reviews stay in the \`recoder-data\` volume, mounted at \`/app/data\`. If you used the old two-container Compose setup, this command removes the old app container without removing its volumes.
 
 Know the image’s limits before you choose it:
 
 - **No agent CLIs and no bubblewrap.** The server image has \`git\`, \`gh\` and \`glab\`, nothing else. You can’t add a provider through OpenCode in Settings, so point Recoder at a model with the \`RECODER_REVIEW_*\` variables. Reviews only read code: findings can’t be reproduced by running it.
-- **Only listed variables reach the server.** \`docker-compose.yml\` passes \`PORT\`, \`FRONTEND_URL\`, \`GITHUB_WEBHOOK_SECRET\`, \`GITLAB_WEBHOOK_SECRET\`, \`GITHUB_TOKEN\`, \`GITLAB_TOKEN\`, \`GITLAB_HOST\`, \`RECODER_ALLOWED_COMMANDS\` and \`RECODER_COMMAND_TIMEOUT_MS\`. To use any other variable, such as \`RECODER_REVIEW_MODEL\` or \`GH_TOKEN\`, add it under the \`server\` service’s \`environment\`.
-- **The app has the server’s address built in.** \`PUBLIC_API_URL\` (default \`http://localhost:3001\`) is compiled into the app image, so rebuild after you change it.
-- **\`FRONTEND_URL\` must be the app’s address.** The image runs with \`NODE_ENV=production\`, and the server then accepts sign-ins and token changes only from that origin.
+- **Only listed variables reach the server.** To use a variable not listed in \`docker-compose.yml\`, such as \`RECODER_REVIEW_MODEL\` or \`GH_TOKEN\`, add it under the \`server\` service’s \`environment\`.
+- **Set the public origin at runtime.** Set \`PORT\` to change the host port. If you put Recoder behind a reverse proxy, set \`RECODER_PUBLIC_URL\` to the public HTTPS origin so sign-in and OAuth callbacks use it. Neither change requires rebuilding the image.
 - **\`glab\` is blocked by default.** The compose default for \`RECODER_ALLOWED_COMMANDS\` leaves it out. That is fine once a GitLab token is connected, since Recoder then uses the REST API.
 
 ## First review

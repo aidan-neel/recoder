@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { env } from '../env';
+import { env, publicOrigin } from '../env';
 
 /**
  * Recoder is a single-user server. Routes that sign in or hold credentials must
@@ -15,13 +15,16 @@ export const trustedOrigin: MiddlewareHandler = async (c, next) => {
 };
 
 /**
- * Whether a page at `origin` may use credentials with this server: the configured `FRONTEND_URL`, the server's own
- * origin, and in development any loopback origin.
+ * Whether a page at `origin` may use credentials with this server. Behind TLS termination the bundled app's
+ * public origin can differ from the server's request URL.
  */
 export function isTrustedOrigin(origin: string, requestUrl: string): boolean {
-	const allowed = new Set([new URL(env.FRONTEND_URL).origin, new URL(requestUrl).origin]);
-
-	return allowed.has(origin) || devOrigin(origin);
+	return (
+		origin === new URL(requestUrl).origin ||
+		origin === publicOrigin() ||
+		(!env.RECODER_APP_DIR && origin === new URL(env.FRONTEND_URL).origin) ||
+		devOrigin(origin)
+	);
 }
 
 /** Vite moves to the next free port, so dev trusts any loopback origin. */

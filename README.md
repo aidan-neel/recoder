@@ -22,10 +22,10 @@ Or with Docker:
 
 ```sh
 cp .env.example .env
-docker compose up --build
+docker compose up --build --remove-orphans
 ```
 
-The app opens at http://localhost:3000 and the server listens on port 3001. The image builds `PUBLIC_API_URL` into the app, so rebuild after you change it.
+The app and API share http://localhost:3001. Set `PORT` to change the host port, or set `RECODER_PUBLIC_URL` to your public HTTPS origin when using a reverse proxy. Neither requires an image rebuild. The Compose command also removes the old separate app container when upgrading from a two-container install; it keeps the existing data volumes.
 
 Configuration lives in [`.env.example`](.env.example).
 

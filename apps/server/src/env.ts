@@ -91,6 +91,7 @@ const envSchema = z.object({
 	RECODER_GITLAB_CLIENT_ID: oauthClientIdSchema,
 	RECODER_GITHUB_CLIENT_SECRET: oauthClientSecretSchema,
 	RECODER_GITLAB_CLIENT_SECRET: oauthClientSecretSchema,
+	RECODER_APP_DIR: z.string().min(1).optional(),
 	RECODER_PUBLIC_URL: publicUrlSchema,
 	RECODER_API_TOKEN: apiTokenSchema
 });
