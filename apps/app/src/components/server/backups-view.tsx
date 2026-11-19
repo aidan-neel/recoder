@@ -55,11 +55,16 @@ const ASKS: Record<BackupAsk, { title: string; description: (when: string) => st
 	}
 };
 
-/** A backup the menu asked about, and where its row stood, kept through the dialog's exit. */
+/** The backups next to the one at `index`: the one below, which takes its place once it is deleted, then the one above. */
+function neighboursOf(backups: Backup[], index: number): string[] {
+	return [backups[index + 1], backups[index - 1]].flatMap((backup) => (backup ? [backup.id] : []));
+}
+
+/** A backup the menu asked about, kept through the dialog's exit, with the rows below and above it, in that order. */
 interface Asked {
 	kind: BackupAsk;
 	backup: Backup;
-	index: number;
+	neighbours: string[];
 }
 
 interface BackupRowProps {
@@ -101,6 +106,7 @@ function BackupRow({ backup, restorable, onAsk, triggerRef }: BackupRowProps) {
 /**
  * The backups, newest first, and the one dialog their menus ask through. It lives beside the rows rather than in one,
  * so deleting a backup leaves it to close and hand focus to the row that took its place, the one above, or Back up now.
+ * The rows on screen are read from their menu buttons as it closes: the closing dialog keeps the props it last had.
  */
 function BackupList({
 	view,
@@ -125,12 +131,14 @@ function BackupList({
 	}
 
 	function focusAfterDelete(event: Event): void {
-		if (!asked || backups.some((backup) => backup.id === asked.backup.id)) return;
+		const buttons = triggers.current;
 
-		const neighbour = backups[asked.index] ?? backups[asked.index - 1];
+		if (!asked || buttons.has(asked.backup.id)) return;
+
+		const neighbour = asked.neighbours.find((id) => buttons.has(id));
 
 		event.preventDefault();
-		(neighbour ? triggers.current.get(neighbour.id) : fallback.current)?.focus();
+		(neighbour ? buttons.get(neighbour) : fallback.current)?.focus();
 	}
 
 	if (backups.length === 0) {
@@ -147,7 +155,7 @@ function BackupList({
 					backup={backup}
 					restorable={view.restorable}
 					onAsk={(kind) => {
-						setAsked({ kind, backup, index });
+						setAsked({ kind, backup, neighbours: neighboursOf(backups, index) });
 						setOpen(true);
 					}}
 					triggerRef={(button) => {
