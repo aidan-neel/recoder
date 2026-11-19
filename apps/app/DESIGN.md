@@ -127,9 +127,13 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   of its own: New review (a + and its label, the first row), Pull requests
   (with the open count), Repositories, Automations
   and Guidelines, all rows of one kind; then Reviews,
-  Chats and Repositories, each under a title that folds it, with a + that
-  starts one (a new review, a new chat, Add repository) and a ⋯ that hides
-  it, both shown when the title is pointed at or focused. Review and chat rows
+  Chats and Repositories, each under a title drawn as Capy draws its groups
+  (`SidebarSection`): the title size (14px) in regular weight and
+  `--text-primary`, on the rows' text lane, with no chevron. At its right, at
+  rest and without a fill, a quiet + that starts one (a new review, a new
+  chat, Add repository) and a ⋯ that collapses or hides the group, in
+  `--text-faint` until pointed at. A click on the title folds the group too.
+  Settled uses the same title. Review and chat rows
   are two lines with no tile: the title and its age, then a review's state,
   repository and number, or a chat's repository. A repository is one line on
   the places' lanes: the forge's mark, the name, and a `--sev-high` dot while
