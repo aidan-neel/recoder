@@ -86,13 +86,11 @@ a.guidelines-pill:focus-visible {
 	max-height: calc(24 * 20px + 16px);
 	border-radius: var(--radius-row);
 	background-color: var(--bg-field);
-	box-shadow: inset 0 0 0 1px var(--line-control);
+	box-shadow: var(--shadow-field);
 	color: var(--text-primary);
 }
 .guidelines-stream:has(:focus-visible) {
-	box-shadow:
-		inset 0 0 0 1px var(--line-focus),
-		0 0 0 3px rgb(var(--ink-rgb) / 0.06);
+	box-shadow: var(--shadow-field-focus);
 }
 .guidelines-stream [data-ui='scroll-area-viewport'] {
 	outline: none;

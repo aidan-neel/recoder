@@ -399,7 +399,7 @@ a.ref-chip {
 }
 .strip[data-tone='neutral'] {
 	background: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-card);
+	box-shadow: var(--shadow-card);
 	color: var(--text-muted);
 }
 .strip svg {

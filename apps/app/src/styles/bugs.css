@@ -425,7 +425,7 @@
 .clean-figures {
 	display: flex;
 	border-radius: var(--radius-card);
-	box-shadow: inset 0 0 0 1px var(--line-card);
+	box-shadow: var(--shadow-card);
 	text-align: start;
 }
 .clean-figure {

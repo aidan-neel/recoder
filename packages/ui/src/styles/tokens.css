@@ -86,11 +86,25 @@
 	--syn-type: #93cfc0;
 	--syn-plain: #d6d1c9;
 
-	/* Elevation */
-	--shadow-menu: 0 0 0 1px var(--line-menu), 0 8px 24px rgba(0, 0, 0, 0.45);
-	/* Centred and tight: an offset blur pooled as a dark band under the dialog. */
-	--shadow-modal: 0 0 0 1px var(--line-control), 0 4px 24px rgba(0, 0, 0, 0.35);
-	--shadow-composer: 0 0 0 1px var(--line-control);
+	/*
+	 * Edges and lift, the parts the surface recipes below are built from. A raised thing has a
+	 * hairline inside its edge and, in dark, a dark outline outside it, so it stays crisp on any
+	 * surface; controls that should feel pressable add a top highlight, a soft fill and a short
+	 * contact shadow. Light needs no outline: its hairline is already dark.
+	 */
+	--edge-outline: rgb(0 0 0 / 0.42);
+	--edge-highlight: rgb(255 255 255 / 0.05);
+	--lift-contact: 0 1px 2px rgb(0 0 0 / 0.3);
+	--lift-float: 0 3px 8px rgb(0 0 0 / 0.22), 0 12px 32px rgb(0 0 0 / 0.3);
+	--lift-sheet: 0 6px 18px rgb(0 0 0 / 0.3), 0 24px 64px rgb(0 0 0 / 0.42);
+	--lift-composer: 0 3px 8px rgb(0 0 0 / 0.1), 0 2px 5px rgb(0 0 0 / 0.1), 0 1px 1px rgb(0 0 0 / 0.1);
+	--fill-raised: linear-gradient(180deg, rgb(255 255 255 / 0.085), rgb(255 255 255 / 0.055));
+	--fill-raised-hover: linear-gradient(180deg, rgb(255 255 255 / 0.11), rgb(255 255 255 / 0.08));
+	--fill-raised-press: rgb(255 255 255 / 0.06);
+	--fill-well: rgb(0 0 0 / 0.22);
+	--primary-sheen: rgb(255 255 255 / 0.45);
+	--primary-ring: rgb(0 0 0 / 0.5);
+	--primary-drop: 0 2px 4px rgb(0 0 0 / 0.32);
 	--scrim: rgba(8, 7, 6, 0.6);
 
 	/* Motion: tuned for a tool opened thousands of times a day. Hover is near
@@ -191,9 +205,19 @@
 	--syn-type: #1f7a68;
 	--syn-plain: #3a3631;
 
-	--shadow-menu: 0 0 0 1px var(--line-menu), 0 8px 24px rgba(60, 45, 30, 0.14);
-	--shadow-modal: 0 0 0 1px var(--line-control), 0 24px 60px rgba(60, 45, 30, 0.22);
-	--shadow-composer: 0 0 0 1px var(--line-control);
+	--edge-outline: transparent;
+	--edge-highlight: transparent;
+	--lift-contact: 0 1px 2px rgb(0 0 0 / 0.06);
+	--lift-float: 0 3px 9px rgb(0 0 0 / 0.06), 0 12px 32px rgb(0 0 0 / 0.08);
+	--lift-sheet: 0 6px 24px rgb(0 0 0 / 0.08), 0 24px 64px rgb(0 0 0 / 0.12);
+	--lift-composer: 0 4px 12px rgb(0 0 0 / 0.025), 0 2px 6px rgb(0 0 0 / 0.03), 0 1px 1px rgb(0 0 0 / 0.04);
+	--fill-raised: linear-gradient(180deg, #ffffff, #f9f9f9);
+	--fill-raised-hover: linear-gradient(180deg, #fbfbfb, #f3f3f4);
+	--fill-raised-press: #f1f1f2;
+	--fill-well: rgb(0 0 0 / 0.045);
+	--primary-sheen: rgb(255 255 255 / 0.14);
+	--primary-ring: rgb(0 0 0 / 0.22);
+	--primary-drop: 0 2px 4px rgb(0 0 0 / 0.14);
 	--scrim: rgba(30, 25, 20, 0.35);
 }
 
@@ -316,4 +340,53 @@
 	--color-line-hover: var(--line-hover);
 	--font-sans: var(--font-ui);
 	--font-mono: var(--font-code);
+}
+
+/*
+ * The surface recipes, defined once and consumed by every control, field, card and overlay in the
+ * kit. They are worked out again wherever a palette or skin can change the parts they read
+ * (`--wash-rgb`, `--primary`), so a swatch previews its own palette.
+ *
+ * - raised: secondary and outline buttons, select triggers, segmented thumbs. Fill, hairline,
+ *   top highlight, dark outline and a contact shadow.
+ * - edge: chips and anything bordered that is not raised. Hairline and dark outline only.
+ * - field: inputs and textareas, a well rather than a plate; the hairline brightens on hover
+ *   and focus, the outline stays.
+ * - card: hairline, highlight and outline, flat in dark, a breath of lift in light.
+ * - menu, modal, composer: the edge plus the lift of what floats over the page.
+ * - primary: the region's one action, a soft gradient of the primary with a sheen, a ring and a
+ *   short drop shadow.
+ */
+:root,
+.app-skin,
+[data-palette] {
+	--edge: rgb(var(--wash-rgb) / 0.1);
+	--edge-strong: rgb(var(--wash-rgb) / 0.16);
+	--edge-focus: rgb(var(--wash-rgb) / 0.28);
+
+	--shadow-raised:
+		inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--edge-highlight), 0 0 0 1px var(--edge-outline), var(--lift-contact);
+	--shadow-raised-hover:
+		inset 0 0 0 1px var(--edge-strong), inset 0 1px 0 var(--edge-highlight), 0 0 0 1px var(--edge-outline),
+		var(--lift-contact);
+	--shadow-edge: inset 0 0 0 1px var(--edge), 0 0 0 1px var(--edge-outline);
+	--shadow-edge-hover: inset 0 0 0 1px var(--edge-strong), 0 0 0 1px var(--edge-outline);
+	--shadow-field: inset 0 0 0 1px var(--edge), 0 0 0 1px var(--edge-outline);
+	--shadow-field-hover: inset 0 0 0 1px var(--edge-strong), 0 0 0 1px var(--edge-outline);
+	--shadow-field-focus: inset 0 0 0 1px var(--edge-focus), 0 0 0 1px var(--edge-outline);
+	--shadow-well: inset 0 0 0 1px rgb(var(--wash-rgb) / 0.05);
+	--shadow-card: inset 0 0 0 1px var(--edge), inset 0 1px 0 var(--edge-highlight), 0 0 0 1px var(--edge-outline);
+	--shadow-card-hover:
+		inset 0 0 0 1px var(--edge-strong), inset 0 1px 0 var(--edge-highlight), 0 0 0 1px var(--edge-outline);
+	--shadow-menu: inset 0 0 0 1px var(--edge), 0 0 0 1px var(--edge-outline), var(--lift-float);
+	--shadow-modal: inset 0 0 0 1px var(--edge), 0 0 0 1px var(--edge-outline), var(--lift-sheet);
+	--shadow-composer: inset 0 0 0 1px var(--edge), 0 0 0 1px var(--edge-outline), var(--lift-composer);
+	--shadow-composer-focus: inset 0 0 0 1px var(--edge-focus), 0 0 0 1px var(--edge-outline), var(--lift-composer);
+	--shadow-primary: inset 0 1px 0 var(--primary-sheen), 0 0 0 1px var(--primary-ring), var(--primary-drop);
+	--fill-primary: linear-gradient(180deg, color-mix(in oklab, var(--primary) 88%, white), var(--primary));
+	--fill-primary-hover: linear-gradient(
+		180deg,
+		color-mix(in oklab, var(--primary-hover) 88%, white),
+		var(--primary-hover)
+	);
 }

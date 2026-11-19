@@ -6,14 +6,14 @@
  * kit's look.
  */
 @layer components {
-	/* ───────── Fields: input frames and textareas share the fill, ring and focus halo ───────── */
+	/* ───────── Fields: input frames and textareas share the fill and the field recipe (tokens.css) ───────── */
 	[data-ui='input'],
 	[data-ui='number-field'],
 	[data-ui='textarea'],
 	[data-ui='link-field'] {
 		width: 100%;
 		background-color: var(--bg-field);
-		box-shadow: inset 0 0 0 1px var(--line-control);
+		box-shadow: var(--shadow-field);
 		color: var(--text-primary);
 		font-size: var(--font-size-body);
 		transition:
@@ -24,26 +24,30 @@
 	[data-ui='number-field']:hover:not(:focus-within, [data-invalid], [data-disabled]),
 	[data-ui='textarea']:hover:not(:focus, [data-invalid], :disabled),
 	[data-ui='link-field']:hover:not(:focus, [data-invalid], [data-disabled]) {
-		box-shadow: inset 0 0 0 1px var(--line-hover);
+		box-shadow: var(--shadow-field-hover);
 	}
 	[data-ui='input']:focus-within,
 	[data-ui='number-field']:focus-within,
 	[data-ui='textarea']:focus,
 	[data-ui='link-field']:focus {
 		background-color: var(--bg-raised);
-		box-shadow: inset 0 0 0 1px var(--line-focus);
+		box-shadow: var(--shadow-field-focus);
 	}
 	[data-ui='input'][data-invalid],
 	[data-ui='number-field'][data-invalid],
 	[data-ui='textarea'][data-invalid],
 	[data-ui='link-field'][data-invalid] {
-		box-shadow: inset 0 0 0 1px var(--danger);
+		box-shadow:
+			inset 0 0 0 1px var(--danger),
+			0 0 0 1px var(--edge-outline);
 	}
 	[data-ui='input'][data-invalid]:focus-within,
 	[data-ui='number-field'][data-invalid]:focus-within,
 	[data-ui='textarea'][data-invalid]:focus,
 	[data-ui='link-field'][data-invalid]:focus {
-		box-shadow: inset 0 0 0 1px var(--danger);
+		box-shadow:
+			inset 0 0 0 1px var(--danger),
+			0 0 0 1px var(--edge-outline);
 	}
 	[data-ui='input-field']::placeholder,
 	[data-ui='number-input']::placeholder,

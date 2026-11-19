@@ -11,12 +11,12 @@ interface CardProps extends HTMLAttributes<HTMLElement> {
 	children: ReactNode;
 }
 
-/** A raised surface drawn with a 1px ring and no drop shadow: only menus and modals float. */
+/** A raised surface in the card recipe: a hairline, a top highlight and a dark outline, with no drop shadow. */
 export function Card({ as: Tag = 'div', className, children, ...props }: CardProps) {
 	return (
 		<Tag
 			data-ui="card"
-			className={cn('rounded-(--radius-card) bg-raised shadow-[0_0_0_1px_var(--line-card)]', className)}
+			className={cn('rounded-(--radius-card) bg-raised shadow-(--shadow-card)', className)}
 			{...props}
 		>
 			{children}

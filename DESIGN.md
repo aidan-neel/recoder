@@ -3,7 +3,7 @@
 The source of truth for Recoder's UI.
 
 ## Principles
-- **Warm near-black surfaces, flat by default.** Depth comes from 1px rings and a few surface steps. Shadows are for floating things only (menus, modals, toasts, the composer).
+- **Warm near-black surfaces, flat by default.** Depth comes from 1px rings and a few surface steps. Shadows are for floating things only (menus, modals, toasts, the composer). This holds for apps/web; the React apps (apps/app, apps/site) take Capy's edges and lift from the kit's surface recipes, described in `apps/app/DESIGN.md` → Surfaces.
 - **Two voices.** The UI speaks in Cal Sans (Geist as fallback). The AI speaks in Lora serif in summaries, findings and the Home brief; chat replies use the UI sans. Never mix them in one block.
 - **Quiet chrome.** Controls stay transparent until they're hovered. There is one cream primary action per region.
 - **No brand mark on AI output.** The serif alone tells you who is speaking.

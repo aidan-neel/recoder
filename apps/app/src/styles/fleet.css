@@ -92,7 +92,7 @@
 /* Pointing at the tile's link deepens its ring and fill and brings its month of reviews forward. */
 .fleet-tile:has(.fleet-tile-name:hover) {
 	background: var(--bg-raised-2);
-	box-shadow: 0 0 0 1px var(--line-strong);
+	box-shadow: var(--shadow-card-hover);
 }
 .fleet-tile .repo-bar:not([data-empty]) {
 	transition: background-color var(--dur-swap) var(--ease-out);
@@ -320,7 +320,7 @@
 	align-items: center;
 	justify-content: center;
 	border-radius: var(--radius-card);
-	box-shadow: 0 0 0 1px var(--line-control);
+	box-shadow: var(--shadow-edge);
 	text-align: center;
 	--row-button-radius: var(--radius-card);
 	transition: background-color var(--dur-hover) ease-out;

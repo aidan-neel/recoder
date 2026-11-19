@@ -29,13 +29,14 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 export type ButtonStatus = 'idle' | 'pending' | 'success' | 'error';
 
 /**
- * The look every button shares: flat, with any edge drawn as an inset
- * hairline in `--button-shadow`, so the focus ring can sit over it. Hover and
- * press on the see-through variants lay a wash over whatever is behind them,
- * so they still show inside a hovered row. A press shades the button; it
- * never changes size. A failed action tints the button red while its cross
- * shows. These class lists hold no two classes that conflict, so they are
- * plain strings: merging them as the module loads would set up
+ * The look every button shares. Its edge and lift come from the kit's surface
+ * recipes (`--shadow-raised`, `--shadow-edge`, `--shadow-primary` in
+ * tokens.css) through `--button-shadow`, so the focus ring can sit over them.
+ * Hover and press on the see-through variants lay a wash over whatever is
+ * behind them, so they still show inside a hovered row. A press shades the
+ * button; it never changes size. A failed action tints the button red while
+ * its cross shows. These class lists hold no two classes that conflict, so
+ * they are plain strings: merging them as the module loads would set up
  * tailwind-merge on every route that imports the kit.
  */
 const BASE = [
@@ -44,7 +45,7 @@ const BASE = [
 	'shadow-(--button-shadow) focus-visible:shadow-[var(--focus-ring),var(--button-shadow)]',
 	'transition-[background-color,color,box-shadow] duration-(--dur-hover) ease-out',
 	'disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none [&_svg]:pointer-events-none',
-	'data-[status=error]:bg-danger-tint data-[status=error]:text-danger',
+	'data-[status=error]:[background:var(--danger-tint)] data-[status=error]:text-danger',
 	'data-[status=error]:[--button-shadow:inset_0_0_0_1px_color-mix(in_oklab,var(--danger)_30%,transparent)]'
 ].join(' ');
 
@@ -57,17 +58,18 @@ const WASH = [
 	'active:bg-[rgb(var(--wash-rgb)/10%)]'
 ].join(' ');
 
-/** The hairline edge of the secondary and outline buttons, the same line a field draws. */
-const EDGE = '[--button-shadow:inset_0_0_0_1px_var(--line-control)]';
+/** The hairline and dark outline of the outline button, the edge a chip or a field draws. */
+const EDGE = '[--button-shadow:var(--shadow-edge)] hover:[--button-shadow:var(--shadow-edge-hover)]';
 
 const VARIANTS: Record<ButtonVariant, string> = {
 	primary: [
-		'bg-(--primary) font-medium text-(--on-primary) [--button-shadow:0_0_transparent]',
-		'hover:bg-(--primary-hover) active:bg-(--primary) data-[state=open]:bg-(--primary-hover)'
+		'[background:var(--fill-primary)] font-medium text-(--on-primary) [--button-shadow:var(--shadow-primary)]',
+		'hover:[background:var(--fill-primary-hover)] active:[background:var(--primary)] data-[state=open]:[background:var(--fill-primary-hover)]'
 	].join(' '),
 	secondary: [
-		`bg-[rgb(var(--wash-rgb)/5%)] text-fg ${EDGE}`,
-		'hover:bg-[rgb(var(--wash-rgb)/9%)] active:bg-[rgb(var(--wash-rgb)/12%)] data-[state=open]:bg-[rgb(var(--wash-rgb)/9%)]'
+		'[background:var(--fill-raised)] text-fg [--button-shadow:var(--shadow-raised)]',
+		'hover:[background:var(--fill-raised-hover)] hover:[--button-shadow:var(--shadow-raised-hover)]',
+		'active:[background:var(--fill-raised-press)] data-[state=open]:[background:var(--fill-raised-hover)]'
 	].join(' '),
 	outline: `bg-transparent text-fg ${EDGE} ${WASH} data-[state=open]:bg-[rgb(var(--wash-rgb)/6%)]`,
 	ghost: [

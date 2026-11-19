@@ -97,10 +97,6 @@
 	--syn-string: #d9c59a;
 	--syn-comment: var(--text-subtle);
 
-	/* Elevation: only menus and dialogs float, on a short, tight shadow. */
-	--shadow-menu: 0 0 0 1px var(--line-menu), 0 8px 24px rgba(0, 0, 0, 0.45);
-	--shadow-modal: 0 0 0 1px var(--line-control), 0 8px 24px rgba(0, 0, 0, 0.4);
-	--shadow-composer: 0 0 0 1px var(--line-control);
 	--scrim: rgba(0, 0, 0, 0.55);
 
 	/* The kit's derived tokens, said again so they follow this palette inside a wrapper. */
@@ -214,8 +210,6 @@
 	--syn-plain: #2a2a2a;
 	--syn-string: #8a5a00;
 
-	--shadow-menu: 0 0 0 1px rgb(0 0 0 / 0.08), 0 6px 16px -4px rgb(0 0 0 / 0.12);
-	--shadow-modal: 0 0 0 1px rgb(0 0 0 / 0.08), 0 16px 48px -12px rgb(0 0 0 / 0.2);
 	--scrim: rgba(0, 0, 0, 0.3);
 	--focus-color: rgb(var(--ink-rgb) / 0.5);
 }

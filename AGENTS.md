@@ -252,6 +252,16 @@ A browser is always available on this machine. Never conclude otherwise:
 - Sivir `ScrollArea` must always be used with `showCues={false}`. We never use
   the blur/edge-fade scroll cues (the React kit's `ScrollArea` has none).
 - We do not use subtitles in our headings only titles.
+- **Edges and lift in the React kit (apps/app, apps/site) follow Capy.** Every
+  bordered control, field, card and overlay takes one of the surface recipes in
+  `packages/ui/src/styles/tokens.css` (`--shadow-raised`, `--shadow-edge`,
+  `--shadow-field`, `--shadow-card`, `--shadow-menu`, `--shadow-modal`,
+  `--shadow-composer`, `--shadow-primary` and their `--fill-*`): a hairline
+  inside the edge, a subtle dark outline outside it in dark, and a soft contact
+  shadow on what should feel pressable (the primary, secondary buttons, the
+  chosen segment). Use the recipe; never write a ring or a shadow by hand in a
+  component or an app stylesheet. Ghost, quiet and icon buttons stay quiet at
+  rest, and panels stay flat. See `apps/app/DESIGN.md` → Surfaces.
 
 ## Recoder design system (dark redesign)
 
@@ -273,7 +283,8 @@ component specs, layout and behavior rules.
   Chat replies in the conversation use the UI sans. Serif (`.ai-voice`) remains
   only for summaries, findings and the Home brief.
 - **No drop shadows on panels, cards or the composer** in either theme
-  (`--drop: 0`); only menus and modals float.
+  (`--drop: 0`); only menus and modals float. This is apps/web's rule; the
+  React kit uses the surface recipes above.
 - **No logo mark** anywhere, including next to AI messages.
 - **One model picker pattern** (`model-picker.svelte`): a quiet model trigger
   opening a searchable command dialog grouped by provider, plus a quiet effort
