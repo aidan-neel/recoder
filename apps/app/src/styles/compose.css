@@ -1,7 +1,7 @@
 /* ───────── New: the choices fill the page, the composer is docked at its foot ───────── */
 /*
- * Two parts share one centred column: the lists, which scroll, and the dock, which stays. The dock is outside the
- * scroller, so the composer's "/" menu opens over the lists and nothing clips it.
+ * Two parts share one centred page column: the lists, which scroll, and the dock, which stays. The dock is outside
+ * the scroller, so the composer's "/" menu opens over the lists and nothing clips it.
  */
 .compose {
 	display: flex;
@@ -9,34 +9,34 @@
 	flex: 1;
 	flex-direction: column;
 }
+.compose-scroll,
+.compose-dock {
+	--page-measure: 760px;
+}
 .compose-scroll {
 	min-height: 0;
 	flex: 1;
 	overflow-y: auto;
-	padding: 20px 24px 24px;
+	padding-block: 20px 24px;
 }
 .compose-dock {
 	flex-shrink: 0;
-	padding: 0 24px 20px;
+	padding-bottom: 20px;
 }
 .compose-column {
 	display: flex;
-	width: 100%;
-	max-width: 760px;
 	flex-direction: column;
-	margin-inline: auto;
 }
 
 /*
- * The find field's box starts 8px in from the column, so its glyph sits on the rows' marks; the repository filter
- * has no box at rest, so its words end on the rows' last lane.
+ * The find field's box spans the column, edge to edge with the composer under it; the repository filter has no box
+ * at rest, so it reaches out by its own padding and its chevron ends on the column's edge.
  */
 .compose-find {
 	display: flex;
 	min-width: 0;
 	align-items: center;
 	gap: 8px;
-	padding: 0 3px 0 8px;
 }
 .compose-find-field {
 	min-width: 0;
@@ -44,6 +44,7 @@
 }
 .compose-find-scope {
 	flex-shrink: 0;
+	margin-right: -9px;
 }
 
 /* The repository and the pull request in the composer's bar: quiet and small like the models beside the send, its name cut short. */
@@ -121,14 +122,16 @@
 }
 
 /*
- * The lists: a row's box spans the column and its content starts 16px in, on the edge of the composer's text. The
- * mark is 16px with a 12px gap, and each row ends in the same lanes: the fact, the size, then the choice mark.
+ * The lists: a row's mark and its choice mark sit on the column's edges, under the find field's and the composer's,
+ * and its fill reaches 12px past them, as a pull request row's does. The mark is 16px with a 12px gap, and each row
+ * ends in the same lanes: the fact, the size, then the choice mark.
  */
 .compose-groups {
 	--menu-highlight-radius: var(--radius-row);
 
 	display: flex;
 	flex-direction: column;
+	margin-inline: -12px;
 }
 .compose-group {
 	display: flex;
@@ -138,7 +141,7 @@
 .compose-group .section-label {
 	display: flex;
 	gap: 6px;
-	padding: 0 16px 6px;
+	padding: 0 12px 6px;
 }
 .compose-group-count {
 	color: var(--text-ghost);
@@ -151,7 +154,7 @@
 	flex-shrink: 0;
 	align-items: center;
 	gap: 12px;
-	padding: 0 12px 0 16px;
+	padding: 0 12px;
 	border-radius: var(--radius-row);
 	text-decoration: none;
 }
@@ -208,7 +211,7 @@
 
 .compose-empty {
 	margin: 0;
-	padding: 28px 16px 0;
+	padding: 28px 12px 0;
 	color: var(--text-faint);
 	font-size: var(--font-size-label);
 }

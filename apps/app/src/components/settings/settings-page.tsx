@@ -20,7 +20,7 @@ export function SettingsPage({ name, end, children }: SettingsPageProps) {
 	return (
 		<Page start={<h1 className="page-bar-title">{name}</h1>} end={end}>
 			<div className="page-scroll">
-				<div className="settings-page">{children}</div>
+				<div className="page-column settings-page">{children}</div>
 			</div>
 		</Page>
 	);

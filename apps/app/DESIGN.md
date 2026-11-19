@@ -81,7 +81,8 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   palette) left of the sidebar's toggle. There are no Back and Forward buttons: Cmd/Ctrl+[
   and Cmd/Ctrl+] and the browser's own walk the tab on screen. The first tab
   starts on the page panel's left edge. With the sidebar hidden the part over
-  it closes up to what it holds, so the tabs start right after it. After the
+  it keeps its width, as Capy's toggle stays put: the account, Search and the
+  toggle never move when the sidebar opens or closes. After the
   last tab, a + (tooltip "New review", Alt+T) opens New review in a new tab;
   the sidebar's first row, New review, opens it in the tab on screen. The design is variant V1,
   "Window bar", of the Paper file
@@ -199,6 +200,21 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
 - **Page bar** (44px, `--bar-height`): breadcrumbs on the left, the page's own
   actions on the right. Every page's content starts under it, so borders line
   up across pages.
+- **One content column a page** (`.page-column`, base.css). Each page's body,
+  and a pull request's header and tab row, sit in one: its edges are the bar's
+  20px gutter (`--page-gutter`, 16px on a phone), or with `--page-measure`
+  set a centred column (Chat 720px, Settings 704px, New 760px) that never
+  comes closer to the panel than the gutter. The outermost ink at rest lands on
+  those edges, nothing passes them: a card's or field's box, a list's marks and
+  last facts, a quiet button's text or icon. Quiet controls and row fills reach
+  past by their own padding, so their hover fill shows outside the edge, never
+  their ink. The gutter is 20px, not the sidebar's 16, because a row fill
+  reaching 12px past it then sits 8px from the panel's side, as the sidebar's
+  highlight sits 8px from the window's. A part that spans the panel (the tab
+  row's rule) is the column itself, its line edge to edge. Changes is a
+  workbench: its file sidebar is full height against the panel's side, its
+  filter and its chevrons on the gutter, and the diff column starts a gutter
+  past the sidebar's rule.
 - **Pull request list**: one row a pull request. A row shows the title, the
   branch, the author, the size of the change and one fact: what the newest
   review found, that a review is running, or that there is none (with
@@ -282,7 +298,8 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
 - **New**: the choices fill the page and one large composer is docked at its
   foot, with no heading; the crumb names the screen (New review or New chat)
   and a Review | Chat switch sits at the end of the page's bar. The lists and
-  the dock share one centred 760px column; the dock stays outside the
+  the dock share one centred 760px page column, edge to edge with the find
+  field and the composer, a row's mark and choice mark on its edges; the dock stays outside the
   scroller, so the composer never moves and its "/" menu opens over the
   lists. On top of the column sits a find field and, once two repositories
   are tracked, a quiet repository filter; both narrow the lists and neither
@@ -599,6 +616,11 @@ AID-8 file).
 
 Motion explains a change and never makes the person wait.
 
+- The sidebar slides on `--dur-toggle` with the strong ease-out. Through the
+  slide the page keeps the width it has with the sidebar hidden and rides the
+  sidebar's edge, the window clipping what passes it, so it is laid out once
+  and nothing in it rewraps; opening, it settles to its narrower width when the
+  slide ends. A reload never slides, and under reduced motion it snaps.
 - Things that move: the sidebar slides, the highlight under the pointer in a
   menu or list follows it, collapsibles and the provider dialog change height.
   Menus, selects, the palette, dialogs, tooltips and the link card fade in

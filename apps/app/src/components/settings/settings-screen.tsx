@@ -69,7 +69,7 @@ export function SettingsScreen({ section }: { section: SettingsSection }) {
 			end={sectionEnd(section)}
 		>
 			<div key={section} className="page-scroll">
-				<div className="settings-page">{allowed ? SECTIONS[section]() : null}</div>
+				<div className="page-column settings-page">{allowed ? SECTIONS[section]() : null}</div>
 			</div>
 		</Page>
 	);

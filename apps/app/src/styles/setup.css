@@ -4,7 +4,8 @@
 	display: grid;
 }
 .setup {
-	margin: auto;
+	margin-block: auto;
+	padding-block: 20px 48px;
 	transition: opacity var(--dur-swap) ease-out;
 }
 .setup[data-leaving] {

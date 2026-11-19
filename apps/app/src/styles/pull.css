@@ -1,8 +1,8 @@
 /* ───────── Pull request page: the header, the review's badge, the merge facts, the tabs, one tab's body ───────── */
-/* The page fills the window. The crumbs, title, badges and first tab label share the bar's gutter. */
+/* The page fills the window. The header, the tab row and each tab's body are page columns, on the bar's edges. */
 .pull-head {
 	flex-shrink: 0;
-	padding: 10px var(--page-gutter);
+	padding-block: 10px;
 	container-type: inline-size;
 }
 /* One dense row: the title, its badges and the buttons at the end. A long title gives way first. */
@@ -31,10 +31,10 @@
 }
 /*
  * The forge link has no box at rest, so its ink ends on the gutter like the box edges below it: it reaches out by
- * its padding beside the icon (the kit's 7px) and by the arrow's own margin (6 of its 24 units).
+ * its padding beside the icon (the kit's 7px) and by the arrow's own margin (48 of its 256 units).
  */
 .pull-forge-link {
-	margin-right: calc(-7px - 14px / 4);
+	margin-right: calc(-7px - 14px * 48 / 256);
 }
 .pull-title-number {
 	flex-shrink: 0;
@@ -74,7 +74,6 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 16px;
-	padding: 0 var(--page-gutter);
 	border-bottom: 1px solid var(--line-subtle);
 }
 

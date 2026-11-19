@@ -35,12 +35,12 @@ export function ChatConversation({ chat }: { chat: RepoChatView }) {
 	return (
 		<>
 			<div ref={scroller} className="chat-scroll">
-				<div className="chat-column chat-thread">
+				<div className="page-column chat-thread">
 					<AskThread ask={ask} />
 				</div>
 			</div>
-			<div className="chat-dock">
-				<div className="chat-column chat-dock-column">
+			<div className="page-column chat-dock">
+				<div className="chat-dock-column">
 					{away && !chat.note ? (
 						<Button variant="secondary" className="chat-to-end" onClick={toEnd}>
 							<ArrowDownIcon aria-hidden />
@@ -71,7 +71,7 @@ export function ChatConversation({ chat }: { chat: RepoChatView }) {
 export function ChatSkeleton() {
 	return (
 		<div className="chat-scroll" aria-hidden>
-			<div className="chat-column chat-thread chat-skeleton">
+			<div className="page-column chat-thread chat-skeleton">
 				<SkeletonBox className="chat-skeleton-question" />
 				<SkeletonText lineHeight={22} />
 			</div>

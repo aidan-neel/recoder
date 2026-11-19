@@ -127,7 +127,7 @@ export function ComposeScreen() {
 			}
 		>
 			<div className="compose">
-				<div className="compose-scroll">
+				<div className="page-column compose-scroll">
 					<div className="compose-column">
 						<Finder list={compose.list} repos={compose.repos} chat={chat} />
 						{chat ? (
@@ -142,7 +142,7 @@ export function ComposeScreen() {
 						)}
 					</div>
 				</div>
-				<div ref={dock} className="compose-dock">
+				<div ref={dock} className="page-column compose-dock">
 					<div className="compose-column">
 						<Composer
 							size="lg"

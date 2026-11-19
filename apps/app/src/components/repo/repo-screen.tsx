@@ -74,7 +74,7 @@ export function RepoScreen({ repoId }: { repoId: string }) {
 				<Skeleton id="repo-page" loading={loading}>
 					{loading ? <RepoSkeleton /> : null}
 					{data ? (
-						<div className="repo-page">
+						<div className="page-column repo-page">
 							<RepoHeader repo={data.repo} figures={data.figures} />
 							<div className="repo-columns">
 								<RepoMain view={view} data={data} />

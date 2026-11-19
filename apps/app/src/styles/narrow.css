@@ -50,10 +50,8 @@
 		pointer-events: auto;
 	}
 	/* With no sidebar column under it, the topbar's first part holds only what it shows. */
-	.topbar-lead,
-	.app-frame[data-sidebar='closed'] .topbar-lead {
+	.topbar-lead {
 		width: max-content;
-		transition: none;
 	}
 
 	/*
@@ -83,7 +81,7 @@
 
 @media (max-width: 759px) {
 	.fleet {
-		padding: 20px var(--page-gutter) 48px;
+		padding-block: 20px 48px;
 	}
 	/* A banner's actions take a line of their own under its words. */
 	[data-ui='status-notice'][data-variant='banner'] [data-ui='status-notice-body'] {
@@ -113,11 +111,7 @@
 	.page {
 		--page-gutter: 16px;
 	}
-	/* New: the lists and the dock reach the page's gutter, and a row keeps its title in place of its size. */
-	.compose-scroll,
-	.compose-dock {
-		padding-inline: 8px;
-	}
+	/* New: a row keeps its title in place of its size. */
 	.compose-row .diff-stat {
 		display: none;
 	}
@@ -137,6 +131,10 @@
 		gap: 0;
 		padding: 0;
 		font-size: 0;
+	}
+	/* Alone in its 28px, the usage icon reaches out by the 7px either side of it, not the label's padding. */
+	.page-bar-side[data-side='end'] > .token-usage-trigger:last-child {
+		margin-right: -7px;
 	}
 	.pulls-find,
 	.fleet-find {

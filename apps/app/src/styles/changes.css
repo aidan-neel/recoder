@@ -23,11 +23,11 @@
 	flex-direction: column;
 	border-right: 1px solid var(--line-subtle);
 }
-/* The rows' fill reaches 8px past the page's gutter, as the tab row's first tab does. */
+/* A top row's chevron lands on the page's gutter, under the filter's edge; the rows' fill reaches past it. */
 .changes-tree {
 	min-height: 0;
 	flex: 1;
-	padding: 8px 4px 24px calc(var(--page-gutter) - 14px);
+	padding: 8px 4px 24px calc(var(--page-gutter) - 16px);
 }
 .changes-main {
 	min-width: 0;
@@ -45,12 +45,12 @@
 	--changes-column: none;
 }
 
-/* The filter over the tree lines up with the tree's rows. */
+/* The filter's box sits on the page's gutter, over the tree's chevrons. */
 .changes-filter {
-	padding: 10px 8px 2px calc(var(--page-gutter) - 14px);
+	padding: 10px var(--page-gutter) 2px;
 }
 .changes-filter-empty {
-	padding: 12px 8px 0 calc(var(--page-gutter) - 6px);
+	padding: 12px 8px 0 var(--page-gutter);
 	color: var(--text-faint);
 	font-size: var(--font-size-label);
 }
@@ -79,7 +79,10 @@
 	gap: 8px;
 }
 
-/* Tools in the tab row. */
+/* Tools in the tab row. The last, the fold, has no box at rest: its 6px padding and the icon's 2px margin reach out. */
+.changes-fold {
+	margin-right: -8px;
+}
 .changes-files .meta {
 	margin-left: 2px;
 }

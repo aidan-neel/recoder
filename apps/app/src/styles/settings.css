@@ -1,10 +1,8 @@
 /* ───────── Settings, and the pages built like it: one column of titled groups, centred ───────── */
 
 /*
- * Settings, Automations and Guidelines share one 704px column: the widest
- * rows (a model with its effort, the ignored paths) fit on one line. It is
- * centred on the page (100cqw is the page's width). Narrower than the column
- * plus the gutters, it keeps the gutter on both sides.
+ * Settings, Automations and Guidelines share one 704px page column: the
+ * widest rows (a model with its effort, the ignored paths) fit on one line.
  *
  * A group's title, the note under its card and the card itself start on one
  * edge. Inside the card, a row's text starts `--settings-inset` in and its
@@ -14,14 +12,12 @@
 .settings-page {
 	--settings-inset: 12px;
 	--settings-end: 8px;
-	--settings-column: 704px;
+	--page-measure: 704px;
 
 	display: flex;
-	width: min(var(--settings-column), 100cqw - 2 * var(--page-gutter));
 	flex-direction: column;
 	gap: 24px;
-	margin-left: max(var(--page-gutter), (100cqw - var(--settings-column)) / 2);
-	padding: 32px 0 48px;
+	padding-block: 32px 48px;
 }
 
 .settings-page .settings {

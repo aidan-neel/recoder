@@ -10,7 +10,7 @@
 	display: contents;
 }
 .settings-page:has(.usage-page) {
-	--settings-column: 920px;
+	--page-measure: 920px;
 }
 .usage-report {
 	display: flex;

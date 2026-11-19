@@ -2,12 +2,9 @@
 /* No boxes: space, section titles and hairlines group the page, as on Usage. */
 .repo-page {
 	display: flex;
-	width: 100%;
-	max-width: 1200px;
-	margin-inline: auto;
 	flex-direction: column;
 	gap: 36px;
-	padding: 32px 40px 48px;
+	padding-block: 32px 48px;
 }
 
 .repo-head {

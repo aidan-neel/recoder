@@ -4,13 +4,12 @@
 	flex: 1;
 	overflow-y: auto;
 }
-/* A tab's body fills the page on the header's gutter, on both sides; only prose keeps a reading measure. */
+/* A tab's body fills the page column; only prose keeps a reading measure. */
 .reading-column {
 	display: flex;
-	width: 100%;
 	flex-direction: column;
 	gap: 10px;
-	padding: 12px var(--page-gutter) 64px var(--page-gutter);
+	padding-block: 12px 64px;
 }
 .reading-column[data-width='narrow'] {
 	max-width: 800px;
@@ -345,16 +344,15 @@
 }
 
 /*
- * A group under the open bugs: a quiet line that opens to its rows. Its chevron and its title sit where the
- * suggested fix's do: the kit hangs the 14px chevron a third outside the edge, then an 8px gap.
+ * A group under the open bugs: a quiet line that opens to its rows. It spans the column as a finding does, so its
+ * chevron lands on the findings' marks: the kit hangs the 14px chevron a third outside the padding, then an 8px gap.
  */
 .bug-group-head {
 	display: flex;
-	width: calc(100% + 24px);
+	width: 100%;
 	min-height: 40px;
 	align-items: center;
 	gap: 8px;
-	margin: 0 -12px;
 	padding: 0 12px;
 	border-radius: var(--radius-row);
 	color: var(--text-secondary);
@@ -386,12 +384,12 @@
 .bug-group-head[role='note'] > [data-ui='status-glyph'] {
 	margin: 0 -1px 0 calc(14px / -3 - 1px);
 }
-/* The rows start under the group's title: the chevron's two thirds inside the edge, then the gap. */
+/* The rows start under the group's title (the head's padding, the chevron's two thirds, then the gap) and end on its count. */
 .bug-group-list {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
-	padding: 2px 0 8px calc(14px * 2 / 3 + 8px);
+	padding: 2px 4px 8px calc(12px + 14px * 2 / 3 + 8px);
 }
 .bug-line {
 	display: flex;

@@ -48,7 +48,7 @@ export function SummaryTab({ onOpenGuide, onOpenFile }: SummaryTabProps) {
 		<ProseRefsContext value={refs}>
 			<div className="summary">
 				<div className="reading">
-					<div className="summary-column">
+					<div className="page-column summary-column">
 						<Overview
 							summary={summary}
 							run={run}

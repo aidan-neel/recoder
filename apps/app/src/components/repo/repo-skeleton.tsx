@@ -16,7 +16,7 @@ const SETUP_ROWS = 2;
  */
 export function RepoSkeleton() {
 	return (
-		<div className="repo-page repo-skeleton" aria-hidden>
+		<div className="page-column repo-page repo-skeleton" aria-hidden>
 			<div className="repo-head">
 				<div className="page-title repo-title">
 					<SkeletonBox className="repo-skeleton-title" />

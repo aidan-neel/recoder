@@ -13,7 +13,7 @@
 	display: flex;
 	flex-direction: column;
 	gap: 32px;
-	padding: 24px var(--page-gutter) 48px;
+	padding-block: 24px 48px;
 }
 
 /* The overview: the review's account as the lede, its findings as badges, the author's words as a quote. */
@@ -91,9 +91,9 @@
 	justify-content: space-between;
 	gap: 12px;
 }
-/* The action's chevron ends on the list's right edge; its hover fill reaches the 7px past it. */
+/* The action's chevron ends on the list's right edge: it reaches out by its 7px padding and the chevron's 4px margin. */
 .summary-section-head > [data-ui='button'] {
-	margin-right: -7px;
+	margin-right: -11px;
 }
 .summary-section-title {
 	display: flex;
