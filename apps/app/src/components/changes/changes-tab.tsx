@@ -7,12 +7,14 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useApi } from '@/lib/api/client';
 import type { BugView } from '@/lib/bugs/types';
 import { useBugsView } from '@/lib/bugs/use-bugs';
+import { useDiffView } from '@/lib/changes/diff-view';
 import { LOADING_DIFF } from '@/lib/changes/loading-diff';
 import { placeHash, readPlace } from '@/lib/changes/places';
 import type { ChangesTarget, GuidePart } from '@/lib/changes/types';
 import { useChangesNav, useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
 import { useCurrentFile } from '@/lib/changes/use-current-file';
 import { useSideOpen } from '@/lib/changes/side-open';
+import { withoutWhitespace } from '@/lib/changes/whitespace';
 import { usePullDiffView, useSession, useSessionData } from '@/lib/pull/pull-session';
 import { useRunView } from '@/lib/run/use-run';
 import { replaceAddress } from '@/lib/shell/navigation';
@@ -121,6 +123,7 @@ function DiffSkeleton() {
 					<FileCard
 						key={file.path}
 						file={file}
+						layout="unified"
 						viewed={false}
 						onToggleViewed={ignore}
 						bugs={NO_BUGS}
@@ -160,7 +163,15 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 	const scroller = useRef<HTMLDivElement | null>(null);
 	const followed = useRef<string | null>(null);
 	const painted = useAfterPaint();
-	const files = diff.phase === 'ready' ? diff.value.files : null;
+	const layout = useDiffView((state) => state.layout);
+	const hideWhitespace = useDiffView((state) => state.hideWhitespace);
+	const loaded = diff.phase === 'ready' ? diff.value.files : null;
+
+	const files = useMemo(
+		() => (loaded && hideWhitespace ? loaded.map(withoutWhitespace) : loaded),
+		[loaded, hideWhitespace]
+	);
+
 	const byFile = useMemo(() => bugsByFile(bugs.open), [bugs.open]);
 	const ordered = useMemo(() => inOrder(files ?? [], tree.order), [files, tree.order]);
 	const parts = useMemo(() => partsWithRest(guide, tree.order), [guide, tree.order]);
@@ -249,6 +260,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 			<FileCard
 				key={file.path}
 				file={file}
+				layout={layout}
 				viewed={viewed.isViewed(file.path)}
 				onToggleViewed={viewed.toggle}
 				bugs={byFile.get(file.path) ?? NO_BUGS}
@@ -265,7 +277,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 	}
 
 	return (
-		<div className="changes">
+		<div className="changes" data-layout={layout}>
 			{sideOpen ? <FileSidebar current={current} onOpen={(path) => nav.goTo(path)} /> : null}
 			<div ref={scroller} className="changes-main">
 				<div className="changes-stack">

@@ -2,17 +2,20 @@
 
 import type { DiffHunk, FileDiff } from '@recoder/shared';
 import { CodeLines, langForPath, type CodeLine } from '@recoder/ui';
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 
 import type { BugView } from '@/lib/bugs/types';
+import { useBugsView } from '@/lib/bugs/use-bugs';
+import type { DiffLayout } from '@/lib/changes/diff-view';
 import { hiddenBefore } from '@/lib/changes/places';
 import type { ChangesTarget } from '@/lib/changes/types';
 import { plural } from '@/lib/shell/format';
 
-import { LineBug } from './line-bug';
+import { BugCard } from '@/components/bugs/bug-card';
 
 interface FileDiffBodyProps {
 	file: FileDiff;
+	layout: DiffLayout;
 	/** Open bugs in this file. */
 	bugs: BugView[];
 	bugsHref: string;
@@ -53,8 +56,33 @@ function targetOf(target: ChangesTarget | null, bug: BugView): ChangesTarget | n
 	return target?.findingId === bug.id ? target : null;
 }
 
+interface InlineBugProps {
+	bug: BugView;
+	bugsHref: string;
+	/** An ask to bring this finding into view; it opens the finding. */
+	target: ChangesTarget | null;
+}
+
+/** A finding under its line: shut to one line until pressed, and opened by a jump to it. */
+function InlineBug({ bug, bugsHref, target }: InlineBugProps) {
+	const view = useBugsView();
+	const [open, setOpen] = useState(target !== null);
+	const [seen, setSeen] = useState(target);
+
+	if (target !== seen) {
+		setSeen(target);
+
+		if (target) setOpen(true);
+	}
+
+	return (
+		<BugCard bug={bug} view={view} open={open} onToggle={() => setOpen(!open)} place="diff" reviewHref={bugsHref} />
+	);
+}
+
 interface HunkProps {
 	hunk: DiffHunk;
+	layout: DiffLayout;
 	lang: string | null;
 	bugs: BugView[];
 	bugsHref: string;
@@ -66,7 +94,7 @@ interface HunkProps {
 }
 
 /** One hunk under a row that counts the unchanged lines left out above it, with each bug's note under its line. */
-function Hunk({ hunk, lang, bugs, bugsHref, hidden, fresh, target }: HunkProps) {
+function Hunk({ hunk, layout, lang, bugs, bugsHref, hidden, fresh, target }: HunkProps) {
 	const marked = target?.findingId ? null : (target?.line ?? null);
 	const lines = useMemo(() => codeLines(hunk, bugs, marked), [hunk, bugs, marked]);
 
@@ -77,7 +105,7 @@ function Hunk({ hunk, lang, bugs, bugsHref, hidden, fresh, target }: HunkProps) 
 
 		if (here.length === 0) return null;
 
-		return here.map((bug) => <LineBug key={bug.id} bug={bug} href={bugsHref} target={targetOf(target, bug)} />);
+		return here.map((bug) => <InlineBug key={bug.id} bug={bug} bugsHref={bugsHref} target={targetOf(target, bug)} />);
 	}
 
 	return (
@@ -87,21 +115,28 @@ function Hunk({ hunk, lang, bugs, bugsHref, hidden, fresh, target }: HunkProps) 
 					<span>{plural(hidden, 'unchanged line')}</span>
 				</div>
 			) : null}
-			<CodeLines lines={lines} lang={lang} showOldNumbers={!fresh} annotate={bugs.length > 0 ? notes : undefined} />
+			<CodeLines
+				lines={lines}
+				lang={lang}
+				layout={layout}
+				showOldNumbers={!fresh}
+				annotate={bugs.length > 0 ? notes : undefined}
+			/>
 		</div>
 	);
 }
 
 /**
- * A file's diff: every hunk, with the file's bugs where they happen. A bug
- * whose line the diff does not show is listed above the first hunk. It
+ * A file's diff: every hunk, unified or split, with the file's bugs where they happen. A new or deleted file has one
+ * side only, so it stays unified. A bug whose line the diff does not show is listed above the first hunk. It
  * re-renders only when its own file, bugs or ask change.
  */
-export const FileDiffBody = memo(function FileDiffBody({ file, bugs, bugsHref, target }: FileDiffBodyProps) {
+export const FileDiffBody = memo(function FileDiffBody({ file, layout, bugs, bugsHref, target }: FileDiffBodyProps) {
 	const lang = langForPath(file.path);
 	const loose = bugs.filter((bug) => !anchored(file, bug));
 	const hidden = hiddenBefore(file);
 	const fresh = file.hunks.every((hunk) => hunk.lines.every((line) => line.type === 'add'));
+	const removed = file.hunks.every((hunk) => hunk.lines.every((line) => line.type === 'del'));
 
 	if (file.hunks.length === 0) {
 		return <div className="file-quiet">No lines to show. The file was renamed, or it is binary.</div>;
@@ -112,7 +147,7 @@ export const FileDiffBody = memo(function FileDiffBody({ file, bugs, bugsHref, t
 			{loose.length > 0 ? (
 				<div className="file-bugs">
 					{loose.map((bug) => (
-						<LineBug key={bug.id} bug={bug} href={bugsHref} target={targetOf(target, bug)} />
+						<InlineBug key={bug.id} bug={bug} bugsHref={bugsHref} target={targetOf(target, bug)} />
 					))}
 				</div>
 			) : null}
@@ -120,6 +155,7 @@ export const FileDiffBody = memo(function FileDiffBody({ file, bugs, bugsHref, t
 				<Hunk
 					key={hunk.header + hunk.newStart}
 					hunk={hunk}
+					layout={fresh || removed ? 'unified' : layout}
 					lang={lang}
 					bugs={bugs}
 					bugsHref={bugsHref}

@@ -7,15 +7,25 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 	Tooltip
 } from '@recoder/ui';
-import { ArrowUpRightIcon, CaretDownIcon, ChatCircleIcon, ThumbsDownIcon, ThumbsUpIcon } from '@phosphor-icons/react';
+import {
+	ArrowUpRightIcon,
+	ChatCircleIcon,
+	CheckIcon,
+	DotsThreeIcon,
+	ThumbsDownIcon,
+	ThumbsUpIcon
+} from '@phosphor-icons/react';
 
 import type { BugsView, BugView } from '@/lib/bugs/types';
+import { replaceAddress } from '@/lib/shell/navigation';
 import { errorToast, undoToast } from '@/lib/shell/notify';
 
-/** What each reason for dismissing reads as in the menu. */
+/** What each reason for dismissing reads as in the menu, under "Dismiss because". */
 const REASON_LABELS: Record<DismissalReason, string> = {
 	wrong: 'It is wrong',
 	'not-worth-fixing': 'Not worth fixing',
@@ -29,6 +39,8 @@ interface BugActionsProps {
 	view: BugsView;
 	asking: boolean;
 	onAskToggle: () => void;
+	/** On the Changes tab: the Review tab's address, so the menu can open the whole finding there. */
+	reviewHref?: string;
 }
 
 /** Shows why a write did not go through. The view already put the bug back as it was. */
@@ -36,84 +48,17 @@ function refused(fallback: string): (error: unknown) => void {
 	return (error) => errorToast(error instanceof Error && error.message ? error.message : fallback);
 }
 
-/** The reasons to dismiss a bug. The choice teaches the next review; Undo opens the bug again. */
-function DismissMenu({ bug, view }: Pick<BugActionsProps, 'bug' | 'view'>) {
-	/** Dismisses with a reason and offers the way back. */
-	function dismiss(reason: DismissalReason): void {
-		view
-			.dismiss(bug.id, reason)
-			.then(
-				() => undoToast('Dismissed', () => void view.reopen(bug.id).catch(refused('The bug did not reopen.'))),
-				refused('The bug was not dismissed.')
-			);
-	}
-
-	return (
-		<DropdownMenu>
-			<DropdownMenuTrigger>
-				<Button variant="ghost">
-					Dismiss
-					<CaretDownIcon aria-hidden className="size-3.5" />
-				</Button>
-			</DropdownMenuTrigger>
-			<DropdownMenuContent className="w-[200px]">
-				{DISMISSAL_REASONS.map((reason) => (
-					<DropdownMenuItem key={reason} onSelect={() => dismiss(reason)}>
-						{REASON_LABELS[reason]}
-					</DropdownMenuItem>
-				))}
-			</DropdownMenuContent>
-		</DropdownMenu>
-	);
-}
-
-/** Whether the bug helped: one of two votes, pressed again to take it back. */
-function Votes({ bug, view }: Pick<BugActionsProps, 'bug' | 'view'>) {
-	/** Casts the vote, or takes it back when it is the one already cast. */
-	function cast(vote: 'useful' | 'not-useful'): void {
-		view.vote(bug.id, bug.vote === vote ? null : vote).catch(refused('The vote was not saved.'));
-	}
-
-	return (
-		<div className="bug-actions-end">
-			<Tooltip content="This bug was useful">
-				<Button
-					variant="ghost"
-					size="icon"
-					aria-label="Useful"
-					aria-pressed={bug.vote === 'useful'}
-					onClick={() => cast('useful')}
-				>
-					<ThumbsUpIcon />
-				</Button>
-			</Tooltip>
-			<Tooltip content="This bug was not useful">
-				<Button
-					variant="ghost"
-					size="icon"
-					aria-label="Not useful"
-					aria-pressed={bug.vote === 'not-useful'}
-					onClick={() => cast('not-useful')}
-				>
-					<ThumbsDownIcon />
-				</Button>
-			</Tooltip>
-		</div>
-	);
-}
-
 /**
- * What a person does with an open bug: post it to the pull request (the
- * primary action when the forge takes comments), hand its fix prompt to a
- * coding agent, ask about it, accept it or dismiss it, and say whether it
- * helped. Posting changes the first button's words in a slot of fixed width
- * and adds the link to the comment after the last action, so no button a
- * person might be about to press moves.
+ * What a person does with an open finding. Two buttons stand out: posting it to the pull request (the primary
+ * action when the forge takes comments) and copying its fix prompt for a coding agent. The rest waits in one menu:
+ * asking about it, opening it on the Review tab, accepting it, dismissing it with a reason and saying whether it
+ * helped. Posting changes the first button's words in a slot of fixed width, so nothing a person might press moves.
  */
-export function BugActions({ bug, view, asking, onAskToggle }: BugActionsProps) {
+export function BugActions({ bug, view, asking, onAskToggle, reviewHref }: BugActionsProps) {
 	const pending = view.pending.has(bug.id);
+	const posted = bug.posted;
 
-	/** Accepts the bug and offers the way back, as dismissing does. */
+	/** Accepts the bug and offers the way back. */
 	function accept(): void {
 		view
 			.accept(bug.id)
@@ -123,41 +68,92 @@ export function BugActions({ bug, view, asking, onAskToggle }: BugActionsProps) 
 			);
 	}
 
+	/** Dismisses with a reason, which teaches the next review, and offers the way back. */
+	function dismiss(reason: DismissalReason): void {
+		view
+			.dismiss(bug.id, reason)
+			.then(
+				() => undoToast('Dismissed', () => void view.reopen(bug.id).catch(refused('The bug did not reopen.'))),
+				refused('The bug was not dismissed.')
+			);
+	}
+
+	/** Casts the vote, or takes it back when it is the one already cast. */
+	function cast(vote: 'useful' | 'not-useful'): void {
+		view.vote(bug.id, bug.vote === vote ? null : vote).catch(refused('The vote was not saved.'));
+	}
+
 	return (
 		<div className="bug-actions">
 			{view.canPost ? (
 				<Button
-					variant={bug.posted ? 'outline' : 'primary'}
+					variant="primary"
 					className="bug-post"
 					status={pending ? 'pending' : 'idle'}
 					onClick={() => view.post(bug.id).catch(refused('The comment was not posted.'))}
 				>
-					{bug.posted ? 'Update the comment' : 'Post to pull request'}
+					{posted ? 'Update the comment' : 'Post to pull request'}
 				</Button>
 			) : null}
 			<CopyButton
-				variant={view.canPost ? 'outline' : 'primary'}
+				variant={view.canPost ? 'secondary' : 'primary'}
 				value={view.fixPrompt(bug.id)}
 				label="Copy fix prompt"
 				copiedLabel="Copied"
 			/>
-			<Button variant="ghost" aria-expanded={asking} onClick={onAskToggle}>
-				<ChatCircleIcon aria-hidden />
-				Ask
-			</Button>
-			<Button variant="ghost" disabled={pending} onClick={accept}>
-				Accept
-			</Button>
-			<DismissMenu bug={bug} view={view} />
-			{bug.posted ? (
-				<Button asChild variant="ghost" className="bug-posted-link">
-					<a href={bug.posted.url} target="_blank" rel="noreferrer">
-						See the comment
-						<ArrowUpRightIcon aria-hidden className="size-3.5" />
-					</a>
-				</Button>
-			) : null}
-			<Votes bug={bug} view={view} />
+			<DropdownMenu>
+				<Tooltip content="More actions">
+					<DropdownMenuTrigger>
+						<Button variant="ghost" size="icon" className="bug-more" aria-label="More actions">
+							<DotsThreeIcon weight="bold" aria-hidden />
+						</Button>
+					</DropdownMenuTrigger>
+				</Tooltip>
+				<DropdownMenuContent align="end" className="w-[220px]">
+					<DropdownMenuItem icon={<ChatCircleIcon />} onSelect={onAskToggle}>
+						{asking ? 'Close the question' : 'Ask about it'}
+					</DropdownMenuItem>
+					{reviewHref ? (
+						<DropdownMenuItem
+							icon={<ArrowUpRightIcon />}
+							onSelect={() => replaceAddress(`${reviewHref}#bug-${encodeURIComponent(bug.id)}`)}
+						>
+							Open in Review
+						</DropdownMenuItem>
+					) : null}
+					{posted ? (
+						<DropdownMenuItem
+							icon={<ArrowUpRightIcon />}
+							onSelect={() => window.open(posted.url, '_blank', 'noreferrer')}
+						>
+							See the comment
+						</DropdownMenuItem>
+					) : null}
+					<DropdownMenuItem icon={<CheckIcon />} disabled={pending} onSelect={accept}>
+						Accept
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuLabel>Dismiss because</DropdownMenuLabel>
+					{DISMISSAL_REASONS.map((reason) => (
+						<DropdownMenuItem key={reason} disabled={pending} onSelect={() => dismiss(reason)}>
+							{REASON_LABELS[reason]}
+						</DropdownMenuItem>
+					))}
+					<DropdownMenuSeparator />
+					<DropdownMenuItem
+						icon={<ThumbsUpIcon weight={bug.vote === 'useful' ? 'fill' : 'regular'} />}
+						onSelect={() => cast('useful')}
+					>
+						{bug.vote === 'useful' ? 'Take back "useful"' : 'Useful'}
+					</DropdownMenuItem>
+					<DropdownMenuItem
+						icon={<ThumbsDownIcon weight={bug.vote === 'not-useful' ? 'fill' : 'regular'} />}
+						onSelect={() => cast('not-useful')}
+					>
+						{bug.vote === 'not-useful' ? 'Take back "not useful"' : 'Not useful'}
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
 		</div>
 	);
 }

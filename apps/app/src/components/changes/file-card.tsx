@@ -7,6 +7,7 @@ import { memo, useId, useRef, useState } from 'react';
 
 import { openFound } from '@/lib/bugs/bug-lists';
 import type { BugView } from '@/lib/bugs/types';
+import type { DiffLayout } from '@/lib/changes/diff-view';
 import type { ChangesFold, ChangesTarget } from '@/lib/changes/types';
 import { useNear } from '@/lib/changes/use-near';
 import { findingsLabel, plural } from '@/lib/shell/format';
@@ -26,6 +27,7 @@ const PLACEHOLDER_MAX = 1600;
 
 interface FileCardProps {
 	file: FileDiff;
+	layout: DiffLayout;
 	viewed: boolean;
 	onToggleViewed: (path: string) => void;
 	/** Open bugs in this file. */
@@ -67,6 +69,7 @@ function FilePath({ path }: { path: string }) {
  */
 export const FileCard = memo(function FileCard({
 	file,
+	layout,
 	viewed,
 	onToggleViewed,
 	bugs,
@@ -126,7 +129,7 @@ export const FileCard = memo(function FileCard({
 			{open ? (
 				<div id={bodyId} className="file-body">
 					{near ? (
-						<FileDiffBody file={file} bugs={bugs} bugsHref={bugsHref} target={target} />
+						<FileDiffBody file={file} layout={layout} bugs={bugs} bugsHref={bugsHref} target={target} />
 					) : (
 						<div style={{ height: placeholderHeight(file) }} />
 					)}

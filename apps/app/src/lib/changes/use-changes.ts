@@ -72,13 +72,13 @@ export function useFileTree(): FileTreeView {
 	return useMemo(() => ({ groups, order }), [groups, order]);
 }
 
-/** The file sidebar's visible rows, and how to open or shut one of its folders. */
-export function useSideRows(): { rows: TreeRow[]; toggleFolder: (path: string) => void } {
+/** The file sidebar's visible rows under its filter, and how to open or shut one of its folders. */
+export function useSideRows(query: string): { rows: TreeRow[]; toggleFolder: (path: string) => void } {
 	const session = useSession();
 	const files = useDiffFiles();
 	const closed = useSessionData((data) => data.changesClosed);
 	const isViewed = useViewedFiles().isViewed;
-	const rows = useMemo(() => sideRows(files, closed, isViewed), [files, closed, isViewed]);
+	const rows = useMemo(() => sideRows(files, closed, isViewed, query), [files, closed, isViewed, query]);
 
 	const toggleFolder = useCallback(
 		(path: string) => {

@@ -40,6 +40,20 @@
 	max-width: var(--changes-column);
 	margin: 0 auto;
 }
+/* Side by side, the column takes the page's width so each side keeps room for its code. */
+.changes[data-layout='split'] .changes-stack {
+	--changes-column: none;
+}
+
+/* The filter over the tree lines up with the tree's rows. */
+.changes-filter {
+	padding: 10px 8px 2px calc(var(--page-gutter) - 14px);
+}
+.changes-filter-empty {
+	padding: 12px 8px 0 calc(var(--page-gutter) - 6px);
+	color: var(--text-faint);
+	font-size: var(--font-size-label);
+}
 
 /* The Files button stands in for the sidebar while it is shut, and on a page too narrow for it. */
 .changes-files[data-beside] {
@@ -68,6 +82,34 @@
 /* Tools in the tab row. */
 .changes-files .meta {
 	margin-left: 2px;
+}
+.changes-whitespace[aria-pressed='true'] {
+	background: var(--bg-selected);
+	color: var(--text-primary);
+}
+/* Where the tab row runs short, the layout and whitespace tools keep their icons alone. */
+@container (max-width: 1139px) {
+	.changes-tool-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+}
+/* Shorter still, the tools take a line of their own under the tabs. */
+@container (max-width: 979px) {
+	.pull-tabs-row:has(.changes-whitespace) {
+		height: auto;
+		min-height: 44px;
+		flex-wrap: wrap;
+		gap: 0 10px;
+	}
+	.pull-tabs-row:has(.changes-whitespace) .pull-tools {
+		margin-left: auto;
+		padding-bottom: 8px;
+	}
 }
 .changes-findings {
 	display: inline-flex;
@@ -110,6 +152,28 @@
 .files-menu-deleted > .flex-1 {
 	text-decoration: line-through;
 	text-decoration-color: var(--text-ghost);
+}
+/* A tree row ends in its finding dot and the letter of its change. */
+.tree-end {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+}
+.tree-change {
+	width: 10px;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 11px;
+	text-align: right;
+}
+.tree-change[data-change='added'] {
+	color: var(--success);
+}
+.tree-change[data-change='modified'] {
+	color: var(--accent-text);
+}
+.tree-change[data-change='deleted'] {
+	color: var(--danger);
 }
 .tree-bug {
 	width: 6px;
@@ -297,72 +361,6 @@
 	font-size: var(--font-size-label);
 }
 
-/*
- * A finding where it happens: one line under the code, a raised plate with the card recipe. Pressed, it opens in
- * place to say what is wrong. Its severity's colour runs down its leading edge.
- */
-.line-bug {
-	max-width: 760px;
-	border-radius: var(--radius-row);
-	background: var(--bg-raised);
-	box-shadow: var(--shadow-card);
-}
-.line-bug-head {
-	display: flex;
-	width: 100%;
-	min-height: 34px;
-	align-items: center;
-	gap: 10px;
-	padding: 6px 10px 6px 12px;
-	border-radius: var(--radius-row);
-	color: var(--text-primary);
-	font-size: var(--font-size-label);
-	font-weight: 500;
-	line-height: 18px;
-	outline: none;
-	text-align: left;
-	transition: background-color var(--dur-hover) var(--ease-hover);
-}
-.line-bug-head:hover {
-	background: rgb(var(--wash-rgb) / 0.04);
-}
-.line-bug-head:focus-visible {
-	box-shadow: var(--focus-ring);
-}
-.line-bug-title {
-	min-width: 0;
-	flex: 1;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.line-bug-caret {
-	width: 13px;
-	height: 13px;
-	flex-shrink: 0;
-	color: var(--text-faint);
-	transition: rotate var(--dur-toggle) var(--ease-menu);
-}
-.line-bug-head[data-state='open'] .line-bug-caret {
-	rotate: 180deg;
-}
-.line-bug-body {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	padding: 0 14px 12px 36px;
-}
-.line-bug-text {
-	max-width: 68ch;
-	color: var(--text-secondary);
-	font-size: var(--font-size-label);
-	line-height: 20px;
-}
-.line-bug-foot {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-}
 .file-bugs {
 	display: flex;
 	flex-direction: column;

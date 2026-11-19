@@ -50,7 +50,7 @@ function sections(groups: FileGroup[], parts: GuidePart[] | null): Section[] {
 }
 
 /** The end of a file's row: a dot while it has open findings, then a check once viewed, else its size. */
-export function FileEnd({ entry }: { entry: FileEntry }) {
+function FileEnd({ entry }: { entry: FileEntry }) {
 	return (
 		<span className="file-end">
 			{entry.bugs > 0 ? <span className="tree-bug" role="img" aria-label={`${entry.bugs} open findings`} /> : null}

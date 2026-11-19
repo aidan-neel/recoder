@@ -6,12 +6,16 @@ import {
 	ArrowsInLineVerticalIcon,
 	ArrowsOutLineVerticalIcon,
 	ArrowUpIcon,
+	ColumnsIcon,
 	ListIcon,
+	ParagraphIcon,
+	RowsIcon,
 	TreeViewIcon
 } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
 
 import { useBugsView } from '@/lib/bugs/use-bugs';
+import { useDiffView } from '@/lib/changes/diff-view';
 import { readingOrder } from '@/lib/changes/places';
 import { useSideOpen } from '@/lib/changes/side-open';
 import { useChangesNav, useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
@@ -29,6 +33,11 @@ const MODES = [
 	{ value: 'guide', label: 'Guide' }
 ];
 
+const LAYOUTS = [
+	{ value: 'unified', label: <span className="changes-tool-label">Unified</span>, icon: <RowsIcon aria-hidden /> },
+	{ value: 'split', label: <span className="changes-tool-label">Split</span>, icon: <ColumnsIcon aria-hidden /> }
+];
+
 interface ChangesToolsProps {
 	mode: ChangesMode;
 	onModeChange: (mode: ChangesMode) => void;
@@ -38,7 +47,8 @@ interface ChangesToolsProps {
  * The Changes tab's tools in the tab row: showing or hiding the file sidebar,
  * the file menu (`t`) where the sidebar is not, a stepper
  * through the open findings in reading order (`n` and `p`), how far
- * through the files you are, the order to read them in, and collapse or
+ * through the files you are, the diff's layout (unified or split) and whether
+ * whitespace-only changes show, the order to read them in, and collapse or
  * expand every file.
  */
 export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
@@ -52,6 +62,7 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 	const fold = useSessionData((data) => data.changesFold);
 	const [menuOpen, setMenuOpen] = useState(false);
 	const side = useSideOpen();
+	const diffView = useDiffView();
 	const findings = useMemo(() => readingOrder(bugs.open, tree.order), [bugs.open, tree.order]);
 	const at = target?.findingId ? findings.findIndex((bug) => bug.id === target.findingId) : -1;
 	const shut = fold?.open === false;
@@ -67,8 +78,18 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 		nav.goTo(next.file, null, next.id);
 	}
 
+	/** `t`: focuses the sidebar's filter where the sidebar shows, else opens the file menu. */
+	function goToFile(): false | void {
+		if (viewed.total === 0) return false;
+
+		const filter = document.querySelector<HTMLInputElement>('.changes-filter input');
+
+		if (filter && filter.offsetParent !== null) filter.focus();
+		else setMenuOpen(true);
+	}
+
 	useKeys({
-		t: () => (viewed.total > 0 ? setMenuOpen(true) : false),
+		t: goToFile,
 		n: () => stepFinding(1),
 		p: () => stepFinding(-1)
 	});
@@ -131,6 +152,25 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 					<Meter value={viewed.count} max={viewed.total} tone="ok" aria-label="Files viewed" />
 				</span>
 			) : null}
+			<SegmentedControl
+				size="sm"
+				aria-label="Layout of the diff"
+				value={diffView.layout}
+				onValueChange={(value) => diffView.setLayout(value === 'split' ? 'split' : 'unified')}
+				options={LAYOUTS}
+			/>
+			<Tooltip content="Hide whitespace">
+				<Button
+					variant="quiet"
+					size="sm"
+					className="changes-whitespace"
+					aria-pressed={diffView.hideWhitespace}
+					onClick={diffView.toggleWhitespace}
+				>
+					<ParagraphIcon aria-hidden />
+					<span className="changes-tool-label">Hide whitespace</span>
+				</Button>
+			</Tooltip>
 			<SegmentedControl
 				size="sm"
 				aria-label="Order of the diff"

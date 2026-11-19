@@ -93,17 +93,22 @@ function joined(start: Folder): { folder: Folder; label: string } {
 
 /**
  * The file sidebar's visible rows, in the diff's order: folders first, each by path, then files by name. A closed
- * folder hides what is in it, and a viewed file is muted.
+ * folder hides what is in it, and a viewed file is muted. A filter keeps the files whose path holds it, with every
+ * folder above them open.
  */
 export function sideRows(
 	files: FileDiff[],
 	closed: ReadonlySet<string>,
-	isViewed: (path: string) => boolean
+	isViewed: (path: string) => boolean,
+	query = ''
 ): TreeRow[] {
+	const needle = query.trim().toLowerCase();
+	const shown = needle ? files.filter((file) => file.path.toLowerCase().includes(needle)) : files;
+
 	function rowsUnder(at: Folder, depth: number): TreeRow[] {
 		const folders = sortedFolders(at).flatMap((child): TreeRow[] => {
 			const { folder: end, label } = joined(child);
-			const open = !closed.has(end.path);
+			const open = needle !== '' || !closed.has(end.path);
 			const row: TreeRow = { kind: 'folder', id: end.path, label, depth, open };
 
 			return open ? [row, ...rowsUnder(end, depth + 1)] : [row];
@@ -120,7 +125,7 @@ export function sideRows(
 		return [...folders, ...own];
 	}
 
-	return rowsUnder(nest(files), 0);
+	return rowsUnder(nest(shown), 0);
 }
 
 /** The paths in tree order, folders before files: the order to read the diff in. */

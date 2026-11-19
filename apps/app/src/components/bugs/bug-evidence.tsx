@@ -1,22 +1,14 @@
 'use client';
 
 import { citedRuleWords, parseUnifiedDiff } from '@recoder/shared';
-import {
-	ClampedText,
-	CodeLines,
-	type CodeLine,
-	Collapsible,
-	CollapsibleContent,
-	CollapsibleTrigger,
-	langForPath,
-	Markdown,
-	Pill
-} from '@recoder/ui';
-import { CheckIcon, CaretRightIcon } from '@phosphor-icons/react';
+import { ClampedText, CodeLines, type CodeLine, langForPath, Markdown, Pill } from '@recoder/ui';
+import { CheckCircleIcon } from '@phosphor-icons/react';
 import { useMemo } from 'react';
 
 import type { BugProof, BugView } from '@/lib/bugs/types';
 import { plural } from '@/lib/shell/format';
+
+import { EvidencePill, HistoryPill } from './bug-facts';
 
 /**
  * The run that reproduces the bug: the command, how it ended and what it
@@ -109,73 +101,62 @@ function usePatch(diff: string | null): Patch | null {
 	}, [diff]);
 }
 
-/** The fix itself: the patch as code with the checks it passed, else the reviewer's words. */
-function FixBody({ fix, patch }: { fix: NonNullable<BugView['fix']>; patch: Patch | null }) {
-	if ('text' in fix) return <Markdown>{fix.text}</Markdown>;
-
-	return (
-		<>
-			<div className="proof">
-				{patch ? <CodeLines lines={patch.lines} lang={langForPath(patch.path)} /> : null}
-				{!patch ? <pre className="proof-output">{fix.diff}</pre> : null}
-			</div>
-			{fix.checks.length > 0 ? (
-				<div className="bug-section-head">
-					{fix.checks.map((check) => (
-						<Pill key={check} face="code" tone="ok" icon={<CheckIcon aria-hidden />}>
-							{check}
-						</Pill>
-					))}
-				</div>
-			) : null}
-		</>
-	);
-}
-
 /**
- * The suggested fix, shut until the reader opens it: one line that says
- * there is one, the file a patch changes and how many checks it passed.
+ * The suggested fix, open: a quiet head that says there is one, the file a patch changes and how many checks it
+ * passed (named in its tooltip), over the patch as code, or the reviewer's words when it gave no patch.
  */
 function FixBlock({ fix }: { fix: NonNullable<BugView['fix']> }) {
 	const patch = usePatch('diff' in fix ? fix.diff : null);
+	const checks = 'checks' in fix ? fix.checks : [];
 
 	return (
-		<Collapsible className="bug-section">
-			<CollapsibleTrigger className="fix-head">
-				<CaretRightIcon aria-hidden data-ui="disclosure-chevron" />
+		<section className="fix" aria-label="Suggested fix">
+			<div className="fix-head">
 				Suggested fix
 				{patch ? (
-					<Pill face="code" title={patch.path}>
-						{patch.path}
-					</Pill>
+					<span className="fix-path" title={patch.path}>
+						{patch.path.slice(patch.path.lastIndexOf('/') + 1)}
+					</span>
 				) : null}
-				{'checks' in fix && fix.checks.length > 0 ? (
-					<Pill tone="ok" icon={<CheckIcon aria-hidden />}>
-						{plural(fix.checks.length, 'check')} passed
-					</Pill>
+				{checks.length > 0 ? (
+					<span className="fix-checks" title={checks.join(', ')}>
+						<CheckCircleIcon aria-hidden />
+						{plural(checks.length, 'check')} passed
+					</span>
 				) : null}
-			</CollapsibleTrigger>
-			<CollapsibleContent className="fix-body">
-				<FixBody fix={fix} patch={patch} />
-			</CollapsibleContent>
-		</Collapsible>
+			</div>
+			{'text' in fix ? <Markdown className="fix-text">{fix.text}</Markdown> : null}
+			{'diff' in fix && patch ? (
+				<CodeLines lines={patch.lines} lang={langForPath(patch.path)} className="fix-code" />
+			) : null}
+			{'diff' in fix && !patch ? <pre className="proof-output">{fix.diff}</pre> : null}
+		</section>
 	);
 }
 
+interface BugEvidenceProps {
+	bug: BugView;
+	/** The Review tab's whole case: the run, the trace or the rule that shows it. The diff leaves them out. */
+	full: boolean;
+}
+
 /**
- * Everything that backs a bug, in the order a reader checks it: what is
- * wrong (its first lines, the rest behind Show more), the proof for its class
- * of evidence (a run, a trace, a rule), then the fix, shut.
+ * What backs a finding, in the order a reader checks it: what is wrong (its first lines, the rest behind Show
+ * more), how it was shown, the proof for its class of evidence on the Review tab, then the fix.
  */
-export function BugEvidence({ bug }: { bug: BugView }) {
+export function BugEvidence({ bug, full }: BugEvidenceProps) {
 	return (
 		<>
-			<ClampedText lines={2}>
+			<ClampedText lines={3}>
 				<Markdown>{bug.explanation}</Markdown>
 			</ClampedText>
-			{bug.proof ? <ProofBlock proof={bug.proof} /> : null}
-			{bug.trace.length > 0 ? <TraceBlock trace={bug.trace} /> : null}
-			{bug.rule ? <RuleBlock rule={bug.rule} /> : null}
+			<div className="bug-section-head">
+				<EvidencePill bug={bug} />
+				<HistoryPill bug={bug} />
+			</div>
+			{full && bug.proof ? <ProofBlock proof={bug.proof} /> : null}
+			{full && bug.trace.length > 0 ? <TraceBlock trace={bug.trace} /> : null}
+			{full && bug.rule ? <RuleBlock rule={bug.rule} /> : null}
 			{bug.fix ? <FixBlock fix={bug.fix} /> : null}
 		</>
 	);

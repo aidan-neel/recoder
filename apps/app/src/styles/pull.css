@@ -2,14 +2,23 @@
 /* The page fills the window. The crumbs, title, badges and first tab label share the bar's gutter. */
 .pull-head {
 	flex-shrink: 0;
-	padding: 18px var(--page-gutter) 14px;
+	padding: 10px var(--page-gutter);
+	container-type: inline-size;
 }
-/* The title, the review's badge beside it, and the buttons at the end. A long title gives way first. */
+/* One dense row: the title, its badges and the buttons at the end. A long title gives way first. */
 .pull-title-row {
 	display: flex;
+	min-height: 32px;
 	min-width: 0;
 	align-items: center;
 	gap: 12px;
+}
+.pull-head .page-title {
+	min-width: 280px;
+	flex: 0 1 auto;
+	gap: 8px;
+	font-size: 15px;
+	line-height: 22px;
 }
 .pull-actions {
 	display: flex;
@@ -36,10 +45,21 @@
 .pull-facts {
 	display: flex;
 	min-width: 0;
-	flex-wrap: wrap;
+	flex-shrink: 0;
 	align-items: center;
 	gap: 6px;
-	margin-top: 10px;
+}
+/* Where the row would cut the title short, the badges take the line under it. */
+@container (max-width: 1219px) {
+	.pull-title-row {
+		flex-wrap: wrap;
+		row-gap: 8px;
+	}
+	.pull-facts {
+		flex-wrap: wrap;
+		flex-basis: 100%;
+		order: 1;
+	}
 }
 
 /*

@@ -117,6 +117,29 @@
 	white-space: normal;
 }
 
+/* Split: two columns of number, sign and text; long lines wrap inside their side so the rows stay paired. */
+[data-ui='code-lines'][data-layout='split'] {
+	--code-columns: 44px 18px minmax(0, 1fr);
+	--code-gutter: 16px;
+}
+[data-ui='code-lines'][data-layout='split'] [data-ui='code-lines-body'] {
+	width: 100%;
+}
+[data-ui='code-split-row'] {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+[data-ui='code-split-row'] > [data-side='new'] {
+	border-left: 1px solid var(--line-card);
+}
+[data-ui='code-lines'][data-layout='split'] [data-ui='code-line-text'] {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+[data-ui='code-line'][data-type='empty'] {
+	background-color: rgb(var(--wash-rgb) / 0.025);
+}
+
 /* ───────── Code block ───────── */
 [data-ui='code-block-content'] {
 	max-height: min(32rem, 70vh);
