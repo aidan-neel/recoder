@@ -1,5 +1,17 @@
 /* Component contracts that classes alone cannot express. Selectors use the kit's data-ui hooks. */
 
+/* A button's gradient stops, registered as colours so hover and press blend the fill instead of swapping it. */
+@property --button-top {
+	syntax: '<color>';
+	inherits: false;
+	initial-value: transparent;
+}
+@property --button-bottom {
+	syntax: '<color>';
+	inherits: false;
+	initial-value: transparent;
+}
+
 /* Layered, so a class passed through `className` (and an app's own CSS) wins over these defaults. */
 @layer components {
 	/* ───────── Keycap ───────── */
