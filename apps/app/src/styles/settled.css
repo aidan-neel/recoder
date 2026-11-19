@@ -4,9 +4,6 @@
 	margin-top: auto;
 	padding: 14px 0 12px;
 }
-.settled .section-head {
-	color: var(--text-faint);
-}
 .settled-count {
 	font-size: var(--font-size-meta);
 	font-variant-numeric: tabular-nums;

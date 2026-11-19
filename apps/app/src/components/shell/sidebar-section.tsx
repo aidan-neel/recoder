@@ -12,7 +12,13 @@ import {
 	RowButton,
 	Tooltip
 } from '@recoder/ui';
-import { CaretDownIcon, DotsThreeIcon, EyeSlashIcon, PlusIcon } from '@phosphor-icons/react';
+import {
+	ArrowsInLineVerticalIcon,
+	ArrowsOutLineVerticalIcon,
+	DotsThreeIcon,
+	EyeSlashIcon,
+	PlusIcon
+} from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 interface SidebarSectionProps {
@@ -30,9 +36,9 @@ interface SidebarSectionProps {
 }
 
 /**
- * A sidebar list under a title that folds it away: a click on the title opens or closes it. A section that starts
- * things has a + at the right of its title, and one the person can hide has a ⋯ menu beside it; both wait until
- * the title is pointed at or focused.
+ * A sidebar group under its title, drawn as Capy draws its groups: the title in the body's ink at the title size, and
+ * at its right the group's quiet + (what it starts) and ⋯ (its menu), shown at rest. A click on the title folds the
+ * list away or brings it back, and the ⋯ menu offers the same.
  */
 export function SidebarSection({
 	title,
@@ -49,9 +55,8 @@ export function SidebarSection({
 			<div className="section-row">
 				<RowButton asChild className="section-head">
 					<CollapsibleTrigger>
-						<span className="section-label">{title}</span>
+						<span className="section-title">{title}</span>
 						{aside}
-						<CaretDownIcon aria-hidden className="section-chevron" />
 					</CollapsibleTrigger>
 				</RowButton>
 				{add || onHide ? (
@@ -71,6 +76,12 @@ export function SidebarSection({
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align="start" className="w-[200px]">
+									<DropdownMenuItem
+										icon={open ? <ArrowsInLineVerticalIcon /> : <ArrowsOutLineVerticalIcon />}
+										onSelect={() => onOpenChange(!open)}
+									>
+										{open ? 'Collapse' : 'Expand'} {title}
+									</DropdownMenuItem>
 									<DropdownMenuItem icon={<EyeSlashIcon />} onSelect={onHide}>
 										Hide {title}
 									</DropdownMenuItem>

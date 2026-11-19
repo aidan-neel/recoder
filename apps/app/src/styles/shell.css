@@ -409,68 +409,49 @@
 	flex-direction: column;
 	margin-top: 20px;
 }
-/* A sidebar section's title: a quiet row that folds the list under it, its chevron turned while folded. */
+/*
+ * A sidebar group's title, as Capy titles its groups: the body's ink at the title size in regular weight, on the
+ * rows' text lane. A click on it folds the list; nothing marks the fold but the list itself, as in Capy.
+ */
 .section-head {
 	--row-button-radius: var(--radius-row);
 
 	width: calc(100% - 16px);
+	height: 28px;
 	align-items: center;
-	gap: 6px;
+	gap: 8px;
 	margin: 0 8px 2px;
-	padding: 2px 8px;
-	color: var(--text-subtle);
+	padding: 0 8px;
+	color: var(--text-primary);
+	font-size: var(--font-size-title);
+	line-height: 20px;
 }
-.section-head:hover {
-	color: var(--text-secondary);
-}
-.section-head .section-label {
+.section-title {
+	min-width: 0;
 	margin-right: auto;
-	color: inherit;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
-.section-chevron {
-	width: 12px;
-	height: 12px;
-	transition: rotate var(--dur-toggle) var(--ease-menu);
-}
-.section-head[data-state='closed'] .section-chevron {
-	rotate: -90deg;
-}
-/* A section that starts things has its + and ⋯ at the title's right; its chevron moves beside the title to make room. */
+/* A group's + and ⋯ sit quiet at the title's right at rest, as Capy's do: no fill, faint ink until pointed at. */
 .section-row {
 	position: relative;
 }
-.section-row:has(.section-tools) .section-label {
-	margin-right: 0;
-}
-.section-row:has(.section-tools) .section-chevron {
-	margin-right: auto;
-	opacity: 0;
-	transition:
-		rotate var(--dur-toggle) var(--ease-menu),
-		opacity var(--dur-hover) var(--ease-hover);
-}
-.section-row:has(.section-tools) :is(.section-head:hover, .section-head[data-state='closed']) .section-chevron {
-	opacity: 1;
+.section-row:has(.section-tools) .section-head {
+	padding-right: 64px;
 }
 .section-tools {
 	position: absolute;
 	top: 50%;
-	right: 10px;
+	right: 8px;
 	display: flex;
-	opacity: 0;
 	translate: 0 -50%;
-	transition: opacity var(--dur-hover) var(--ease-hover);
-}
-.section-row:is(:hover, :focus-within, :has(.section-tools [data-state='open'])) .section-tools {
-	opacity: 1;
 }
 .section-tools [data-ui='button'] {
-	color: var(--text-subtle);
+	color: var(--text-faint);
 }
-@media (hover: none) {
-	.section-tools {
-		opacity: 1;
-	}
+.section-tools [data-ui='button']:is(:hover, :focus-visible, [data-state='open']) {
+	color: var(--text-primary);
 }
 /* The 2px on top keeps the first row's focus ring clear of the title above it. */
 .recent-list {
