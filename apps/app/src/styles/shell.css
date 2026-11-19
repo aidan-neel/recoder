@@ -4,9 +4,14 @@
  * slides out whole, its text never rewraps, and the page's left edge stays glued to it: one property on one clock,
  * nothing fades or overlaps. Every row in the sidebar keeps one lane: icons centred 24px in, text 40px in.
  */
+/*
+ * `--page-rest` is the width the page settles at once the sidebar is where it is going: set at once while the slide
+ * runs, so a page can lay out for where it ends up rather than for each width it passes (pull.css).
+ */
 .app-frame {
 	--dur-sidebar: var(--dur-toggle);
 	--ease-sidebar: var(--ease-menu);
+	--page-rest: 100vw;
 
 	display: grid;
 	height: 100dvh;
@@ -51,8 +56,12 @@
 	.app-frame {
 		--frame-inset: 8px;
 		--frame-radius: 12px;
+		--page-rest: calc(100vw - var(--sidebar-width) - var(--frame-inset));
 
 		background: var(--bg-chrome);
+	}
+	.app-frame[data-sidebar='closed'] {
+		--page-rest: calc(100vw - 2 * var(--frame-inset));
 	}
 	.app-frame .sidebar {
 		padding-bottom: var(--frame-inset);
