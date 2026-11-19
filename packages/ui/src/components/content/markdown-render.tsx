@@ -1,5 +1,5 @@
 import { createElement, type ReactElement, type ReactNode, type Ref } from 'react';
-import ReactMarkdown, { type Components, type ExtraProps, type Options } from 'react-markdown';
+import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { cn } from '../../lib/cn';
@@ -138,13 +138,9 @@ function plainTree(paragraphs: string[], parts: Components): ReactElement {
 	);
 }
 
-/** Rehype plugins for streaming text, such as the one that times each word for its fade. */
-type StreamPlugins = Options['rehypePlugins'];
-
 /**
  * The React tree for a source. Complete text is parsed once and kept, so a
- * remount reuses it; streaming text is parsed on every render, through
- * `plugins`.
+ * remount reuses it; streaming text is parsed on every render.
  * Complete text with no Markdown in it but code spans (a summary that names
  * a status code or a function, often) skips the parser and builds the same
  * paragraphs itself, unless `parts` draws them: the parser's first run, its
@@ -152,16 +148,10 @@ type StreamPlugins = Options['rehypePlugins'];
  * `tests/content/markdown-render.test.tsx` holds the shortcut to the
  * parser's markup.
  */
-function markdownTree(source: string, streaming: boolean, parts: Components, plugins?: StreamPlugins): ReactElement {
-	const render = (rehypePlugins?: StreamPlugins) =>
-		ReactMarkdown({
-			children: source,
-			remarkPlugins: REMARK,
-			rehypePlugins,
-			components: parts
-		});
+function markdownTree(source: string, streaming: boolean, parts: Components): ReactElement {
+	const render = () => ReactMarkdown({ children: source, remarkPlugins: REMARK, components: parts });
 
-	if (streaming) return render(plugins);
+	if (streaming) return render();
 
 	return cachedMarkdown(parts, source, () => {
 		const paragraphs = parts.p ? null : plainParagraphs(source);
@@ -221,9 +211,8 @@ export function MarkdownProse({
 	linkOverride,
 	inlineCode,
 	parts = clientParts(linkOverride, inlineCode),
-	plugins,
 	ref
-}: MarkdownProps & { parts?: Components; plugins?: StreamPlugins; ref?: Ref<HTMLDivElement> }) {
+}: MarkdownProps & { parts?: Components; ref?: Ref<HTMLDivElement> }) {
 	return (
 		<div
 			ref={ref}
@@ -233,7 +222,7 @@ export function MarkdownProse({
 			aria-busy={streaming || undefined}
 			className={cn('min-w-0 [overflow-wrap:break-word]', VOICE[variant], className)}
 		>
-			{markdownTree(children, streaming, parts, plugins)}
+			{markdownTree(children, streaming, parts)}
 		</div>
 	);
 }

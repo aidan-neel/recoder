@@ -1,13 +1,20 @@
 'use client';
 
-import { AnimatePresence, motion, useReducedMotionConfig, type Transition, type Variants } from 'motion/react';
-import { useLayoutEffect, useState, type Ref } from 'react';
+import { useReducedMotionConfig } from 'motion/react';
+import { memo, useLayoutEffect, useRef, useState } from 'react';
 
 import { cn } from '../../lib/cn';
-import { DURATION, EASE_OUT, SPRING } from '../../motion/presets';
+import { EASE_OUT } from '../../motion/presets';
 
-/** Which way digits roll: 1 when the value went up (new digits rise from below), -1 when it went down. */
-type Direction = 1 | -1;
+/** How long a digit takes to roll to its new value, in ms: Capy's roll. */
+const ROLL_MS = 500;
+
+const ROLL_EASING = `cubic-bezier(${EASE_OUT.join(', ')})`;
+
+/** The digits a rolling column draws, ten either side of the one at rest, so a roll of up to ten steps never runs dry. */
+const COLUMN = Array.from({ length: 21 }, (_, index) => index - 10);
+
+const DIGIT = /\d/;
 
 interface AnimatedNumberProps {
 	/**
@@ -27,177 +34,189 @@ interface AnimatedNumberProps {
 	still?: boolean;
 }
 
-/** A digit enters 0.6em from the side it rolls from and leaves 0.6em toward the other, crossfading on the way. */
-const ROLL: Variants = {
-	enter: (direction: Direction) => ({ y: `${0.6 * direction}em`, opacity: 0 }),
-	settled: { y: '0em', opacity: 1 },
-	leave: (direction: Direction) => ({ y: `${-0.6 * direction}em`, opacity: 0 })
-};
-
-/** Reduced motion: digits crossfade in place instead of rolling. */
-const FADE: Variants = {
-	enter: { opacity: 0 },
-	settled: { opacity: 1 },
-	leave: { opacity: 0 }
-};
-
-/** The roll springs; the crossfade is a short tween so a leaving digit is gone before the spring settles. */
-const ROLL_TRANSITION: Transition = { y: SPRING, opacity: { duration: DURATION.swap, ease: EASE_OUT } };
-
-/** Reduced motion: the crossfade is held to the shortest fade, so nothing lingers. */
-const FADE_TRANSITION: Transition = { opacity: { duration: DURATION.menuOut, ease: EASE_OUT } };
-
-interface DigitProps {
-	char: string;
-	direction: Direction;
-	reduced: boolean;
-	/** Lets the presence measure a leaving position and pop it out of the flow, so the rest reflows at once. */
-	ref?: Ref<HTMLSpanElement>;
-}
-
-/**
- * One character position. A new position rolls in as a whole; inside it a
- * changed character rolls out while the new one rolls in, and an unchanged
- * one stays still.
- */
-function Digit({ char, direction, reduced, ref }: DigitProps) {
-	const variants = reduced ? FADE : ROLL;
-	const transition = reduced ? FADE_TRANSITION : ROLL_TRANSITION;
-
-	return (
-		<motion.span
-			ref={ref}
-			data-ui="animated-number-digit"
-			className="relative inline-block"
-			custom={direction}
-			variants={variants}
-			initial="enter"
-			animate="settled"
-			exit="leave"
-			transition={transition}
-		>
-			<AnimatePresence initial={false} custom={direction} mode="popLayout">
-				<motion.span
-					key={char}
-					className="inline-block whitespace-pre"
-					custom={direction}
-					variants={variants}
-					initial="enter"
-					animate="settled"
-					exit="leave"
-					transition={transition}
-				>
-					{char}
-				</motion.span>
-			</AnimatePresence>
-		</motion.span>
-	);
-}
-
-/** A character drawn in the same boxes as a rolling `Digit`, with no motion, for a number that has not changed yet. */
-function StillDigit({ char }: { char: string }) {
-	return (
-		<span data-ui="animated-number-digit" className="relative inline-block">
-			<span className="inline-block whitespace-pre">{char}</span>
-		</span>
-	);
-}
-
-interface DigitsProps {
-	text: string;
-	direction: Direction;
-	reduced: boolean;
-	/** False until the number first changes: until then each character is a plain box and no motion is set up. */
-	rolling: boolean;
-}
-
-/**
- * The characters. Each mount paints its value at once (the presence skips
- * its first render), so a number that was not shown before never rolls;
- * only a change to a shown number does.
- */
-function Digits({ text, direction, reduced, rolling }: DigitsProps) {
-	const chars = [...text];
-
-	return (
-		<>
-			<span className="sr-only">{text}</span>
-			<span aria-hidden className="inline-flex">
-				{rolling ? (
-					<AnimatePresence initial={false} custom={direction} mode="popLayout">
-						{chars.map((char, index) => (
-							<Digit key={chars.length - index} char={char} direction={direction} reduced={reduced} />
-						))}
-					</AnimatePresence>
-				) : (
-					chars.map((char, index) => <StillDigit key={chars.length - index} char={char} />)
-				)}
-			</span>
-		</>
-	);
-}
-
-/** What the digits show and how they move. */
+/** Where a digit's column starts its roll from and comes to rest, in lines above its rest. */
 interface Roll {
-	/** The text to draw. */
-	text: string;
-	direction: Direction;
-	/** False until the number first changes; most never do, so they set up no motion. */
-	rolling: boolean;
+	from: number;
+	to: number;
+}
+
+/** A remainder that stays in 0 to 9 for negative steps too. */
+function wrap(n: number): number {
+	return ((n % 10) + 10) % 10;
 }
 
 /**
- * Follows the value for the digits. A number draws plain boxes until its
- * first change. On that change the rolling digits mount on the old text,
- * and a layout effect hands them the new one before the frame paints, so the
- * first change rolls like every later one.
+ * How many lines the column moves to go from `from` to `to`: up through the digits when the number grew (`trend`
+ * 1), down when it shrank (-1), and the shorter way when it is not a number that moved.
  */
-function useRoll(value: number | null | undefined, format: (n: number) => string): Roll {
-	const [previous, setPrevious] = useState(value);
-	const [direction, setDirection] = useState<Direction>(1);
+function rollSteps(from: number, to: number, trend: number): number {
+	const up = wrap(to - from);
+
+	if (trend > 0) return up;
+	if (trend < 0) return up - 10;
+
+	return up <= 5 ? up : up - 10;
+}
+
+/**
+ * Where a column moving now sits, in lines from its rest: a roll caught mid-way carries on from the line it is at
+ * rather than jumping back to its start.
+ */
+function offsetNow(column: HTMLElement | null): number {
+	if (!column) return 0;
+
+	const style = getComputedStyle(column);
+	const line = Number.parseFloat(style.lineHeight);
+
+	if (!Number.isFinite(line) || line <= 0 || style.transform === 'none') return 0;
+
+	return new DOMMatrixReadOnly(style.transform).m42 / line;
+}
+
+/**
+ * One digit. At rest it is a plain character; once it changes it becomes a clipped column of digits that rolls the
+ * new one into place over 500ms on a strong ease-out, the way Capy rolls its counters. A change mid-roll takes over
+ * from where the column is.
+ */
+const RollingDigit = memo(function RollingDigit({ digit, trend }: { digit: number; trend: number }) {
+	const reduced = useReducedMotionConfig() ?? false;
+	const [shown, setShown] = useState(digit);
 	const [rolling, setRolling] = useState(false);
-	const [start, setStart] = useState<string | null>(null);
-
-	if (value !== previous) {
-		setPrevious(value);
-
-		if (value !== null && value !== undefined && previous !== null && previous !== undefined) {
-			setDirection(value > previous ? 1 : -1);
-
-			if (!rolling) {
-				setRolling(true);
-				setStart(format(previous));
-			}
-		}
-	}
+	const last = useRef(digit);
+	const rest = useRef(digit);
+	const column = useRef<HTMLSpanElement | null>(null);
+	const animation = useRef<Animation | null>(null);
+	const pending = useRef<Roll | null>(null);
 
 	useLayoutEffect(() => {
-		/* eslint-disable-next-line react-hooks/set-state-in-effect -- the rolling digits commit once on the old text, so the presence sees the change */
-		if (start !== null) setStart(null);
-	}, [start]);
+		if (digit === last.current) return;
 
-	return { text: start ?? (value === null || value === undefined ? '' : format(value)), direction, rolling };
+		const target = rest.current + rollSteps(last.current, digit, trend);
+		const to = wrap(target);
+		const at = rest.current - offsetNow(column.current);
+		const start = at + (to - target);
+
+		last.current = digit;
+		rest.current = to;
+		pending.current = { from: start - Math.trunc((start - to) / 10) * 10, to };
+		setRolling(true);
+		setShown(to);
+	}, [digit, trend]);
+
+	useLayoutEffect(() => {
+		const roll = pending.current;
+		const element = column.current;
+
+		if (!roll || !element || shown !== roll.to) return;
+
+		pending.current = null;
+		animation.current?.cancel();
+
+		if (reduced) return;
+
+		animation.current = element.animate(
+			[{ transform: `translateY(calc(${roll.to - roll.from} * 1lh))` }, { transform: 'translateY(0px)' }],
+			{ duration: ROLL_MS, easing: ROLL_EASING }
+		);
+	}, [shown, rolling, reduced]);
+
+	return (
+		<span className="relative inline-block">
+			<span
+				aria-hidden
+				data-d={rolling ? 0 : digit}
+				className={cn('before:content-[attr(data-d)]', rolling && 'invisible')}
+			/>
+			{rolling ? (
+				<span
+					aria-hidden
+					className="absolute inset-0 overflow-clip [mask-image:linear-gradient(to_bottom,transparent,black_22%,black_78%,transparent)]"
+				>
+					<span ref={column} className="absolute inset-x-0 top-0">
+						{COLUMN.map((line) => (
+							<span
+								key={line}
+								data-d={wrap(shown + line)}
+								className="absolute inset-x-0 before:content-[attr(data-d)]"
+								style={{ top: `calc(${line} * 1lh)` }}
+							/>
+						))}
+					</span>
+				</span>
+			) : null}
+		</span>
+	);
+});
+
+/** The value's direction at its last change: 1 up, -1 down, 0 when either side was unknown. */
+function useTrend(value: number | null | undefined): number {
+	const [previous, setPrevious] = useState(value);
+	const [trend, setTrend] = useState(0);
+
+	if (value !== previous) {
+		const known = value !== null && value !== undefined && previous !== null && previous !== undefined;
+
+		setPrevious(value);
+		setTrend(known ? Math.sign(value - previous) : 0);
+	}
+
+	return trend;
+}
+
+/** False on the first commit, so the characters a number is first drawn with show at once and only later ones fade in. */
+function useMounted(): boolean {
+	const [mounted, setMounted] = useState(false);
+
+	useLayoutEffect(() => {
+		/* eslint-disable-next-line react-hooks/set-state-in-effect -- the first characters paint still; only ones added after mount fade in */
+		setMounted(true);
+	}, []);
+
+	return mounted;
 }
 
 /**
- * A number in tabular figures whose changed digits roll when a shown value
- * changes: up when it grows, down when it shrinks. A value that first becomes
- * known (on mount, from a saved copy on page load, or after null) appears at
- * once, and `still` turns the roll off. Assistive tech reads the whole value
- * once.
+ * A number in tabular figures whose changed digits roll, Capy's way: each digit is a column that moves up through
+ * the digits when the value grows and down when it shrinks, keyed from the right so a new place (9 to 10, 59s to
+ * 1m 0s) fades in on the left while the rest roll. A value that first becomes known appears at once, `still` turns
+ * the roll off, and reduced motion swaps the digits in place. Assistive tech reads the whole value once.
  */
 export function AnimatedNumber({ value, className, format = String, still = false }: AnimatedNumberProps) {
-	const reduced = useReducedMotionConfig() ?? false;
-	const roll = useRoll(value, format);
-	const known = value !== null && value !== undefined;
+	const trend = useTrend(value);
+	const mounted = useMounted();
+
+	if (value === null || value === undefined) return <span data-ui="animated-number" className={className} />;
+
+	const text = format(value);
+	const chars = [...text];
+	const fresh = mounted ? 'transition-opacity duration-(--dur-swap) ease-(--ease-out) starting:opacity-0' : undefined;
 
 	return (
 		<span
 			data-ui="animated-number"
-			data-still={still || undefined}
-			className={cn('relative inline-flex tabular-nums', className)}
+			className={cn('relative inline-flex items-baseline leading-[inherit] tabular-nums', className)}
 		>
-			{known && (still ? format(value) : <Digits {...roll} reduced={reduced} />)}
+			<span className="sr-only">{text}</span>
+			{chars.map((char, index) => {
+				const key = `rpos-${chars.length - 1 - index}`;
+
+				if (!still && DIGIT.test(char)) {
+					return (
+						<span key={key} aria-hidden className={cn('inline-block', fresh)}>
+							<RollingDigit digit={Number(char)} trend={trend} />
+						</span>
+					);
+				}
+
+				return (
+					<span
+						key={key}
+						aria-hidden
+						data-c={char === ' ' ? '\u00a0' : char}
+						className={cn('inline-block whitespace-pre before:content-[attr(data-c)]', fresh)}
+					/>
+				);
+			})}
 		</span>
 	);
 }

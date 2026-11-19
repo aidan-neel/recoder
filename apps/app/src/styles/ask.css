@@ -15,6 +15,7 @@
 }
 /* A reply stands a step clear of the question above it, and its trail's line a step clear of the words it led to. */
 .ask-message[data-from='recoder'] {
+	position: relative;
 	padding-top: 6px;
 }
 .ask-message[data-from='recoder'] > .trail {
@@ -29,27 +30,47 @@
 	font-variant-numeric: tabular-nums;
 }
 /*
- * Under a finished reply: when it arrived and a copy, quiet until the reply is hovered or holds focus. The row keeps
- * its room while hidden, so nothing moves when it shows.
+ * Capy's toolbar on a finished reply: a small ringed pill on a solid base at the reply's top right, holding the hour,
+ * Reply, Copy and a menu. It shows while the reply is hovered or holds focus, and while its menu is open; at rest it
+ * takes no pointer, so the words under it stay selectable.
  */
-.ask-meta {
+.ask-actions {
+	position: absolute;
+	top: 0;
+	right: 0;
+	z-index: 1;
 	display: flex;
 	align-items: center;
-	gap: 4px;
-	margin-top: -4px;
+	gap: 0;
+	padding: 1px;
+	border: 1px solid var(--line-control);
+	border-radius: calc(var(--radius-control) + 2px); /* its buttons' radius plus the 1px border and 1px padding */
+	background: var(--bg-canvas);
 	color: var(--text-faint);
 	font-size: var(--font-size-meta);
 	font-variant-numeric: tabular-nums;
 	opacity: 0;
+	pointer-events: none;
 	transition: opacity var(--dur-hover) ease-out;
 }
-.ask-message:hover .ask-meta,
-.ask-message:focus-within .ask-meta {
+.ask-actions svg {
+	width: 14px;
+	height: 14px;
+}
+.ask-actions-time {
+	padding: 0 6px 0 8px;
+	line-height: 16px;
+}
+.ask-message:hover > .ask-actions,
+.ask-message:focus-within > .ask-actions,
+.ask-actions:has([data-state='open']) {
 	opacity: 1;
+	pointer-events: auto;
 }
 @media (hover: none) {
-	.ask-meta {
+	.ask-actions {
 		opacity: 1;
+		pointer-events: auto;
 	}
 }
 /* The person's images under their words, on the same right edge. */

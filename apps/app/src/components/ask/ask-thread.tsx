@@ -1,13 +1,14 @@
 'use client';
 
-import { Button, CopyButton, HoverList, ImageChips, LinkText, Markdown, RowButton } from '@recoder/ui';
+import { Button, HoverList, ImageChips, LinkText, Markdown, RowButton } from '@recoder/ui';
 import { ArrowElbowDownRightIcon } from '@phosphor-icons/react';
+import { useRef } from 'react';
 
 import type { AskMessageView, AskView } from '@/lib/ask/types';
-import { clockTime, fullTime } from '@/lib/shell/age';
 
 import { ChatTrail } from '../chat-trail/chat-trail';
 import { CITATION_LINKS, CitedPassagesContext } from '../chat-trail/citation-chip';
+import { MessageActions, MessageTime } from './message-actions';
 import { ReviewCard } from './review-card';
 
 /** Who a message is from, as a screen reader names them. */
@@ -29,6 +30,8 @@ interface AskMessageProps {
 	onRetry: (id: string) => void;
 	/** Mark the hour over the question, as the first of a stretch of the conversation. */
 	marked: boolean;
+	onReply?: (text: string) => void;
+	onAskAgain: (() => void) | null;
 }
 
 /** Whether a reply shows its trail: it has steps, or it is still working with nothing to say yet. */
@@ -73,9 +76,11 @@ function ReplyBody({ message }: { message: AskMessageView }) {
  * they typed, on a tint at the right; Recoder's reply as prose on the page.
  * A failed message says why and offers to ask again.
  */
-function AskMessage({ message, onRetry, marked }: AskMessageProps) {
+function AskMessage({ message, onRetry, marked, onReply, onAskAgain }: AskMessageProps) {
+	const article = useRef<HTMLElement | null>(null);
+
 	return (
-		<article className="ask-message" data-from={message.from} aria-label={`${NAMES[message.from]} said`}>
+		<article ref={article} className="ask-message" data-from={message.from} aria-label={`${NAMES[message.from]} said`}>
 			{message.from === 'person' ? (
 				<>
 					{marked ? <MessageTime at={message.at} className="ask-when" /> : null}
@@ -88,7 +93,7 @@ function AskMessage({ message, onRetry, marked }: AskMessageProps) {
 				<ReplyBody message={message} />
 			)}
 			{message.from === 'recoder' && message.state === 'done' && message.text !== '' ? (
-				<ReplyMeta message={message} />
+				<MessageActions message={message} article={article} onReply={onReply} onAskAgain={onAskAgain} />
 			) : null}
 			{message.state === 'failed' ? (
 				<p className="ask-failed" role="alert">
@@ -102,29 +107,16 @@ function AskMessage({ message, onRetry, marked }: AskMessageProps) {
 	);
 }
 
-/** A message's hour, with the full date and time for a pointer that rests on it. */
-function MessageTime({ at, className }: { at: string | null; className?: string }) {
-	if (!at) return null;
-
-	return (
-		<time dateTime={at} title={fullTime(at)} className={className}>
-			{clockTime(at)}
-		</time>
-	);
+/** The question a reply answered: the person's last message before it. */
+function questionBefore(messages: readonly AskMessageView[], index: number): string | null {
+	return messages.slice(0, index).findLast((before) => before.from === 'person')?.text ?? null;
 }
 
-/** Under a finished reply, as Capy has it: when it arrived, and a copy of its words. */
-function ReplyMeta({ message }: { message: AskMessageView }) {
-	return (
-		<footer className="ask-meta">
-			<MessageTime at={message.at} />
-			<CopyButton value={message.text} label="Copy reply" iconOnly />
-		</footer>
-	);
-}
-
-/** A conversation with Recoder, oldest first. Nothing renders while it is empty. */
-export function AskThread({ ask }: { ask: AskView }) {
+/**
+ * A conversation with Recoder, oldest first. Nothing renders while it is empty. With `onReply`, a reply's toolbar
+ * quotes it in the composer beside the thread.
+ */
+export function AskThread({ ask, onReply }: { ask: AskView; onReply?: (text: string) => void }) {
 	if (ask.messages.length === 0) return null;
 
 	return (
@@ -135,10 +127,21 @@ export function AskThread({ ask }: { ask: AskView }) {
 					message={message}
 					onRetry={ask.retry}
 					marked={opensTurn(message, ask.messages[index - 1])}
+					onReply={onReply}
+					onAskAgain={askAgain(ask, index)}
 				/>
 			))}
 		</div>
 	);
+}
+
+/** Sends the question behind the reply at `index` again; null while a reply is arriving or no question led to it. */
+function askAgain(ask: AskView, index: number): (() => void) | null {
+	const question = questionBefore(ask.messages, index);
+
+	if (ask.replying || question === null) return null;
+
+	return () => void ask.send(question);
 }
 
 /** Short questions to start from, as quiet rows while the thread is empty. A click sends the question. */

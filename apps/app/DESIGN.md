@@ -506,16 +506,24 @@ AID-8 file).
 - **Turns.** The person's question sits on a tint at the right. The hour
   shows centred over a question that opens a conversation or follows a rest
   of more than five minutes. Recoder's reply is prose on the page.
-- **What it did.** Under the question, one line runs across the column with
-  hairlines either side: `Working for 8s`, which sweeps while the reply
-  works, then `Worked for 13s`. While the reply works, its steps arrive
+- **What it did.** Under the question, one centred line with no rule:
+  `Working for 8s`, which sweeps while the reply works and whose seconds
+  roll like Capy's counters (`AnimatedNumber`), then `Worked for 13s`. While the reply works, its steps arrive
   under that line, one quiet line each, ending in how long the step took.
   They fold away once the answer begins, and pressing the line opens them
   again. A step with more to show (the files a search or a read found, a
   command and its output, a thought's text) opens under its own line on
   request, and only a failed command starts open.
-- **Under a reply.** The hour it arrived and a copy, faint, shown while the
-  reply is hovered or holds focus. The row keeps its room, so nothing moves.
+- **A reply's toolbar.** Capy's pill at the reply's top right: a 1px
+  `--line-control` ring on the canvas, holding the hour it arrived, Reply
+  (quotes the reply in the composer, where one sits beside the thread), Copy
+  (the Markdown) and a menu with Copy as plain text and Ask again. Its icons
+  are 14px in 28px targets. It shows while the reply is hovered or holds
+  focus and while its menu is open, and takes no pointer at rest.
+- **Streaming.** The reply's text goes out a few words at a time, and each
+  stretch that arrives fades from transparent to its colour over 160ms on a
+  strong ease-out, drawn with CSS custom highlights so nothing moves or
+  blurs (`useStreamFade`). Code stands at once.
 - **Scroll.** The thread follows a reply while the person reads the end.
   Scrolling up stops the following and shows a Scroll to end pill centred
   over the composer, which brings the end back and follows again.
