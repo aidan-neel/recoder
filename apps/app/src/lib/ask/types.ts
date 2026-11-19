@@ -13,8 +13,10 @@ export interface AskMessageView {
 	state: 'done' | 'writing' | 'failed';
 	/** Why the reply failed, as one plain sentence. */
 	error: string | null;
-	/** ISO time; null for a message not sent yet. */
+	/** ISO time; null for a message not sent yet. A reply's start. */
 	at: string | null;
+	/** When a reply stopped working, ISO; absent while it works and on replies saved before it was kept. */
+	endedAt?: string;
 	/** The images the person attached, as chips that open them. */
 	images?: ImageChip[];
 	/** What a reply did before it answered; present on a repository chat's replies, empty when it reported nothing. */

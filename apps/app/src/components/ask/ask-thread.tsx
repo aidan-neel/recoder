@@ -42,11 +42,14 @@ function MessageTime({ at, className }: { at: string | null; className?: string 
 	);
 }
 
-/** Whether a reply shows its trail: it has steps, or it is still working with nothing to say yet. */
+/**
+ * Whether a reply shows its trail line: from the moment it starts working to the end, so the line never comes and goes
+ * while it streams, and after that while there are steps to open or a time to tell.
+ */
 function showsTrail(message: AskMessageView): boolean {
-	if (message.trail && message.trail.length > 0) return true;
+	if (message.state === 'writing' || (message.trail?.length ?? 0) > 0) return true;
 
-	return message.state === 'writing' && (message.trail !== undefined || message.text === '');
+	return message.state === 'done' && message.at !== null && message.endedAt !== undefined;
 }
 
 /**
@@ -63,8 +66,8 @@ function ReplyBody({ message }: { message: AskMessageView }) {
 				<ChatTrail
 					steps={message.trail ?? []}
 					startedAt={message.at}
+					endedAt={message.endedAt ?? null}
 					working={writing}
-					answering={message.text !== ''}
 				/>
 			) : null}
 			{message.text === '' && !writing ? null : (

@@ -108,6 +108,7 @@ export function createSampleRepoChats(world: SampleWorld) {
 				text: pieces.slice(0, shown).join(''),
 				trail: endedTrail(trailAt(script, Date.now() - startedAt, startedAt), Date.now()),
 				citations: script.citations,
+				endedAt: new Date().toISOString(),
 				status: 'done',
 				model: 'sample',
 				...(stopped ? { stopped: true as const } : {})

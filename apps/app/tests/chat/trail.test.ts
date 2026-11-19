@@ -39,15 +39,21 @@ describe('toolLine', () => {
 });
 
 describe('workedSeconds', () => {
-	test('counts from the reply start to the end of its last step', () => {
-		const seconds = workedSeconds(REPLY_START, [thought('a', START), read('b', ['x.ts'])]);
+	test('counts from the reply start to its end, past the last step, so it never falls below the working count', () => {
+		const seconds = workedSeconds(REPLY_START, '2026-11-13T10:00:20.900Z', [read('a', ['x.ts'])]);
+
+		expect(seconds).toBe(22);
+	});
+
+	test('counts a reply saved without its end to the end of its last step', () => {
+		const seconds = workedSeconds(REPLY_START, null, [thought('a', START), read('b', ['x.ts'])]);
 
 		expect(seconds).toBe(14);
 		expect(workedLabel(seconds)).toBe('Worked for 14s');
 	});
 
 	test('knows no time while a step still runs, and the line says only Worked', () => {
-		const seconds = workedSeconds(REPLY_START, [read('a', ['x.ts']), run('b', 'running')]);
+		const seconds = workedSeconds(REPLY_START, null, [read('a', ['x.ts']), run('b', 'running')]);
 
 		expect(seconds).toBeNull();
 		expect(workedLabel(seconds)).toBe('Worked');

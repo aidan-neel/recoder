@@ -24,8 +24,10 @@ export interface AskMessage {
 	state: ReplyState;
 	/** Why a `failed` reply got no full answer, kept so earlier failures still say why. */
 	failure?: ChatFailure;
-	/** ISO time it was asked or answered. */
+	/** ISO time it was asked, or a reply began. */
 	at?: string;
+	/** ISO time a reply ended, done, stopped or failed. */
+	endedAt?: string;
 }
 
 export interface AskThread {
@@ -149,7 +151,10 @@ export function createBugChat(context: SessionContext) {
 		controllers.set(bugId, controller);
 
 		patchThread(bugId, (thread) => ({
-			messages: [...thread.messages, { id, role: 'assistant', text: '', state: 'streaming' }]
+			messages: [
+				...thread.messages,
+				{ id, role: 'assistant', text: '', state: 'streaming', at: new Date().toISOString() }
+			]
 		}));
 
 		save();
@@ -166,11 +171,15 @@ export function createBugChat(context: SessionContext) {
 				text: result.reply || m.text,
 				model: result.model,
 				state: 'done',
-				at: new Date().toISOString()
+				endedAt: new Date().toISOString()
 			}));
 		} catch (error) {
+			const endedAt = new Date().toISOString();
+
 			patchMessage(bugId, id, (m) =>
-				controller.signal.aborted ? { ...m, state: 'stopped' } : { ...m, state: 'failed', failure: chatFailure(error) }
+				controller.signal.aborted
+					? { ...m, state: 'stopped', endedAt }
+					: { ...m, state: 'failed', failure: chatFailure(error), endedAt }
 			);
 		} finally {
 			controllers.delete(bugId);

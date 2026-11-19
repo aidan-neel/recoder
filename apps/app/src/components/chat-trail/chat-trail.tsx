@@ -1,8 +1,7 @@
 'use client';
 
-import { isStepRunning, type ChatTrailStep } from '@recoder/shared';
+import { type ChatTrailStep } from '@recoder/shared';
 import { AnimatedNumber, Collapsible, CollapsibleContent, CollapsibleTrigger, SwapText } from '@recoder/ui';
-import { CaretDownIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { spanLabel, workedLabel, workedSeconds } from '@/lib/chat/trail';
@@ -16,30 +15,35 @@ interface ChatTrailProps {
 	steps: readonly ChatTrailStep[];
 	/** When the reply began, ISO. */
 	startedAt: string | null;
+	/** When the reply ended, ISO; null while it works or when it was saved without one. */
+	endedAt: string | null;
 	/** True until the reply is done: a model may write between its tool calls, so text does not end the work. */
 	working: boolean;
-	/** True once the answer has begun: the steps fold away under the line so the answer reads from the top. */
-	answering: boolean;
 }
 
 /**
- * What a reply did before it answered, the way a Capy thread shows it: one centred line, `Working for 8s`
- * while it works and `Worked for 13s` once it is done, with the steps under it. The steps arrive live, one line each,
- * while the reply works, and fold away under the line once the answer begins. A person who opens or shuts them
- * keeps that choice.
+ * What a reply did, the way a Capy thread shows it: one centred line, `Working for 8s` while it works and
+ * `Worked for 13s` once it is done, the same line from send to done so nothing around it moves. The steps sit folded
+ * under it, live while the reply works; pressing the line opens them, and the person's choice stays. Until a step
+ * arrives the line opens nothing, but it is the same line, so the sweep never restarts.
  */
-export function ChatTrail({ steps, startedAt, working, answering }: ChatTrailProps) {
-	const [chosen, setChosen] = useState<boolean | null>(null);
-	const open = chosen ?? (working && !answering);
+export function ChatTrail({ steps, startedAt, endedAt, working }: ChatTrailProps) {
+	const [open, setOpen] = useState(false);
+	const empty = steps.length === 0;
 
 	return (
-		<Collapsible open={open} onOpenChange={setChosen} className="trail" role="group" aria-label="What Recoder did">
-			<CollapsibleTrigger className="trail-head">
-				<TrailHead steps={steps} startedAt={startedAt} working={working} open={open} />
-				<CaretDownIcon className="trail-chevron" aria-hidden />
+		<Collapsible
+			open={open && !empty}
+			onOpenChange={setOpen}
+			className="trail"
+			role="group"
+			aria-label="What Recoder did"
+		>
+			<CollapsibleTrigger className="trail-head" disabled={empty}>
+				<TrailHead steps={steps} startedAt={startedAt} endedAt={endedAt} working={working} />
 			</CollapsibleTrigger>
 			<CollapsibleContent>
-				{steps.length === 0 ? null : (
+				{empty ? null : (
 					<ol className="trail-steps" aria-live={working ? 'polite' : undefined}>
 						{steps.map((step) => (
 							<TrailStepView key={step.id} step={step} />
@@ -58,15 +62,12 @@ function TrailStepView({ step }: { step: ChatTrailStep }) {
 	return <ToolCall step={step} />;
 }
 
-/**
- * The trail's line: `Working for 8s`, its seconds rolling like Capy's and the line sweeping while it works, unless the
- * steps are open and a running one shows the sweep; then how long it worked.
- */
-function TrailHead({ steps, startedAt, working, open }: Omit<ChatTrailProps, 'answering'> & { open: boolean }) {
+/** The trail's line: `Working for 8s`, its seconds rolling like Capy's and the line sweeping, then how long it worked. */
+function TrailHead({ steps, startedAt, endedAt, working }: ChatTrailProps) {
 	const elapsed = useElapsedSeconds(startedAt, working);
 
 	const label = working ? (
-		<span className="tabular" data-shimmer={open && steps.some(isStepRunning) ? undefined : true}>
+		<span className="tabular" data-shimmer>
 			{elapsed === null ? (
 				'Working'
 			) : (
@@ -76,7 +77,7 @@ function TrailHead({ steps, startedAt, working, open }: Omit<ChatTrailProps, 'an
 			)}
 		</span>
 	) : (
-		<span className="tabular">{workedLabel(workedSeconds(startedAt, steps))}</span>
+		<span className="tabular">{workedLabel(workedSeconds(startedAt, endedAt, steps))}</span>
 	);
 
 	return <SwapText id={working ? 'working' : 'worked'}>{label}</SwapText>;
