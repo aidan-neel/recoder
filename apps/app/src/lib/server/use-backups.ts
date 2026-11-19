@@ -4,6 +4,7 @@ import type { Backup, BackupPolicy, BackupsState } from '@recoder/shared';
 import type { ButtonStatus } from '@recoder/ui';
 import { useEffect, useState } from 'react';
 
+import { useApi } from '../api/client';
 import { failureText } from '../api/http';
 import { serverApi } from '../api/server';
 import { navigate } from '../shell/navigation';
@@ -24,6 +25,8 @@ export interface BackupsView {
 	backUpStatus: ButtonStatus;
 	setPolicy: (policy: BackupPolicy) => void;
 	remove: (backup: Backup) => Promise<void>;
+	/** True when the updater runs this install, the only way a backup restores while Recoder runs. */
+	restorable: boolean;
 	restore: (backup: Backup) => Promise<void>;
 	/** Why the last change was refused. */
 	refused: string | null;
@@ -31,7 +34,7 @@ export interface BackupsView {
 
 /**
  * The backups this server keeps. While one is being made they are read every second. A restore restarts the server
- * through its updater, so the page moves to Updates, where its steps tick off.
+ * through its updater, so it is offered only where one runs, and the page moves to Updates, where its steps tick off.
  */
 export function useBackups(): BackupsView {
 	const read = useServerRead(serverApi.backups, 'The backups did not load.');
@@ -39,6 +42,12 @@ export function useBackups(): BackupsView {
 	const [refused, setRefused] = useState<string | null>(null);
 	const running = read.data?.running ?? false;
 	const { reload, take } = read;
+	const { update: updateApi } = useApi();
+	const restorable = useUpdate((store) => store.status?.mode === 'container');
+
+	useEffect(() => {
+		if (useUpdate.getState().read !== 'ready') void useUpdate.getState().load(updateApi);
+	}, [updateApi]);
 
 	useEffect(() => {
 		if (!running) return;
@@ -70,6 +79,7 @@ export function useBackups(): BackupsView {
 			});
 		},
 		remove: (backup) => settle(serverApi.deleteBackup(backup.id)),
+		restorable,
 		restore: async (backup) => {
 			const status = await serverApi.restoreBackup(backup.id);
 

@@ -55,7 +55,7 @@ const ASKS: Record<BackupAsk, { title: string; description: (when: string) => st
 	}
 };
 
-/** One backup: when, how big and why, and a menu to download, restore or delete it. */
+/** One backup: when, how big and why, and a menu to download, delete or, where the updater runs, restore it. */
 function BackupRow({ backup, view }: { backup: Backup; view: BackupsView }) {
 	const [ask, setAsk] = useState<BackupAsk | null>(null);
 	const when = fullTime(backup.createdAt);
@@ -82,7 +82,7 @@ function BackupRow({ backup, view }: { backup: Backup; view: BackupsView }) {
 						Download
 					</DropdownMenuItem>
 					<DropdownMenuItem onSelect={() => setAsk('key')}>Download with the secret key</DropdownMenuItem>
-					<DropdownMenuItem onSelect={() => setAsk('restore')}>Restore</DropdownMenuItem>
+					{view.restorable ? <DropdownMenuItem onSelect={() => setAsk('restore')}>Restore</DropdownMenuItem> : null}
 					<DropdownMenuItem onSelect={() => setAsk('delete')}>Delete</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
