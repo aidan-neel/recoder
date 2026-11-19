@@ -8,6 +8,7 @@
 		"start": "bun src/index.ts",
 		"recoder": "bun src/cli/main.ts",
 		"backup:operator": "bun src/storage/backups/operator.ts",
+		"update:sidecar": "bun src/update/container/sidecar.ts",
 		"check": "tsc --noEmit",
 		"test": "bun tests/run.ts",
 		"test:ha": "bun test tests/integration tests/config/shared-settings.test.ts",

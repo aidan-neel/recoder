@@ -19,6 +19,11 @@ const backupId = z.uuid();
 
 let running = false;
 let lastError: string | undefined;
+let readProtection: (() => Promise<{ busy: boolean; ids: string[] }>) | undefined;
+
+export function protectUpdaterBackups(read: NonNullable<typeof readProtection>): void {
+	readProtection = read;
+}
 
 export class BackupRefusedError extends Error {}
 
@@ -103,8 +108,11 @@ async function takeBackup(reason: BackupReason): Promise<Backup> {
 		const created = await createBackup(data, reason);
 		const root = await backupRoot(data);
 		const [backups, policy] = await Promise.all([list(root), policyAt(root)]);
+		const protectedIds = new Set((await readProtection?.())?.ids ?? []);
 
-		for (const backup of backups.slice(policy.keep)) await rm(join(root, backup.id), { recursive: true, force: true });
+		for (const backup of backups.slice(policy.keep)) {
+			if (!protectedIds.has(backup.id)) await rm(join(root, backup.id), { recursive: true, force: true });
+		}
 
 		return created;
 	} catch (error) {
@@ -133,6 +141,11 @@ export async function saveBackupPolicy(policy: BackupPolicy): Promise<BackupsSta
 export async function deleteBackup(id: string): Promise<BackupsState | undefined> {
 	requireLocalBackups();
 
+	const protection = await readProtection?.();
+
+	if (protection?.busy || protection?.ids.includes(id))
+		throw new BackupRefusedError('This backup is held by the updater.');
+
 	const directory = await findBackup(serverDataDir(), id);
 
 	if (!directory) return undefined;
@@ -143,7 +156,7 @@ export async function deleteBackup(id: string): Promise<BackupsState | undefined
 }
 
 async function maybeNightly(): Promise<void> {
-	if (running) return;
+	if (running || (await readProtection?.())?.busy) return;
 
 	const { policy, backups } = await backupStatus();
 	const now = new Date();

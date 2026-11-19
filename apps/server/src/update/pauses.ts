@@ -1,4 +1,4 @@
-import { db } from '../store';
+import { db, flushPersistence, reviewCheckpoints } from '../store';
 import { continueReviewSession } from '../commands/rerun';
 import { getReviewControl } from '../review/session/review-control';
 import { emitReviewEvent, flushReviewEvents } from '../review/session/events';
@@ -41,6 +41,36 @@ export async function pauseReviewsForUpdate(): Promise<string[]> {
 	}
 
 	return paused;
+}
+
+/** Wait for running reviews to acknowledge the hold and have a checkpoint before replacing the server. */
+export async function waitForUpdateCheckpoints(reviewIds: string[]): Promise<void> {
+	const deadline = Date.now() + 30_000;
+
+	for (;;) {
+		const states = await Promise.all(
+			reviewIds.map(async (id) => {
+				const review = await db.reviews.get(id);
+
+				if (review?.status !== 'running') return true;
+				if (!getReviewControl(id)?.isAtPausePoint()) return false;
+
+				await flushReviewEvents(id);
+
+				return (await reviewCheckpoints.get(id)) !== undefined;
+			})
+		);
+
+		if (states.every(Boolean)) {
+			await flushPersistence();
+
+			return;
+		}
+
+		if (Date.now() >= deadline) throw new Error('Some reviews have not reached a checkpoint. Wait for them and retry.');
+
+		await Bun.sleep(100);
+	}
 }
 
 /** The update failed before restarting: let the paused reviews run again and free the start gate. */

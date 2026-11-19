@@ -20,6 +20,9 @@ import { startPullSweep } from './forge/pulls/state-sweep';
 import { restartWatcher } from './forge/watch/watcher';
 import { closeStore, exitOnShutdownSignals, recoverStaleReviews, db } from './store';
 import { coordinator, initializeStorage, postgres, settingsOperation } from './storage/backend';
+import { holdReviewStarts } from './update/hold';
+import { readBackupProtection, resumeContainerAfterReady, startAutomaticUpdates } from './update/container/server';
+import { configuredUpdater } from './update/container/connection';
 import { resumeAfterUpdate } from './update/pauses';
 import { SUCCESSOR_ENV, waitForPortRelease } from './update/restart';
 import { startReviewWorkers } from './review/runtime/worker';
@@ -30,8 +33,10 @@ import { interruptLocalReplies } from './repo-chat/chat-reply';
 import { loadPriceLookup } from './models/model-prices';
 import { updateService } from './update/service';
 import { backfillModelCalls, pruneModelCalls } from './usage/model-calls';
-import { startNightlyBackups } from './storage/backups/service';
+import { protectUpdaterBackups, startNightlyBackups } from './storage/backups/service';
 import { bundledApp } from './deploy/bundled-app';
+import { initializeSetupChecklist } from './deploy/setup/checklist';
+import { serverLog } from './deploy/logs/stream';
 
 /**
  * Start the agents' checks now so Settings never waits on a cold start:
@@ -98,7 +103,8 @@ const LONG_LIVED = [
 	/^\/api\/settings\/providers\/[^/]+\/(connect|catalog)$/,
 	/^\/api\/settings\/models(\/discover)?$/,
 	/^\/api\/settings\/vllm(\/refresh)?$/,
-	/^\/api\/server\/backups\/[^/]+\/download$/
+	/^\/api\/server\/backups\/[^/]+\/download$/,
+	/^\/api\/server\/logs\/events$/
 ];
 
 function isLongLived(path: string): boolean {
@@ -148,6 +154,7 @@ const serveApp = env.RECODER_APP_DIR ? bundledApp(env.RECODER_APP_DIR) : undefin
 
 console.log(`recoder secret key: ${describeSecretKeySource(secretKey().source)}`);
 await initializeStorage();
+protectUpdaterBackups(readBackupProtection);
 startNightlyBackups();
 await deleteChatGptTokens(serverDataDir());
 await backfillModelCalls();
@@ -155,6 +162,7 @@ await pruneModelCalls();
 
 let stopWorkers: (() => Promise<void>) | undefined;
 const stopMaintenance = postgres ? startSharedMaintenance(postgres) : undefined;
+const waitForUpdater = !postgres && !!(await configuredUpdater());
 
 if (coordinator) {
 	await sealSharedCredentials();
@@ -175,7 +183,8 @@ if (coordinator) {
 	initReviewSettings();
 	initVllmServers();
 	await recoverStaleReviews();
-	await resumeAfterUpdate();
+	if (waitForUpdater) holdReviewStarts();
+	else await resumeAfterUpdate();
 	await recoverRepoChats();
 	warmAgents();
 	warmForgeStatus();
@@ -185,6 +194,7 @@ if (coordinator) {
 	restartWatcher();
 }
 
+await settingsOperation(initializeSetupChecklist);
 await sealStoredRefreshToken();
 await startSetupCode((await findAdmin()) !== undefined);
 startTokenRefresh();
@@ -206,6 +216,11 @@ const server = Bun.serve({
 
 console.log(`recoder server listening on http://${server.hostname}:${server.port}`);
 console.log(`recoder data dir: ${serverDataDir()}`);
+serverLog('info', 'Recoder started and is accepting requests.');
+startAutomaticUpdates();
+
+if (waitForUpdater)
+	void resumeContainerAfterReady().catch(() => serverLog('error', 'Could not resume paused reviews.'));
 
 if (postgres) {
 	let stopping = false;
