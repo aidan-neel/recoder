@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { FileDiff } from '@recoder/shared';
 
-import { treeOrder, treeRows, type FileMarks } from '../../src/lib/changes/file-tree';
+import { fileGroups, sideRows, treeOrder, type FileMarks } from '../../src/lib/changes/file-tree';
 import { addedHunk } from '../fixtures';
 
 function file(path: string): FileDiff {
@@ -17,64 +17,66 @@ const FILES = [
 
 const MARKS: FileMarks = { isViewed: (path) => path === 'README.md', bugs: new Map([['apps/server/src/index.ts', 2]]) };
 
-function labels(files: FileDiff[], filter = '', closed: ReadonlySet<string> = new Set()): string[] {
-	return treeRows(files, { filter, closed }, MARKS).map((row) => (row.kind === 'folder' ? `${row.label}/` : row.name));
-}
-
-describe('treeRows', () => {
-	test('a chain of single-child folders reads as one row, folders before files, each by name', () => {
-		expect(labels(FILES)).toEqual([
-			'apps/server/src/',
-			'agents/',
-			'run.ts',
-			'routes/',
-			'pulls.ts',
-			'index.ts',
-			'README.md'
-		]);
-	});
-
-	test('a joined folder row counts every file under it and carries the full path as its id', () => {
-		const [top] = treeRows(FILES, { filter: '', closed: new Set() }, MARKS);
-
-		expect(top).toEqual({
-			kind: 'folder',
-			id: 'apps/server/src',
-			label: 'apps/server/src',
-			depth: 0,
-			open: true,
-			files: 3
-		});
-	});
-
-	test('file rows carry the viewed mark, open findings and how the file changed', () => {
-		const rows = treeRows(FILES, { filter: '', closed: new Set() }, MARKS);
-
-		expect(rows.find((row) => row.id === 'README.md')).toMatchObject({ viewed: true, bugs: 0, change: 'modified' });
-
-		expect(rows.find((row) => row.id === 'apps/server/src/index.ts')).toMatchObject({
-			viewed: false,
-			bugs: 2,
-			depth: 1
-		});
-	});
-
-	test('a closed folder hides what is in it', () => {
-		expect(labels(FILES, '', new Set(['apps/server/src']))).toEqual(['apps/server/src/', 'README.md']);
-	});
-
-	test('the filter keeps files whose path holds the text, ignoring case, and drops empty folders', () => {
-		expect(labels(FILES, 'ROUTES')).toEqual(['apps/server/src/routes/', 'pulls.ts']);
-	});
-});
-
 describe('treeOrder', () => {
-	test('reads the files in tree order with every folder open', () => {
+	test('reads the files in tree order: folders first, each by path, then files by name', () => {
 		expect(treeOrder(FILES)).toEqual([
 			'apps/server/src/agents/run.ts',
 			'apps/server/src/routes/pulls.ts',
 			'apps/server/src/index.ts',
 			'README.md'
 		]);
+	});
+});
+
+describe('sideRows', () => {
+	test('joins a chain of lone folders into one row and lists the rows in the diff order', () => {
+		const rows = sideRows(FILES, new Set(), MARKS.isViewed);
+
+		expect(rows.map((row) => [row.depth, row.label])).toEqual([
+			[0, 'apps/server/src'],
+			[1, 'agents'],
+			[2, 'run.ts'],
+			[1, 'routes'],
+			[2, 'pulls.ts'],
+			[1, 'index.ts'],
+			[0, 'README.md']
+		]);
+
+		expect(rows.filter((row) => row.kind === 'file').map((row) => row.id)).toEqual(treeOrder(FILES));
+	});
+
+	test('a closed folder hides what is in it, and a viewed file is muted', () => {
+		const rows = sideRows(FILES, new Set(['apps/server/src']), MARKS.isViewed);
+
+		expect(rows).toEqual([
+			{ kind: 'folder', id: 'apps/server/src', label: 'apps/server/src', depth: 0, open: false },
+			{ kind: 'file', id: 'README.md', label: 'README.md', depth: 0, muted: true }
+		]);
+	});
+});
+
+describe('fileGroups', () => {
+	test('gathers the files in tree order under their folder, with the top level last', () => {
+		expect(fileGroups(FILES, MARKS).map((group) => [group.folder, group.files.map((entry) => entry.name)])).toEqual([
+			['apps/server/src/agents', ['run.ts']],
+			['apps/server/src/routes', ['pulls.ts']],
+			['apps/server/src', ['index.ts']],
+			['', ['README.md']]
+		]);
+	});
+
+	test('each file carries the viewed mark, its open findings and how it changed', () => {
+		const entries = fileGroups(FILES, MARKS).flatMap((group) => group.files);
+
+		expect(entries.find((entry) => entry.path === 'README.md')).toMatchObject({
+			viewed: true,
+			bugs: 0,
+			change: 'modified'
+		});
+
+		expect(entries.find((entry) => entry.path === 'apps/server/src/index.ts')).toMatchObject({
+			viewed: false,
+			bugs: 2
+		});
 	});
 });

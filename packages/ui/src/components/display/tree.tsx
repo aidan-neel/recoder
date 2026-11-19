@@ -1,7 +1,15 @@
 'use client';
 
 import { CaretRightIcon, FileIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react';
-import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent } from 'react';
+import {
+	useEffect,
+	useRef,
+	useState,
+	type CSSProperties,
+	type FocusEvent,
+	type KeyboardEvent,
+	type ReactNode
+} from 'react';
 
 import { cn } from '../../lib/cn';
 import { Spinner } from '../spinner';
@@ -19,6 +27,8 @@ interface TreeProps {
 	revealId?: string | null;
 	onToggle: (id: string) => void;
 	onSelect: (id: string) => void;
+	/** What a row shows at its end, such as a file's size; nothing when it returns null. */
+	end?: (row: TreeRow) => ReactNode;
 	'aria-label': string;
 	className?: string;
 }
@@ -37,11 +47,12 @@ interface TreeItemProps {
 	row: TreeRow;
 	selected: boolean;
 	tabbable: boolean;
+	end: ReactNode;
 	onPress: () => void;
 }
 
 /** A folder with its chevron and icon, or a file with its icon; a folder reading its contents shows a spinner. */
-function TreeItem({ row, selected, tabbable, onPress }: TreeItemProps) {
+function TreeItem({ row, selected, tabbable, end, onPress }: TreeItemProps) {
 	const folder = row.kind === 'folder';
 	const FolderMark = row.open ? FolderOpenIcon : FolderIcon;
 
@@ -53,6 +64,7 @@ function TreeItem({ row, selected, tabbable, onPress }: TreeItemProps) {
 			data-tree-id={row.id}
 			data-kind={row.kind}
 			data-open={row.open || undefined}
+			data-muted={row.muted || undefined}
 			aria-level={row.depth + 1}
 			aria-expanded={folder ? Boolean(row.open) : undefined}
 			aria-selected={folder ? undefined : selected}
@@ -65,6 +77,7 @@ function TreeItem({ row, selected, tabbable, onPress }: TreeItemProps) {
 			{folder ? <FolderMark aria-hidden /> : <FileIcon aria-hidden />}
 			<span data-ui="tree-label">{row.label}</span>
 			{row.loading ? <Spinner size={12} /> : null}
+			{end ? <span data-ui="tree-end">{end}</span> : null}
 		</button>
 	);
 }
@@ -77,7 +90,7 @@ function TreeItem({ row, selected, tabbable, onPress }: TreeItemProps) {
  * Space open a folder or choose a file. One row is a tab stop, the chosen
  * file's or the one last focused.
  */
-export function Tree({ rows, selectedId, revealId = null, onToggle, onSelect, className, ...props }: TreeProps) {
+export function Tree({ rows, selectedId, revealId = null, onToggle, onSelect, end, className, ...props }: TreeProps) {
 	const host = useRef<HTMLDivElement | null>(null);
 	const [focusId, setFocusId] = useState<string | null>(null);
 	const hasSelected = rows.some((row) => row.id === selectedId);
@@ -127,6 +140,7 @@ export function Tree({ rows, selectedId, revealId = null, onToggle, onSelect, cl
 						row={row}
 						selected={row.id === selectedId}
 						tabbable={row.id === tabId}
+						end={end?.(row)}
 						onPress={() => (row.kind === 'folder' ? onToggle(row.id) : onSelect(row.id))}
 					/>
 				))}

@@ -48,9 +48,11 @@ const GROUPS: Group[] = [
 		rows: [
 			[['1', '2', '3', '4'], 'Switch tab'],
 			[['j', 'k'], 'Next and previous file or bug'],
+			[['n', 'p'], 'Next and previous finding in the diff'],
+			[['o'], 'Open or shut the file'],
 			[['v'], 'Mark the file as viewed'],
 			[['r'], 'Review, or review again'],
-			[['t'], 'Find a file']
+			[['t'], 'Go to a file']
 		]
 	},
 	{

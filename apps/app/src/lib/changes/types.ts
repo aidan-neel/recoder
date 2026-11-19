@@ -1,41 +1,29 @@
 /** How a file changed. */
 export type FileChange = 'added' | 'deleted' | 'modified';
 
-/** A row of the file tree: a folder (a chain of single-child folders is one row, `apps/server/src`) or a file. */
-export type TreeRow =
-	| {
-			kind: 'folder';
-			/** The folder's full path, unique in the tree. */
-			id: string;
-			label: string;
-			depth: number;
-			open: boolean;
-			/** How many files are under it. */
-			files: number;
-	  }
-	| {
-			kind: 'file';
-			/** The file's path. */
-			id: string;
-			name: string;
-			depth: number;
-			additions: number;
-			deletions: number;
-			change: FileChange;
-			viewed: boolean;
-			/** Open findings in this file. */
-			bugs: number;
-	  };
+/** A changed file as the file menu lists it. */
+export interface FileEntry {
+	path: string;
+	name: string;
+	additions: number;
+	deletions: number;
+	change: FileChange;
+	viewed: boolean;
+	/** Open findings in this file. */
+	bugs: number;
+}
 
-/** The file tree beside the diff. */
+/** The files that sit in one folder; `folder` is empty for the top of the repository. */
+export interface FileGroup {
+	folder: string;
+	files: FileEntry[];
+}
+
+/** The changed files for the file menu, and the order the diff reads in. */
 export interface FileTreeView {
-	/** Visible rows, top to bottom: folders first, then files, each by name; rows inside a closed folder are left out. */
-	rows: TreeRow[];
-	/** Text that narrows the tree to files whose path contains it; folders with no match are left out. */
-	filter: string;
-	setFilter: (filter: string) => void;
-	toggleFolder: (id: string) => void;
-	/** The file order of the diff: the tree's order with every folder open and no filter. */
+	/** The files in tree order, gathered by folder. */
+	groups: FileGroup[];
+	/** The file order of the diff: folders first, each by path, then files by name. */
 	order: string[];
 }
 
@@ -59,4 +47,28 @@ export interface GuidePart {
 	bugs: number;
 	/** How many of those are suggestions. */
 	suggestions: number;
+}
+
+/** A place in the diff the Changes tab was asked to bring into view: a file, one of its lines, or a finding in it. */
+export interface ChangesTarget {
+	path: string;
+	/** A new-side line to mark, or null for the top of the file. */
+	line: number | null;
+	/** A finding to open, or null. */
+	findingId: string | null;
+	/** True once the tab brought it into view, so it is not brought there again when the tab next mounts. */
+	done: boolean;
+}
+
+/** A press of collapse all or expand all; every file card follows each new one once. */
+export interface ChangesFold {
+	open: boolean;
+}
+
+/** The Changes tab's moves that its tools and other tabs ask for. */
+export interface ChangesNav {
+	/** Brings a file, one of its lines, or a finding in it into view. */
+	goTo: (path: string, line?: number | null, findingId?: string | null) => void;
+	/** Shuts every file, or opens every file. */
+	foldAll: (open: boolean) => void;
 }

@@ -12,6 +12,7 @@ import type { StoreApi } from 'zustand/vanilla';
 
 import type { ApiClient } from '../api/client';
 import type { AskThread } from '../ask/bug-thread';
+import type { ChangesFold, ChangesTarget } from '../changes/types';
 import type { Outgoing } from '../ask/conversation';
 import type { ListStore } from '../pulls/list-store';
 
@@ -54,8 +55,14 @@ export interface SessionData {
 	votes: Record<string, Vote>;
 	/** Viewed files: each path with the hash of the diff it had when marked. */
 	viewed: Record<string, string>;
-	treeFilter: string;
-	closedFolders: ReadonlySet<string>;
+	/** Where the Changes tab was last asked to go; it scrolls there when the ask is new. */
+	changesTarget: ChangesTarget | null;
+	/** The file the Changes tab is reading, so the file menu can mark it. */
+	changesCurrent: string | null;
+	/** The newest collapse all or expand all. */
+	changesFold: ChangesFold | null;
+	/** Folders shut in the Changes tab's file sidebar. */
+	changesClosed: ReadonlySet<string>;
 	/** Messages this page sent to the review's conversation that its events have not carried yet. */
 	outbox: Outgoing[];
 	/** Threads about single findings, by finding id. */
@@ -95,8 +102,10 @@ export function initialSession(viewed: Record<string, string>): SessionData {
 		postingAll: false,
 		votes: {},
 		viewed,
-		treeFilter: '',
-		closedFolders: new Set(),
+		changesTarget: null,
+		changesCurrent: null,
+		changesFold: null,
+		changesClosed: new Set(),
 		outbox: [],
 		threads: {}
 	};

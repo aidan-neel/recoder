@@ -148,8 +148,8 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   under the topbar, opened by the topbar's toggle, Cmd/Ctrl+B or `[` and shut
   by the toggle, its scrim, Escape or going to another page; it always starts
   shut. The tab row keeps its tabs and
-  buttons and the review's facts drop to a line under it. Under 760px the
-  file tree steps out of Changes.
+  buttons and the review's facts drop to a line under it. Under 860px of
+  page the file sidebar steps out of Changes.
   Under 640px a list row stacks its title (which wraps), its meta line, then
   its fact and size; the pull request's title wraps over its buttons, with
   the merge button filling their line; the bar keeps the last two crumbs and
@@ -300,9 +300,8 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   paused, failed or out-of-date review shows one glyph with its word as a
   tooltip (failed in the danger tone, out of date in medium); a done review
   shows its open bugs as the count. The tabs:
-  - **Changes**: the file tree beside the diff. Bugs sit under the line they
-    name. A file can be marked viewed. The guide gives the order to read the
-    files in.
+  - **Changes**: one reading column of diffs, as Capy Desktop shows a pull
+    request; nothing sits beside it. See Changes below.
   - **Summary**: what the change does (clamped), the order to read the
     files in, the description (clamped), and the conversation with the
     reviewer. No boxes: labels, space and hairlines group it. It runs the
@@ -637,7 +636,8 @@ Motion explains a change and never makes the person wait.
   sidebar, ⌘, opens settings and `?` lists every shortcut. On the list, j/k
   move, Enter opens, `r` reviews and `/` opens a pull request by link. On a
   pull request, 1 to 4 pick a tab, j/k move between files or bugs, `v` marks
-  a file viewed, `r` reviews (or reviews again) and `t` finds a file. On a
+  a file viewed, `o` opens or shuts it, `n` and `p` step through the findings
+  in the diff, `r` reviews (or reviews again) and `t` goes to a file. On a
   bug, Enter opens or closes it, `p` posts it, `y` copies its fix prompt and
   `x` dismisses it.
 - **Enter and Space on a focused control belong to that control.** Page keys
@@ -771,6 +771,50 @@ fill the field. A line that restates the label, the placeholder or the
 control, explains an ordinary control, or describes the feature in general
 goes. A needed fact moves to where it is used rather than being shortened. A
 line that comes and goes keeps its space, so nothing jumps.
+
+## Changes
+
+The diff reads as one column, capped at 1080px and centred, so the code gets
+the width and the eye keeps one lane. The changed files stand beside it as a
+tree.
+
+- **The file sidebar** is flat, at the sidebar's level: no fill, a hairline
+  on its right, the kit's `Tree` with each file's finding dot and size at
+  its end, or a check once viewed (a viewed file's name goes faint). Lone
+  folder chains read as one row (`apps/server/src`). The file in view is
+  marked as the diff scrolls; pressing a file brings it to the top. Its
+  width drags (200 to 480px, kept per browser), and the tree button in the
+  tab row hides or shows it, kept per browser. Under 860px of page the
+  sidebar steps out and the Files button stands in for it. Bars stand in
+  while the diff loads; a diff with no files has no sidebar.
+- **Tab row tools**, left to right: the sidebar button; Files (`t`, shown
+  while the sidebar is not) opens a search dialog of every file by folder
+  (or by the guide's parts in guide order), each with its finding dot and
+  its size, or a check once viewed, and `t` opens it either way; Findings with a
+  severity glyph, its place (`2/3`) and previous and next (`p`, `n`),
+  stepping through the open findings in reading order and wrapping; how
+  many files are viewed, with a meter; Files or Guide; collapse or expand
+  every file.
+- **A file** is a card with the kit's card edge, drawn over its content so
+  the coloured lines and the sticky header never cover it. Its 40px header
+  stays in view while its diff scrolls: caret, the language's mark, the
+  name in ink and its folder quiet (the folder gives way first), then its
+  findings pill, the size and Viewed. Marking it viewed shuts it; a diff
+  over 800 lines starts shut behind Show it; a renamed or binary file says
+  it has no lines. Off screen it skips layout and paint, and its diff
+  mounts only as it nears the view.
+- **Hunks** are numbered on both sides, a new file on its own side only.
+  Where the diff skips lines, a quiet row says how many are unchanged.
+- **A finding** sits under the line it ends on as one raised line: severity
+  glyph, title, evidence and a caret, so the code around it stays
+  readable. Pressed, it opens in place to its explanation, with Open in
+  Review. Its lines wear the bug's red wash and bar.
+- **Jumps** (the file menu, the stepper, `j` and `k`, a file badge in the
+  Summary) bring the file to the top and a line or finding to the middle,
+  open the file and the finding, focus the finding and write the place to
+  the address: `#file=<path>`, `#file=<path>&line=<n>` (that line wears
+  the accent's wash and bar) or `#finding=<id>`. Opening such an address
+  goes there.
 
 ## Code
 

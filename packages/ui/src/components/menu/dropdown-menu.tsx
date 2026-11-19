@@ -179,3 +179,15 @@ export function DropdownMenuRadioItem({ icon, className, children, ...props }: D
 export function DropdownMenuSeparator({ className }: { className?: string }) {
 	return <DropdownMenuPrimitive.Separator data-ui="menu-separator" className={cn(MENU_SEPARATOR, className)} />;
 }
+
+/** A quiet heading over a group of items, such as the reasons a choice can be made for. */
+export function DropdownMenuLabel({ children }: { children: ReactNode }) {
+	return (
+		<DropdownMenuPrimitive.Label
+			data-ui="menu-label"
+			className="px-2 pt-1.5 pb-1 text-[11.5px] text-fg-faint select-none"
+		>
+			{children}
+		</DropdownMenuPrimitive.Label>
+	);
+}

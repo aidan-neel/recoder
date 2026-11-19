@@ -29,44 +29,12 @@ export function EvidencePill({ bug }: { bug: Pick<BugView, 'evidence' | 'evidenc
 	);
 }
 
-/** How serious the bug is, in its severity's colour; a suggestion says so instead. */
-function SeverityPill({ bug }: { bug: BugView }) {
-	const dot = <span aria-hidden className="pill-dot" />;
-
-	if (bug.kind === 'suggestion') {
-		return (
-			<Pill tone="low" icon={dot}>
-				Suggestion
-			</Pill>
-		);
-	}
-
-	return (
-		<Pill tone={bug.tone} icon={dot}>
-			{bug.severity}
-		</Pill>
-	);
+/** That an earlier review of this pull request reported the bug too; nothing for a new one. */
+export function HistoryPill({ bug }: { bug: Pick<BugView, 'history'> }) {
+	return bug.history === 'carried' || bug.history === 'rechecked' ? <Pill>{HISTORY_LABELS[bug.history]}</Pill> : null;
 }
 
-/**
- * The facts of a bug as one row of badges, in the order a reader scans them:
- * how serious, what kind, how it was shown, where it is, and whether an
- * earlier review reported it. A rule finding's category is left out, since
- * its evidence badge already names the rule.
- */
-export function BugFacts({ bug }: { bug: BugView }) {
-	const history = bug.history === 'carried' || bug.history === 'rechecked' ? HISTORY_LABELS[bug.history] : null;
-	const repeatsEvidence = bug.evidence === 'rule' && bug.category === RULE_CATEGORY;
-
-	return (
-		<span className="bug-facts">
-			<SeverityPill bug={bug} />
-			{repeatsEvidence ? null : <Pill>{bug.category}</Pill>}
-			<EvidencePill bug={bug} />
-			<Pill face="code" title={bug.file}>
-				{bug.where}
-			</Pill>
-			{history ? <Pill>{history}</Pill> : null}
-		</span>
-	);
+/** The bug's category, or null for a repository-rule finding, whose evidence already names the rule. */
+export function shownCategory(bug: Pick<BugView, 'evidence' | 'category'>): string | null {
+	return bug.evidence === 'rule' && bug.category === RULE_CATEGORY ? null : bug.category;
 }

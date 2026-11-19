@@ -7,7 +7,7 @@ import { useCallback, useState, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import { useBugsView } from '@/lib/bugs/use-bugs';
-import { useViewedFiles } from '@/lib/changes/use-changes';
+import { useChangesNav } from '@/lib/changes/use-changes';
 import { forgeLabel } from '@/lib/connections/forges';
 import { LOADING_PULL_PAGE } from '@/lib/pull/loading-page';
 import { PullSessionProvider, useMergeView, usePullChecksView, usePullPageView } from '@/lib/pull/pull-session';
@@ -49,11 +49,6 @@ interface PullOnTabProps extends PullScreenProps {
 /** The Review tab's tools; they read the review, so they mount only on that tab. */
 function ReviewTabTools() {
 	return <BugsTools view={useBugsView()} run={useRunView()} />;
-}
-
-/** The Changes tab's tools; they read the viewed files, so they mount only on that tab. */
-function ChangesTabTools({ mode, onModeChange }: { mode: ChangesMode; onModeChange: (mode: ChangesMode) => void }) {
-	return <ChangesTools viewed={useViewedFiles()} mode={mode} onModeChange={onModeChange} />;
 }
 
 /**
@@ -112,7 +107,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	const { base } = useApi();
 	const view = usePullPageView();
 	const [mode, setMode] = useState<ChangesMode>('files');
-	const [fileToOpen, setFileToOpen] = useState<string | null>(null);
+	const nav = useChangesNav();
 	const changesHref = pullHref(base, repoId, number, 'changes');
 	const page = view.page;
 	const forge = page && page.provider !== 'local' && page.pull.url ? forgeLabel(page.provider) : null;
@@ -126,25 +121,21 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	/** Opens the Changes tab at a changed file: the tab scrolls to it once the file's card is drawn. */
 	const openFile = useCallback(
 		(path: string) => {
-			setFileToOpen(path);
+			nav.goTo(path);
 			replaceAddress(changesHref);
 		},
-		[changesHref]
+		[nav, changesHref]
 	);
 
-	const forgetFileToOpen = useCallback(() => setFileToOpen(null), []);
-
 	const tools: Record<PullTab, ReactNode> = {
-		changes: <ChangesTabTools mode={mode} onModeChange={setMode} />,
+		changes: <ChangesTools mode={mode} onModeChange={setMode} />,
 		summary: null,
 		review: <ReviewTabTools />,
 		commits: null
 	};
 
 	const bodies: Record<PullTab, ReactNode> = {
-		changes: (
-			<ChangesTab repoId={repoId} number={number} mode={mode} fileToOpen={fileToOpen} onFileOpened={forgetFileToOpen} />
-		),
+		changes: <ChangesTab repoId={repoId} number={number} mode={mode} />,
 		summary: <SummaryTab onOpenGuide={openGuide} onOpenFile={openFile} />,
 		review: <BugsTab />,
 		commits: <CommitsTab />

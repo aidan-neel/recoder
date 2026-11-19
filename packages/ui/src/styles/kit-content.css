@@ -75,9 +75,18 @@
 	background-color: var(--diff-focus);
 	box-shadow: inset 2px 0 0 var(--sev-medium-solid);
 }
+/* The line a link points at: the accent's wash and bar. */
+[data-ui='code-line'][data-marked] {
+	background-color: var(--accent-tint);
+	box-shadow: inset 2px 0 0 var(--accent);
+}
+[data-ui='code-line'][data-marked] > [data-ui='code-line-number'] {
+	background-color: transparent;
+	color: var(--accent-text);
+}
 
 /* A new file is all additions: the green says nothing, so it steps back. */
-[data-ui='code-lines'][data-fresh] [data-ui='code-line'][data-type='add']:not([data-flagged]),
+[data-ui='code-lines'][data-fresh] [data-ui='code-line'][data-type='add']:not([data-flagged], [data-marked]),
 [data-ui='code-lines'][data-fresh] [data-ui='code-line'][data-type='add'] > [data-ui='code-line-number'] {
 	background-color: transparent;
 }
@@ -106,6 +115,29 @@
 	padding: 4px 16px 8px var(--code-gutter);
 	font-family: var(--font-ui);
 	white-space: normal;
+}
+
+/* Split: two columns of number, sign and text; long lines wrap inside their side so the rows stay paired. */
+[data-ui='code-lines'][data-layout='split'] {
+	--code-columns: 44px 18px minmax(0, 1fr);
+	--code-gutter: 16px;
+}
+[data-ui='code-lines'][data-layout='split'] [data-ui='code-lines-body'] {
+	width: 100%;
+}
+[data-ui='code-split-row'] {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+[data-ui='code-split-row'] > [data-side='new'] {
+	border-left: 1px solid var(--line-card);
+}
+[data-ui='code-lines'][data-layout='split'] [data-ui='code-line-text'] {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+[data-ui='code-line'][data-type='empty'] {
+	background-color: rgb(var(--wash-rgb) / 0.025);
 }
 
 /* ───────── Code block ───────── */

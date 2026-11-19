@@ -1,12 +1,14 @@
 'use client';
 
 import type { FileDiff } from '@recoder/shared';
-import { Button, Checkbox, Pill } from '@recoder/ui';
+import { Button, Checkbox, FileIcon, Pill } from '@recoder/ui';
 import { CaretRightIcon } from '@phosphor-icons/react';
 import { memo, useId, useRef, useState } from 'react';
 
 import { openFound } from '@/lib/bugs/bug-lists';
 import type { BugView } from '@/lib/bugs/types';
+import type { DiffLayout } from '@/lib/changes/diff-view';
+import type { ChangesFold, ChangesTarget } from '@/lib/changes/types';
 import { useNear } from '@/lib/changes/use-near';
 import { findingsLabel, plural } from '@/lib/shell/format';
 
@@ -25,11 +27,16 @@ const PLACEHOLDER_MAX = 1600;
 
 interface FileCardProps {
 	file: FileDiff;
+	layout: DiffLayout;
 	viewed: boolean;
 	onToggleViewed: (path: string) => void;
 	/** Open bugs in this file. */
 	bugs: BugView[];
 	bugsHref: string;
+	/** An ask to bring this file, a line of it or a finding in it into view; it opens the file. */
+	target: ChangesTarget | null;
+	/** The newest collapse all or expand all; the file follows it once. */
+	fold: ChangesFold | null;
 }
 
 /** How many lines the file's diff shows. */
@@ -42,39 +49,49 @@ function placeholderHeight(file: FileDiff): number {
 	return Math.min(PLACEHOLDER_MAX, lineCount(file) * LINE_HEIGHT);
 }
 
-/** The path with its folder quiet and its file name in ink. */
+/** The file's name in ink, then its folder, quiet, which gives way first when the header is narrow. */
 function FilePath({ path }: { path: string }) {
-	const cut = path.lastIndexOf('/') + 1;
+	const cut = path.lastIndexOf('/');
 
 	return (
 		<span className="file-path" title={path}>
-			<bdi>
-				{path.slice(0, cut)}
-				<strong>{path.slice(cut)}</strong>
-			</bdi>
+			<strong>{path.slice(cut + 1)}</strong>
+			{cut > 0 ? <span className="file-dir">{path.slice(0, cut)}</span> : null}
 		</span>
 	);
 }
 
 /**
  * One changed file: a header that names it and stays in view, and its diff
- * under it. Marking it viewed shuts it; a large diff starts shut. The diff
- * mounts when the card comes near the viewport, so a pull request of
- * hundreds of files opens at once.
+ * under it. Marking it viewed shuts it; a large diff starts shut; a jump to
+ * it, or expand all, opens it. The diff mounts when the card comes near the
+ * viewport, so a pull request of hundreds of files opens at once.
  */
-export const FileCard = memo(function FileCard({ file, viewed, onToggleViewed, bugs, bugsHref }: FileCardProps) {
+export const FileCard = memo(function FileCard({
+	file,
+	layout,
+	viewed,
+	onToggleViewed,
+	bugs,
+	bugsHref,
+	target,
+	fold
+}: FileCardProps) {
 	const card = useRef<HTMLElement | null>(null);
 	const near = useNear(card);
 	const bodyId = useId();
 	const viewedId = useId();
 	const large = lineCount(file) > LARGE_LINES;
 	const found = openFound(bugs);
-	const [open, setOpen] = useState(!viewed && !large);
-	const [wasViewed, setWasViewed] = useState(viewed);
+	const [open, setOpen] = useState((!viewed && !large) || target !== null);
+	const [seen, setSeen] = useState({ viewed, target, fold });
 
-	if (viewed !== wasViewed) {
-		setWasViewed(viewed);
-		setOpen(!viewed);
+	if (viewed !== seen.viewed || target !== seen.target || fold !== seen.fold) {
+		setSeen({ viewed, target, fold });
+
+		if (viewed !== seen.viewed) setOpen(!viewed);
+		if (fold !== seen.fold && fold) setOpen(fold.open);
+		if (target !== seen.target && target && !target.done) setOpen(true);
 	}
 
 	return (
@@ -94,14 +111,15 @@ export const FileCard = memo(function FileCard({ file, viewed, onToggleViewed, b
 					aria-controls={bodyId}
 					onClick={() => setOpen(!open)}
 				>
-					<CaretRightIcon aria-hidden />
+					<CaretRightIcon aria-hidden className="file-caret" />
+					<FileIcon path={file.path} className="file-icon" />
 					<FilePath path={file.path} />
 				</button>
-				<DiffStat additions={file.additions} deletions={file.deletions} />
 				<div className="file-head-end">
 					{bugs.length > 0 ? (
 						<Pill tone={found.bugs > 0 ? 'high' : 'low'}>{findingsLabel(found.bugs, found.suggestions)}</Pill>
 					) : null}
+					<DiffStat additions={file.additions} deletions={file.deletions} />
 					<label className="file-viewed" htmlFor={viewedId}>
 						<Checkbox id={viewedId} checked={viewed} onCheckedChange={() => onToggleViewed(file.path)} />
 						Viewed
@@ -111,7 +129,7 @@ export const FileCard = memo(function FileCard({ file, viewed, onToggleViewed, b
 			{open ? (
 				<div id={bodyId} className="file-body">
 					{near ? (
-						<FileDiffBody file={file} bugs={bugs} bugsHref={bugsHref} />
+						<FileDiffBody file={file} layout={layout} bugs={bugs} bugsHref={bugsHref} target={target} />
 					) : (
 						<div style={{ height: placeholderHeight(file) }} />
 					)}

@@ -16,33 +16,93 @@
 	max-width: 800px;
 }
 
+/*
+ * A finding: the same card under its line in the diff and in the Review tab's list. Shut, it is one line that washes
+ * on hover; open, a raised card with the card recipe. Its severity shows as a small square and a word in its colour.
+ */
 .bug-item {
-	border-bottom: 1px solid var(--line-subtle);
+	--bug-mark: var(--sev-low);
+	--bug-ink: var(--sev-low);
+
+	border-radius: var(--radius-row);
 	scroll-margin-top: 20px;
 }
-/* The head's hover fill reaches 12px past the gutter, so the title itself starts on it. */
+.bug-item[data-tone='high'] {
+	--bug-mark: var(--sev-high-icon);
+	--bug-ink: var(--sev-high);
+}
+.bug-item[data-tone='medium'] {
+	--bug-mark: var(--sev-medium);
+	--bug-ink: var(--sev-medium);
+}
+.bug-item[data-open] {
+	background: var(--bg-raised);
+	box-shadow: var(--shadow-card);
+}
+.bug-item[data-place='diff'] {
+	max-width: 760px;
+}
+/* Side by side, a finding spans both sides under its row. */
+[data-ui='code-lines'][data-layout='split'] .bug-item[data-place='diff'] {
+	max-width: none;
+}
 .bug-head {
 	display: grid;
-	width: calc(100% + 24px);
+	width: 100%;
+	min-height: 36px;
 	align-items: center;
-	grid-template-columns: minmax(0, 1fr) auto;
-	gap: 8px 12px;
-	margin: 0 -12px;
-	padding: 14px 12px;
-	border-radius: var(--radius-row);
+	grid-template-areas: 'severity title category . where caret';
+	grid-template-columns: auto minmax(0, max-content) auto minmax(0, 1fr) auto auto;
+	column-gap: 10px;
+	padding: 7px 12px;
+	border-radius: inherit;
 	outline: none;
 	text-align: left;
 	transition: background-color var(--dur-hover) var(--ease-hover);
 }
-.bug-head:hover {
-	background: var(--bg-hover);
+.bug-item:not([data-open]) .bug-head:hover {
+	background: rgb(var(--wash-rgb) / 0.05);
 }
 .bug-head:focus-visible {
-	box-shadow: inset 0 0 0 2px var(--focus-color);
+	box-shadow: var(--focus-ring);
+}
+/* Open, the severity line sits over the title. */
+.bug-item[data-open] .bug-head {
+	grid-template-areas:
+		'severity category . where caret'
+		'title title title title title';
+	grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+	row-gap: 6px;
+	padding: 12px 14px 0;
+}
+.bug-severity {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	grid-area: severity;
+	color: var(--bug-ink);
+	font-size: 12.5px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+.bug-mark {
+	width: 8px;
+	height: 8px;
+	flex-shrink: 0;
+	border-radius: 2px;
+	background: var(--bug-mark);
+}
+.bug-category {
+	grid-area: category;
+	color: var(--text-faint);
+	font-size: 12.5px;
+	white-space: nowrap;
 }
 .bug-title {
+	min-width: 0;
+	grid-area: title;
 	color: var(--text-primary);
-	font-size: 14px;
+	font-size: 13.5px;
 	font-weight: 500;
 	line-height: 20px;
 	text-wrap: pretty;
@@ -52,20 +112,25 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-/* Lucide's chevron-down inks 5 of its 24 units short of each side; hanging that out ends its ink on the edge. */
-.bug-head > svg {
+.bug-where {
+	grid-area: where;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+.bug-caret {
 	width: 14px;
 	height: 14px;
-	margin-right: calc(14px * -5 / 24);
+	grid-area: caret;
 	color: var(--text-faint);
 	transition: rotate var(--dur-toggle) var(--ease-menu);
 }
-.bug-item[data-open] .bug-head > svg {
+.bug-item[data-open] .bug-caret {
 	rotate: 180deg;
 }
 
 /* The facts of a bug (and of a fix or a rule): one row of badges that wraps cleanly. */
-.bug-facts,
 .bug-line-facts,
 .bug-section-head {
 	display: flex;
@@ -74,21 +139,17 @@
 	align-items: center;
 	gap: 6px;
 }
-.bug-facts {
-	grid-column: 1 / -1;
-}
-/* The body spans the card, so its evidence and its action row end on the page's right gutter; prose keeps 72ch. */
 .bug-body {
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
-	padding: 2px 0 18px;
+	gap: 12px;
+	padding: 8px 14px 14px;
 }
 .bug-body [data-ui='markdown'] {
 	max-width: 72ch;
 	color: var(--text-secondary);
-	font-size: var(--font-size-body);
-	line-height: 22px;
+	font-size: var(--font-size-label);
+	line-height: 20px;
 }
 .bug-section {
 	display: flex;
@@ -110,42 +171,52 @@
 	line-height: 18px;
 }
 
-/* The suggested fix opens from one quiet line. */
+/* The suggested fix: a quiet head with the file and the checks it passed, over the patch. */
+.fix {
+	overflow: hidden;
+	border-radius: var(--radius-row);
+	background: var(--bg-canvas);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+}
 .fix-head {
 	display: flex;
-	min-height: 28px;
+	height: 32px;
 	align-items: center;
 	gap: 8px;
-	margin-left: -4px;
-	padding: 0 4px;
-	border-radius: var(--radius-control);
+	padding: 0 12px;
+	border-bottom: 1px solid var(--line-card);
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+	white-space: nowrap;
+}
+.fix-path {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	text-overflow: ellipsis;
+}
+.fix-checks {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	margin-left: auto;
+	color: var(--success);
+}
+.fix-checks svg {
+	width: 13px;
+	height: 13px;
+	flex-shrink: 0;
+}
+.fix [data-ui='code-lines'] {
+	border-radius: 0;
+	box-shadow: none;
+}
+.fix-text {
+	padding: 10px 12px;
 	color: var(--text-secondary);
 	font-size: var(--font-size-label);
-	outline: none;
-	text-align: left;
-	transition: color var(--dur-hover) var(--ease-hover);
-}
-.fix-head:hover {
-	color: var(--text-primary);
-}
-.fix-head:focus-visible {
-	box-shadow: var(--focus-ring);
-}
-.fix-head > svg {
-	width: 14px;
-	height: 14px;
-	flex-shrink: 0;
-	color: var(--text-faint);
-	transition: rotate var(--dur-toggle) var(--ease-menu);
-}
-.fix-head[data-state='open'] > svg {
-	rotate: 90deg;
-}
-.fix-body {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	padding-top: 8px;
 }
 
 /*
@@ -257,38 +328,13 @@
 	align-items: center;
 	gap: 6px;
 }
-/* The votes are 28px icon buttons; they reach out by the 6px around their icon, so the last icon ends on the edge. */
-.bug-actions-end {
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	margin-right: -6px;
+/* The menu of the rest ends on the card's edge, past the two buttons. */
+.bug-more {
 	margin-left: auto;
-	color: var(--text-faint);
-	font-size: var(--font-size-meta);
 }
-.bug-actions-end [aria-pressed='true'] {
-	background: var(--bg-selected);
-	color: var(--text-primary);
-}
-/* The post button keeps one width for both its labels, so the buttons after it never move when a bug is posted. */
+/* The post button keeps one width for both its labels, so the copy button never moves when a bug is posted. */
 .bug-post {
 	width: 148px;
-}
-/* The link to the posted comment comes after the last action, behind a hairline. */
-.bug-posted-link {
-	position: relative;
-	margin-left: 9px;
-	color: var(--accent-text);
-}
-.bug-posted-link::before {
-	position: absolute;
-	top: 6px;
-	bottom: 6px;
-	left: -5px;
-	width: 1px;
-	background: var(--line-card);
-	content: '';
 }
 .bug-ask {
 	display: flex;
@@ -481,7 +527,6 @@
 .bug-item[data-stale] .bug-title {
 	color: var(--text-secondary);
 }
-.bug-item[data-stale] .bug-facts,
-.bug-item[data-stale] .bug-head > svg {
+.bug-item[data-stale] :is(.bug-severity, .bug-caret) {
 	opacity: 0.6;
 }

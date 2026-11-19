@@ -106,7 +106,7 @@ function PreviousFindings({ view, open, onToggle }: PreviousFindingsProps) {
 				<span className="meta bugs-previous-note">Replaced when this review finishes</span>
 			</div>
 			{view.previous.open.map((bug) => (
-				<BugCard key={bug.id} bug={bug} view={view} open={open.has(bug.id)} onToggle={onToggle} stale />
+				<BugCard key={bug.id} bug={bug} view={view} open={open.has(bug.id)} onToggle={onToggle} place="review" stale />
 			))}
 		</section>
 	);
@@ -145,7 +145,7 @@ export function BugsTab() {
 				{!isLive(run.phase) && !arriving ? (
 					<RunBanner run={run} bugs={view.phase === 'ready' ? view.open.length : null} />
 				) : null}
-				{view.phase === 'loading' || arriving ? <SkeletonRows count={3} height={52} glyph lines={1} /> : null}
+				{view.phase === 'loading' || arriving ? <SkeletonRows count={3} height={36} glyph lines={1} /> : null}
 				{view.phase === 'failed' ? (
 					<div className="page-notice">
 						<StatusNotice
@@ -159,7 +159,7 @@ export function BugsTab() {
 				{clean ? <CleanNotice checked={view.checked} /> : null}
 				{view.phase === 'ready'
 					? view.open.map((bug) => (
-							<BugCard key={bug.id} bug={bug} view={view} open={open.has(bug.id)} onToggle={toggle} />
+							<BugCard key={bug.id} bug={bug} view={view} open={open.has(bug.id)} onToggle={toggle} place="review" />
 						))
 					: null}
 				{view.phase === 'ready' ? <BugGroups view={view} clean={clean} /> : null}

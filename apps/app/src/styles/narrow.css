@@ -81,14 +81,7 @@
 	}
 }
 
-/* Under 760px two columns no longer fit side by side: the diff keeps the page and the file tree steps out. */
 @media (max-width: 759px) {
-	.changes {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.changes-side {
-		display: none;
-	}
 	.fleet {
 		padding: 20px var(--page-gutter) 48px;
 	}
