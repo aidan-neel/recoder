@@ -566,12 +566,6 @@ AID-8 file).
   again. A step with more to show (the files a search or a read found, a
   command and its output, a thought's text) opens under its own line on
   request, and only a failed command starts open.
-- **A reply's toolbar.** Capy's pill at the reply's top right: a 1px
-  `--line-control` ring on the canvas, holding the hour it arrived, Reply
-  (quotes the reply in the composer, where one sits beside the thread), Copy
-  (the Markdown) and a menu with Copy as plain text and Ask again. Its icons
-  are 14px in 28px targets. It shows while the reply is hovered or holds
-  focus and while its menu is open, and takes no pointer at rest.
 - **Streaming.** The reply's text goes out a few words at a time, and each
   stretch that arrives fades from transparent to its colour over 160ms on a
   strong ease-out, drawn with CSS custom highlights so nothing moves or
@@ -621,10 +615,17 @@ Motion explains a change and never makes the person wait.
   `next/navigation`. A screen that has no data yet shows its skeleton; it
   never holds the old page.
 - Durations and easings come from the kit tokens (`--dur-*`, `--motion-*`,
-  `--ease-menu`) and the kit's motion presets (`DURATION`). Hover takes 80ms
-  and the menu highlight 90ms. Nothing on a keyboard path runs longer than
-  about 130ms.
-- `prefers-reduced-motion` turns movement into plain swaps.
+  `--ease-menu`, `--ease-hover`) and the kit's motion presets (`DURATION`).
+  Hover eases in and out over `--dur-hover` (120ms on `--ease-hover`) on
+  buttons, rows, menu items, the segmented control, fields and the composer
+  edge, so a pointer crossing a list leaves a soft wake rather than a
+  flicker. A press shades in faster, over `--dur-tap` (60ms), and eases back
+  on release. The menu highlight still travels between items in 90ms
+  (`--motion-hover`) and lands on the item before its fade ends. Nothing on
+  a keyboard path runs longer than about 130ms.
+- `prefers-reduced-motion` turns movement into plain swaps. Hover's colour
+  fades stay, since they move nothing, and a menu highlight fades in on its
+  item without travelling there.
 
 ## Interaction rules
 
@@ -668,7 +669,10 @@ side an icon sits on gets 2px less padding than a side with text.
 
 - **Hover and press** lay a wash over whatever is behind a see-through
   button, so it still shows inside a hovered row. A press shades the button
-  a step deeper within `--dur-hover`. It never changes size.
+  a step deeper within `--dur-tap`. It never changes size. The primary and
+  secondary keep their gradient through hover and press: only its two stops
+  darken (`--fill-primary-*-top` and `-bottom`, `--fill-raised-*`), blended
+  as registered colours, so the fill never swaps and never flashes.
 - **Status** keeps the idle width. Pending shows a spinner, success a green
   check and error a red cross on a red-tinted button, each in the label's
   place. Pass `successLabel` or `errorLabel` only when the word adds
@@ -736,7 +740,7 @@ recipe and never write a ring or a shadow of their own.
 
 | Recipe | Parts | On |
 | ------ | ----- | -- |
-| `--shadow-primary` + `--fill-primary` | A soft vertical gradient of `--primary`, a top sheen, a ring and a short drop shadow | The primary button |
+| `--shadow-primary` + `--fill-primary-*` | A soft vertical gradient of `--primary`, a top sheen, a ring and a short drop shadow | The primary button |
 | `--shadow-raised` + `--fill-raised` | A soft fill, hairline, top highlight, dark outline and a 1px contact shadow | Secondary buttons, select triggers, the chosen segment |
 | `--shadow-edge` | Hairline and dark outline | Outline buttons, chips, an empty tile |
 | `--shadow-field` | Hairline and dark outline; `-hover` and `-focus` brighten the hairline | Inputs, textareas, the command bar field, the guidelines stream |

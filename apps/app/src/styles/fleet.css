@@ -149,9 +149,9 @@
 .fleet-menu [data-ui='button'] {
 	opacity: 0;
 	transition:
-		opacity var(--dur-hover) ease-out,
-		background-color var(--dur-hover) ease-out,
-		color var(--dur-hover) ease-out;
+		opacity var(--dur-hover) var(--ease-hover),
+		background-color var(--dur-hover) var(--ease-hover),
+		color var(--dur-hover) var(--ease-hover);
 }
 .fleet-tile:hover .fleet-menu [data-ui='button'],
 .fleet-tile:focus-within .fleet-menu [data-ui='button'],
@@ -300,7 +300,7 @@
 	color: var(--text-secondary);
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .fleet-next:hover .fleet-next-title {
 	color: var(--text-primary);
@@ -321,7 +321,7 @@
 	box-shadow: var(--shadow-edge);
 	text-align: center;
 	--row-button-radius: var(--radius-card);
-	transition: background-color var(--dur-hover) ease-out;
+	transition: background-color var(--dur-hover) var(--ease-hover);
 }
 .fleet-connect:hover {
 	background: var(--bg-raised-2);

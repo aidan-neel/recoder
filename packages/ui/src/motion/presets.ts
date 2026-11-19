@@ -16,7 +16,7 @@ export const EASE_OUT = [0.23, 1, 0.32, 1] as const;
  * since overlays animate in JS.
  */
 export const DURATION = {
-	hover: 0.08,
+	hover: 0.12,
 	toggle: 0.21,
 	swap: 0.17,
 	disclose: 0.23,

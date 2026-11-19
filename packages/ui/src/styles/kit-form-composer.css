@@ -23,7 +23,7 @@
 		background-color: var(--bg-raised);
 		box-shadow: var(--shadow-composer);
 		cursor: text;
-		transition: box-shadow var(--dur-hover) ease-out;
+		transition: box-shadow var(--dur-hover) var(--ease-hover);
 	}
 	[data-ui='composer'][data-size='lg'] {
 		--composer-radius: calc(var(--radius-composer) + 2px);

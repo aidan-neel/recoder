@@ -21,7 +21,7 @@
 	transition:
 		transform var(--motion-hover) var(--ease-menu),
 		height var(--motion-hover) var(--ease-menu),
-		opacity var(--dur-hover) ease-out;
+		opacity var(--dur-hover) var(--ease-hover);
 }
 [data-ui='menu-highlight'][data-state='visible'] {
 	opacity: 1;
@@ -103,8 +103,8 @@
 	cursor: text;
 	outline: none;
 	transition:
-		background-color var(--dur-menu) ease-out,
-		box-shadow var(--dur-menu) ease-out;
+		background-color var(--dur-hover) var(--ease-hover),
+		box-shadow var(--dur-hover) var(--ease-hover);
 }
 [data-ui='command-bar-field'][data-slot='trigger']:hover {
 	box-shadow: var(--shadow-field-hover);

@@ -161,7 +161,7 @@
 	height: 1px;
 	background: var(--line-subtle);
 	content: '';
-	transition: opacity var(--dur-highlight) ease-out;
+	transition: opacity var(--dur-hover) var(--ease-hover);
 }
 .repo-rows[data-ui='hover-list'] .repo-row:hover::before,
 .repo-rows[data-ui='hover-list'] .repo-row:hover + .repo-row::before {
@@ -252,7 +252,7 @@
 	overflow: hidden;
 	border-radius: 2px;
 	background: var(--text-ghost);
-	transition: opacity var(--dur-hover) ease-out;
+	transition: opacity var(--dur-hover) var(--ease-hover);
 }
 .repo-bar[data-empty] {
 	background: var(--line-strong);

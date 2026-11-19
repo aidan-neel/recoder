@@ -91,7 +91,7 @@
 	flex-shrink: 0;
 	place-items: center;
 	color: var(--text-ghost);
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .provider-pick-end svg {
 	width: 14px;

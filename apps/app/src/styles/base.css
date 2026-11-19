@@ -119,7 +119,7 @@
 	color: var(--text-muted);
 	font-size: var(--font-size-label);
 	outline: none;
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .page-tab:hover,
 .page-tab[aria-current] {
@@ -181,7 +181,7 @@
 	border-radius: var(--radius-chip);
 	color: inherit;
 	outline: none;
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .crumbs a:hover {
 	color: var(--text-primary);
@@ -261,8 +261,8 @@
 	white-space: nowrap;
 	cursor: default;
 	transition:
-		color var(--dur-hover) ease-out,
-		background-color var(--dur-hover) ease-out;
+		color var(--dur-hover) var(--ease-hover),
+		background-color var(--dur-hover) var(--ease-hover);
 }
 .ref-chip[data-openable],
 a.ref-chip {
@@ -274,8 +274,8 @@ a.ref-chip {
 	color: var(--text-muted);
 	text-decoration: none;
 	transition:
-		color var(--dur-hover) ease-out,
-		background-color var(--dur-hover) ease-out;
+		color var(--dur-hover) var(--ease-hover),
+		background-color var(--dur-hover) var(--ease-hover);
 }
 /* Only a chip that does something answers the pointer: a button or a link, never a plain label. */
 :is(a, button).ref-chip:hover,
@@ -361,7 +361,7 @@ a.ref-chip {
 	text-decoration: underline;
 	text-decoration-color: transparent;
 	text-underline-offset: 3px;
-	transition: text-decoration-color var(--dur-hover) ease-out;
+	transition: text-decoration-color var(--dur-hover) var(--ease-hover);
 }
 .text-link:hover {
 	text-decoration-color: currentColor;

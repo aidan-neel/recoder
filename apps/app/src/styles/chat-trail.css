@@ -47,7 +47,7 @@
 	color: inherit;
 	font: inherit;
 	cursor: pointer;
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .trail-head .trail-chevron {
 	width: 12px;
@@ -68,7 +68,7 @@
 	font: inherit;
 	text-align: left;
 	cursor: pointer;
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .trail-head:hover,
 .trail-toggle:hover {

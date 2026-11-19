@@ -333,7 +333,7 @@
 	width: 14px;
 	height: 14px;
 	color: var(--text-faint);
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .usage-row:hover .usage-cell-go svg {
 	color: var(--text-muted);
