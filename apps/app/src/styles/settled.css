@@ -13,24 +13,17 @@
 	gap: 2px;
 	padding-bottom: 0;
 }
-.recent-item .recent-title {
-	flex: 1;
-	min-width: 0;
+/* Settled's rows are compact thread rows in quieter ink: old news reads a step below the live lists. */
+.settled .thread-title {
 	color: var(--text-muted);
 }
-.recent-item:hover .recent-title,
-.recent-item[data-active] .recent-title {
+.settled .thread-row:is(:hover, [data-active]) .thread-title {
 	color: var(--text-primary);
-}
-.recent-age {
-	flex-shrink: 0;
-	color: var(--text-faint);
-	font-size: var(--font-size-meta);
-	font-variant-numeric: tabular-nums;
-	transition: opacity var(--dur-hover) var(--ease-hover);
 }
 .settled-more {
 	--row-button-radius: var(--radius-row);
+
+	transition: background-color var(--dur-hover) var(--ease-hover);
 
 	align-items: center;
 	gap: 8px;
@@ -38,4 +31,14 @@
 	color: var(--text-muted);
 	font-size: var(--font-size-label);
 	line-height: 18px;
+}
+.settled-more:hover {
+	background: rgb(var(--wash-rgb) / 0.04);
+}
+.settled-more-mark {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	padding: 1px;
+	color: var(--text-subtle);
 }

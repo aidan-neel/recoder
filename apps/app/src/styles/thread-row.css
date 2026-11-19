@@ -1,0 +1,203 @@
+/*
+ * The sidebar's thread rows: Reviews, Chats and Settled (`ThreadRow`). Detailed, the default: the title and its age
+ * over where it lives and a state pill, with an unread dot in the list's gutter. Compact (Settings → Appearance →
+ * Sidebar rows, and always in Settled): one line, a 16px glyph, the title, then the dot and the age. Both are in the
+ * markup; the density only decides what shows, so a change of setting or of state never moves a row.
+ */
+.thread-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 2px 8px 0;
+}
+.thread-row {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 6px 8px 7px;
+	border-radius: var(--radius-row);
+	transition: background-color var(--dur-hover) var(--ease-hover);
+}
+.thread-row:hover {
+	background: rgb(var(--wash-rgb) / 0.04);
+}
+.thread-row[data-active] {
+	background: var(--bg-hover);
+}
+.thread-glyph {
+	display: none;
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-subtle);
+}
+.thread-glyph > svg {
+	width: 16px;
+	height: 16px;
+	padding: 1px;
+}
+.thread-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 3px;
+}
+.thread-head,
+.thread-foot {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	white-space: nowrap;
+}
+.thread-head {
+	height: 20px;
+}
+.thread-link {
+	--row-button-radius: var(--radius-row);
+
+	min-width: 0;
+	flex: 1;
+}
+.thread-title {
+	overflow: hidden;
+	color: var(--text-secondary);
+	font-size: var(--font-size-body);
+	line-height: 20px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	transition: color var(--dur-hover) var(--ease-hover);
+}
+.thread-row:is(:hover, [data-active], [data-unread]) .thread-title {
+	color: var(--text-primary);
+}
+.thread-row[data-unread] .thread-title {
+	font-weight: 500;
+}
+.thread-trail {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+}
+.thread-age {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	font-variant-numeric: tabular-nums;
+}
+.thread-dot {
+	display: none;
+	width: 6px;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--accent);
+}
+/* Detailed: the dot hangs in the list's gutter, left of the title, as Capy marks a thread with news. */
+.thread-row[data-unread] .thread-dot {
+	position: absolute;
+	top: 13px;
+	left: -5px;
+	display: block;
+}
+.thread-foot {
+	height: 18px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.thread-place {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 5px;
+}
+.thread-place > svg {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+}
+.thread-place-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.thread-pill {
+	max-width: 60%;
+}
+/* News in a chat reads in the accent, as Capy marks a thread that has something for you. */
+.thread-pill[data-tone='info'] {
+	--pill-fg: var(--accent-text);
+	--pill-bg: var(--accent-tint);
+}
+/* The running review's spinner, at the pill's 12px icon size. */
+.thread-pill-glyph[data-ui='status-glyph'] {
+	width: 12px;
+	height: 12px;
+}
+.thread-pill-glyph > [data-ui='status-glyph-face'] {
+	margin: -2px;
+	scale: 0.75;
+}
+
+/* A row's tools (Settle, the "more" button) wait until it is pointed at, focused, or its menu is open. */
+.thread-tools {
+	position: absolute;
+	z-index: 1;
+	top: 2px;
+	right: 4px;
+	display: flex;
+	align-items: center;
+	opacity: 0;
+	transition: opacity var(--dur-hover) var(--ease-hover);
+}
+.thread-tools [data-ui='button'] {
+	background: none;
+	color: var(--text-subtle);
+}
+.thread-tools [data-ui='button']:is(:hover, [data-state='open']) {
+	background: none;
+	color: var(--text-primary);
+}
+.thread-row:is(:hover, :focus-within, :has([data-state='open'])) .thread-tools {
+	opacity: 1;
+}
+/* Pointed at, the age steps aside and the title stops short of the tools, so they never sit over its text. */
+.thread-row[data-tools]:is(:hover, :focus-within, :has([data-state='open'])) .thread-trail {
+	display: none;
+}
+.thread-row[data-tools='1']:is(:hover, :focus-within, :has([data-state='open'])) .thread-head {
+	padding-right: 28px;
+}
+.thread-row[data-tools='2']:is(:hover, :focus-within, :has([data-state='open'])) .thread-head {
+	padding-right: 56px;
+}
+@media (hover: none) {
+	.thread-tools {
+		opacity: 1;
+	}
+	.thread-trail {
+		display: none;
+	}
+}
+
+/* Compact: one 30px line. The glyph shows, the second line goes, and the dot joins the age. */
+:is(:root[data-sidebar-rows='compact'] .thread-row, .thread-row[data-density='compact']) {
+	align-items: center;
+	padding: 5px 8px;
+}
+:is(:root[data-sidebar-rows='compact'], .thread-row[data-density='compact']) .thread-glyph {
+	display: flex;
+}
+:is(:root[data-sidebar-rows='compact'], .thread-row[data-density='compact']) .thread-foot {
+	display: none;
+}
+:is(:root[data-sidebar-rows='compact'] .thread-row, .thread-row[data-density='compact'])[data-unread] .thread-dot {
+	position: static;
+}
+:is(:root[data-sidebar-rows='compact'] .thread-row, .thread-row[data-density='compact']) .thread-tools {
+	top: 1px;
+}

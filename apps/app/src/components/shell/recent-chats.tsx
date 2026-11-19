@@ -1,8 +1,12 @@
 'use client';
 
+import { Pill } from '@recoder/ui';
+import { ChatIcon } from '@phosphor-icons/react';
+
 import { useApi, useChatCache } from '@/lib/api/client';
 import { useComposeMode } from '@/lib/compose/compose-mode';
 import { shortAge } from '@/lib/shell/age';
+import { useUnread } from '@/lib/shell/seen';
 import { useSettleMarks } from '@/lib/shell/settle';
 import { useSidebarFolds } from '@/lib/shell/sidebar-folds';
 import { navigate, usePathname } from '@/lib/shell/navigation';
@@ -11,7 +15,7 @@ import type { RecentChat } from '@/lib/shell/types';
 import { useNow } from '@/lib/shell/use-now';
 
 import { useChatActions } from './recent-actions';
-import { AGE_TICK, RecentCard } from './recent-row';
+import { AGE_TICK, ThreadRow } from './recent-row';
 import { SidebarSection } from './sidebar-section';
 
 /**
@@ -27,6 +31,8 @@ export function RecentChats({ chats }: { chats: RecentChat[] }) {
 	const actionsFor = useChatActions();
 	const settle = useSettleMarks((state) => state.mark);
 	const now = useNow(AGE_TICK);
+	const shownRow = chats.find((chat) => pathname === chat.href);
+	const unread = useUnread(shownRow && { id: shownRow.chatId, updatedAt: shownRow.updatedAt, busy: false });
 
 	const open = useSidebarFolds((state) => !state.folded.includes('chats'));
 	const setOpen = useSidebarFolds((state) => state.setOpen);
@@ -43,20 +49,38 @@ export function RecentChats({ chats }: { chats: RecentChat[] }) {
 			add={{ label: 'New chat', onSelect: () => newChat(base) }}
 			onHide={() => setShown('chats', false)}
 		>
-			<div className="recent-list">
-				{chats.map((chat) => (
-					<RecentCard
-						key={chat.chatId}
-						href={chat.href}
-						active={pathname === chat.href}
-						title={chat.title}
-						foot={chat.repoName}
-						age={shortAge(chat.updatedAt, now)}
-						actions={actionsFor(chat)}
-						onIntent={() => chatCache.warm(chat.chatId)}
-						onSettle={() => settle(chat.chatId, true)}
-					/>
-				))}
+			<div className="thread-list">
+				{chats.map((chat) => {
+					const fresh = unread(chat.chatId, chat.updatedAt);
+
+					return (
+						<ThreadRow
+							key={chat.chatId}
+							href={chat.href}
+							active={pathname === chat.href}
+							title={chat.title}
+							age={shortAge(chat.updatedAt, now)}
+							glyph={<ChatIcon aria-hidden />}
+							place={
+								<>
+									<ChatIcon aria-hidden />
+									<span className="thread-place-text">{chat.repoName}</span>
+								</>
+							}
+							pill={
+								fresh ? (
+									<Pill tone="info" className="thread-pill">
+										New reply
+									</Pill>
+								) : undefined
+							}
+							unread={fresh}
+							actions={actionsFor(chat)}
+							onIntent={() => chatCache.warm(chat.chatId)}
+							onSettle={() => settle(chat.chatId, true)}
+						/>
+					);
+				})}
 			</div>
 		</SidebarSection>
 	);

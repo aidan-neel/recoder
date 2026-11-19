@@ -133,9 +133,27 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   rest and without a fill, a quiet + that starts one (a new review, a new
   chat, Add repository) and a ⋯ that collapses or hides the group, in
   `--text-faint` until pointed at. A click on the title folds the group too.
-  Settled uses the same title. Review and chat rows
-  are two lines with no tile: the title and its age, then a review's state,
-  repository and number, or a chat's repository. A repository is one line on
+  Settled uses the same title. Reviews, Chats and Settled draw every row
+  with one component (`ThreadRow`, `styles/thread-row.css`), Paper variant
+  V3 of AID-18, in two densities picked in Settings → Appearance → Sidebar
+  rows (saved in this browser, set on `<html>` before first paint, applied
+  at once). Detailed, the default, is two lines with no tile: the title in
+  `--text-secondary` (full ink when pointed at, open or unread) and its age,
+  then where it lives (a pull request mark and "api #214", or a chat mark and
+  the repository) and the state as a kit `Pill` at the line's end: "2 bugs"
+  high, "No bugs" ok, "Failed" danger, "Reviewing" neutral with the spinner,
+  and "New reply" in the accent on a chat with news. Compact is one 30px
+  line: the review's `StatusGlyph` (or a chat mark), the title, then the
+  unread dot and the age. Settled is always compact, its glyph how the pull
+  request ended, its title in `--text-muted`. A row that changed since this
+  browser last had it open is unread (a running review never is): a 6px
+  `--accent` dot, in the list's gutter when detailed and before the age
+  when compact, and its title at weight 500. The open row is marked seen
+  through every change it goes through. Both densities are always in the
+  markup and the setting only decides what shows, and a row's two lines have
+  fixed heights, so a change of setting or of state never moves a row.
+  Pointed at or focused, the age gives way to a quiet Settle (✓) and ⋯;
+  the open row sits on `--bg-hover`. A repository is one line on
   the places' lanes: the forge's mark, the name, and a `--sev-high` dot while
   it has an open high bug. Then Settled; and at the foot the model reviews run with,
   the shortcuts and the theme switch. A review a person cancelled wears a

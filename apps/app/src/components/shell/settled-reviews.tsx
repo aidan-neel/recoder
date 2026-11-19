@@ -1,6 +1,6 @@
 'use client';
 
-import { HoverList, RowButton } from '@recoder/ui';
+import { RowButton } from '@recoder/ui';
 import { CaretDownIcon, GitMergeIcon, GitPullRequestIcon, ChatIcon, ArrowUUpLeftIcon } from '@phosphor-icons/react';
 import { usePathname } from '@/lib/shell/navigation';
 import { useState } from 'react';
@@ -12,7 +12,7 @@ import type { SettledRow } from '@/lib/shell/types';
 import { useNow } from '@/lib/shell/use-now';
 
 import { useChatActions, useReviewActions, type RowAction } from './recent-actions';
-import { AGE_TICK, RecentRow } from './recent-row';
+import { AGE_TICK, ThreadRow } from './recent-row';
 import { SidebarSection } from './sidebar-section';
 
 /** How many settled rows show before "Show more". */
@@ -85,19 +85,22 @@ function SettledRows({ reviews, hidden, onShowAll }: SettledRowsProps) {
 	}
 
 	return (
-		<HoverList className="recent-list settled-list" itemSelector="[data-recent]">
+		<div className="thread-list settled-list">
 			{reviews.map((entry) => {
 				const { icon: Icon, label } = markOf(entry);
 				const { row } = entry;
 
 				return (
-					<RecentRow
+					<ThreadRow
 						key={entry.kind === 'review' ? entry.row.reviewId : entry.row.chatId}
 						href={row.href}
 						active={pathname === row.href.split('?')[0]}
-						mark={<Icon role="img" aria-label={label} className="recent-mark" />}
+						density="compact"
+						glyph={<Icon aria-hidden />}
+						status={label}
+						place={row.repoName}
 						title={row.title}
-						trailing={<span className="recent-age">{shortAge(row.updatedAt, now)}</span>}
+						age={shortAge(row.updatedAt, now)}
 						actions={actionsFor(entry)}
 						onIntent={() =>
 							entry.kind === 'review'
@@ -108,11 +111,11 @@ function SettledRows({ reviews, hidden, onShowAll }: SettledRowsProps) {
 				);
 			})}
 			{hidden > 0 ? (
-				<RowButton data-recent className="settled-more" onClick={onShowAll}>
-					<CaretDownIcon aria-hidden className="recent-mark" />
+				<RowButton className="settled-more" onClick={onShowAll}>
+					<CaretDownIcon aria-hidden className="settled-more-mark" />
 					Show {hidden} more
 				</RowButton>
 			) : null}
-		</HoverList>
+		</div>
 	);
 }

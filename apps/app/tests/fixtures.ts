@@ -7,6 +7,7 @@ import type {
 	Repo,
 	ReviewListItem
 } from '@recoder/shared';
+import { afterEach, beforeEach } from 'bun:test';
 
 /** The head commit the fixtures' pull requests and reviews share. */
 const HEAD = 'head1';
@@ -46,6 +47,20 @@ export function memoryStorage(): Storage {
 		removeItem: (key) => void items.delete(key),
 		clear: () => items.clear()
 	};
+}
+
+/** Gives each test of the file a fresh `memoryStorage` as localStorage, and puts the real one back after it. */
+export function useMemoryStorage(): void {
+	const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+
+	beforeEach(() => {
+		Object.defineProperty(globalThis, 'localStorage', { value: memoryStorage(), configurable: true });
+	});
+
+	afterEach(() => {
+		if (original) Object.defineProperty(globalThis, 'localStorage', original);
+		else Reflect.deleteProperty(globalThis, 'localStorage');
+	});
 }
 
 /** A hunk of `count` added lines on the new side, starting at line `start`. */

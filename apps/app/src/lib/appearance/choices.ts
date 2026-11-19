@@ -3,9 +3,10 @@ import { withoutTransitions } from '@recoder/shared';
 import { readStored, writeStored } from '../shell/browser-storage';
 
 /**
- * The palette and the typeface: picked in Settings → Appearance, saved in
- * this browser, and shown as an attribute on <html> that the CSS keys on
- * (`styles/palettes.css`, `styles/appearance.css`). The fallback of each sets
+ * The palette, the typeface and the sidebar's rows: picked in Settings →
+ * Appearance, saved in this browser, and shown as an attribute on <html> that
+ * the CSS keys on (`styles/palettes.css`, `styles/appearance.css`,
+ * `styles/thread-row.css`). The fallback of each sets
  * no attribute, so the app's own tokens show.
  */
 export interface RootChoice<Id extends string> {
@@ -55,6 +56,21 @@ export const TYPEFACE: RootChoice<TypefaceId> = {
 	attribute: 'data-font',
 	options: TYPEFACE_OPTIONS,
 	fallback: 'inter'
+};
+
+const SIDEBAR_ROW_OPTIONS = [
+	{ id: 'detailed', name: 'Detailed' },
+	{ id: 'compact', name: 'Compact' }
+] as const;
+
+export type SidebarRowsId = (typeof SIDEBAR_ROW_OPTIONS)[number]['id'];
+
+/** How the sidebar draws Reviews and Chats: detailed rows on two lines, or compact rows on one (`styles/thread-row.css`). */
+export const SIDEBAR_ROWS: RootChoice<SidebarRowsId> = {
+	key: 'recoder-sidebar-rows',
+	attribute: 'data-sidebar-rows',
+	options: SIDEBAR_ROW_OPTIONS,
+	fallback: 'detailed'
 };
 
 /** The saved pick, or the fallback when nothing valid is saved or storage is blocked. */
