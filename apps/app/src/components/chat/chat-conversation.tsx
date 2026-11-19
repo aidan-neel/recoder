@@ -53,6 +53,7 @@ export function ChatConversation({ chat }: { chat: RepoChatView }) {
 					<ChatComposer
 						label={subject}
 						placeholder={subject}
+						minRows={1}
 						limit={ask.limit}
 						busy={ask.replying}
 						onStop={ask.stop}

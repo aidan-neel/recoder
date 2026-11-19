@@ -2,7 +2,7 @@
 
 import { isStepRunning } from '@recoder/shared';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@recoder/ui';
-import { CaretDownIcon } from '@phosphor-icons/react';
+import { CaretRightIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { hasDetail, opensDetail, stepSpan, toolLine, type ToolStep } from '@/lib/chat/trail';
@@ -24,7 +24,7 @@ export function ToolCall({ step }: { step: ToolStep }) {
 				<Collapsible open={chosen ?? opensDetail(step)} onOpenChange={setChosen}>
 					<CollapsibleTrigger className="trail-label trail-toggle">
 						<ToolLabel step={step} />
-						<CaretDownIcon className="trail-chevron" aria-hidden />
+						<CaretRightIcon className="trail-chevron" aria-hidden />
 					</CollapsibleTrigger>
 					<CollapsibleContent>
 						<ToolDetail step={step} />

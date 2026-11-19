@@ -61,6 +61,10 @@
 	}
 
 	/* The box draws the ring and the fill; `:is(*, :focus)` outranks the field's own hover, focus and invalid rings. */
+	/* Capy's composer asks quietly: its placeholder in the ghost ink, a step under the field's own placeholder. */
+	[data-ui='composer'] [data-ui='link-field'][data-empty]::before {
+		color: var(--text-ghost);
+	}
 	[data-ui='composer'] [data-ui='link-field']:is(*, :focus) {
 		background: none;
 		box-shadow: none;

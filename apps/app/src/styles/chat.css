@@ -10,7 +10,7 @@
 }
 .chat-thread,
 .chat-dock {
-	--page-measure: 720px;
+	--page-measure: 864px;
 }
 .chat-thread {
 	padding-block: 32px 24px;
@@ -19,8 +19,20 @@
 	flex-shrink: 0;
 	padding-block: 8px 20px;
 }
+/*
+ * Capy's thread composer: one line of text over its bar, a 10px radius, and wider than the column by its text inset,
+ * so what is typed starts on the same edge as the thread's words.
+ */
 .chat-dock-column {
 	position: relative;
+}
+.chat-dock-column > [data-ui='composer'] {
+	--composer-radius: var(--radius-card);
+	--composer-text-x: 16px;
+	--composer-text-top: 14px;
+	--composer-line: 20px;
+
+	margin-inline: -16px;
 }
 /*
  * A line over the composer: the stream reconnecting, or a stop that failed. It lies over the thread's bottom
@@ -33,15 +45,18 @@
 	background: var(--bg-canvas);
 }
 
-/* Capy's way back down: a small pill centred over the composer while the end is out of view. */
+/* Capy's way back down: a small raised button centred over the composer while the end is out of view. */
 .chat-to-end {
 	position: absolute;
 	bottom: calc(100% + 8px);
 	left: 50%;
 	z-index: 1;
 	translate: -50% 0;
-	border-radius: 999px;
-	background-color: var(--bg-canvas);
+	border-radius: var(--radius-row);
+	color: var(--text-muted);
+}
+.chat-to-end:hover {
+	color: var(--text-primary);
 }
 
 /* Loading: the first question at the right, the start of its reply under it. */

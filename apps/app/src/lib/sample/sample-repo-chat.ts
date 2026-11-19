@@ -36,6 +36,10 @@ const SAMPLE_THREAD: [string, string][] = [
 	[
 		'What would you change?',
 		"Key header-less requests by client address instead of one shared name:\n\n```ts\nconst key = c.req.header('x-tenant-id') ?? `ip:${clientAddress(c)}`;\n```\n\nBehind the proxy, read the first address in `x-forwarded-for`. Keep the reproduction test so the shared bucket can't come back."
+	],
+	[
+		'Which tests cover the limiter today?',
+		'Three files, and none of them idles a bucket:\n\n1. `limiter.test.ts` drains a bucket and checks the `429`.\n2. `middleware.test.ts` reads the tenant header.\n3. `anonymous.test.ts` reproduces the shared bucket from **#214**.\n\n| File | Tests | Covers refill |\n| --- | --- | --- |\n| limiter.test.ts | 5 | No |\n| middleware.test.ts | 3 | No |\n| anonymous.test.ts | 1 | No |\n\nThe [rate limit docs](https://example.com/docs/rate-limits) promise a cap, so a refill test belongs beside the first file.'
 	]
 ];
 

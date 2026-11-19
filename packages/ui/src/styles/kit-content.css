@@ -421,23 +421,26 @@
 	margin: 0.75em 0;
 }
 
+/* Capy's table: one rounded box, rows split by hairlines, no column rules and no header fill. */
 [data-ui='markdown'] :where([data-ui='markdown-table']) {
 	margin: 0.75em 0;
 	overflow-x: auto;
+	border: 1px solid var(--line-control);
+	border-radius: var(--radius-row);
 }
 [data-ui='markdown'] :where(table) {
 	width: 100%;
 	border-collapse: collapse;
-	font-size: 0.925em;
 }
 [data-ui='markdown'] :where(th, td) {
 	padding: 6px 10px;
-	border: 1px solid var(--line-card);
 	text-align: left;
 	vertical-align: top;
 }
+[data-ui='markdown'] :where(tr + tr, tbody tr) > :where(th, td) {
+	border-top: 1px solid var(--line-control);
+}
 [data-ui='markdown'] :where(th) {
-	background: rgb(var(--wash-rgb) / 0.03);
 	font-weight: 500;
 }
 

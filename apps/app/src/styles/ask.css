@@ -1,8 +1,9 @@
 /* ───────── Ask: a thread about a bug, and its composer ───────── */
+/* Capy's rhythm: 24px between a question, the line over its reply, the reply and the next question. */
 .ask-thread {
 	display: flex;
 	flex-direction: column;
-	gap: 20px;
+	gap: 24px;
 }
 .ask-message {
 	display: flex;
@@ -13,12 +14,8 @@
 .ask-message[data-from='person'] {
 	align-items: flex-end;
 }
-/* A reply stands a step clear of the question above it, and its trail's line a step clear of the words it led to. */
-.ask-message[data-from='recoder'] {
-	padding-top: 6px;
-}
 .ask-message[data-from='recoder'] > .trail {
-	margin-bottom: 6px;
+	margin-bottom: 16px;
 }
 /* The hour a turn began, centred over the question that began it, as Capy marks one. */
 .ask-when {
@@ -30,13 +27,13 @@
 }
 /* The person's images under their words, on the same right edge. */
 .ask-images {
-	max-width: 85%;
+	max-width: 77%;
 	justify-content: flex-end;
 	padding: 6px 0 0;
 }
 .ask-question {
-	max-width: 85%;
-	padding: 6px 10px;
+	max-width: 77%;
+	padding: 7px 12px;
 	border-radius: var(--radius-row);
 	background: var(--bg-bubble);
 	color: var(--text-primary);
@@ -46,9 +43,24 @@
 	white-space: pre-wrap;
 }
 .ask-message[data-from='recoder'] [data-ui='markdown'] {
-	color: var(--text-secondary);
+	color: var(--text-primary);
 	font-size: var(--font-size-body);
-	line-height: 22px;
+	line-height: 20px;
+}
+/* Capy's inline code: a small chip in the code face on the bubble's fill, edged like a control. */
+.ask-message[data-from='recoder'] [data-ui='markdown'] .inline-code {
+	padding: 1px 4px;
+	border-radius: 4px;
+	box-shadow: var(--shadow-edge);
+	font-size: 0.8em;
+}
+/* Links read as links, in the accent, as Capy's do; the underline comes back under the pointer. */
+.ask-message[data-from='recoder'] [data-ui='markdown'] :where(a) {
+	color: var(--accent-text);
+	text-decoration-color: transparent;
+}
+.ask-message[data-from='recoder'] [data-ui='markdown'] :where(a):hover {
+	text-decoration-color: currentColor;
 }
 .ask-failed {
 	display: flex;
