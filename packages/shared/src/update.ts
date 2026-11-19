@@ -6,11 +6,41 @@
  * while an apply runs in the background.
  */
 
-/** How this installation runs, which decides how an update applies. */
-export type UpdateMode = 'git' | 'binary' | 'managed';
+/**
+ * How this installation runs, which decides how an update applies. `container`: the release image, with the
+ * updater beside it pulling, switching and rolling back.
+ */
+export type UpdateMode = 'git' | 'binary' | 'container' | 'managed';
 
-/** What an update is doing, for the polling UI. */
-export type UpdateState = 'idle' | 'checking' | 'pausing' | 'updating' | 'restarting' | 'resuming' | 'failed';
+/**
+ * What an update is doing, for the polling UI. `backing-up`, `health-check` and `rolling-back` are the container
+ * updater's own; `rolled-back` is where a container update ends when the new version failed its health check.
+ */
+export type UpdateState =
+	| 'idle'
+	| 'checking'
+	| 'pausing'
+	| 'backing-up'
+	| 'updating'
+	| 'restarting'
+	| 'health-check'
+	| 'resuming'
+	| 'rolling-back'
+	| 'rolled-back'
+	| 'failed';
+
+/** What the updater is running: a new version, a rollback, a restore of a backup, or a move to another store. */
+export type UpdateOperation = 'update' | 'rollback' | 'restore' | 'storage';
+
+/** One step of a container update, in the order the updater runs them. */
+export type UpdateStepId = 'pause' | 'backup' | 'download' | 'start' | 'health';
+
+export interface UpdateStep {
+	id: UpdateStepId;
+	state: 'pending' | 'running' | 'done' | 'failed' | 'skipped';
+	/** The fact the step shows (`2 running, they resume after`, `about 1.2 GB`). */
+	detail?: string;
+}
 
 /** One commit a git update would bring in. */
 export interface UpdateCommit {
@@ -38,6 +68,14 @@ export interface UpdateAvailable {
 	branch?: string;
 	commits: UpdateCommit[];
 	changes: UpdateChanges;
+	/** Container and binary mode: the release notes, as Markdown, from the release's manifest. */
+	notes?: string;
+	releasedAt?: string;
+	/**
+	 * Container mode: the release moves the data to a new data version, so rolling back from it restores the backup
+	 * taken before it and loses what was written since.
+	 */
+	dataChange?: boolean;
 }
 
 /** `GET /api/update/branches`: the remote branches a git install can switch to, freshly fetched. */
@@ -76,4 +114,47 @@ export interface UpdateStatus {
 	managedNote?: string;
 	/** After a web-only update: whether the web app needs a restart. */
 	webRestart?: WebRestart;
+	/** Container mode: what the updater is running while `state` is not idle. */
+	operation?: UpdateOperation;
+	/** Container mode: the update's steps, present while one is available or running. */
+	steps?: UpdateStep[];
+	/** Managed mode: the command that updates this install (`helm upgrade … --set server.image.tag=0.3.0`). */
+	managedCommand?: string;
+}
+
+/** Container mode: when updates install on their own. */
+export interface UpdatePolicy {
+	channel: 'stable' | 'beta';
+	/** `ask`: an admin presses Update; `auto`: the updater installs in the window. */
+	install: 'ask' | 'auto';
+	/** The weekly window automatic installs run in: a weekday (0 is Sunday; null every day) and an hour, 0 to 23. */
+	window: { weekday: number | null; hour: number };
+	/** Take a backup before every update. */
+	backupFirst: boolean;
+}
+
+/** How a version in the history ended up. */
+export type UpdateOutcome = 'running' | 'replaced' | 'rolled-back' | 'failed';
+
+/**
+ * One version this install ran, newest first (`GET /api/update/history`). `GET /api/update/history/:id/log`
+ * answers its update's `LogPage`.
+ */
+export interface UpdateHistoryEntry {
+	id: string;
+	version: string;
+	installedAt: string;
+	/** Who pressed Update; null for an automatic install. */
+	by: string | null;
+	/** How long the update took; null when it was not an update (the first install). */
+	durationMs: number | null;
+	outcome: UpdateOutcome;
+	/** Why it failed or was rolled back. */
+	error?: string;
+	/**
+	 * What `POST /api/update/rollback` with this version does: `swap` starts its image on today's data,
+	 * `restore` restores the backup taken before the update that replaced it (writes since are lost), `none`
+	 * cannot go back to it (the running version or no backup left).
+	 */
+	rollback: 'swap' | 'restore' | 'none';
 }
