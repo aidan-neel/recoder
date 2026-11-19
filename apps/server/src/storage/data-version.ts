@@ -1,7 +1,8 @@
 /** The schema this release writes, and the oldest schema it can migrate in place. */
 export const DATA_VERSION = 1;
 
-const OLDEST_DATA_VERSION = 0;
+/** The oldest data version this release can open: 0 is data the releases before the ledger wrote. */
+export const OLDEST_DATA_VERSION = 0;
 
 export function assertReadableDataVersion(version: number): void {
 	if (!Number.isSafeInteger(version) || version < OLDEST_DATA_VERSION)

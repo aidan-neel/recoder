@@ -13,7 +13,8 @@
 		"apps/server": {
 			"entry": [
 				"tests/**/*.test.ts",
-				"tests/integration/publication-lifetime.ts"
+				"tests/integration/publication-lifetime.ts",
+				"src/cli/upgrade/release-manifest.ts"
 			],
 			"project": [
 				"src/**/*.ts",

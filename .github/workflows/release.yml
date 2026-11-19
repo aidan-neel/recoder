@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
 
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
 jobs:
   build:
     name: Build the recoder binaries
@@ -18,16 +21,19 @@ jobs:
         with:
           bun-version-file: package.json
       - run: bun install --frozen-lockfile
-      - name: Build one binary per platform
+      - name: Build one binary per platform, stamped with the tag's version
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
           mkdir -p dist
           for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
-            bun build --compile --minify --target="bun-$target" apps/server/src/cli/main.ts --outfile "dist/recoder-$target"
+            bun build --compile --minify --target="bun-$target" \
+              --define "process.env.RECODER_VERSION:'$VERSION'" \
+              apps/server/src/cli/main.ts --outfile "dist/recoder-$target"
           done
           cd dist && sha256sum recoder-* > SHA256SUMS
       - name: Smoke-test the Linux binary
         run: |
-          dist/recoder-linux-x64 --version
+          test "$(dist/recoder-linux-x64 --version)" = "${GITHUB_REF_NAME#v}"
           dist/recoder-linux-x64 skill show > /dev/null
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -35,20 +41,101 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  image:
+    name: Build and sign the image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      index_digest: ${{ steps.push.outputs.digest }}
+      platforms: ${{ steps.digests.outputs.platforms }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Read the version and channel from the tag
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          case "$GITHUB_REF_NAME" in
+            *-*) echo "CHANNEL=beta" >> "$GITHUB_ENV" ;;
+            *) echo "CHANNEL=stable" >> "$GITHUB_ENV" ;;
+          esac
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          build-args: RECODER_VERSION=${{ env.VERSION }}
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:${{ env.CHANNEL }}
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+      - name: Sign the image index (keyless, through GitHub's OIDC)
+        run: cosign sign --yes "${IMAGE}@${{ steps.push.outputs.digest }}"
+      - id: digests
+        name: Read the per-platform digests the index points at
+        run: |
+          platforms="$(docker buildx imagetools inspect "${IMAGE}@${{ steps.push.outputs.digest }}" --json |
+            jq -c '[.manifests[] | select(.platform.os == "linux")]
+                   | map({ key: "\(.platform.os)/\(.platform.architecture)", value: .digest })
+                   | from_entries')"
+          echo "platforms=$platforms" >> "$GITHUB_OUTPUT"
+
   publish:
     name: Publish the release
-    needs: build
+    needs: [build, image]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: write
+      id-token: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: binaries
           path: dist
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Read the release's notes and time for the manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --json body,publishedAt > release-view.json
+          jq -r .body release-view.json > release-notes.md
+          echo "RELEASED_AT=$(jq -r .publishedAt release-view.json)" >> "$GITHUB_ENV"
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3
+      - name: Write and sign the release manifest
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_IMAGE: ${{ env.IMAGE }}
+          RELEASE_INDEX_DIGEST: ${{ needs.image.outputs.index_digest }}
+          RELEASE_PLATFORMS: ${{ needs.image.outputs.platforms }}
+          RELEASE_NOTES_FILE: release-notes.md
+          RELEASE_OUT: release.json
+        run: |
+          bun apps/server/src/cli/upgrade/release-manifest.ts
+          cosign sign-blob --bundle release.json.sig --yes release.json
+      - name: Attach the manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$GITHUB_REF_NAME" release.json release.json.sig
