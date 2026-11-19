@@ -13,7 +13,6 @@ import { useAction } from '@/lib/shell/use-action';
 
 import { Age } from '@/components/common/age';
 import { CancelReviewButton } from '@/components/common/cancel-review';
-import { ReviewButton } from '@/components/pull/run-banner';
 
 interface BugsToolsProps {
 	view: BugsView;
@@ -151,24 +150,18 @@ function RunTools({ run }: { run: RunView }) {
 }
 
 /**
- * The Review tab's tools in the tab row: the facts of the review being shown,
- * posting it on the pull request, and reviewing again. Reviewing again stays
- * when the findings did not load, so a done review can always run once more.
- * While a review is queued, runs or is paused, its own tools take their place.
+ * The Review tab's tools in the tab row: the facts of the review being shown and posting it on the pull request.
+ * Reviewing again is the header's Review button. While a review is queued, runs or is paused, its own tools take
+ * their place.
  */
 export function BugsTools({ view, run }: BugsToolsProps) {
 	if (isLive(run.phase)) return <RunTools run={run} />;
-	if (view.phase !== 'ready' && view.phase !== 'failed') return null;
+	if (view.phase !== 'ready') return null;
 
 	return (
 		<>
-			{view.phase === 'ready' ? (
-				<>
-					<ReviewFacts view={view} />
-					<PostReview view={view} />
-				</>
-			) : null}
-			<ReviewButton run={run} again />
+			<ReviewFacts view={view} />
+			<PostReview view={view} />
 		</>
 	);
 }

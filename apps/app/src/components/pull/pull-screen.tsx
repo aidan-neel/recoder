@@ -34,7 +34,7 @@ import { MergeActions, MergeFacts } from './merge-facts';
 import { PullHeader } from './pull-header';
 import { PullNotice } from './pull-notice';
 import { PullTabs } from './pull-tabs';
-import { ReviewButton } from './run-banner';
+import { ReviewButton, reviewIsNext } from './review-button';
 
 interface PullScreenProps {
 	repoId: string;
@@ -52,20 +52,19 @@ function ReviewTabTools() {
 }
 
 /**
- * Review, while there is none or it is out of date, then the menu and the merge button. `r` presses Review.
- * The merge button is the page's primary only once nothing is open: with findings to read or a review running it
- * steps back to an outline, so the one primary button in view is the next step.
+ * The page's one Review button, then the menu and the merge button. The merge button is the page's primary only
+ * once nothing is left to do first: with a review to run, findings to read or a review running it steps back to an
+ * outline, so the one primary button in view is the next step.
  */
 function PullActions({ page }: { page: PullPage }) {
 	const run = useRunView();
 	const merge = useMergeView();
 	const bugs = useBugsView();
-	const settled = !isLive(run.phase) && !(bugs.phase === 'ready' && bugs.open.length > 0);
-	const reviewable = run.phase === 'none' || run.phase === 'cancelled' || (run.phase === 'passed' && run.outdated);
+	const settled = !isLive(run.phase) && !reviewIsNext(run) && !(bugs.phase === 'ready' && bugs.open.length > 0);
 
 	return (
 		<>
-			{reviewable ? <ReviewButton run={run} again={false} shortcut variant="outline" /> : null}
+			<ReviewButton run={run} />
 			<MergeActions page={page} merge={merge} settled={settled} />
 		</>
 	);

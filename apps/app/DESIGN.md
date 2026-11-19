@@ -336,7 +336,15 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   has run (`5:01`, tabular figures, so the tab keeps its width); a queued,
   paused, failed or out-of-date review shows one glyph with its word as a
   tooltip (failed in the danger tone, out of date in medium); a done review
-  shows its open bugs as the count. The tabs:
+  shows its open bugs as the count. The page has one control that starts a
+  review: the Review split button at the end of the title's row, before the
+  menu and the merge button, on every tab. It reads Review until a review has
+  run and Review again after; `r` presses it, its menu offers Spark, and on a
+  failed review at the same head it continues from where the review stopped.
+  It is the region's primary, with its `r` keycap, while a review is the next
+  step (none yet, cancelled, failed, out of date) and an outline otherwise.
+  While a review is queued, runs or is paused it is gone, and the Review tab's
+  row holds Pause and Cancel. Nothing else on the page starts a review. The tabs:
   - **Changes**: one reading column of diffs, as Capy Desktop shows a pull
     request; nothing sits beside it. See Changes below.
   - **Summary**: what the change does (clamped), the order to read the
@@ -375,8 +383,8 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
     action, so no button moves when a bug is posted. The tab runs the page's
     full width on the header's gutters, so a bug's chevron, its evidence and
     its votes end on the header's edge. The tab row carries the
-    review's own facts as badges (commit, when, model, duration), posting the
-    review and Review again. While a review is queued, runs or is paused, there is
+    review's own facts as badges (commit, when, model, duration) and posting the
+    review. While a review is queued, runs or is paused, there is
     no box: its four steps are rows in the bugs' row language (the same
     hairlines, title, badge row and chevron lane), with a 16px glyph lane
     before the name: a check once done, a spinner while it runs, a ring while
@@ -396,13 +404,15 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
     before this one stay to read, named "Previous review" with its commit and
     time, stepped back and with nothing to act on, until the new review
     replaces them. A failed, out-of-date, cancelled or missing
-    review gets a banner with its next step (Try again, Review). Old
+    review gets a banner that says where it stands (a failure adds why, the
+    steps it kept and Open settings when the server offers it); the header's
+    Review button is its next step. Old
     `?tab=bugs` links open this tab.
   - **Commits**.
     The merge strip under the title shows checks and mergeability and holds the
     merge button. It merges at the head commit the page shows, and never with
-    admin rights. The button is the primary only when no finding is open and no
-    review runs; otherwise it is an outline, so the page's one primary is the
+    admin rights. The button is the primary only when no review is due, no finding
+    is open and no review runs; otherwise it is an outline, so the page's one primary is the
     next step. Its checks open under it as a grid of rows (glyph and name;
     the forge link shows on hover) in a scroll area capped at about eight
     rows: failed first, then running, then passed, with skipped checks folded
