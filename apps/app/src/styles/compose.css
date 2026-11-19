@@ -1,46 +1,48 @@
-/* ───────── New: one field, a few pull requests to pick from ───────── */
+/* ───────── New: the choices fill the page, the composer is docked at its foot ───────── */
 /*
- * The field sits a little above the middle: its centre lands near 42% of the
- * page under the top bar (the title row over it and the box are about 170px
- * tall), and the list below grows down without moving it.
+ * Two parts share one centred column: the lists, which scroll, and the dock, which stays. The dock is outside the
+ * scroller, so the composer's "/" menu opens over the lists and nothing clips it.
  */
 .compose {
 	display: flex;
 	min-height: 0;
 	flex: 1;
 	flex-direction: column;
-	align-items: center;
+}
+.compose-scroll {
+	min-height: 0;
+	flex: 1;
 	overflow-y: auto;
-	padding: max(48px, calc(42vh - 104px)) 24px 48px;
+	padding: 20px 24px 24px;
+}
+.compose-dock {
+	flex-shrink: 0;
+	padding: 0 24px 20px;
 }
 .compose-column {
 	display: flex;
 	width: 100%;
-	max-width: 720px;
+	max-width: 760px;
 	flex-direction: column;
+	margin-inline: auto;
 }
 
 /*
- * The title over the field's text edge (the large composer's text starts 16px in; the title's ink, 2px past its
- * box), the mode switch over the send. Both centre on one 28px line.
+ * The find field's box starts 8px in from the column, so its glyph sits on the rows' marks; the repository filter
+ * has no box at rest, so its words end on the rows' last lane.
  */
-.compose-head {
+.compose-find {
 	display: flex;
 	min-width: 0;
 	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 0 4px 12px 14px;
+	gap: 8px;
+	padding: 0 3px 0 8px;
 }
-.compose-title {
-	margin: 0;
-	color: var(--text-primary);
-	font-size: 20px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-	line-height: 28px;
+.compose-find-field {
+	min-width: 0;
+	flex: 1;
 }
-.compose-mode {
+.compose-find-scope {
 	flex-shrink: 0;
 }
 
@@ -71,6 +73,7 @@
 .bar-trigger .bar-trigger-chevron {
 	width: 12px;
 	height: 12px;
+	flex-shrink: 0;
 	color: var(--text-faint);
 }
 /* The review speeds: wide enough that each one's line on what it trades wraps once at most. */
@@ -118,47 +121,94 @@
 }
 
 /*
- * Not reviewed yet: row boxes start 8px in and their content 16px, in the
- * composer's lanes. The mark is 14px with a 6px gap, like the forge mark in
- * the repository trigger, so the titles start on the repository name's edge.
+ * The lists: a row's box spans the column and its content starts 16px in, on the edge of the composer's text. The
+ * mark is 16px with a 12px gap, and each row ends in the same lanes: the fact, the size, then the choice mark.
  */
-.compose-suggestions {
+.compose-groups {
+	--menu-highlight-radius: var(--radius-row);
+
 	display: flex;
 	flex-direction: column;
-	padding: 24px 8px 0;
 }
-.compose-suggestions .section-label {
-	padding: 0 8px 4px;
+.compose-group {
+	display: flex;
+	flex-direction: column;
+	padding-top: 22px;
 }
-.suggestion-row {
-	height: 32px;
-	align-items: center;
+.compose-group .section-label {
+	display: flex;
 	gap: 6px;
-	padding: 0 8px;
-	color: var(--text-secondary);
-	font-size: var(--font-size-body);
+	padding: 0 16px 6px;
 }
-.suggestion-row:hover,
-.suggestion-row[aria-pressed='true'] {
-	color: var(--text-primary);
+.compose-group-count {
+	color: var(--text-ghost);
+	font-variant-numeric: tabular-nums;
 }
+.compose-row {
+	--row-button-radius: var(--radius-row);
 
-/* The mark's stroke starts 1px inside its box; the nudge puts its ink on the text's edge without moving the title. */
-.suggestion-row .pull-mark {
-	width: 14px;
-	height: 14px;
-	translate: -1px 0;
+	height: 48px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 12px;
+	padding: 0 12px 0 16px;
+	border-radius: var(--radius-row);
+	text-decoration: none;
 }
-
-/* The loading row's glyph is the mark's size, so its bar starts where the title lands. */
-.suggestion-row > [skullet-bar]:first-child {
-	width: 14px;
-	height: 14px;
+.compose-row-glyph {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	color: var(--text-faint);
 }
-.suggestion-title {
+.compose-row-text {
+	display: flex;
 	min-width: 0;
 	flex: 1;
+	flex-direction: column;
+	gap: 0;
+}
+.compose-row-title {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 8px;
+}
+.compose-row-name {
+	min-width: 0;
 	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+	line-height: 20px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+.compose-row .diff-stat {
+	width: 84px;
+	flex-shrink: 0;
+	justify-content: flex-end;
+}
+.compose-row [data-ui='pill'] {
+	flex-shrink: 0;
+}
+
+/* The choice mark: a ring that fills to a dot's width when its row is the pull request chosen. */
+.choice-mark {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	box-shadow: inset 0 0 0 1.5px var(--line-focus);
+	transition: box-shadow var(--dur-hover) ease-out;
+}
+.compose-row[aria-pressed='true'] .choice-mark {
+	box-shadow: inset 0 0 0 5px var(--text-primary);
+}
+
+.compose-empty {
+	margin: 0;
+	padding: 28px 16px 0;
+	color: var(--text-faint);
+	font-size: var(--font-size-label);
 }

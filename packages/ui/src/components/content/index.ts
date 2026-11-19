@@ -7,5 +7,11 @@ export { whenIdle } from './idle';
 export { langForPath } from './languages';
 export { Markdown } from './markdown';
 export { prepareMarkdown, StaticMarkdown } from './markdown-render';
-export { type LinkOverride, type MarkdownCodeParts, type MarkdownFence } from './markdown-parts';
+export {
+	InlineCode,
+	type InlineCodeComponent,
+	type LinkOverride,
+	type MarkdownCodeParts,
+	type MarkdownFence
+} from './markdown-parts';
 export { StaticCodeBlock } from './static-code-block';

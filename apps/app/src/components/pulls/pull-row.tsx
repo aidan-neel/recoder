@@ -14,15 +14,13 @@ import { memo, useCallback } from 'react';
 import { useApi } from '@/lib/api/client';
 import type { PullRow as PullRowView } from '@/lib/pulls/types';
 import { copyLink } from '@/lib/shell/copy-link';
-import { author } from '@/lib/shell/format';
 import { useIntent } from '@/lib/shell/intent';
 import { pullHref } from '@/lib/shell/routes';
 
-import { Age } from '@/components/common/age';
 import { DiffStat } from '@/components/common/diff-stat';
 import { Link } from '@/components/common/link';
 import { PullMark } from '@/components/common/pull-mark';
-import { RepoLabel } from '@/components/common/repo-label';
+import { PullMeta } from '@/components/common/pull-meta';
 
 import { PullStatus } from './pull-status';
 
@@ -74,7 +72,6 @@ function RowMenu({ row, onReview }: Pick<PullRowProps, 'row' | 'onReview'>) {
  */
 export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent, showRepo = true }: PullRowProps) {
 	const { base } = useApi();
-	const by = author(row.author);
 	const intent = useIntent(useCallback(() => onIntent?.(row), [onIntent, row]));
 
 	return (
@@ -89,11 +86,7 @@ export const PullRow = memo(function PullRow({ row, starting, onReview, onIntent
 					</RowButton>
 					<span className="pull-row-number">#{row.number}</span>
 				</div>
-				<div className="meta pull-row-meta">
-					{by.name}
-					{showRepo ? <RepoLabel className="meta-sep" name={row.repoName} forge={row.repoForge} /> : null}
-					<Age at={row.activeAt} className="meta-sep" />
-				</div>
+				<PullMeta row={row} showRepo={showRepo} />
 			</div>
 			<DiffStat additions={row.additions} deletions={row.deletions} />
 			<div className="pull-row-menu">

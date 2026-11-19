@@ -1,11 +1,11 @@
 'use client';
 
 import { Composer, ComposerSend, SegmentedControl, focusComposerField, type ComposerNote } from '@recoder/ui';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { ComposeMode } from '@/lib/compose/compose-mode';
 import { REVIEW_NEEDS_PULL } from '@/lib/compose/compose-target';
-import type { ComposeView } from '@/lib/compose/types';
+import type { ComposeList, ComposeRepo, ComposeView } from '@/lib/compose/types';
 import { useCompose } from '@/lib/compose/use-compose';
 import { useImageDraft } from '@/lib/compose/use-image-draft';
 import { useOpenStarted } from '@/lib/compose/use-open-started';
@@ -15,34 +15,40 @@ import { useRepoSkills } from '@/lib/skills/use-repo-skills';
 
 import { ComposerModels } from '@/components/ask/model-menu';
 import { Crumbs } from '@/components/common/crumbs';
+import { FindField } from '@/components/common/find-field';
 import { Page } from '@/components/common/page';
 import { RepoBrowser } from '@/components/connections/repo-browser';
+import { RepoSelect } from '@/components/pulls/pulls-bar';
 
 import { AttachImages } from './attach-images';
+import { ChatList } from './chat-list';
 import { PickerSkeleton } from './picker-skeleton';
+import { PullChoices } from './pull-choices';
 import { PullPicker } from './pull-picker';
 import { RepoPicker } from './repo-picker';
-import { Suggestions } from './suggestions';
 
 const MODES: { value: ComposeMode; label: string }[] = [
 	{ value: 'review', label: 'Review' },
 	{ value: 'chat', label: 'Chat' }
 ];
 
+/** The most rows the docked field grows to before it scrolls, so the list over it keeps its room. */
+const MAX_ROWS = 8;
+
 /**
- * New: one field, a little above the middle of the page. In Review mode the
- * pull request is a choice, made in the composer's bar or from the list
- * below, and the field is the brief: what the review should look at. A
- * `#214` or a link typed or pasted into it moves into the choice. Enter
- * starts the review of the choice with the brief, which may be empty, and
- * opens the pull request. In Chat mode the field takes anything about the
- * repository; Enter opens the chat. The title and the mode sit over the
- * field; the repository, the pull request, images and models sit in its bar,
- * and in Review mode the model menu also holds the review's speed. Images go
- * with the brief or the chat's first message, and "/" offers the
- * repository's skills, a chosen pull request's head included. The pull requests
- * with no review yet sit below; a click chooses one and puts the caret in
- * the field.
+ * New: the choices fill the page and the composer is docked at its foot. In
+ * Review mode the page lists the open pull requests, those with no review
+ * yet first; a click chooses one and puts the caret in the composer, whose
+ * field is the brief: what the review should look at. A `#214` or a link
+ * typed or pasted into the brief, or pasted into the find field, moves into
+ * the choice. Enter starts the review of the choice with the brief, which
+ * may be empty, and opens the pull request. In Chat mode the page lists the
+ * newest chats, the field takes anything about the repository, and Enter
+ * opens the chat. The mode sits in the page's bar; the repository, the pull
+ * request, images and models sit in the composer's bar, and in Review mode
+ * the model menu also holds the review's speed. Images go with the brief or
+ * the chat's first message, and "/" offers the repository's skills, a chosen
+ * pull request's head included.
  */
 export function ComposeScreen() {
 	const compose = useCompose();
@@ -50,7 +56,7 @@ export function ComposeScreen() {
 	const started = useOpenStarted(compose.clear);
 	const [error, setError] = useState<string | null>(null);
 	const [browsing, setBrowsing] = useState(false);
-	const column = useRef<HTMLDivElement>(null);
+	const dock = useRef<HTMLDivElement>(null);
 	const chat = compose.mode === 'chat';
 	const skills = useRepoSkills(skillSource(compose));
 
@@ -80,12 +86,15 @@ export function ComposeScreen() {
 		start(() => compose.submit(images.uploads()));
 	}
 
-	/** A suggestion chooses its pull request, in Review mode, and puts the caret in the field for the brief. */
+	/** A pull request chosen from the page, from a row or a link in the find field, puts the caret in the field for the brief. */
+	useEffect(() => {
+		if (compose.pick) focusComposerField(dock.current?.querySelector('[data-ui="composer"]') ?? null);
+	}, [compose.pick]);
+
+	/** A row chooses its pull request. */
 	function pickRow(row: PullRow): void {
 		setError(null);
-		compose.setMode('review');
 		compose.choose(row);
-		focusComposerField(column.current?.querySelector('[data-ui="composer"]') ?? null);
 	}
 
 	/** Closing the repository dialog reads the list again, so a repository just added is there to pick. */
@@ -111,74 +120,106 @@ export function ComposeScreen() {
 	}
 
 	return (
-		<Page start={<Crumbs parts={[{ label: chat ? 'New chat' : 'New review' }]} />}>
+		<Page
+			start={<Crumbs parts={[{ label: chat ? 'New chat' : 'New review' }]} />}
+			end={
+				<SegmentedControl aria-label="What to start" value={compose.mode} options={MODES} onValueChange={chooseMode} />
+			}
+		>
 			<div className="compose">
-				<div ref={column} className="compose-column">
-					<div className="compose-head">
-						<h1 className="compose-title">Recoder</h1>
-						<SegmentedControl
-							aria-label="What to start"
-							className="compose-mode"
-							value={compose.mode}
-							options={MODES}
-							onValueChange={chooseMode}
+				<div className="compose-scroll">
+					<div className="compose-column">
+						<Finder list={compose.list} repos={compose.repos} chat={chat} />
+						{chat ? (
+							<ChatList list={compose.list} />
+						) : (
+							<PullChoices
+								list={compose.list}
+								loading={compose.pullsLoading}
+								picked={compose.pick?.target ?? null}
+								onPick={pickRow}
+							/>
+						)}
+					</div>
+				</div>
+				<div ref={dock} className="compose-dock">
+					<div className="compose-column">
+						<Composer
+							size="lg"
+							maxRows={MAX_ROWS}
+							autoFocus
+							spellCheck={chat}
+							label={chat ? 'A question about the repository' : 'The brief: what the review should look at'}
+							placeholder={placeholderFor(compose)}
+							value={compose.text}
+							onValueChange={edit}
+							onSubmit={submit}
+							invalid={chat && compose.overBy > 0}
+							linkFacts={compose.linkFacts}
+							note={noteFor(compose, error ?? images.refusal)}
+							onFiles={images.add}
+							images={images.images}
+							onRemoveImage={images.remove}
+							skills={skills}
+							tools={<AttachImages onAttach={images.add} />}
+							targets={
+								<>
+									{compose.reposLoading ? (
+										<PickerSkeleton width={140} />
+									) : (
+										<RepoPicker
+											repos={compose.repos}
+											repoId={compose.repoId}
+											onPick={compose.setRepoId}
+											onAdd={() => setBrowsing(true)}
+										/>
+									)}
+									{chat ? null : <PullChoice compose={compose} />}
+								</>
+							}
+							trailing={
+								<ComposerModels speed={chat ? undefined : { speed: compose.speed, onSpeedChange: compose.setSpeed }} />
+							}
+							action={
+								<ComposerSend
+									label={chat ? 'Start the chat' : 'Start the review'}
+									disabled={!compose.ready}
+									pending={started.opening}
+									onClick={submit}
+								/>
+							}
 						/>
 					</div>
-					<Composer
-						size="lg"
-						minRows={3}
-						autoFocus
-						spellCheck={chat}
-						label={chat ? 'A question about the repository' : 'The brief: what the review should look at'}
-						placeholder={placeholderFor(compose)}
-						value={compose.text}
-						onValueChange={edit}
-						onSubmit={submit}
-						invalid={chat && compose.overBy > 0}
-						linkFacts={compose.linkFacts}
-						note={noteFor(compose, error ?? images.refusal)}
-						onFiles={images.add}
-						images={images.images}
-						onRemoveImage={images.remove}
-						skills={skills}
-						tools={<AttachImages onAttach={images.add} />}
-						targets={
-							<>
-								{compose.reposLoading ? (
-									<PickerSkeleton width={140} />
-								) : (
-									<RepoPicker
-										repos={compose.repos}
-										repoId={compose.repoId}
-										onPick={compose.setRepoId}
-										onAdd={() => setBrowsing(true)}
-									/>
-								)}
-								{chat ? null : <PullChoice compose={compose} />}
-							</>
-						}
-						trailing={
-							<ComposerModels speed={chat ? undefined : { speed: compose.speed, onSpeedChange: compose.setSpeed }} />
-						}
-						action={
-							<ComposerSend
-								label={chat ? 'Start the chat' : 'Start the review'}
-								disabled={!compose.ready}
-								pending={started.opening}
-								onClick={submit}
-							/>
-						}
-					/>
-					<Suggestions
-						rows={compose.suggestions}
-						loading={compose.pullsLoading}
-						picked={chat ? null : (compose.pick?.target ?? null)}
-						onPick={pickRow}
-					/>
 				</div>
 			</div>
 			<RepoBrowser open={browsing} onOpenChange={browse} />
 		</Page>
+	);
+}
+
+interface FinderProps {
+	list: ComposeList;
+	repos: ComposeRepo[];
+	/** True in Chat mode, where the lists hold chats. */
+	chat: boolean;
+}
+
+/** The find field over the lists, and the repository filter once there are two repositories to choose between. */
+function Finder({ list, repos, chat }: FinderProps) {
+	return (
+		<div className="compose-find">
+			<FindField
+				className="compose-find-field"
+				label={chat ? 'Find a chat' : 'Find a pull request, or paste a link'}
+				placeholder={chat ? 'Find a chat' : 'Find a pull request, or paste a link'}
+				query={list.query}
+				onQueryChange={list.setQuery}
+				onSubmit={list.settleQuery}
+			/>
+			{repos.length > 1 ? (
+				<RepoSelect className="compose-find-scope" repos={repos} repoId={list.repoId} onChange={list.setRepoId} />
+			) : null}
+		</div>
 	);
 }
 

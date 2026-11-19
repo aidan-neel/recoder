@@ -2,7 +2,7 @@
 
 import type { FileDiff } from '@recoder/shared';
 import { Button, Skeleton, StatusNotice } from '@recoder/ui';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import type { BugView } from '@/lib/bugs/types';
@@ -31,6 +31,10 @@ interface ChangesTabProps {
 	repoId: string;
 	number: number;
 	mode: ChangesMode;
+	/** A file to bring to the top once its card is drawn, such as one pressed in the Summary; null for none. */
+	fileToOpen: string | null;
+	/** Called once `fileToOpen` is in view, so the tab does not return to it later. */
+	onFileOpened: () => void;
 }
 
 /** The open bugs of each file. */
@@ -73,7 +77,7 @@ function DiffSkeleton() {
  * into the parts the review planned. `j` and `k` step through the files and
  * `v` marks the one being read as viewed.
  */
-export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
+export function ChangesTab({ repoId, number, mode, fileToOpen, onFileOpened }: ChangesTabProps) {
 	const { base } = useApi();
 	const diff = usePullDiffView();
 	const tree = useFileTree();
@@ -98,6 +102,13 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 
 		if (next) scrollToFile(scroller.current, next);
 	}
+
+	useEffect(() => {
+		if (!fileToOpen || !files) return;
+
+		scrollToFile(scroller.current, fileToOpen);
+		onFileOpened();
+	}, [fileToOpen, files, onFileOpened]);
 
 	useKeys({
 		j: () => step(1),

@@ -126,6 +126,20 @@ describe('MarkdownProse', () => {
 		expect(html).not.toContain('markdown-tail');
 		expect(html).toContain(`<p>${source.replace("'", '&#x27;')}</p>`);
 	});
+
+	test('a caller draws the inline code of plain paragraphs and of parsed tables, and fenced code stays a block', () => {
+		const Badge = ({ code }: { code: string }) => <kbd>{code}</kbd>;
+		const plain = renderToStaticMarkup(<MarkdownProse inlineCode={Badge}>{'Renew in `lease.ts` now.'}</MarkdownProse>);
+
+		const parsed = renderToStaticMarkup(
+			<MarkdownProse inlineCode={Badge}>{'| File |\n| --- |\n| `lease.ts` |\n\n```\nlease.ts\n```'}</MarkdownProse>
+		);
+
+		expect(plain).toContain('<kbd>lease.ts</kbd>');
+		expect(parsed).toContain('<td><kbd>lease.ts</kbd></td>');
+		expect(parsed.match(/<kbd>/g)).toHaveLength(1);
+		expect(parsed).toContain('data-ui="code-block"');
+	});
 });
 
 /** Runs idle callbacks at once while `run` runs, so a prepare happens before the test reads the cache. */

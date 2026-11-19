@@ -41,7 +41,7 @@
 			"outputLogs": "errors-only"
 		},
 		"@recoder/site#check": {
-			"dependsOn": ["^build"],
+			"dependsOn": ["^build", "build"],
 			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/src/**", "$TURBO_ROOT$/apps/app/src/**"],
 			"outputLogs": "errors-only"
 		},
@@ -57,7 +57,7 @@
 			"outputLogs": "errors-only"
 		},
 		"@recoder/app#check": {
-			"dependsOn": ["^build"],
+			"dependsOn": ["^build", "build"],
 			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/src/**"],
 			"outputLogs": "errors-only"
 		},

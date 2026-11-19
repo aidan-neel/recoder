@@ -5,10 +5,9 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useListStore } from '../api/client';
-import { queryTerms } from '../shell/search';
-import { inFilter, matchesQuery, shortRepoName } from './pull-rows';
+import { inFilter, shortRepoName } from './pull-rows';
 import type { PullFilter, PullListView, PullRow, RepoOption } from './types';
-import { useRowEntries, useWatchList, type RowEntry } from './use-rows';
+import { narrowEntries, useRowEntries, useWatchList, type RowEntry } from './use-rows';
 
 const FILTERS: PullFilter[] = ['all', 'needs-review', 'bugs', 'ready'];
 
@@ -50,11 +49,7 @@ export function usePullList(): PullListView {
 
 	const { repos, pullList, filter, repoId, query } = data;
 
-	const narrowed = useMemo(() => {
-		const terms = queryTerms(query);
-
-		return entries.filter(({ row }) => (!repoId || row.repoId === repoId) && matchesQuery(row, terms));
-	}, [entries, repoId, query]);
+	const narrowed = useMemo(() => narrowEntries(entries, repoId, query), [entries, repoId, query]);
 
 	const rows = useMemo(
 		() => narrowed.filter(({ listed, row }) => inFilter(filter, row, listed)).map(({ row }) => row),

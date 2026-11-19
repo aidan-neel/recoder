@@ -3,6 +3,7 @@ import type { Components, ExtraProps } from 'react-markdown';
 
 import { CodeBlock } from './code-block';
 import { codeSource } from './code-block-view';
+import { dedent, guessLanguage } from './code-shape';
 import { StaticCodeBlock } from './static-code-block';
 
 type HastElement = NonNullable<ExtraProps['node']>;
@@ -47,23 +48,48 @@ function readFence(node: HastElement | undefined): MarkdownFence | null {
 	return { code: textOf(code), lang: fenceLang(code), meta: typeof meta === 'string' ? meta : '' };
 }
 
+/**
+ * The fence a `pre` holds as the kit's blocks draw it: without the
+ * indentation its lines share, and in the language its text shows when the
+ * fence names none.
+ */
+function readShapedFence(node: HastElement | undefined): Pick<MarkdownFence, 'code' | 'lang'> | null {
+	const fence = readFence(node);
+
+	if (!fence) return null;
+
+	const code = dedent(codeSource(fence.code));
+
+	return { code, lang: fence.lang ?? guessLanguage(code) };
+}
+
 /** Fenced code: the kit's code block, highlighted in the fence's language once the highlighter loads, with a copy button. */
 function Fence({ node }: ComponentProps<'pre'> & ExtraProps) {
-	const fence = readFence(node);
+	const fence = readShapedFence(node);
 
 	return fence ? <CodeBlock code={fence.code} lang={fence.lang} copy /> : null;
 }
 
 /** Fenced code rendered on the server, its colors already in the HTML. */
 function StaticFence({ node }: ComponentProps<'pre'> & ExtraProps) {
-	const fence = readFence(node);
+	const fence = readShapedFence(node);
 
-	return fence ? <StaticCodeBlock source={codeSource(fence.code)} lang={fence.lang} copy /> : null;
+	return fence ? <StaticCodeBlock source={fence.code} lang={fence.lang} copy /> : null;
 }
 
-/** Inline code. Fenced code never reaches here: `Fence` renders it whole. */
-function InlineCode({ children }: ComponentProps<'code'>) {
+/** Inline code as the kit draws it. Fenced code never reaches here: `Fence` renders it whole. */
+export function InlineCode({ children }: ComponentProps<'code'>) {
 	return <code className="inline-code">{children}</code>;
+}
+
+/** A caller's drawing of inline code, such as a badge for a file name. It renders `InlineCode` for code it leaves alone. */
+export type InlineCodeComponent = ComponentType<{ code: string }>;
+
+/** The `code` part that draws plain inline code through `Custom`; code that holds more than text keeps the kit's element. */
+function inlineCodePart(Custom: InlineCodeComponent): NonNullable<Components['code']> {
+	return function CustomInlineCode({ children }: ComponentProps<'code'>) {
+		return typeof children === 'string' ? <Custom code={children} /> : <InlineCode>{children}</InlineCode>;
+	};
 }
 
 /**
@@ -116,7 +142,7 @@ export interface MarkdownCodeParts {
 	/** Draws a fenced block in place of the kit's code block. It may be an async server component. */
 	fence?: ComponentType<MarkdownFence>;
 	/** Draws inline code in place of the kit's `code` element. */
-	inline?: ComponentType<{ code: string }>;
+	inline?: InlineCodeComponent;
 }
 
 const STATIC_CODE_PARTS = new WeakMap<MarkdownCodeParts, Components>();
@@ -138,10 +164,7 @@ export function staticPartsWithCode(code: MarkdownCodeParts): Components {
 		};
 	}
 
-	if (CustomInline) {
-		parts.code = ({ children }: ComponentProps<'code'>) =>
-			typeof children === 'string' ? <CustomInline code={children} /> : <InlineCode>{children}</InlineCode>;
-	}
+	if (CustomInline) parts.code = inlineCodePart(CustomInline);
 
 	STATIC_CODE_PARTS.set(code, parts);
 
@@ -174,6 +197,26 @@ export function partsWithLinkOverride({ prefix, component: Custom }: LinkOverrid
 
 	byPrefix.set(prefix, parts);
 	OVERRIDE_PARTS.set(Custom, byPrefix);
+
+	return parts;
+}
+
+const INLINE_CODE_PARTS = new WeakMap<Components, WeakMap<InlineCodeComponent, Components>>();
+
+/**
+ * `base` with its inline code drawn by `Custom`. One table per pair, kept, because rendered text is cached by its
+ * table's identity.
+ */
+export function partsWithInlineCode(base: Components, Custom: InlineCodeComponent): Components {
+	const byComponent = INLINE_CODE_PARTS.get(base) ?? new WeakMap<InlineCodeComponent, Components>();
+	const kept = byComponent.get(Custom);
+
+	if (kept) return kept;
+
+	const parts: Components = { ...base, code: inlineCodePart(Custom) };
+
+	byComponent.set(Custom, parts);
+	INLINE_CODE_PARTS.set(base, byComponent);
 
 	return parts;
 }

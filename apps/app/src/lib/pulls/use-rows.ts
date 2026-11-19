@@ -7,7 +7,8 @@ import type { PullListItem } from '@recoder/shared';
 
 import { useApi, useListStore } from '../api/client';
 import type { ListData } from './list-store';
-import { byActivity, pullKey, pullRow, type ListedPull } from './pull-rows';
+import { queryTerms } from '../shell/search';
+import { byActivity, matchesQuery, pullKey, pullRow, type ListedPull } from './pull-rows';
 import type { PullRow } from './types';
 
 /** A listed pull request with its row. */
@@ -30,6 +31,13 @@ function rowEntries(
 			return { listed, row: pullRow(listed, repos, base) };
 		})
 		.sort((a, b) => byActivity(a.row, b.row));
+}
+
+/** The entries of one repository, or of every one when `repoId` is null, whose row holds each word of `query`. */
+export function narrowEntries(entries: RowEntry[], repoId: string | null, query: string): RowEntry[] {
+	const terms = queryTerms(query);
+
+	return entries.filter(({ row }) => (!repoId || row.repoId === repoId) && matchesQuery(row, terms));
 }
 
 /** Keeps the shared list fresh while the calling screen shows. */

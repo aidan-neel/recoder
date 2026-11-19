@@ -13,6 +13,8 @@ import { createContext, use, useState, type ComponentProps, type ReactNode } fro
 
 import { fileName, lineRange } from '@/lib/chat/trail';
 
+import { RefChip } from '@/components/common/ref-chip';
+
 import { useOpenFile } from './file-reference';
 
 /** The passages a reply cites, and whether the reply is finished, so a link with no passage can be told from one still waiting for it. */
@@ -78,9 +80,8 @@ function CitationChip({
 	const [first] = files;
 
 	return (
-		<button
-			type="button"
-			className="cite-chip"
+		<RefChip
+			icon={<FileIcon path={first.path} />}
 			data-openable={openFile ? '' : undefined}
 			onClick={() => {
 				onPress?.();
@@ -88,10 +89,9 @@ function CitationChip({
 			}}
 			{...trigger}
 		>
-			<FileIcon path={first.path} />
 			<span>{fileName(first.path)}</span>
 			{files.length > 1 ? <span className="cite-more">+{files.length - 1}</span> : null}
-		</button>
+		</RefChip>
 	);
 }
 

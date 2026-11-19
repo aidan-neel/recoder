@@ -1,8 +1,9 @@
 'use client';
 
-import { ClampedText, Markdown, Pill, Skeleton } from '@recoder/ui';
+import { ClampedText, Pill, Skeleton } from '@recoder/ui';
 
 import type { BugsView, SummaryView } from '@/lib/bugs/types';
+import { shortSha } from '@/lib/files/ref-label';
 import type { RunView } from '@/lib/run/types';
 import { author } from '@/lib/shell/format';
 import { severityCounts } from '@/lib/summary/bug-tones';
@@ -10,8 +11,7 @@ import { LOADING_SUMMARY } from '@/lib/summary/loading-summary';
 
 import { Age } from '@/components/common/age';
 
-/** How many characters of a commit hash name it. */
-const SHORT_SHA = 7;
+import { SummaryProse } from './prose';
 
 interface OverviewProps {
 	summary: SummaryView;
@@ -40,7 +40,7 @@ export function Overview({ summary, run, bugs, by, loading }: OverviewProps) {
 				{shown.analysis ? (
 					<>
 						<ClampedText lines={4} className="summary-lede">
-							<Markdown>{shown.analysis}</Markdown>
+							<SummaryProse>{shown.analysis}</SummaryProse>
 						</ClampedText>
 						{loading ? <LoadingFacts /> : <OverviewFacts run={run} bugs={bugs} />}
 					</>
@@ -75,7 +75,7 @@ function OverviewFacts({ run, bugs }: Pick<OverviewProps, 'run' | 'bugs'>) {
 			{bugs.phase === 'ready' && counts.length === 0 ? <Pill tone="ok">No open bugs</Pill> : null}
 			{run.headSha ? (
 				<span className="summary-reviewed">
-					Reviewed <span className="mono">{run.headSha.slice(0, SHORT_SHA)}</span>
+					Reviewed <span className="mono">{shortSha(run.headSha)}</span>
 					{run.finishedAt ? (
 						<>
 							<span className="meta-sep" />
@@ -94,7 +94,7 @@ function Description({ text, by }: { text: string; by: string | null }) {
 		<div className="summary-description">
 			<p className="summary-description-label">{by ? `Description · ${author(by).name}` : 'Description'}</p>
 			<ClampedText lines={3}>
-				<Markdown>{text}</Markdown>
+				<SummaryProse>{text}</SummaryProse>
 			</ClampedText>
 		</div>
 	);

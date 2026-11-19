@@ -3,7 +3,7 @@
 import type { PullPage } from '@recoder/shared';
 import { Button, Skeleton } from '@recoder/ui';
 import { ArrowUpRightIcon } from '@phosphor-icons/react';
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import { useBugsView } from '@/lib/bugs/use-bugs';
@@ -112,14 +112,27 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	const { base } = useApi();
 	const view = usePullPageView();
 	const [mode, setMode] = useState<ChangesMode>('files');
+	const [fileToOpen, setFileToOpen] = useState<string | null>(null);
+	const changesHref = pullHref(base, repoId, number, 'changes');
 	const page = view.page;
 	const forge = page && page.provider !== 'local' && page.pull.url ? forgeLabel(page.provider) : null;
 
 	/** Opens the Changes tab in the guide's reading order. */
 	function openGuide(): void {
 		setMode('guide');
-		replaceAddress(pullHref(base, repoId, number, 'changes'));
+		replaceAddress(changesHref);
 	}
+
+	/** Opens the Changes tab at a changed file: the tab scrolls to it once the file's card is drawn. */
+	const openFile = useCallback(
+		(path: string) => {
+			setFileToOpen(path);
+			replaceAddress(changesHref);
+		},
+		[changesHref]
+	);
+
+	const forgetFileToOpen = useCallback(() => setFileToOpen(null), []);
 
 	const tools: Record<PullTab, ReactNode> = {
 		changes: <ChangesTabTools mode={mode} onModeChange={setMode} />,
@@ -129,8 +142,10 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	};
 
 	const bodies: Record<PullTab, ReactNode> = {
-		changes: <ChangesTab repoId={repoId} number={number} mode={mode} />,
-		summary: <SummaryTab onOpenGuide={openGuide} />,
+		changes: (
+			<ChangesTab repoId={repoId} number={number} mode={mode} fileToOpen={fileToOpen} onFileOpened={forgetFileToOpen} />
+		),
+		summary: <SummaryTab onOpenGuide={openGuide} onOpenFile={openFile} />,
 		review: <BugsTab />,
 		commits: <CommitsTab />
 	};

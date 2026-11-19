@@ -24,6 +24,12 @@ import {
 
 restoreAfterEach();
 
+/**
+ * The first test of the file starts the sandbox cold and runs real commands in it. It takes 0.7 s alone, and passed
+ * the default five seconds on a loaded CI runner.
+ */
+const COLD_SANDBOX_TIMEOUT_MS = 30_000;
+
 /** Proves the real bug with a failing grep and refutes the imagined one with a passing grep. */
 function verifierReply(user: string, last: string, realCommand: string): unknown {
 	const real = user.includes('Real bug.');
@@ -135,7 +141,8 @@ test.skipIf((await execUnavailableReason()) !== null)(
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}
-	}
+	},
+	COLD_SANDBOX_TIMEOUT_MS
 );
 
 /** Reviews a repo whose one real finding is proven by `realCommand`, and returns that finding's verification. */

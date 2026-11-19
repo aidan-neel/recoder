@@ -5,6 +5,7 @@ import { Button, Pill, Tooltip } from '@recoder/ui';
 import { ArrowUpRightIcon, ClockIcon, GitCommitIcon, TimerIcon, LightningIcon } from '@phosphor-icons/react';
 
 import type { BugsView } from '@/lib/bugs/types';
+import { shortSha } from '@/lib/files/ref-label';
 import { isLive } from '@/lib/run/run-phase';
 import type { RunView } from '@/lib/run/types';
 import { errorToast } from '@/lib/shell/notify';
@@ -73,7 +74,7 @@ function PostReview({ view }: { view: BugsView }) {
 function CommitPill({ sha }: { sha: string }) {
 	return (
 		<Pill face="code" icon={<GitCommitIcon aria-hidden />} title={sha}>
-			{sha.slice(0, 7)}
+			{shortSha(sha)}
 		</Pill>
 	);
 }
