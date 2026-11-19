@@ -63,6 +63,12 @@ const apiTokenSchema = z.preprocess(
 	z.string().min(32).max(200).optional()
 );
 
+/** Whether this install manages no TLS (`RECODER_TLS=off`); any other value means Recoder may ask Caddy. */
+const tlsModeSchema = z.preprocess((value) => (value === 'off' ? 'off' : undefined), z.literal('off').optional());
+
+/** The address Caddy's admin API answers at, from the server's point of view on the Compose network. */
+const caddyAdminSchema = z.preprocess((value) => (value === '' ? undefined : value), z.url().optional());
+
 const envSchema = z.object({
 	PORT: z.coerce.number().int().positive().default(3001),
 	HOST: z.string().default('0.0.0.0'),
@@ -93,6 +99,9 @@ const envSchema = z.object({
 	RECODER_GITLAB_CLIENT_SECRET: oauthClientSecretSchema,
 	RECODER_APP_DIR: z.string().min(1).optional(),
 	RECODER_PUBLIC_URL: publicUrlSchema,
+	RECODER_PUBLIC_IPS: z.string().optional(),
+	RECODER_TLS: tlsModeSchema,
+	RECODER_CADDY_ADMIN_URL: caddyAdminSchema,
 	RECODER_API_TOKEN: apiTokenSchema
 });
 
@@ -155,6 +164,27 @@ export function publicOrigin(): string | undefined {
 	if (!parsed.success) throw new Error('RECODER_PUBLIC_URL must be an http(s) URL.');
 
 	return parsed.data ? new URL(parsed.data).origin : undefined;
+}
+
+/**
+ * The public addresses the install script saw on this server (`RECODER_PUBLIC_IPS`), so a domain's DNS can be
+ * checked against where it points. Empty when the script could not tell or did not run.
+ */
+export function publicAddresses(): string[] {
+	return (process.env.RECODER_PUBLIC_IPS ?? '')
+		.split(',')
+		.map((address) => address.trim())
+		.filter(Boolean);
+}
+
+/** Whether Recoder manages no TLS on this install (`RECODER_TLS=off`). Read per call, so a test can switch it. */
+export function tlsOff(): boolean {
+	return tlsModeSchema.safeParse(process.env.RECODER_TLS).data === 'off';
+}
+
+/** Where Caddy's admin API answers (`RECODER_CADDY_ADMIN_URL`), as the server reaches it on the Compose network. */
+export function caddyAdminUrl(): string {
+	return caddyAdminSchema.safeParse(process.env.RECODER_CADDY_ADMIN_URL).data ?? 'http://caddy:2019';
 }
 
 /** The fixed API access token (`RECODER_API_TOKEN`), or undefined when unset. */
