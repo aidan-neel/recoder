@@ -38,12 +38,13 @@ function RepoActions({ view }: { view: RepoPageView }) {
 					Ask
 				</Link>
 			</Button>
-			<Button asChild variant="primary">
-				<Link href={view.newHref} onClick={view.prepareReview}>
-					<PlusIcon aria-hidden />
-					New review
-				</Link>
-			</Button>
+			<Tooltip content="New review" shortcut="c">
+				<Button asChild variant="primary" size="icon">
+					<Link href={view.newHref} onClick={view.prepareReview} aria-label="New review">
+						<PlusIcon aria-hidden />
+					</Link>
+				</Button>
+			</Tooltip>
 		</>
 	);
 }

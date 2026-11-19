@@ -12,7 +12,7 @@ import { ModelChip } from '@/components/shell/model-chip';
 export default function SampleLayout({ children }: { children: ReactNode }) {
 	return (
 		<ApiProvider client={sampleApi}>
-			<AppShell model={<ModelChip label="Sample model" state="ready" />}>{children}</AppShell>
+			<AppShell model={<ModelChip label="Grok 4.6" state="ready" />}>{children}</AppShell>
 		</ApiProvider>
 	);
 }

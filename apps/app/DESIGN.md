@@ -5,22 +5,24 @@ built on the shared React kit, `@recoder/ui` (`packages/ui`). It is a quiet
 tool for one job: read an agent-written pull request, see what a review found,
 and merge it or send the fix back. The layout is the one people know from
 pull request tools: a sidebar, a list of pull requests, and a pull request
-page with tabs.
+page with tabs, under a topbar of window tabs taken from Capy's desktop app.
 
 It departs from the root `DESIGN.md` (apps/web) in six places:
 
-- **An inset sidebar shell**, not a top bar with session tabs. The sidebar
-  has no surface of its own and sits on the window's tint (`--bg-chrome`);
-  from 1024px the page is a panel 8px in from the window's edges, with 12px
-  corners and a `--line-subtle` hairline, and scrolls inside itself. The rule
-  "do not reintroduce the left sidebar" is for apps/web only.
+- **A topbar of window tabs over an inset sidebar shell**, as in Capy. The
+  topbar and the sidebar have no surface of their own and sit on the window's
+  tint (`--bg-chrome`); from 1024px the page is a panel under the topbar, 8px
+  in from the window's other edges, with 12px corners and a `--line-subtle`
+  hairline, and scrolls inside itself. The rule "do not reintroduce the left
+  sidebar" is for apps/web only. Where this file and Capy disagree on how
+  people move around the app, Capy wins and this file follows.
 - **One sans face.** The UI face is Inter (`--font-ui`), and the AI voice
   uses it too (`--font-ai`). There is no serif and no Cal Sans. Code, paths,
   hashes and aligned numbers are Geist Mono.
 - **Near-neutral surfaces.** Near-black panels with white hairlines in dark,
   white and light grey in light, all with a faint cool tint. The sidebar sits
   a step darker than the page and menus a step lighter. One blue primary
-  button (`#4062e2` with white ink in both themes, its hover the same blue a
+  button (`#2f6bf0` with white ink in both themes, its hover the same blue a
   step darker;
   the palettes in Settings → Appearance bring their own) and one indigo-blue (`#3777ec`) accent (links, the selected line,
   hunk headers).
@@ -55,8 +57,8 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
 
 - **Routes** (`src/app/(live)`): `/` the pull request list, `/new` a new
   review, `/pulls/[repoId]/[number]` a pull request, `/repos` the tracked
-  repositories, `/repos/[repoId]` a repository, `/automations`, `/guidelines`. Settings has no route: it is a
-  dialog over the page (see Settings dialog). `/sample`
+  repositories, `/repos/[repoId]` a repository, `/automations`, `/guidelines`, `/settings/[section]`
+  a section of Settings (live only; `/settings` is Models). `/sample`
   mirrors the list, the new review page, the pull request page, the
   Repositories page and the repository page on an in-memory client, with no server.
 - **Logic** lives in `src/lib/<feature>/` as view-model hooks and stores. A
@@ -72,56 +74,106 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
 
 ## Layout
 
-- **Sidebar** (248px, `--sidebar-width`): the account menu; New review, Pull
-  requests (with the open count), Repositories, Automations and Guidelines; Repositories,
-  one row a tracked repository on the places' lanes and row height: its
-  forge's mark (14px, centred in the 16px icon lane), the name ending in an
-  ellipsis, and, while one of its open pull requests has an open high bug, a
-  6px dot in `--sev-high` where Pull requests holds its count (a screen reader
-  hears "Has high-severity bugs"); the open one filled in place, folding like
-  the lists under it; the recent chats and reviews; Settled; and at the foot
-  the model reviews run with, the shortcuts and the theme switch. `[` shows or
-  hides it. Settings open from the account menu and with ⌘,. A review a
-  person cancelled wears a quiet slashed circle, never the failure triangle.
-  The sample has no Automations, Guidelines or Settings, so its sidebar,
-  account menu, palette and ⌘, leave them out instead of leading to the live
-  app's sign-in. The first Tab stop on every page is "Skip to content", which
-  moves focus past the sidebar's rows to the page.
+- **Topbar** (40px, `--topbar-height`) across the whole window, on the
+  window's tint. Over the sidebar, in the sidebar's width: the account menu
+  at the window's left edge, so the top-left is never empty, and at the
+  sidebar's right edge a small Search button (Cmd/Ctrl+K, it opens the
+  palette) left of the sidebar's toggle. There are no Back and Forward buttons: Cmd/Ctrl+[
+  and Cmd/Ctrl+] and the browser's own walk the tab on screen. The first tab
+  starts on the page panel's left edge. With the sidebar hidden the part over
+  it closes up to what it holds, so the tabs start right after it. After the
+  last tab, a + (tooltip "New review", Alt+T) opens New review in a new tab;
+  the sidebar's first row, New review, opens it in the tab on screen. The design is variant V1,
+  "Window bar", of the Paper file
+  https://app.paper.design/file/01M7S67WPYQ32KY5VF219H93M0.
+- **Window tabs** are 200px by 28px with `--radius-row` corners and 2px
+  between them, and read like the sidebar's rows: bare at rest, a light wash
+  of `--bg-hover` when pointed at, and the tab on screen flat on
+  `--bg-hover`, the sidebar's selected-row fill, with no shadow or lift and
+  its X always shown. Only colours change between these states, never a
+  weight, border or padding, so selecting a tab moves nothing. Each tab
+  holds any page and its own Back and Forward history, and every tab, its history and the tab on screen are kept in this
+  browser, so a reload comes back to them (the sample keeps its own). A tab
+  shows its screen's icon, the page's own name (a pull request's or chat's
+  title, a repository's name, a section of Settings) ending in an ellipsis,
+  and at its end the state of a running review, a review with bugs, or one
+  that failed; pointed at or focused, an X takes that place. Tabs narrow to
+  112px and then scroll sideways, the one on screen kept in view. A drag
+  reorders them; a middle click or the X closes one. A right click opens the
+  tab's menu in three groups, text only with shortcuts at the right, as in a
+  browser: New tab (Alt+T), Duplicate tab, Copy link; Close tab (Alt+W on the
+  tab on screen), Close other tabs, Close tabs to the right; Reopen closed tab
+  (Alt+Shift+T). A duplicate opens right after its tab with its history.
+  Closing the last tab leaves one on the pull request list. While Alt (Option)
+  is held the first nine tabs show the number that reaches them.
+- **How a link opens**, as in Capy: a plain click opens the page in the tab
+  on screen and adds it to that tab's history; a page another tab already
+  shows brings that tab forward instead; Cmd or Ctrl with a click, or the
+  middle button, opens it in a new tab at the end of the row, on screen. A
+  tab of a page (a pull request's Changes or Review) swaps the address in
+  place, so Back leaves the page. The browser's own Back and Forward walk the
+  same history: every entry the app makes names its tab and step. An address
+  opened from outside the app (a pasted link, a reload of a page no tab
+  shows) opens in a new tab, never over one in use.
+- **Shortcuts.** The browser keeps Cmd/Ctrl with T, W, Shift+T, 1–9 and Tab
+  for its own tabs, so the window tabs answer to Alt (Option) instead: Alt+T
+  a new tab (New review), Alt+W close, Alt+Shift+T reopen, Alt+1…8 that tab
+  and Alt+9 the last, Alt+[ and Alt+] the previous and next tab. Back and
+  Forward in a tab are Cmd/Ctrl+[ and Cmd/Ctrl+], the sidebar Cmd/Ctrl+B (or
+  `[`), Settings Cmd/Ctrl+,. Alt with a letter or a digit works in a text
+  field too; Alt with a bracket stays with the field, as on a Mac it types
+  quotes.
+- **Sidebar** (248px, `--sidebar-width`) starts under the topbar with no head
+  of its own: New review (a + and its label, the first row), Pull requests
+  (with the open count), Repositories, Automations
+  and Guidelines, all rows of one kind; then Reviews,
+  Chats and Repositories, each under a title that folds it, with a + that
+  starts one (a new review, a new chat, Add repository) and a ⋯ that hides
+  it, both shown when the title is pointed at or focused. Review and chat rows
+  are two lines with no tile: the title and its age, then a review's state,
+  repository and number, or a chat's repository. A repository is one line on
+  the places' lanes: the forge's mark, the name, and a `--sev-high` dot while
+  it has an open high bug. Then Settled; and at the foot the model reviews run with,
+  the shortcuts and the theme switch. A review a person cancelled wears a
+  quiet slashed circle, never the failure triangle. The sample has no
+  Automations, Guidelines or Settings, so its sidebar, account menu, palette,
+  model chip and ⌘, leave them out instead of leading to the live app's
+  sign-in. The first Tab stop on every page is "Skip to content", which moves
+  focus past the topbar and the sidebar to the page.
 - **Narrow windows**: under 1024px the sidebar is a drawer over the page,
-  opened by the bar's button or `[` and shut by its scrim, Escape or going to
-  another page; it always starts shut. The tab row keeps its tabs and
+  under the topbar, opened by the topbar's toggle, Cmd/Ctrl+B or `[` and shut
+  by the toggle, its scrim, Escape or going to another page; it always starts
+  shut. The tab row keeps its tabs and
   buttons and the review's facts drop to a line under it. Under 760px the
   file tree steps out of Changes.
   Under 640px a list row stacks its title (which wraps), its meta line, then
   its fact and size; the pull request's title wraps over its buttons, with
   the merge button filling their line; the bar keeps the last two crumbs and
   icon actions. Nothing is cut off.
-- **Sidebar body**: everything between the head and the foot scrolls as one
-  region, so the head and foot never move and no list is squeezed shut; with
+- **Sidebar body**: everything above the foot scrolls as one
+  region, so the foot never moves and no list is squeezed shut; with
   room to spare, Settled sits at the bottom. A right click anywhere on it, or
-  the context-menu key, opens a menu of three checks: Repositories, Chats and
-  Reviews. A row with its own menu (a chat, a review, a settled row) keeps
+  the context-menu key, opens a menu of three checks: Reviews, Chats and
+  Repositories. A row with its own menu (a chat, a review, a settled row) keeps
   its menu. Unchecked, a list is left out whole, title and all, in this
   browser; hiding is apart from folding. Hiding Chats or Reviews takes its
   rows out of Settled too, and Settled goes when nothing is left in it.
-- **Settings dialog**: Settings opens over whatever page is open, from the
-  account menu, the palette, the model chip, a link that names a section, or
-  ⌘, (which also closes it). It fills the window but for a 24px margin, up to
-  1280 by 960px (the kit's `screen` modal). On the left, a 220px nav on the
-  sidebar's surface, lanes and rows, under a search field that keeps the
-  sections whose name or keywords (their groups and rows) hold every word
-  typed; Enter opens the first, and with none left it says so. The rows:
-  Models, Providers, Connections and
-  Appearance, each with its icon, and the admin's own under an Admin label:
-  Recoder (the running server, its updates, the branch a git checkout runs and
-  a switch to another, the global review guidelines and its people), Limits,
-  Telemetry and Usage. The open section sits on a still fill. On the right, a
-  44px bar holds the crumbs (Settings › the section), the section's own
-  control (the range on Usage and Telemetry) and the close button; under it
-  the section scrolls in the settings column. Opening puts focus on the
-  dialog, not a row; Esc closes the top layer first, so a menu inside closes
-  before Settings does. A member asked for an admin section gets Models.
-  Nothing about Settings lives in the address, so a reload closes it.
+- **Settings** is a page in the tab on screen, opened from the account menu,
+  the palette, the model chip, a link that names a section, or ⌘, (which
+  goes back to the page Settings opened over). The tab is named for the
+  section. Settings' sections take over the sidebar: a way back ("← Settings",
+  to the page before Settings in this tab, or the pull request list), a search
+  field that keeps the sections whose name or
+  keywords (their groups and rows) hold every word typed (Enter opens the
+  first, and with none left it says so), then Models, Providers, Connections
+  and Appearance, each with its icon, and the admin's own under an Admin
+  label: Recoder (the running server, its updates, the branch a git checkout
+  runs and a switch to another, the global review guidelines and its people),
+  Limits, Telemetry and Usage. The open section sits on a still fill. The
+  topbar stays as it is. The page's bar holds the crumbs (Settings › the
+  section) and the section's own control (the range on Usage and Telemetry);
+  under it the section scrolls in the settings column. A member sent to an
+  admin section gets Models.
 - **Page bar** (44px, `--bar-height`): breadcrumbs on the left, the page's own
   actions on the right. Every page's content starts under it, so borders line
   up across pages.
@@ -184,8 +236,8 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
 - **Repository page**: the bar holds the crumbs (Repositories, linking to the
   Repositories page, then the
   name) and, on the right, the forge link as an icon button, Ask (outline),
-  which opens New in Chat on this repository, and New review, the one primary,
-  which opens New in Review on it. Under the bar, the forge's mark and
+  which opens New in Chat on this repository, and a + (tooltip "New review"),
+  the one primary, which opens New in Review on it. Under the bar, the forge's mark and
   `owner / name` (20px, the owner faint) over its facts as badges: the default
   branch, since when it is tracked, and whether auto review watches it
   ("Auto review on" in the success tone, "Auto review off" neutral, each led
@@ -316,8 +368,8 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
     rows: failed first, then running, then passed, with skipped checks folded
     into one "N skipped" row.
 - **Automations**, **Guidelines** and **Settings** are one 704px column of
-  titled cards (`SettingsPage`, `SettingsGroup`), centred on the page (or the
-  Settings dialog's pane), 32px under the bar.
+  titled cards (`SettingsPage`, `SettingsGroup`), centred on the page, 32px
+  under the bar.
   The width is the widest row on one line: a model with its effort, the
   ignored paths. No column has a title of its own: the bar names the page,
   and the dialog's crumbs name the section.

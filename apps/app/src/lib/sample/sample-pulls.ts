@@ -180,7 +180,7 @@ const PULLS = {
 		repoId: 'sample-api',
 		number: 219,
 		title: 'Add an audit log for admin actions',
-		author: 'claude[bot]',
+		author: 'codex[bot]',
 		updatedAt: sampleTime('2026-10-13T06:10:00.000Z'),
 		checks: MANY_CHECKS_PASSING
 	}),
@@ -290,7 +290,7 @@ const CONVERSATION: PullComment[] = [
 	{
 		id: 'sample-comment-2',
 		kind: 'review',
-		author: { login: 'claude[bot]', name: null, avatarUrl: null },
+		author: { login: 'codex[bot]', name: null, avatarUrl: null },
 		body: 'Good catch. I will key header-less requests by client address.',
 		createdAt: sampleTime('2026-10-13T09:31:00.000Z'),
 		url: null,

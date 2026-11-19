@@ -257,7 +257,7 @@ export const SAMPLE_PULL: PullRequest = {
 	number: 214,
 	title: 'Add per-tenant rate limiting to the public API',
 	url: 'https://github.com/acme/api/pull/214',
-	author: 'claude[bot]',
+	author: 'codex[bot]',
 	base: 'main',
 	headRef: 'agent/rate-limit-tenants',
 	headSha: 'a41c9e2f6d0b',

@@ -18,9 +18,20 @@ const GROUPS: Group[] = [
 		rows: [
 			[['mod+k'], 'Search'],
 			[['c'], 'New review'],
-			[['['], 'Show or hide the sidebar'],
+			[['mod+b', '['], 'Show or hide the sidebar'],
 			[['mod+,'], 'Settings'],
 			[['?'], 'These shortcuts']
+		]
+	},
+	{
+		title: 'Tabs',
+		rows: [
+			[['alt+t'], 'New tab'],
+			[['alt+w'], 'Close tab'],
+			[['alt+shift+t'], 'Reopen closed tab'],
+			[['alt+1', 'alt+9'], 'Go to a tab, 9 for the last'],
+			[['alt+[', 'alt+]'], 'Previous and next tab'],
+			[['mod+[', 'mod+]'], 'Back and forward in the tab']
 		]
 	},
 	{

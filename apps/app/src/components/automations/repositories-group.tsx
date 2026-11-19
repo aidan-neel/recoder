@@ -8,7 +8,7 @@ import { OFFLINE_TEXT } from '@/lib/api/http';
 import type { AutoReviewSection } from '@/lib/settings/use-auto-review-section';
 import { useAutoReviewSwitch } from '@/lib/settings/use-auto-review-switch';
 import { useWatchRepo, type WatchRepoView } from '@/lib/settings/use-watch-repo';
-import { useChrome } from '@/lib/shell/chrome';
+import { openSettings } from '@/lib/settings/open-settings';
 
 import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
 
@@ -62,7 +62,7 @@ function OwnReposRow() {
 function NoRepositories() {
 	return (
 		<SettingsRow name="No repositories yet" detail="The watcher checks the repositories you track">
-			<Button variant="outline" onClick={() => useChrome.getState().openSettings('connections')}>
+			<Button variant="outline" onClick={() => openSettings('connections')}>
 				Open Connections
 			</Button>
 		</SettingsRow>

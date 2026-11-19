@@ -26,9 +26,9 @@ interface SampleModel {
 }
 
 const MODELS: readonly SampleModel[] = [
-	{ model: 'claude-opus-5-5', provider: 'claude-code', pricePerMillion: 0.31, medianDurationMs: 31000 },
-	{ model: 'claude-sonnet-5-5', provider: 'claude-code', pricePerMillion: 0.09, medianDurationMs: 14000 },
-	{ model: 'claude-haiku-5-5', provider: 'claude-code', pricePerMillion: 0.03, medianDurationMs: 3200 },
+	{ model: 'grok-4.6', provider: 'grok', pricePerMillion: 0.31, medianDurationMs: 31000 },
+	{ model: 'gpt-6-luna', provider: 'codex', pricePerMillion: 0.09, medianDurationMs: 14000 },
+	{ model: 'gpt-6.1-terra', provider: 'codex', pricePerMillion: 0.03, medianDurationMs: 3200 },
 	{ model: 'gpt-5.2', provider: 'codex', pricePerMillion: 0.12, medianDurationMs: 22000 },
 	{ model: 'glm-5.2', provider: 'opencode', pricePerMillion: null, medianDurationMs: 38000 }
 ];
@@ -57,9 +57,9 @@ const PEOPLE: readonly SamplePerson[] = [
 		dailyTokens: 1_350_000_000,
 		firstDay: 0,
 		mix: [
-			['claude-opus-5-5', 7],
-			['claude-sonnet-5-5', 2],
-			['claude-haiku-5-5', 1]
+			['grok-4.6', 7],
+			['gpt-6-luna', 2],
+			['gpt-6.1-terra', 1]
 		]
 	},
 	{
@@ -71,8 +71,8 @@ const PEOPLE: readonly SamplePerson[] = [
 		dailyTokens: 780_000_000,
 		firstDay: 0,
 		mix: [
-			['claude-opus-5-5', 5],
-			['claude-sonnet-5-5', 3],
+			['grok-4.6', 5],
+			['gpt-6-luna', 3],
 			['gpt-5.2', 2]
 		]
 	},
@@ -85,9 +85,9 @@ const PEOPLE: readonly SamplePerson[] = [
 		dailyTokens: 410_000_000,
 		firstDay: 0,
 		mix: [
-			['claude-sonnet-5-5', 4],
+			['gpt-6-luna', 4],
 			['glm-5.2', 4],
-			['claude-haiku-5-5', 2]
+			['gpt-6.1-terra', 2]
 		]
 	},
 	{
@@ -100,7 +100,7 @@ const PEOPLE: readonly SamplePerson[] = [
 		firstDay: 9,
 		mix: [
 			['gpt-5.2', 6],
-			['claude-haiku-5-5', 4]
+			['gpt-6.1-terra', 4]
 		]
 	}
 ];

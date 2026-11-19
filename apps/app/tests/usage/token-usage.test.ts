@@ -68,7 +68,7 @@ test('a passed sample review splits token types, models and pipeline stages plus
 	expect(summary?.budgetLabel).toBe('Medium budget');
 	expect(summary?.callsLabel).toBe('5 calls');
 	expect(summary?.segments.map((segment) => segment.label)).toEqual(['Input', 'Cache read', 'Cache write', 'Output']);
-	expect(summary?.models.map((row) => row.model)).toEqual(['Claude Opus 4.6', 'Claude Sonnet 4.6', 'GPT 5.4']);
+	expect(summary?.models.map((row) => row.model)).toEqual(['Grok 4.6', 'GPT 6 Luna', 'GPT 5.4']);
 	expect(summary?.breakdown.map((row) => row.label)).toEqual(['Reviewer', 'Subagent', 'Verifier', 'Follow-ups']);
 	expect(summary?.notes).toEqual([]);
 });

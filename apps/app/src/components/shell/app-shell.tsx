@@ -2,21 +2,32 @@
 
 import { SkeletonProvider, Toaster, TooltipProvider } from '@recoder/ui';
 import { MotionConfig } from 'motion/react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
+import { leaveSettings, openSettings } from '@/lib/settings/open-settings';
 import { useChrome } from '@/lib/shell/chrome';
-import { isLiveApp, newReviewHref } from '@/lib/shell/routes';
+import {
+	closeTabs,
+	markOpeningEntry,
+	navigate,
+	openTab,
+	reopenTab,
+	startWindowTabs,
+	stepTab,
+	switchTab,
+	usePathname
+} from '@/lib/shell/navigation';
+import { inSettings, isLiveApp, newReviewHref, pullsHref } from '@/lib/shell/routes';
 import { toggleSidebar } from '@/lib/shell/sidebar-toggle';
+import { useTabs } from '@/lib/shell/tabs';
 import { followSystemTheme } from '@/lib/shell/theme';
 import { useKeys } from '@/lib/shell/use-keys';
-import { navigate, usePathname } from '@/lib/shell/navigation';
-
-import { SettingsModal } from '@/components/settings/settings-modal';
 
 import { CommandPalette } from './command-palette';
 import { ShortcutsModal } from './shortcuts-modal';
 import { Sidebar } from './sidebar';
+import { Topbar } from './topbar';
 
 interface AppShellProps {
 	/** The model chip at the foot of the sidebar: the live one reads Settings, the sample's is fixed. */
@@ -24,20 +35,57 @@ interface AppShellProps {
 	children: ReactNode;
 }
 
+/** Brings the tab `offset` places along the row to the screen, wrapping round at either end. */
+function cycleTab(offset: number): void {
+	const { tabs, activeId } = useTabs.getState();
+	const index = tabs.findIndex((tab) => tab.id === activeId);
+
+	switchTab(tabs[(index + offset + tabs.length) % tabs.length].id);
+}
+
+/** `alt+1`…`alt+8` bring that tab to the screen and `alt+9` the last, as a browser's own tabs do. */
+function ordinalKeys(): Record<string, () => void> {
+	const keys: Record<string, () => void> = {};
+
+	for (let place = 1; place <= 9; place++) {
+		keys[`alt+${place}`] = () => {
+			const { tabs } = useTabs.getState();
+			const tab = place === 9 ? tabs[tabs.length - 1] : tabs[place - 1];
+
+			if (tab) switchTab(tab.id);
+		};
+	}
+
+	return keys;
+}
+
 /**
- * The frame every page sits in: a link past the sidebar for keyboard users,
- * the sidebar, the page beside it, and the app-wide overlays. It owns the
- * keys that work anywhere.
+ * The frame every page sits in: a link past the chrome for keyboard users,
+ * the topbar with the window's tabs, the sidebar, the page beside it, and the
+ * app-wide overlays. It owns the keys that work anywhere. The browser keeps
+ * Cmd/Ctrl with T, W, 1–9 and Tab for its own tabs, so the window's tabs
+ * answer to Alt (Option) instead.
  */
 export function AppShell({ model, children }: AppShellProps) {
 	const { base } = useApi();
 
+	useState(startWindowTabs);
+	useEffect(markOpeningEntry, []);
 	useEffect(() => followSystemTheme(), []);
 
 	useKeys({
 		'mod+k': () => useChrome.getState().setPaletteOpen(!useChrome.getState().paletteOpen),
-		'mod+,': () => (isLiveApp(base) ? toggleSettings() : false),
+		'mod+,': () => (isLiveApp(base) ? toggleSettings(base) : false),
+		'mod+b': () => toggleSidebar(),
 		'[': () => toggleSidebar(),
+		'mod+[': () => stepTab(-1),
+		'mod+]': () => stepTab(1),
+		'alt+t': () => openTab(newReviewHref(base)),
+		'alt+w': () => closeTabs([useTabs.getState().activeId], pullsHref(base)),
+		'alt+shift+t': () => reopenTab(),
+		'alt+[': () => cycleTab(-1),
+		'alt+]': () => cycleTab(1),
+		...ordinalKeys(),
 		c: () => navigate(newReviewHref(base)),
 		'?': () => useChrome.getState().setShortcutsOpen(true)
 	});
@@ -50,12 +98,12 @@ export function AppShell({ model, children }: AppShellProps) {
 						Skip to content
 					</a>
 					<Frame>
+						<Topbar />
 						<Sidebar model={model} />
 						{children}
 					</Frame>
 					<CommandPalette />
 					<ShortcutsModal />
-					<SettingsModal />
 					<Toaster />
 				</TooltipProvider>
 			</SkeletonProvider>
@@ -103,10 +151,8 @@ function Frame({ children }: { children: ReactNode }) {
 	);
 }
 
-/** ⌘, opens Settings on its first section, and closes it when it is open. */
-function toggleSettings(): void {
-	const chrome = useChrome.getState();
-
-	if (chrome.settingsSection === null) chrome.openSettings();
-	else chrome.closeSettings();
+/** ⌘, opens Settings in the tab on screen, and from Settings goes back to the page it opened over. */
+function toggleSettings(base: string): void {
+	if (inSettings(window.location.pathname)) leaveSettings(pullsHref(base));
+	else openSettings();
 }

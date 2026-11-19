@@ -61,10 +61,17 @@ interface RowShellProps {
 /**
  * What every recent row shares: a right click opens its menu at the pointer,
  * and the "more" button, which shows on hover and focus, opens the same
- * entries beside the row.
+ * entries beside the row. A row with no actions has neither.
  */
 function RowShell({ title, actions, onIntent, className, active, tools, children }: RowShellProps) {
 	const intent = useIntent(onIntent);
+
+	if (actions.length === 0)
+		return (
+			<div className={className} data-recent data-active={active || undefined} {...intent}>
+				{children}
+			</div>
+		);
 
 	return (
 		<ContextMenu>
@@ -124,23 +131,21 @@ interface RecentCardProps {
 	href: string;
 	active: boolean;
 	title: string;
-	/** The top line: the repository, in the meta face. */
-	repo: ReactNode;
 	/** How long ago it changed, at the top right; it steps aside for Settle and the "more" button. */
-	age: string;
-	/** A line under the title, such as a review's state and its pull request. */
-	foot?: ReactNode;
-	actions: RowAction[];
+	age?: string;
+	/** The line under the title, in the meta face: a review's state and its pull request, or a repository's counts. */
+	foot: ReactNode;
+	actions?: RowAction[];
 	onIntent?: () => void;
-	onSettle: () => void;
+	/** Moves the row down to Settled; a row with none has no Settle. */
+	onSettle?: () => void;
 }
 
 /**
- * A chat or review in the sidebar as a small card: the repository and age,
- * the title, then any foot. Pointed at, the age gives way to Settle, which
- * moves it down to Settled, and the "more" button. The whole card opens it.
+ * A row of the sidebar's lists on two lines: the title and its age, then the foot. Pointed at, the
+ * age gives way to Settle, which moves it down to Settled, and the "more" button. The whole row opens it.
  */
-export function RecentCard({ href, active, title, repo, age, foot, actions, onIntent, onSettle }: RecentCardProps) {
+export function RecentCard({ href, active, title, age, foot, actions = [], onIntent, onSettle }: RecentCardProps) {
 	return (
 		<RowShell
 			title={title}
@@ -149,22 +154,25 @@ export function RecentCard({ href, active, title, repo, age, foot, actions, onIn
 			className="recent-card"
 			active={active}
 			tools={
-				<Button variant="ghost" size="sm" className="recent-settle" onClick={onSettle}>
-					<CheckIcon />
-					Settle
-				</Button>
+				onSettle ? (
+					<Button variant="ghost" size="sm" className="recent-settle" onClick={onSettle}>
+						<CheckIcon />
+						Settle
+					</Button>
+				) : null
 			}
 		>
-			<span className="recent-card-head meta">
-				{repo}
-				<span className="recent-age">{age}</span>
+			<span className="recent-card-text">
+				<span className="recent-card-head">
+					<RowButton asChild cover className="recent-card-title">
+						<Link href={href} aria-current={active ? 'page' : undefined}>
+							<span className="recent-title">{title}</span>
+						</Link>
+					</RowButton>
+					{age ? <span className="recent-age meta">{age}</span> : null}
+				</span>
+				<span className="recent-card-foot meta">{foot}</span>
 			</span>
-			<RowButton asChild cover className="recent-card-title">
-				<Link href={href} aria-current={active ? 'page' : undefined}>
-					{title}
-				</Link>
-			</RowButton>
-			{foot ? <span className="recent-card-foot meta">{foot}</span> : null}
 		</RowShell>
 	);
 }

@@ -49,7 +49,7 @@ The source of truth for Recoder's UI.
 
 ### Primary
 - apps/web: `primary` `#ede9e3` (cream), `on-primary` `#141312`.
-- apps/app and apps/site (the kit): `primary` `#4062e2` with white `on-primary` in both themes (5.2:1). Links and the selected line use the accent (`--accent`, `--accent-text`), never the primary as text.
+- apps/app and apps/site (the kit): `primary` `#2f6bf0` with white `on-primary` in both themes (4.7:1; the gradient's top tint is 2% white so it stays at 4.5:1). Links and the selected line use the accent (`--accent`, `--accent-text`), never the primary as text.
 - Hover: `filter: brightness(1.08)`. No press scale.
 - Primary must stay swappable. If a light color is picked, on-primary is computed by luminance: dark text when L > 0.3.
 

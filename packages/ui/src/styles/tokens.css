@@ -48,7 +48,7 @@
 	--text-brief-body: #8f8a82;
 
 	/* Primary (swappable; on-primary follows luminance) */
-	--primary: #4062e2;
+	--primary: #2f6bf0;
 	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
 	--on-primary: #ffffff;
 
@@ -175,7 +175,7 @@
 	--text-ghost: #a8a39b;
 	--text-brief-body: #6a655e;
 
-	--primary: #4062e2;
+	--primary: #2f6bf0;
 	--primary-hover: color-mix(in oklab, var(--primary) 90%, black);
 	--on-primary: #ffffff;
 
@@ -390,10 +390,10 @@
 	--shadow-composer-focus: inset 0 0 0 1px var(--edge-focus), 0 0 0 1px var(--edge-outline), var(--lift-composer);
 	--primary-edge: color-mix(in oklab, var(--primary) var(--primary-ring-tint), var(--primary-ring));
 	--shadow-primary: inset 0 1px 0 var(--primary-sheen), 0 0 0 1px var(--primary-edge), var(--primary-drop);
-	--fill-primary: linear-gradient(180deg, color-mix(in oklab, var(--primary) 94%, white), var(--primary));
+	--fill-primary: linear-gradient(180deg, color-mix(in oklab, var(--primary) 98%, white), var(--primary));
 	--fill-primary-hover: linear-gradient(
 		180deg,
-		color-mix(in oklab, var(--primary-hover) 94%, white),
+		color-mix(in oklab, var(--primary-hover) 98%, white),
 		var(--primary-hover)
 	);
 }
