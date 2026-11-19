@@ -1,4 +1,6 @@
-import type { UpdateCommit, UpdateState, UpdateStatus } from '@recoder/shared';
+import type { UpdateCommit, UpdateState, UpdateStatus, UpdateStep as ServerStep, UpdateStepId } from '@recoder/shared';
+
+import { dayDate } from '../shell/age';
 
 import type { UpdatePhase } from './update-store';
 
@@ -14,11 +16,13 @@ export interface UpdateSnapshot {
 /** What a failed line's Retry does. */
 export type UpdateRetry = 'load' | 'check' | 'update' | 'follow';
 
-type StepStage = 'done' | 'current' | 'next';
+type StepStage = 'done' | 'current' | 'next' | 'failed';
 
 export interface UpdateStep {
 	label: string;
 	stage: StepStage;
+	/** What the step involves: `about 1.2 GB`, `2 running, they resume after`. */
+	detail?: string;
 }
 
 /** What the strip says about the updater, as plain data for its components. */
@@ -27,15 +31,49 @@ export type UpdateLine =
 	| { kind: 'checking' }
 	| {
 			kind: 'available';
+			version: string | null;
 			headline: string;
+			/** `You run 0.2.1 · released Nov 18`. */
+			since: string;
 			touches: string | null;
+			/** The release notes, in Markdown; null when the updater has none (a git install lists commits). */
+			notes: string | null;
 			commits: UpdateCommit[];
+			/** What the update will do, step by step; empty when the updater does not say. */
+			plan: UpdateStep[];
 			blockedReason: string | null;
 	  }
 	| { kind: 'managed'; note: string }
 	| { kind: 'progress'; steps: UpdateStep[] }
 	| { kind: 'updated'; note: string | null; canReload: boolean }
-	| { kind: 'failed'; error: string; retry: UpdateRetry };
+	| { kind: 'failed'; error: string; retry: UpdateRetry }
+	| { kind: 'rolled-back'; error: string; steps: UpdateStep[] };
+
+/** What each step the updater reports is called while it runs. */
+const STEP_LABELS: Record<UpdateStepId, string> = {
+	pause: 'Pause reviews',
+	backup: 'Back up',
+	download: 'Download',
+	start: 'Start the new version',
+	health: 'Check its health'
+};
+
+/** Where each of the updater's step states puts the step in the card's list. */
+const STEP_STAGES: Record<Exclude<ServerStep['state'], 'skipped'>, StepStage> = {
+	pending: 'next',
+	running: 'current',
+	done: 'done',
+	failed: 'failed'
+};
+
+/** The updater's own steps as the card lists them, leaving out the ones this update skips. */
+function serverSteps(status: UpdateStatus): UpdateStep[] {
+	return (status.steps ?? []).flatMap((step) =>
+		step.state === 'skipped'
+			? []
+			: [{ label: STEP_LABELS[step.id], detail: step.detail, stage: STEP_STAGES[step.state] }]
+	);
+}
 
 /** The states a server update passes through, in order. A web-only update has the one. */
 const SERVER_STEPS: readonly { state: UpdateState; label: string }[] = [
@@ -57,6 +95,14 @@ export function describeUpdate({ status, phase, unreachableSince, error }: Updat
 
 	if (error) return { kind: 'failed', error, retry: status.available ? 'update' : 'check' };
 
+	if (status.state === 'rolled-back') {
+		return {
+			kind: 'rolled-back',
+			error: status.error ?? 'The new version failed, so Recoder went back.',
+			steps: serverSteps(status)
+		};
+	}
+
 	if (status.state === 'failed') {
 		return { kind: 'failed', error: status.error ?? 'The update failed.', retry: 'update' };
 	}
@@ -75,11 +121,20 @@ export function restartsServer(available: UpdateStatus['available']): boolean {
 }
 
 function availableLine(status: UpdateStatus, available: NonNullable<UpdateStatus['available']>): UpdateLine {
+	const running = status.current.version ?? status.current.branch ?? null;
+	const released = dayDate(available.releasedAt);
+
 	return {
 		kind: 'available',
-		headline: available.version ? `Version ${available.version} available` : 'Update available',
+		version: available.version ?? null,
+		headline: available.version ? `Recoder ${available.version} is ready` : 'An update is ready',
+		since: [running ? `You run ${running}` : null, released ? `released ${released}` : null]
+			.filter(Boolean)
+			.join(' · '),
 		touches: touchesLine(available.changes),
+		notes: available.notes?.trim() || null,
 		commits: available.commits,
+		plan: serverSteps(status),
 		blockedReason: status.blockedReason ?? null
 	};
 }
@@ -91,6 +146,8 @@ function touchesLine(changes: { server: boolean; web: boolean }): string | null 
 }
 
 function progressLine(status: UpdateStatus, serverIsAway: boolean): UpdateLine {
+	if (status.steps?.length) return { kind: 'progress', steps: serverSteps(status) };
+
 	const steps = restartsServer(status.available) ? SERVER_STEPS : WEB_STEPS;
 	const state = serverIsAway ? 'restarting' : status.state;
 	const at = steps.findIndex((step) => step.state === state);

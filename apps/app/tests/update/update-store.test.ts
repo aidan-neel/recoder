@@ -30,7 +30,12 @@ function scripted(steps: (UpdateStatus | Error)[], apply: UpdateStatus = status(
 		check: async () => status('idle'),
 		apply: async () => apply,
 		branches: async () => ({ current: 'main', branches: ['main'] }),
-		switchBranch: async () => apply
+		switchBranch: async () => apply,
+		rollback: async () => apply,
+		history: async () => ({ entries: [] }),
+		historyLog: async () => ({ lines: [], before: null }),
+		policy: async () => ({ channel: 'stable', install: 'ask', window: { weekday: null, hour: 3 }, backupFirst: true }),
+		setPolicy: async (policy) => policy
 	};
 }
 

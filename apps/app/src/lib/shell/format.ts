@@ -20,6 +20,22 @@ export function shortCount(value: number): string {
 	return SHORT_COUNT_FORMAT.format(value).toLowerCase();
 }
 
+/** The units a size steps through, a thousand apart, as disks are sold. */
+const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
+
+/** A size as a person reads it: `2 MB`, `1.1 GB`, `41 GB`. */
+export function formatBytes(bytes: number): string {
+	let value = bytes;
+	let unit = 0;
+
+	while (value >= 1000 && unit < BYTE_UNITS.length - 1) {
+		value /= 1000;
+		unit += 1;
+	}
+
+	return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${BYTE_UNITS[unit]}`;
+}
+
 /** "1 decision", "3 decisions". */
 export function plural(count: number, word: string, many = `${word}s`): string {
 	return `${count} ${count === 1 ? word : many}`;

@@ -14,7 +14,15 @@ const MAX_BACKOFF_MS = 6000;
 export const GIVE_UP_MS = 120_000;
 
 /** The states an update passes through while it applies. */
-const RUNNING_STATES: readonly UpdateState[] = ['pausing', 'updating', 'restarting', 'resuming'];
+const RUNNING_STATES: readonly UpdateState[] = [
+	'pausing',
+	'backing-up',
+	'updating',
+	'restarting',
+	'health-check',
+	'resuming',
+	'rolling-back'
+];
 
 /**
  * What the page is doing with the updater: `checking` waits on a check,

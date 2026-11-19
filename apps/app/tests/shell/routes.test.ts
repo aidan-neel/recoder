@@ -36,10 +36,17 @@ describe('routeOf', () => {
 	});
 
 	test('opens Settings on the section its address names, its first section for none, live only', () => {
-		expect(routeOf('/settings/limits', '')).toEqual({ screen: 'settings', section: 'limits' });
-		expect(routeOf('/settings', '')).toEqual({ screen: 'settings', section: 'models' });
+		expect(routeOf('/settings/limits', '')).toEqual({ screen: 'settings', section: 'limits', view: null });
+		expect(routeOf('/settings', '')).toEqual({ screen: 'settings', section: 'models', view: null });
 		expect(routeOf('/settings/nope', '')).toEqual({ screen: 'missing' });
 		expect(routeOf('/sample/settings/models', '/sample')).toEqual({ screen: 'missing' });
+	});
+
+	test('opens Settings → Server on the view its address names, Overview for none, and no view elsewhere', () => {
+		expect(routeOf('/settings/server', '')).toEqual({ screen: 'settings', section: 'server', view: 'overview' });
+		expect(routeOf('/settings/server/logs', '')).toEqual({ screen: 'settings', section: 'server', view: 'logs' });
+		expect(routeOf('/settings/server/nope', '')).toEqual({ screen: 'missing' });
+		expect(routeOf('/settings/limits/logs', '')).toEqual({ screen: 'missing' });
 	});
 
 	test('keeps the live-only pages out of the sample', () => {

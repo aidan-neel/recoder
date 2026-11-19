@@ -28,7 +28,14 @@ export const SETTINGS_SECTIONS = [
 	{
 		id: 'admin',
 		label: 'Recoder',
-		keywords: 'update version branch restart guidelines global mentions handle people members chosen by',
+		keywords: 'guidelines global mentions handle people members chosen by',
+		adminOnly: true
+	},
+	{
+		id: 'server',
+		label: 'Server',
+		keywords:
+			'overview version address https certificate storage database disk checks update release notes branch restart rollback history automatic channel backups restore download logs',
 		adminOnly: true
 	},
 	{

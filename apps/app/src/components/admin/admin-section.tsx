@@ -9,10 +9,8 @@ import { SectionNotice } from '@/components/settings/section-notice';
 import { SettingsGroup } from '@/components/settings/settings-group';
 import { SettingsSkeleton } from '@/components/settings/settings-skeleton';
 
-import { BranchGroup } from './branch-group';
 import { MembersSection } from './members-section';
 import { MentionGroup } from './mention-group';
-import { UpdateStrip } from './update-strip';
 
 /**
  * The global guidelines layer: what every review follows. Reads the overview
@@ -43,14 +41,12 @@ function Guidelines() {
 }
 
 /**
- * Settings → Recoder: the running Recoder, its updates and branch, the global review
- * guidelines, whether a mention starts a review, who has signed in, and their models.
+ * Settings → Recoder: the global review guidelines, whether a mention starts a review, who has signed in, and their
+ * models. The running Recoder and its updates are under Settings → Server.
  */
 export function AdminSection() {
 	return (
 		<div className="settings">
-			<UpdateStrip />
-			<BranchGroup />
 			<Guidelines />
 			<MentionGroup />
 			<MembersSection />

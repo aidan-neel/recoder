@@ -1,14 +1,60 @@
-/* ───────── Admin: the update strip, the version and the update beside it ───────── */
+/* ───────── Settings → Server → Updates: the card with the running version or the release waiting ───────── */
 
 /*
- * The top of the page: the version over what the updater found, the button
- * for the next step on the right, and a hairline that sets it apart from the
- * groups below. Two lines, like a settings row, so a long update note never
- * wraps into the version. An update's changes open under it.
+ * The version over what the updater found, the buttons for the next step on the right. A release waiting opens its
+ * notes and what installing it does under that line, each part set off by a hairline, as the V1 design draws it.
  */
-.update-strip {
-	padding-bottom: 12px;
-	box-shadow: inset 0 -1px 0 var(--line-subtle);
+.update-card > .update-line {
+	padding: 12px 16px;
+}
+.update-line[data-available]::before {
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	align-self: flex-start;
+	margin: 6px -6px 0 0;
+	border-radius: 999px;
+	background: var(--primary);
+	content: '';
+}
+.update-card .update-text {
+	flex: 1;
+}
+.update-news .update-steps li {
+	color: var(--text-secondary);
+}
+.update-actions {
+	display: flex;
+	flex-shrink: 0;
+	gap: 8px;
+}
+.update-part {
+	padding: 12px 16px 14px;
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+}
+.update-news {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 16px 32px;
+}
+.update-part-title {
+	margin: 0 0 8px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	font-weight: 400;
+	line-height: 16px;
+}
+.update-notes {
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+}
+.update-promise {
+	margin: 0;
+	padding: 10px 16px;
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
 }
 .update-line {
 	display: flex;
@@ -69,38 +115,29 @@
 	color: var(--success);
 }
 
-.update-disclosure {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	border-radius: var(--radius-chip);
-	outline: none;
-	color: var(--text-primary);
-}
-.update-disclosure:focus-visible {
-	box-shadow: var(--focus-ring);
-}
-.update-disclosure svg {
-	width: 14px;
-	height: 14px;
-	color: var(--text-muted);
-	transition: transform var(--dur-toggle) ease-out;
-}
-.update-disclosure[data-state='open'] svg {
-	transform: rotate(180deg);
-}
-
+/* An update's steps, one a line, each with what it involves after it. */
 .update-steps {
 	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 0 16px;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: var(--font-size-label);
+	line-height: 18px;
 }
 .update-steps li {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
 	color: var(--text-faint);
+}
+.update-step-detail {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.update-steps li[data-stage='failed'] {
+	color: var(--danger);
 }
 .update-step-mark {
 	display: inline-grid;
@@ -119,12 +156,14 @@
 	color: var(--text-primary);
 }
 
-/* The commits an update brings in, one a line under the strip. */
+/* The commits a git update brings in, one a line, where a release would have notes. */
 .update-commits {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
-	padding-top: 10px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
 	color: var(--text-secondary);
 }
 .update-commit {
@@ -136,7 +175,7 @@
 	white-space: nowrap;
 }
 
-/* ───────── Admin: the running branch and the dialog that switches it ───────── */
+/* ───────── Updates: the running branch and the dialog that switches it ───────── */
 .branch-trigger {
 	min-width: 0;
 	max-width: 260px;

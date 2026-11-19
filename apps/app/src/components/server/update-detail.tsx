@@ -1,5 +1,5 @@
-import { CollapsibleTrigger, Spinner } from '@recoder/ui';
-import { CheckIcon, CaretDownIcon } from '@phosphor-icons/react';
+import { CheckIcon, XIcon } from '@phosphor-icons/react';
+import { Spinner } from '@recoder/ui';
 
 import type { UpdateLine, UpdateStep } from '@/lib/update/update-line';
 
@@ -15,10 +15,11 @@ export function UpdateDetail({ line }: { line: UpdateLine }) {
 		case 'managed':
 			return line.note;
 		case 'progress':
-			return <UpdateSteps steps={line.steps} />;
+			return 'Updating';
 		case 'updated':
 			return <UpdatedLine note={line.note} />;
 		case 'failed':
+		case 'rolled-back':
 			return <span data-tone="danger">{line.error}</span>;
 		case 'available':
 			return <AvailableLine line={line} />;
@@ -26,18 +27,10 @@ export function UpdateDetail({ line }: { line: UpdateLine }) {
 }
 
 function AvailableLine({ line }: { line: AvailableLine }) {
-	const note = line.blockedReason ?? line.touches;
-
 	return (
 		<span className="update-available">
-			<span className="update-headline">{line.headline}</span>
-			{line.commits.length > 0 ? (
-				<CollapsibleTrigger className="update-disclosure">
-					What’s new
-					<CaretDownIcon aria-hidden />
-				</CollapsibleTrigger>
-			) : null}
-			{note ? <span data-tone={line.blockedReason ? 'danger' : undefined}>{note}</span> : null}
+			{line.since ? <span>{line.since}</span> : null}
+			{line.blockedReason ? <span data-tone="danger">{line.blockedReason}</span> : null}
 		</span>
 	);
 }
@@ -51,13 +44,15 @@ function UpdatedLine({ note }: { note: string | null }) {
 	);
 }
 
-function UpdateSteps({ steps }: { steps: UpdateStep[] }) {
+/** An update's steps, one a line: what it will do before it starts, and how far it got while it runs. */
+export function UpdateSteps({ steps, label }: { steps: UpdateStep[]; label: string }) {
 	return (
-		<ol className="update-steps" aria-label="Update progress">
+		<ol className="update-steps" aria-label={label}>
 			{steps.map((step) => (
 				<li key={step.label} data-stage={step.stage} aria-current={step.stage === 'current' ? 'step' : undefined}>
 					<StepMark stage={step.stage} />
-					{step.label}
+					<span className="update-step-label">{step.label}</span>
+					{step.detail ? <span className="update-step-detail">{step.detail}</span> : null}
 				</li>
 			))}
 		</ol>
@@ -70,6 +65,7 @@ function StepMark({ stage }: { stage: UpdateStep['stage'] }) {
 		<span className="update-step-mark" aria-hidden>
 			{stage === 'current' ? <Spinner size={12} /> : null}
 			{stage === 'done' ? <CheckIcon /> : null}
+			{stage === 'failed' ? <XIcon /> : null}
 		</span>
 	);
 }
