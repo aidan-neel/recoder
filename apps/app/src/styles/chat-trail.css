@@ -182,6 +182,13 @@
 .trail-head [data-shimmer] {
 	--shimmer-ink: var(--trail-quiet);
 }
+/*
+ * A rolling count draws its digits in layers of their own, which a text-clipped sweep cannot paint, so it would show
+ * as a gap that comes and goes. The count keeps the line's ink instead and the sweep crosses the words.
+ */
+.trail [data-shimmer] [data-ui='animated-number'] {
+	color: var(--shimmer-ink, var(--trail-label));
+}
 @keyframes trail-sweep {
 	from {
 		background-position:

@@ -89,7 +89,12 @@ function ReplyBody({ message }: { message: AskMessageView }) {
  */
 function AskMessage({ message, onRetry, marked }: AskMessageProps) {
 	return (
-		<article className="ask-message" data-from={message.from} aria-label={`${NAMES[message.from]} said`}>
+		<article
+			className="ask-message"
+			data-from={message.from}
+			data-live={message.state === 'writing' || undefined}
+			aria-label={`${NAMES[message.from]} said`}
+		>
 			{message.from === 'person' ? (
 				<>
 					{marked ? <MessageTime at={message.at} className="ask-when" /> : null}
