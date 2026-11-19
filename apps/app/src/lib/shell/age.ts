@@ -53,6 +53,20 @@ export function fullTime(at: string | null | undefined): string {
 	return fullTimeFormat.format(then);
 }
 
+/** Formats every message's hour, made once for the same reason as `fullTimeFormat`. */
+let clockFormat: Intl.DateTimeFormat | undefined;
+
+/** The hour and minute in the reader's locale, `4:12 PM`, as a chat marks a message. Empty when `at` is no date. */
+export function clockTime(at: string | null | undefined): string {
+	const then = at ? Date.parse(at) : Number.NaN;
+
+	if (Number.isNaN(then)) return '';
+
+	clockFormat ??= new Intl.DateTimeFormat([], { timeStyle: 'short' });
+
+	return clockFormat.format(then);
+}
+
 /** A running clock for a review in progress: `2:14`, `1:02:09`. */
 export function runClock(ms: number): string {
 	const seconds = Math.max(0, Math.floor(ms / 1000));

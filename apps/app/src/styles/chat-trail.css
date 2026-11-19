@@ -1,26 +1,22 @@
 /* ───────── Chat trail: what a reply did before it answered, over the answer ───────── */
 /*
- * One line heads the trail (`Working for 8s`, then `Worked for 13s`) and folds the steps under it. Every step is an
- * icon on one thin line, then a label, then what it holds. The whole trail speaks in one size and one icon: labels
- * in the muted ink, a thought's text and a call's files a step stronger, code in the code face at the same optical
- * size. These tokens are the only sizes, inks and gaps below.
+ * Capy's shape: one line across the column (`Working for 8s`, then `Worked for 13s`) with the steps under it, one
+ * quiet line each, ending in how long the step took. A step with more to show opens under its line. The whole trail
+ * speaks in one size: labels in the muted ink, a thought's text and a call's files a step stronger, code in the code
+ * face at the same optical size. These tokens are the only sizes, inks and gaps below.
  */
 .trail {
 	--trail-font: var(--font-size-label);
-	--trail-line: 20px;
+	--trail-line: 22px;
 	--trail-code-font: 0.92em;
 	--trail-icon: 14px;
 	--trail-stroke: 1.75;
-	--trail-slot: var(--trail-icon);
-	--trail-gap: 10px;
-	--trail-step-gap: 12px;
-	--trail-icon-top: calc((var(--trail-line) - var(--trail-icon)) / 2);
+	--trail-step-gap: 2px;
 	--trail-chip-height: 22px;
 	--trail-label: var(--text-muted);
 	--trail-body: var(--text-secondary);
 	--trail-quiet: var(--text-faint);
-	--trail-rule: var(--line-strong);
-	--trail-now-gap: 6px;
+	--trail-rule: var(--line-subtle);
 
 	position: relative;
 	display: flex;
@@ -39,14 +35,43 @@
 	stroke-width: var(--trail-stroke);
 }
 
-/* ───────── The line over the steps, and the chevron every toggle shares ───────── */
-.trail-head,
+/* ───────── The line across the column: hairlines either side of how long it worked ───────── */
+.trail-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0;
+	border: 0;
+	border-radius: var(--radius-chip);
+	background: none;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+	transition: color var(--dur-hover) ease-out;
+}
+.trail-head::before,
+.trail-head::after {
+	height: 1px;
+	flex: 1;
+	background: var(--trail-rule);
+	content: '';
+}
+.trail-head::before {
+	margin-right: 6px;
+}
+.trail-head::after {
+	margin-left: 6px;
+}
+.trail-head .trail-chevron {
+	width: 12px;
+	height: 12px;
+	margin-left: -2px;
+}
 .trail-toggle {
 	display: inline-flex;
 	max-width: 100%;
 	align-items: center;
 	gap: 6px;
-	align-self: flex-start;
 	margin: 0 -4px;
 	padding: 0 4px;
 	border: 0;
@@ -74,70 +99,30 @@
 [data-state='open'] > .trail-chevron {
 	rotate: 180deg;
 }
-
-/*
- * What the model said it would do: one line under the trail's line while it works. Its gap is padding, not margin,
- * so a line leaving the layout fades exactly where it stood; the answer starts the same gap under the trail, so its
- * first line fades in where the thought fades out.
- */
-.trail-now {
-	margin: 0;
-	padding-top: var(--trail-now-gap);
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
 .trail-said {
 	margin: 0;
-	color: var(--trail-body);
+	color: var(--trail-label);
 	overflow-wrap: anywhere;
 }
 
-/* ───────── Steps: an icon on the joining line, then the label and its body ───────── */
+/* ───────── Steps: one line each, the time it took at the end ───────── */
 .trail-steps {
 	display: flex;
 	flex-direction: column;
 	gap: var(--trail-step-gap);
 	margin: 0;
-	padding: var(--trail-step-gap) 0 0;
+	padding: 10px 0 0;
 	list-style: none;
 }
 .trail-step {
-	position: relative;
-	display: flex;
 	min-width: 0;
-	gap: var(--trail-gap);
-}
-/* The line runs from under one step's icon to just over the next one's, through the gap between them. */
-.trail-step:not(:last-child)::before {
-	position: absolute;
-	top: calc(var(--trail-icon-top) + var(--trail-icon) + 4px);
-	bottom: calc(4px - var(--trail-step-gap) - var(--trail-icon-top));
-	left: calc(var(--trail-slot) / 2 - 0.5px);
-	width: 1px;
-	background: var(--trail-rule);
-	content: '';
-}
-.trail-icon {
-	display: flex;
-	width: var(--trail-slot);
-	height: var(--trail-line);
-	flex-shrink: 0;
-	align-items: center;
-	justify-content: center;
-	color: var(--trail-quiet);
-}
-.trail-step[data-failed] .trail-icon {
-	color: var(--sev-high-icon);
-}
-.trail-step-body {
-	min-width: 0;
-	flex: 1;
 }
 .trail-label {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
 	margin-block: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 .trail-label-text {
@@ -145,10 +130,15 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+.trail-time {
+	flex-shrink: 0;
+	color: var(--trail-quiet);
+	font-variant-numeric: tabular-nums;
+}
 .trail-step[data-failed] .trail-label {
 	color: var(--sev-high);
 }
-/* Line height 1 keeps the code face's own metrics from growing the 20px line. */
+/* Line height 1 keeps the code face's own metrics from growing the line. */
 .trail-code {
 	font-family: var(--font-code);
 	font-size: var(--trail-code-font);
@@ -158,7 +148,7 @@
 	color: var(--trail-quiet);
 }
 .trail-text {
-	margin: 2px 0 0;
+	margin: 2px 0 6px;
 	color: var(--trail-body);
 	overflow-wrap: anywhere;
 	white-space: pre-wrap;
@@ -206,7 +196,7 @@
 /* ───────── What a call opens to: its files as chips, or its command and output ───────── */
 .trail-output {
 	max-height: 160px;
-	margin: 4px 0 0;
+	margin: 4px 0 6px;
 	padding: 6px 10px;
 	overflow: auto;
 	border-radius: var(--radius-row);
@@ -262,14 +252,6 @@
 .trail-chip-button:focus-visible {
 	box-shadow: var(--focus-ring);
 	outline: none;
-}
-
-/*
- * The answer's first line sits where the trail's last thought stood, baselines matched: the message's gap less the
- * trail's pull-up leaves 2px, and 3px more lands the answer's taller line on the thought's baseline.
- */
-.ask-message[data-from='recoder'] .trail + [data-ui='markdown'] {
-	margin-top: 3px;
 }
 
 /* Citations: a reference chip (`.ref-chip`) in the line of the answer, and the card it opens. */

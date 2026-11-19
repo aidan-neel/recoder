@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import type { ChatTrailStep } from '@recoder/shared';
 
 import {
-	latestLine,
+	opensDetail,
+	stepSpan,
 	thoughtLabel,
 	toolLine,
 	workedLabel,
@@ -64,18 +65,17 @@ describe('thoughtLabel', () => {
 	});
 });
 
-describe('latestLine', () => {
-	test('a note that says two things shows only the newer one', () => {
-		const note = { id: 'n', kind: 'note', text: "I'll read the PR.\n\nI'll check the tests.", startedAt: '' } as const;
-
-		expect(latestLine(note)).toBe("I'll check the tests.");
+describe('stepSpan', () => {
+	test('ends a finished step with how long it took, and a running one with nothing', () => {
+		expect(stepSpan(read('a', ['a.ts']))).toBe('12s');
+		expect(stepSpan(run('b', 'running'))).toBeNull();
 	});
+});
 
-	test('a titled thought shows its title, and an untitled one its newest paragraph', () => {
-		const titled = { id: 't', kind: 'thought', title: 'Checking caps', text: 'It clamps.', startedAt: '' } as const;
-		const untitled = { ...titled, title: '', text: 'First idea.\n\nSecond idea.' };
-
-		expect(latestLine(titled)).toBe('Checking caps');
-		expect(latestLine(untitled)).toBe('Second idea.');
+describe('opensDetail', () => {
+	test('keeps every step to one line but opens the output of a command that failed', () => {
+		expect(opensDetail(read('a', ['a.ts', 'b.ts']))).toBe(false);
+		expect(opensDetail(run('b', 'done'))).toBe(false);
+		expect(opensDetail(run('c', 'error'))).toBe(true);
 	});
 });

@@ -1,6 +1,7 @@
 'use client';
 
-import { SkeletonBox, SkeletonText, StatusNotice } from '@recoder/ui';
+import { Button, SkeletonBox, SkeletonText, StatusNotice } from '@recoder/ui';
+import { ArrowDownIcon } from '@phosphor-icons/react';
 
 import { useFollowEnd } from '@/lib/ask/use-follow-end';
 import type { RepoChatView } from '@/lib/chat/types';
@@ -15,12 +16,12 @@ import { ComposerModels } from '@/components/ask/model-menu';
  * The conversation in one readable column down the middle of the page, the
  * composer docked under it in the same column. It opens on the newest
  * message and follows a reply as it arrives, unless the person scrolled up
- * to read back.
+ * to read back; then a Scroll to end over the composer brings them down.
  */
 export function ChatConversation({ chat }: { chat: RepoChatView }) {
 	const { ask } = chat;
 	const images = useImageDraft();
-	const scroller = useFollowEnd(ask.replying);
+	const { scroller, away, toEnd } = useFollowEnd(ask.replying);
 	const skills = useRepoSkills({ repoId: chat.repoId });
 
 	/** Sends the words with the images attached; the images clear once the message is taken. */
@@ -40,6 +41,12 @@ export function ChatConversation({ chat }: { chat: RepoChatView }) {
 			</div>
 			<div className="chat-dock">
 				<div className="chat-column chat-dock-column">
+					{away && !chat.note ? (
+						<Button variant="secondary" className="chat-to-end" onClick={toEnd}>
+							<ArrowDownIcon aria-hidden />
+							Scroll to end
+						</Button>
+					) : null}
 					{chat.note ? (
 						<StatusNotice variant="inline" tone={chat.note.tone} title={chat.note.text} className="chat-note" />
 					) : null}
