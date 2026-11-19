@@ -71,17 +71,6 @@
 		margin-left: var(--frame-inset);
 	}
 }
-/*
- * While the sidebar slides (`data-sliding`), the page keeps the width it has with the sidebar hidden and rides the
- * column's left edge; the window clips what passes its right edge. So the page is laid out once, never at the
- * widths in between: nothing in it rewraps or moves on its own, and its container queries hold still.
- */
-@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
-	.app-frame[data-sliding] > .page {
-		width: calc(100vw - 2 * var(--frame-inset));
-	}
-}
-
 /* A drag follows the pointer with no easing; the open and close slide is untouched. */
 .app-frame:has([data-ui='resize-handle'][data-dragging]) {
 	transition: none;
