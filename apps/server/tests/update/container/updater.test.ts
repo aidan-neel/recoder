@@ -19,7 +19,8 @@ const release: ContainerRelease = {
 	dataVersion: 2,
 	oldestDataVersion: 0,
 	image: `${IMAGE}@${DIGEST}`,
-	platform: 'linux/amd64'
+	platform: 'linux/amd64',
+	platformImage: `${IMAGE}@${DIGEST}`
 };
 
 function fixture(journal?: Journal, authorize: (version: string) => Promise<ContainerRelease> = async () => release) {
@@ -151,3 +152,27 @@ test.each(['unlisted', 'unsigned manifest', 'unsigned image'])(
 		expect(updater.status().update.state).toBe('failed');
 	}
 );
+
+test('a signed release resolves to the digest its manifest lists for this platform', async () => {
+	const platformDigest = `sha256:${'b'.repeat(64)}`;
+
+	const requests = (async (url: string) =>
+		url.endsWith('.sig')
+			? new Response('fixture bundle')
+			: Response.json({
+					...release,
+					schemaVersion: 1,
+					minDataVersion: 0,
+					indexDigest: DIGEST,
+					platforms: { 'linux/amd64': platformDigest },
+					image: IMAGE
+				})) as typeof fetch;
+
+	const signed = async () => true;
+
+	expect((await releaseSource('linux/amd64', requests, signed).authorize(NEW_VERSION)).platformImage).toBe(
+		`${IMAGE}@${platformDigest}`
+	);
+
+	await expect(releaseSource('linux/arm64', requests, signed).authorize(NEW_VERSION)).rejects.toThrow('platform');
+});

@@ -52,6 +52,8 @@ const inspection = z.object({
 
 type Inspection = z.infer<typeof inspection>;
 
+const pulledImage = z.object({ RepoDigests: z.array(z.string()), Os: z.string(), Architecture: z.string() });
+
 interface Options {
 	socket: string;
 	name: string;
@@ -383,7 +385,7 @@ export function dockerUpdates(options: Options): UpdateDocker {
 		},
 		backup,
 		async pull(release) {
-			const params = new URLSearchParams({ fromImage: release.image, platform: release.platform });
+			const params = new URLSearchParams({ fromImage: release.platformImage, platform: release.platform });
 
 			const response = await required(
 				await send('POST', `/images/create?${params}`, undefined, 600_000),
@@ -398,9 +400,25 @@ export function dockerUpdates(options: Options): UpdateDocker {
 				if (item.error || item.errorDetail)
 					throw new UpdaterRefused('Docker did not complete the verified image pull.');
 			}
+
+			const image = pulledImage.safeParse(
+				await (
+					await required(
+						await send('GET', `/images/${encodeURIComponent(release.platformImage)}/json`),
+						'Docker could not inspect the verified image.'
+					)
+				).json()
+			);
+
+			if (
+				!image.success ||
+				!image.data.RepoDigests.includes(release.platformImage) ||
+				`${image.data.Os}/${image.data.Architecture}` !== release.platform
+			)
+				throw new UpdaterRefused('The pulled image does not match the signed digest for this platform.');
 		},
-		startCandidate: (original, release) => switchContainer(original, release.image),
-		startWithBackup: (original, id, release) => switchContainer(original, release?.image, id),
+		startCandidate: (original, release) => switchContainer(original, release.platformImage),
+		startWithBackup: (original, id, release) => switchContainer(original, release?.platformImage, id),
 		async recover(original, checkpoint) {
 			const active = await inspect(options.name, true);
 			const previous = (await inspect(original))!;

@@ -41,6 +41,7 @@ export interface ContainerRelease extends ReleaseData {
 	minVersion: string;
 	image: string;
 	platform: string;
+	platformImage: string;
 }
 
 type Verify = (argv: string[]) => Promise<boolean>;
@@ -152,7 +153,8 @@ export function releaseSource(platform: string, request: typeof fetch = fetch, v
 				dataVersion: release.dataVersion,
 				oldestDataVersion: release.minDataVersion,
 				platform,
-				image: `${release.image}@${release.indexDigest}`
+				image: `${release.image}@${release.indexDigest}`,
+				platformImage: `${release.image}@${release.platforms[platform]}`
 			};
 		} finally {
 			await rm(directory, { recursive: true, force: true });
