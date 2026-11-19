@@ -5,6 +5,8 @@ import { useEffect, type ReactNode } from 'react';
 import { gateOf, useAccount } from '@/lib/account/account-store';
 import type { AuthApi } from '@/lib/api/accounts';
 
+import { SetupScreen } from '@/components/setup/setup-screen';
+
 import { SignInScreen } from './sign-in-screen';
 
 interface AccountGateProps {
@@ -26,7 +28,10 @@ export function AccountGate({ api, children }: AccountGateProps) {
 		void useAccount.getState().ensure(api);
 	}, [api]);
 
-	if (gate === 'sign-in' && auth) return <SignInScreen api={api} auth={auth} />;
+	if (gate === 'sign-in' && auth) {
+		return auth.setup ? <SetupScreen account={{ api, auth }} /> : <SignInScreen api={api} auth={auth} />;
+	}
+
 	if (gate === 'open') return children;
 
 	return null;

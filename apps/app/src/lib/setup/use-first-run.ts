@@ -1,71 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import type { SetupChecklist } from '@recoder/shared';
 
-import { recheckSetup, useSetupSteps } from './setup-gate';
-import { stepsLeft, type SetupSteps } from './setup-steps';
+import { useChecklist } from './checklist-store';
 import { useFinish } from './use-finish';
 
-/** The dialogs first run opens over the checklist. */
-type SetupDialog = 'provider' | 'browse';
-
-/** The step taking the tint: the first one not done yet. */
-type SetupCurrent = 'provider' | 'model' | 'repo';
-
-/** Everything the first-run checklist shows and does. */
+/** Everything the signed-in checklist shows. */
 export interface FirstRunView {
-	/** The three steps' done state; null until the settings and repositories load. */
-	steps: SetupSteps | null;
-	/** How many steps are left, 0 to 3 (3 until they load). */
-	left: number;
-	/** The first step not done yet; null once all are. */
-	current: SetupCurrent | null;
-	/** The dialog open over the checklist, if any. */
-	dialog: SetupDialog | null;
-	/** Opens the provider or repo-browser dialog. */
-	openDialog: (dialog: SetupDialog) => void;
-	/** The dialogs' onOpenChange: closing rechecks the steps. */
-	dialogOpenChange: (open: boolean) => void;
+	/** Null until it loads. */
+	checklist: SetupChecklist | null;
 	/** True while the checklist fades out and the pull request list takes its place. */
 	leaving: boolean;
 }
 
-/** The first step not done yet; null once all are. */
-function currentStep(steps: SetupSteps): SetupCurrent | null {
-	if (!steps.provider) return 'provider';
-	if (!steps.model) return 'model';
-	if (!steps.repo) return 'repo';
-
-	return null;
-}
-
-/**
- * First run's checklist: a model provider, a review model and a repository.
- * Each step checks off in place as it is done; a beat after the last one,
- * with no dialog open, the pull request list takes the page (`leaving` fades the
- * checklist). Render nothing while `steps` is null.
- */
+/** The signed-in checklist: once the server says setup is complete, a beat later the pull request list takes the page. */
 export function useFirstRun(): FirstRunView {
-	const steps = useSetupSteps();
-	const [dialog, setDialog] = useState<SetupDialog | null>(null);
-	const left = steps ? stepsLeft(steps) : 3;
-	const leaving = useFinish(left === 0 && dialog === null);
-	const current = steps ? currentStep(steps) : null;
+	const checklist = useChecklist((state) => state.checklist);
+	const leaving = useFinish(checklist?.complete ?? false);
 
-	function dialogOpenChange(open: boolean): void {
-		if (open) return;
-
-		setDialog(null);
-		recheckSetup();
-	}
-
-	return {
-		steps,
-		left,
-		current,
-		dialog,
-		openDialog: setDialog,
-		dialogOpenChange,
-		leaving
-	};
+	return { checklist, leaving };
 }

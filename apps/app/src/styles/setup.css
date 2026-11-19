@@ -1,9 +1,10 @@
-/* ───────── First run: three steps on the pull request page, then the list takes it ───────── */
+/* ───────── Setup: seven steps, on their own before an account exists, then on the pull request page ───────── */
 /* The checklist is the whole page, so it sits in the middle of it rather than on the bar's gutter. */
 .page-scroll:has(> .setup) {
 	display: grid;
 }
 .setup {
+	--page-measure: 600px;
 	margin-block: auto;
 	padding-block: 20px 48px;
 	transition: opacity var(--dur-swap) ease-out;
@@ -26,14 +27,10 @@
 .setup-step .settings-row + .settings-row {
 	box-shadow: none;
 }
-/* The mark sits on the name's line, however far the line under it wraps; a step with no line under its name centres it. */
-.setup-step [data-ui='status-glyph'] {
-	align-self: flex-start;
-	margin-top: 1px;
-}
-.setup-step .settings-row:not(:has(.settings-row-detail)) [data-ui='status-glyph'] {
-	align-self: center;
-	margin-top: 0;
+/* A done step's check mark takes the ring's width, so every name starts at one edge. */
+.setup-step .settings-row > [data-ui='status-glyph'] {
+	width: 18px;
+	justify-content: center;
 }
 /* A step's line is a sentence, so it wraps where a settings row would cut it short. */
 .setup-step .settings-row[data-led] .settings-row-detail {
@@ -51,9 +48,134 @@
 .setup-step[data-current] .model-trigger-quiet {
 	color: var(--text-primary);
 }
-/* The command lines up with the step's text, past the mark. */
-.setup-command {
-	padding: 0 16px 14px 44px;
+/* A step's line sits beside its name, as in a table, and drops under it on a narrow column. */
+.setup-step .settings-row-text {
+	flex-flow: row wrap;
+	align-items: baseline;
+	column-gap: 16px;
+}
+.setup-step .settings-row-name {
+	flex: 0 0 148px;
+}
+.setup-step .settings-row-detail {
+	flex: 1 1 200px;
+	color: var(--text-faint);
+}
+.setup-step[data-done] .settings-row-detail {
+	color: var(--text-muted);
+}
+.setup-step:not([data-current], [data-done]) .settings-row-name {
+	color: var(--text-secondary);
+}
+.setup-fact-code {
+	font-family: var(--font-code);
+	font-size: 12px;
+}
+
+/* The mark of a step not done: its number in a ring, the step taking its turn in the primary. */
+.step-mark {
+	display: inline-grid;
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	place-items: center;
+	border-radius: 999px;
+	box-shadow: inset 0 0 0 1px var(--line-strong);
+	color: var(--text-faint);
+	font-family: var(--font-mono);
+	font-size: 10px;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+}
+.step-mark[data-current] {
+	box-shadow: inset 0 0 0 1.5px var(--primary);
+	color: var(--text-primary);
+}
+.setup-step[data-current] {
+	background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
+}
+.setup-step:first-child[data-current] {
+	border-start-start-radius: inherit;
+	border-start-end-radius: inherit;
+}
+.setup-step:last-child[data-current] {
+	border-end-start-radius: inherit;
+	border-end-end-radius: inherit;
+}
+
+/* The current step's body lines up with its name, past the mark. */
+.setup-body {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 0 16px 16px 46px;
+}
+.setup-text {
+	max-width: 60ch;
+	margin: 0;
+	color: var(--text-secondary);
+	text-wrap: pretty;
+}
+.setup-waiting {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.setup-form {
+	display: flex;
+	width: 100%;
+	max-width: 420px;
+	flex-direction: column;
+	gap: 12px;
+}
+.setup-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+/* The setup code sits on one line with its button; an error under the field leaves the button where it was. */
+.setup-code {
+	display: grid;
+	grid-template-columns: 220px auto;
+	align-items: start;
+	gap: 8px;
+}
+.setup-code > button {
+	margin-top: 22px;
+}
+.setup-signin {
+	display: flex;
+	width: 100%;
+	max-width: 320px;
+	flex-direction: column;
+	gap: 12px;
+}
+.setup-check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--text-secondary);
+	cursor: pointer;
+}
+.setup-modal-note {
+	margin: 0;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+
+/* Before an account exists the checklist is the whole screen, with no shell around it. */
+.setup-screen {
+	--page-gutter: 16px;
+	display: grid;
+	height: 100dvh;
+	overflow-y: auto;
+	background: var(--bg-canvas);
+}
+.setup-screen-error {
+	margin: auto;
+	color: var(--text-muted);
 }
 
 .setup-foot {

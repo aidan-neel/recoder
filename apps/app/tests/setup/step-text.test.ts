@@ -1,6 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import type { ModelSettings } from '@recoder/shared';
-import { prettyModelName } from '@recoder/shared';
 
 import { joinNames } from '../../src/lib/shell/format';
 import {
@@ -8,11 +6,9 @@ import {
 	connectedLine,
 	providerDescription,
 	providerReady,
-	reviewModelName,
-	shortList,
-	trackingLine
+	shortList
 } from '../../src/lib/setup/step-text';
-import { modelSettings, openCodeStatus } from '../fixtures';
+import { openCodeStatus } from '../fixtures';
 
 describe('shortening a list of names', () => {
 	test('three or fewer join plainly; past that the tail folds into a count', () => {
@@ -81,28 +77,5 @@ describe('the provider step’s description', () => {
 		expect(
 			providerDescription({ done: false, providers: [], models: null, manager: undefined, agentError: null })
 		).toBe('Can’t find OpenCode on this machine.');
-	});
-});
-
-describe('the repository step’s lines', () => {
-	test('tracking names the one repo or counts them', () => {
-		expect(trackingLine(['web'])).toBe('Tracking web');
-		expect(trackingLine(['web', 'api'])).toBe('Tracking 2 repositories');
-		expect(trackingLine([])).toBe('Tracking 0 repositories');
-	});
-});
-
-describe('the review model’s display name', () => {
-	function settings(model: string): ModelSettings {
-		return modelSettings({ model });
-	}
-
-	test('falls back to the saved model id pretty-printed', () => {
-		expect(reviewModelName(settings('openai/gpt-5.2'))).toBe(prettyModelName('openai/gpt-5.2'));
-	});
-
-	test('nothing saved resolves to null', () => {
-		expect(reviewModelName(settings(''))).toBeNull();
-		expect(reviewModelName(null)).toBeNull();
 	});
 });

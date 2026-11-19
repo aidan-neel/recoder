@@ -1,40 +1,32 @@
 'use client';
 
+import type { SetupStep as Step } from '@recoder/shared';
+import { useEffect } from 'react';
+
 import { useModelPicker } from '@/lib/settings/use-model-picker';
-import { useReviewModel } from '@/lib/setup/use-review-model';
+import { useChecklist } from '@/lib/setup/checklist-store';
 
 import { ModelPicker } from '@/components/settings/model-picker';
 
 import { SetupStep } from './setup-step';
 
-/** The step's line once a model is picked: the model reviews run on. Null before. */
-function modelLine(done: boolean, name: string | null): string | null {
-	if (!done) return null;
-
-	return name ? `Reviews run on ${name}` : 'Reviews are set up';
-}
-
-interface ModelStepProps {
-	done: boolean;
-	current: boolean;
-	/** A provider is in place, so there are models to pick from. */
-	offered: boolean;
-}
-
-/** Step two: the model that runs the reviews, picked in place with the picker Settings uses. */
-export function ModelStep({ done, current, offered }: ModelStepProps) {
-	const model = useReviewModel();
+/** Step five: the model that runs the reviews, picked in place with the picker Settings uses. */
+export function ModelStep({ step, current }: { step: Step; current: boolean }) {
 	const picker = useModelPicker('orchestrator');
+
+	useEffect(() => {
+		if (picker.state === 'success') void useChecklist.getState().load();
+	}, [picker.state]);
 
 	return (
 		<SetupStep
 			name="Review model"
-			detail={modelLine(done, model.name)}
-			done={done}
+			step={step}
 			current={current}
+			hint="Grok 4.6 at Low effort is the default"
 			state={picker.state}
 		>
-			{offered ? <ModelPicker role="orchestrator" picker={picker} /> : null}
+			{current || step.done ? <ModelPicker role="orchestrator" picker={picker} /> : null}
 		</SetupStep>
 	);
 }

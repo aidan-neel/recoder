@@ -1,7 +1,6 @@
-import { agentReady, prettyModelName, type AgentProvider, type AgentStatus, type ModelSettings } from '@recoder/shared';
+import { agentReady, type AgentProvider, type AgentStatus, type ModelSettings } from '@recoder/shared';
 
 import { joinNames } from '../shell/format';
-import { rolePick } from '../settings/model-options';
 
 /** Names past this many fold into "and N more". */
 const NAMED = 2;
@@ -57,27 +56,4 @@ export function providerDescription({
 	if (done) return connectedLine(providers, models);
 
 	return providerReady(manager, agentError) ? null : blockedLine(manager, agentError);
-}
-
-/** "Tracking acme/api", or how many once there are several. */
-export function trackingLine(names: string[]): string {
-	return names.length === 1 ? `Tracking ${names[0]}` : `Tracking ${names.length} repositories`;
-}
-
-/** The repository step's one line once done: what is tracked. Null before. */
-export function repoDescription({ done, names }: { done: boolean; names: string[] }): string | null {
-	return done ? trackingLine(names) : null;
-}
-
-/** The model reviews run on, by name; null when none resolves. */
-export function reviewModelName(models: ModelSettings | null): string | null {
-	if (!models) return null;
-
-	const pick = rolePick(models, 'orchestrator');
-
-	if (pick.option) return pick.option.name;
-
-	const id = pick.id ?? models.model;
-
-	return id ? prettyModelName(id) : null;
 }
