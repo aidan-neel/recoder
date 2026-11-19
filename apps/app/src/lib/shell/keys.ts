@@ -26,7 +26,7 @@ const OVERLAYS = ['dialog', 'alertdialog', 'menu', 'listbox']
 	.join();
 
 /** True when the event comes from a field the person is typing in. */
-function typing(target: EventTarget | null): boolean {
+export function typing(target: EventTarget | null): boolean {
 	const element = target as HTMLElement | null;
 
 	return !!element && (element.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(element.tagName));
