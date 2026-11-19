@@ -364,7 +364,7 @@ export function candidateFromDetector(
 		file: result.file,
 		line: result.line,
 		endLine,
-		severity: result.category === 'correctness' ? 'error' : 'warning',
+		severity: result.severity ?? (result.category === 'correctness' ? 'error' : 'warning'),
 		message: `[${result.category}] ${result.body}`,
 		agent: lens,
 		category: result.category,

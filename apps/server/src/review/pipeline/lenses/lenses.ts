@@ -112,6 +112,7 @@ const READABILITY: Lens = {
 	procedure: numbered([
 		`For each changed symbol, check the smells in this order: ${READABILITY_SMELLS.join(', ')}.`,
 		'deep-nesting and long-function are complexity; compare the symbol metrics with the repo baseline in the context and report only a clear outlier.',
+		'Size is never a finding by itself. A function under about 150 lines is not a long-function, and past that a complexity finding needs a concrete problem: several unrelated responsibilities, nesting so deep a bug hides in it, or tangled control flow. Say which problem, and rate complexity findings low: they are suggestions, not bugs.',
 		'Every other smell is readability. Name exactly one smell in "smell" per finding.',
 		'Report only on lines the change added or modified, and only when a careful human reviewer on this repo would ask for the change.',
 		'Add "fix" edits when the fix is mechanical (a rename, an extracted constant).'

@@ -5,9 +5,12 @@ import type { DetectorResult } from './types.js';
 
 /**
  * A symbol counts as complex only past both the repo's own p95 and these
- * floors, so a repo of tiny functions doesn't flag a normal one.
+ * floors, so a repo of tiny functions doesn't flag a normal one. Line count
+ * alone is never the finding: a symbol past `lines` but within the depth and
+ * parameter floors is left alone, and a symbol under `lines` is never
+ * reported for size however the repo's p95 reads.
  */
-const COMPLEXITY_FLOORS: SymbolMetrics = { lines: 60, maxDepth: 4, params: 5 };
+const COMPLEXITY_FLOORS: SymbolMetrics = { lines: 150, maxDepth: 4, params: 5 };
 
 /** A modified symbol is judged only when the change wrote at least this share of its lines. */
 const MIN_ADDED_SHARE = 0.25;
@@ -78,27 +81,42 @@ function exceeded(metrics: SymbolMetrics, baseline: RepoMetricsBaseline): [keyof
 		.filter(([, value, limit]) => value > limit);
 }
 
-function complexityResult(symbol: ChangedSymbol, over: [keyof SymbolMetrics, number, number][]): DetectorResult {
+/** The metrics a finding needs a concrete problem for: nesting and parameters, never line count. */
+function concreteOver(over: [keyof SymbolMetrics, number, number][]): [keyof SymbolMetrics, number, number][] {
+	return over.filter(([key]) => key !== 'lines');
+}
+
+function complexityResult(
+	symbol: ChangedSymbol,
+	over: [keyof SymbolMetrics, number, number][],
+	size: [keyof SymbolMetrics, number, number][]
+): DetectorResult {
 	const parts = over.map(([key, value]) => `${value} ${METRIC_NAMES[key]}`);
 	const limits = over.map(([key, , limit]) => `${METRIC_NAMES[key]} ${limit}`);
+	const lines = size.find(([key]) => key === 'lines');
+	const alsoSize = lines ? ` It also runs ${lines[1]} lines, more than 95% of the repo's declarations.` : '';
 
 	return {
 		detector: 'complexity',
 		category: 'complexity',
-		title: `\`${symbol.name}\` is larger than almost all code in this repo`,
-		body: `\`${symbol.qualifiedName}\` has ${parts.join(', ')}, more than 95% of this repo's ${symbol.language} declarations. Split it into smaller named steps.`,
+		title: `\`${symbol.name}\` is harder to follow than almost all code in this repo`,
+		body: `\`${symbol.qualifiedName}\` has ${parts.join(', ')}, more than 95% of this repo's ${symbol.language} declarations.${alsoSize} Consider naming the steps or thinning the signature if the code is hard to work with; a large but straightforward function is fine as it is.`,
 		file: symbol.file,
 		line: symbol.startLine,
 		endLine: symbol.endLine,
 		symbol: symbol.qualifiedName,
-		evidence: `${symbol.qualifiedName}: ${over.map(([key, value]) => `${key} ${value}`).join(', ')}; limit (max of repo p95 and floor): ${limits.join(', ')}.`
+		evidence: `${symbol.qualifiedName}: ${size.map(([key, value]) => `${key} ${value}`).join(', ')}; limit (max of repo p95 and floor): ${limits.join(', ')}.`,
+		severity: 'info'
 	};
 }
 
 /**
  * Changed symbols past both the repo's p95 and the absolute floors for their
- * language. A modified symbol counts only when the change wrote a real share
- * of it, so touching one line of an old long function doesn't flag it.
+ * language, where the metric past the limits is nesting depth or parameters.
+ * Line count is supporting evidence, never the reason: a long but shallow
+ * function with few parameters is not reported. A modified symbol counts only
+ * when the change wrote a real share of it, so touching one line of an old
+ * long function doesn't flag it.
  */
 export function complexityResults(model: ChangeModel | null, added: AddedLines): DetectorResult[] {
 	if (!model) return [];
@@ -112,7 +130,8 @@ export function complexityResults(model: ChangeModel | null, added: AddedLines):
 		if (symbol.change === 'modified' && addedWithin(symbol, added) < symbol.metrics.lines * MIN_ADDED_SHARE) return [];
 
 		const over = exceeded(symbol.metrics, baseline);
+		const concrete = concreteOver(over);
 
-		return over.length ? [complexityResult(symbol, over)] : [];
+		return concrete.length ? [complexityResult(symbol, concrete, over)] : [];
 	});
 }

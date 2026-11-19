@@ -403,7 +403,7 @@ function standard(candidate: CandidateFinding, rule: RepoRule | undefined): stri
 		case 'readability':
 			return `Named smell: ${candidate.smell}.\nConfirm only when the flagged lines show this smell plainly. Read them and cite that read.`;
 		case 'complexity':
-			return 'Confirm only when the flagged code is clearly harder to follow than the code around it. Read it and cite that read.';
+			return 'Confirm only when the flagged code has a concrete problem: several unrelated responsibilities, nesting so deep a bug hides in it, or tangled control flow. Size alone is not enough — a function under about 150 lines is never too large, and past that a plain long function with a clear shape is fine. Read the flagged code and cite that read.';
 		case 'duplication':
 			return 'Confirm only when other code already does the same thing. Read that other code and cite the read.';
 		case 'dead-code':
