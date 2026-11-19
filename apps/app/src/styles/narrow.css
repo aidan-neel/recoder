@@ -122,6 +122,14 @@
 	.page {
 		--page-gutter: 16px;
 	}
+	/* New: the lists and the dock reach the page's gutter, and a row keeps its title in place of its size. */
+	.compose-scroll,
+	.compose-dock {
+		padding-inline: 8px;
+	}
+	.compose-row .diff-stat {
+		display: none;
+	}
 	.crumbs > :not(:nth-last-child(-n + 3)) {
 		display: none;
 	}

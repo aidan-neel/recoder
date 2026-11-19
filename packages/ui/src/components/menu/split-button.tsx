@@ -29,7 +29,8 @@ interface SplitButtonProps extends Omit<ComponentProps<typeof Button>, 'variant'
  * A button and a menu of other ways to do its action, read as one control:
  * outer corners round, inner corners square. A filled pair has a hairline of
  * the label's colour between the halves; an outlined pair shares one edge.
- * Each half lights and rings inside its own shape. The button takes the rest
+ * Each half lights and rings inside its own shape. The chevron is small and
+ * quieter than the label, so the pair reads as the button first. The button takes the rest
  * of the props; while it is disabled or pending, the menu is shut too.
  */
 export function SplitButton({
@@ -60,7 +61,7 @@ export function SplitButton({
 						disabled={disabled || status === 'pending'}
 						className={cn('rounded-s-none', HALF_FOCUS, variant === 'primary' ? SEAM : '-ms-px')}
 					>
-						<CaretDownIcon />
+						<CaretDownIcon className="size-3 opacity-60" />
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className={menuClassName}>

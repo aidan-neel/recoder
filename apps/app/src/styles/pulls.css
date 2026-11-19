@@ -130,11 +130,6 @@
 	font-size: var(--font-size-label);
 	font-variant-numeric: tabular-nums;
 }
-.pull-row-meta {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
 /* Controls inside a row stay clickable above the row's own link. */
 .pull-row-status,
 .pull-row-menu {

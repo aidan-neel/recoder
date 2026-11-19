@@ -221,8 +221,73 @@
 	color: var(--text-ghost);
 	content: '·';
 }
+/* The facts under a pull request's title, on one line that ends in an ellipsis. */
+.pull-meta {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* The repository's label fills the line's height, so its name sits on the line of the words beside it whether or not a word leads. */
+.pull-meta .repo-label {
+	vertical-align: top;
+}
 .mono {
 	font-family: var(--font-code);
+}
+
+/*
+ * A reference in a line of text: a file or a commit as a small chip, a mark before its name. Its block margins are
+ * negative, so a 20px chip never makes a 20px line taller than the lines without one.
+ */
+.ref-chip {
+	display: inline-flex;
+	max-width: 100%;
+	align-items: center;
+	gap: 4px;
+	height: 20px;
+	margin-block: -3px;
+	padding: 0 7px 0 5px;
+	border: 0;
+	border-radius: var(--radius-row);
+	background: var(--sev-info-tint);
+	color: var(--text-muted);
+	font-family: var(--font-code);
+	font-size: var(--font-size-badge);
+	font-weight: 400;
+	letter-spacing: 0;
+	line-height: 20px;
+	text-decoration: none;
+	vertical-align: 1px;
+	white-space: nowrap;
+	cursor: default;
+	transition:
+		color var(--dur-hover) ease-out,
+		background-color var(--dur-hover) ease-out;
+}
+.ref-chip[data-openable],
+a.ref-chip {
+	cursor: pointer;
+}
+/* A chip that is a link keeps the chip's look inside Markdown, whose links are underlined and primary. */
+a.ref-chip {
+	border-radius: var(--radius-row);
+	color: var(--text-muted);
+	text-decoration: none;
+	transition:
+		color var(--dur-hover) ease-out,
+		background-color var(--dur-hover) ease-out;
+}
+/* Only a chip that does something answers the pointer: a button or a link, never a plain label. */
+:is(a, button).ref-chip:hover,
+.ref-chip[data-state='open'] {
+	background: var(--bg-hover);
+	color: var(--text-primary);
+}
+.ref-chip svg {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
 }
 
 /* Lines added and removed: mono, the sign carries the meaning with the hue. */

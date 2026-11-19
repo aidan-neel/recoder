@@ -8,6 +8,14 @@ export const REVIEW_NEEDS_PULL = 'Choose a pull request to review, or switch to 
 /** Why Chat mode will not start: a chat is about a tracked repository, and none is. */
 export const CHAT_NEEDS_REPO = 'Track a repository to chat about it.';
 
+/** The most characters one edit can add and still be typing. */
+const TYPED_CHARS = 1;
+
+/** True when the edit from `previous` to `next` added more than a keystroke: a paste, which brings a whole reference at once. */
+export function isPaste(previous: string, next: string): boolean {
+	return next.length - previous.length > TYPED_CHARS;
+}
+
 /** A pull request reference taken out of the field, and the text that stays in it. */
 export type PullTake =
 	{ kind: 'taken'; target: PickTarget; text: string } | { kind: 'refused'; reason: string; text: string };

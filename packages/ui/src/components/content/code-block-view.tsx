@@ -65,7 +65,7 @@ export function CodeBlockView({
 			data-gutter={gutter}
 			className={cn(
 				'relative min-w-0 overflow-hidden rounded-(--radius-row) bg-code font-mono text-[12.5px] leading-5 text-(--syn-plain)',
-				'shadow-[0_0_0_1px_var(--line-card)] [tab-size:4]',
+				'shadow-[0_0_0_1px_var(--line-card)] [tab-size:var(--code-tab-size,4)]',
 				className
 			)}
 		>

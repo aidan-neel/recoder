@@ -31,13 +31,43 @@
 	width: 200px;
 }
 
-/* The tiles rise 6px as they arrive, a little further than a row, since they stand taller. */
+/*
+ * The tiles rise 6px as they arrive, a little further than a row, since they stand taller. The window's width sets
+ * how many a row holds, never the page's: the page widens while the sidebar slides away, and a count read from it
+ * adds a column half-way and snaps every tile narrower. Each step is the width at which the tiles are 300px wide
+ * beside the sidebar at its default width, so hiding the sidebar only widens them.
+ */
 .fleet-grid {
 	--enter-rise: 6px;
 
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	grid-template-columns: repeat(var(--fleet-columns, 1), minmax(0, 1fr));
 	gap: 16px;
+}
+@media (min-width: 640px) {
+	.fleet-grid {
+		--fleet-columns: 2;
+	}
+}
+@media (min-width: 1280px) {
+	.fleet-grid {
+		--fleet-columns: 3;
+	}
+}
+@media (min-width: 1600px) {
+	.fleet-grid {
+		--fleet-columns: 4;
+	}
+}
+@media (min-width: 1920px) {
+	.fleet-grid {
+		--fleet-columns: 5;
+	}
+}
+@media (min-width: 2240px) {
+	.fleet-grid {
+		--fleet-columns: 6;
+	}
 }
 .fleet-cell {
 	display: grid;

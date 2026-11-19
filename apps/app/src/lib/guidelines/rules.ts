@@ -1,5 +1,7 @@
 import type { GlobalGuidelines, RepoGuidelines } from '@recoder/shared';
 
+import { shortSha } from '../files/ref-label';
+
 /** The global row's line when the owner never saved global guidelines, so the built-in ones apply. */
 const NOT_SET = 'Not set. Reviewers follow Recoder’s defaults.';
 
@@ -35,7 +37,7 @@ export function repoSummary(data: RepoGuidelines): string {
 
 /** Where the active file was read: branch and short commit, for the status pill's tooltip. */
 export function activeSource(data: RepoGuidelines): string {
-	const sha = data.sha ? ` at ${data.sha.slice(0, 7)}` : '';
+	const sha = data.sha ? ` at ${shortSha(data.sha)}` : '';
 
 	return `${data.path} on ${data.ref}${sha}`;
 }

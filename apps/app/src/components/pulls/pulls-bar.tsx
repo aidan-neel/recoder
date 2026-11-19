@@ -16,7 +16,7 @@ interface RepoScopeProps {
 	onChange: (repoId: string | null) => void;
 }
 
-/** Which repository's pull requests show: all of them, or one. Hidden until there are two to choose between. */
+/** Which repository's pull requests show: all of them, or one. With fewer than two to choose between, it names the page. */
 export function RepoScope({ repos, repoId, onChange }: RepoScopeProps) {
 	const [only] = repos;
 
@@ -26,6 +26,11 @@ export function RepoScope({ repos, repoId, onChange }: RepoScopeProps) {
 		);
 	}
 
+	return <RepoSelect className="pulls-scope" repos={repos} repoId={repoId} onChange={onChange} />;
+}
+
+/** The quiet select of a list's repository: every one, or one of them. */
+export function RepoSelect({ repos, repoId, onChange, className }: RepoScopeProps & { className?: string }) {
 	const options: SelectOption[] = [
 		{ value: ALL_REPOS, label: 'All repositories' },
 		...repos.map((repo) => ({ value: repo.id, label: <RepoLabel name={repo.name} forge={repo.provider} /> }))
@@ -34,7 +39,7 @@ export function RepoScope({ repos, repoId, onChange }: RepoScopeProps) {
 	return (
 		<Select
 			variant="quiet"
-			className="pulls-scope"
+			className={className}
 			aria-label="Repository"
 			value={repoId ?? ALL_REPOS}
 			onValueChange={(value) => onChange(value === ALL_REPOS ? null : value)}

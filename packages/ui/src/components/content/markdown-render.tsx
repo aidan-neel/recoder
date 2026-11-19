@@ -7,9 +7,11 @@ import { whenIdle } from './idle';
 import { cachedMarkdown } from './markdown-cache';
 import {
 	MARKDOWN_PARTS,
+	partsWithInlineCode,
 	partsWithLinkOverride,
 	STATIC_MARKDOWN_PARTS,
 	staticPartsWithCode,
+	type InlineCodeComponent,
 	type LinkOverride,
 	type MarkdownCodeParts
 } from './markdown-parts';
@@ -37,6 +39,18 @@ export interface MarkdownProps extends MarkdownSource {
 	streaming?: boolean;
 	/** Draws the links with this target prefix through a component of the caller's, keeping every other link as is. */
 	linkOverride?: LinkOverride;
+	/**
+	 * Draws inline code through a component of the caller's, such as a badge for a file the page knows. Keep one
+	 * component for the life of the page: rendered text is cached by it.
+	 */
+	inlineCode?: InlineCodeComponent;
+}
+
+/** The parts a client Markdown renders with: the kit's, with the caller's links and inline code when it draws them. */
+function clientParts(linkOverride?: LinkOverride, inlineCode?: InlineCodeComponent): Components {
+	const base = linkOverride ? partsWithLinkOverride(linkOverride) : MARKDOWN_PARTS;
+
+	return inlineCode ? partsWithInlineCode(base, inlineCode) : base;
 }
 
 const REMARK = [remarkGfm];
@@ -205,7 +219,8 @@ export function MarkdownProse({
 	streaming = false,
 	className,
 	linkOverride,
-	parts = linkOverride ? partsWithLinkOverride(linkOverride) : MARKDOWN_PARTS,
+	inlineCode,
+	parts = clientParts(linkOverride, inlineCode),
 	plugins,
 	ref
 }: MarkdownProps & { parts?: Components; plugins?: StreamPlugins; ref?: Ref<HTMLDivElement> }) {

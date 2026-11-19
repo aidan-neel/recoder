@@ -113,7 +113,10 @@ export function usePullDiffView(): PullDiffView {
 	return useMemo(() => loadable(diff, () => void session.pages.loadDiff()), [diff, session]);
 }
 
-/** Reads the commits unless they have been read: for the Commits tab, and for the pointer resting on its link. */
+/**
+ * Reads the commits unless they have been read: for the Commits tab, for the Summary, whose prose names them, and
+ * for the pointer resting on either tab's link.
+ */
 export function useWarmCommits(): () => void {
 	const session = useSession();
 

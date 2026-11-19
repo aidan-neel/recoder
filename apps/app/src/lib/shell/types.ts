@@ -29,6 +29,8 @@ export interface SettledReview extends RecentReview {
 export interface RecentChat {
 	chatId: string;
 	href: string;
+	/** The repository the chat is about, for a list that shows one repository's chats. */
+	repoId: string;
 	/** Short, from the chat's first message. */
 	title: string;
 	/** The repository's short name. */

@@ -6,22 +6,16 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useApi, useChatCache, useListStore } from '../api/client';
-import { needsReview } from '../pulls/pull-rows';
 import type { TargetContext } from '../pulls/pull-target';
 import { trackedPull } from '../pulls/use-open-pull';
 import { useLinkFacts } from '../pulls/use-link-facts';
 import { useRowEntries, useWatchList } from '../pulls/use-rows';
 import { chatHref } from '../shell/routes';
 import { useComposeMode, type ComposeMode } from './compose-mode';
-import { CHAT_NEEDS_REPO, REVIEW_NEEDS_PULL, takePull } from './compose-target';
+import { CHAT_NEEDS_REPO, REVIEW_NEEDS_PULL, isPaste, takePull } from './compose-target';
 import type { ComposeView } from './types';
+import { useComposeList } from './use-compose-list';
 import { usePullPick } from './use-pull-pick';
-
-/** How many pull requests the New review screen suggests. */
-const SUGGESTION_LIMIT = 6;
-
-/** The most characters one edit can add and still be typing; more is a paste, which brings a whole reference at once. */
-const TYPED_CHARS = 1;
 
 /**
  * The New screen: the pull request chosen, the brief or message written, the
@@ -46,12 +40,11 @@ export function useCompose(): ComposeView {
 			chosenRepoId: state.composeRepoId,
 			repos: state.repos,
 			pulls: state.list,
-			phase: state.phase,
-			starting: state.starting
+			phase: state.phase
 		}))
 	);
 
-	const { text, chosenRepoId, repos, pulls, starting } = data;
+	const { text, chosenRepoId, repos, pulls } = data;
 	const repoId = repos?.some((repo) => repo.id === chosenRepoId) ? chosenRepoId : (repos?.[0]?.id ?? null);
 
 	const context = useMemo<TargetContext>(
@@ -64,14 +57,18 @@ export function useCompose(): ComposeView {
 	const hasTypedPull = mode === 'review' && takePull(text, context, true) !== null;
 	const linkFacts = useLinkFacts();
 
-	const suggestions = useMemo(
-		() =>
-			entries
-				.filter(({ listed, row }) => needsReview(listed) && !starting.has(row.key))
-				.slice(0, SUGGESTION_LIMIT)
-				.map(({ row }) => row),
-		[entries, starting]
+	const takeReference = useCallback(
+		(reference: string) => {
+			const taken = mode === 'review' ? takePull(reference, context, true) : null;
+
+			if (taken) picking.take(taken);
+
+			return taken !== null;
+		},
+		[mode, context, picking]
 	);
+
+	const listing = useComposeList(entries, takeReference);
 
 	const repoPulls = useMemo(
 		() => entries.filter(({ row }) => row.repoId === repoId).map(({ row }) => row),
@@ -85,7 +82,7 @@ export function useCompose(): ComposeView {
 
 	const setText = useCallback(
 		(next: string) => {
-			const pasted = next.length - list.state.getState().composeText.length > TYPED_CHARS;
+			const pasted = isPaste(list.state.getState().composeText, next);
 			const taken = mode === 'review' ? takePull(next, context, pasted) : null;
 
 			picking.clearRefusal();
@@ -186,7 +183,7 @@ export function useCompose(): ComposeView {
 			repoId,
 			setRepoId,
 			reload: list.reload,
-			suggestions,
+			list: listing,
 			reposLoading: repos === null,
 			pullsLoading: data.phase === 'loading',
 			overBy,
@@ -212,7 +209,7 @@ export function useCompose(): ComposeView {
 			repoId,
 			setRepoId,
 			list,
-			suggestions,
+			listing,
 			repos,
 			data.phase,
 			overBy,

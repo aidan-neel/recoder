@@ -2,6 +2,7 @@ import type { ImageUpload, Provider, ReviewSpeed } from '@recoder/shared';
 import type { LinkFacts } from '@recoder/ui/form';
 
 import type { PullRow, PullTarget, RepoOption } from '../pulls/types';
+import type { RecentChat } from '../shell/types';
 import type { ComposeMode } from './compose-mode';
 
 /** A pull request New can review: one in a tracked repository, or one whose repository is tracked first. */
@@ -16,6 +17,27 @@ export interface ComposePick {
 /** A tracked repository in the New review picker, with the forge whose mark it shows. */
 export interface ComposeRepo extends RepoOption {
 	provider: Provider;
+}
+
+/** What New lists over the composer: the open pull requests to choose from, and the chats to go back to. */
+export interface ComposeList {
+	/** The find field's text; the lists hold only what has each of its words. */
+	query: string;
+	/** Sets the find text. In Review mode a pasted link or `#214` is chosen instead, and the field empties. */
+	setQuery: (query: string) => void;
+	/** Enter in the find field: chooses the pull request the text names, when it names one. */
+	settleQuery: () => void;
+	/** The one repository listed, or null for all. It does not move the repository of the composer's bar. */
+	repoId: string | null;
+	setRepoId: (repoId: string | null) => void;
+	/** Open pull requests with no review at their current head, newest activity first. */
+	unreviewed: PullRow[];
+	/** Open pull requests with a review at their current head, running or done, newest activity first. */
+	reviewed: PullRow[];
+	/** The newest chats, newest first. */
+	chats: RecentChat[];
+	/** True until the chats answer for the first time. */
+	chatsLoading: boolean;
 }
 
 /** The New screen: choose a pull request and write what its review should look at, or start a chat about a repository. */
@@ -55,11 +77,11 @@ export interface ComposeView {
 	setRepoId: (repoId: string) => void;
 	/** Reads the repositories and pull requests again: after one was added from the composer. */
 	reload: () => void;
-	/** Open pull requests with no review at their current head, newest first; at most six. */
-	suggestions: PullRow[];
+	/** The lists over the composer, with the find field and the repository filter that narrow them. */
+	list: ComposeList;
 	/** True while the repositories load for the first time. They answer fast, so a chat can start before the pulls. */
 	reposLoading: boolean;
-	/** True while the pull requests, and so the suggestions, load for the first time; a forge can take seconds. */
+	/** True while the pull requests load for the first time; a forge can take seconds. */
 	pullsLoading: boolean;
 	/** How many characters a chat's first message runs over the server's limit; 0 or less when it fits. */
 	overBy: number;

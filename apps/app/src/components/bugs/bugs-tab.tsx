@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 
 import type { BugsView } from '@/lib/bugs/types';
 import { useBugsView } from '@/lib/bugs/use-bugs';
+import { shortSha } from '@/lib/files/ref-label';
 import { usePullPageView } from '@/lib/pull/pull-session';
 import { isLive } from '@/lib/run/run-phase';
 import { useRunView } from '@/lib/run/use-run';
@@ -94,7 +95,7 @@ function PreviousFindings({ view, open, onToggle }: PreviousFindingsProps) {
 				<h2 className="section-label">Previous review</h2>
 				{view.previous.headSha ? (
 					<Pill face="code" icon={<GitCommitIcon aria-hidden />} title={view.previous.headSha}>
-						{view.previous.headSha.slice(0, 7)}
+						{shortSha(view.previous.headSha)}
 					</Pill>
 				) : null}
 				{view.previous.reviewedAt ? (

@@ -209,6 +209,7 @@
 	background: none;
 	font-family: inherit;
 	font-size: inherit;
+	line-height: inherit;
 }
 [data-ui='code-line-text']::selection,
 [data-ui='code-line-text'] ::selection,
@@ -381,7 +382,10 @@
 	border: 0;
 	border-top: 1px solid var(--line-card);
 }
+/* Code quoted in prose sits in a narrow column, so its tabs are two columns wide and deep code stays in view. */
 [data-ui='markdown'] :where([data-ui='code-block']) {
+	--code-tab-size: 2;
+
 	margin: 0.75em 0;
 }
 

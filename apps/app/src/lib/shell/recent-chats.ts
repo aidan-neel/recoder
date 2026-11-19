@@ -11,6 +11,7 @@ export function recentChats(chats: RepoChatSummary[], repos: Repo[] | null, base
 		.map((chat) => ({
 			chatId: chat.id,
 			href: chatHref(base, chat.id),
+			repoId: chat.repoId,
 			title: chat.title,
 			repoName: shortRepoName(repos, chat.repoId),
 			repoForge: repoForge(repos, chat.repoId),

@@ -86,11 +86,15 @@
 		gap: 4px;
 		padding: var(--composer-inset);
 	}
+	/* The tools keep their size; a caller's picker among them may give way, so a long name never pushes the action out. */
 	[data-ui='composer-bar-tools'] {
 		display: flex;
-		flex-shrink: 0;
+		min-width: 0;
 		align-items: center;
 		gap: 2px;
+	}
+	[data-ui='composer-bar-tools'] > [data-ui='composer-tool'] {
+		flex-shrink: 0;
 	}
 
 	/* ───────── Images: square tiles over the text, on the text's edge; the remove button rides the corner ───────── */

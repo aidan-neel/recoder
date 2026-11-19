@@ -147,8 +147,12 @@ It departs from the root `DESIGN.md` (apps/web) in five places:
   Under the bar, the scopes as page tabs with a count each (All, Needs you
   with its count in the high-severity colour, Quiet, Auto review off; the
   address names the scope as `?scope=`) and, at the right, the days the tiles
-  cover. Then a grid of tiles at least 300px wide with 16px between, a
-  tracked repository each, those with something to do first, then by name.
+  cover. Then a grid of tiles with 16px between, a tracked repository each,
+  those with something to do first, then by name. The window's width sets
+  how many tiles a row holds (2 from 640px, 3 from 1280px, 4 from 1600px,
+  5 from 1920px, 6 from 2240px: the widths where a tile is 300px beside the
+  default sidebar), so hiding the sidebar widens the tiles and never moves
+  one to another row.
   A tile is a card, 224px tall: the forge's mark and `owner / name` (the
   owner faint and cut first), which is the link to the repository page and
   covers the tile, with a 6px dot at the end that is green when auto review
@@ -195,25 +199,37 @@ It departs from the root `DESIGN.md` (apps/web) in five places:
   Guidelines and Automations. The page loads behind a skeleton of the same
   shape and paints once, whole. A part with nothing in it says so in one quiet
   line; a repository that is not tracked or did not load says so in a banner.
-- **New**: one large composer, its centre near 42% of the page, with no
-  heading; the crumb names the screen (New review or New chat). In its bar,
-  after attach and "/", sits the repository, a quiet button with the forge's
-  mark that opens a searchable command dialog of every tracked repository,
-  the current one checked. Over its right edge sits a Review | Chat switch. In Review the
-  pull request is a pick, not text: a second bar button beside the repository
-  (it reads None until one is chosen) opens a searchable dialog of its open
-  pull requests, and the field holds only
-  the brief, what the review should look at (it may be empty). A pasted link or
-  a typed `#214 ` moves into the pick and leaves the text; a row under "Not
-  reviewed yet" picks its pull request and puts the caret in the field rather
-  than starting at once. In Chat it takes anything about the
-  repository, and Enter opens the chat. The switch is explicit, not guessed
-  from the text: "Is api #214 safe to merge?" names a pull request and is
-  still a question. The note in the bar holds what stops Enter (the target's
-  error, a review with no pull request chosen, a chat over the limit), what
-  Enter will do first (connect an untracked repository), or a refusal; it is
-  empty otherwise. The models sit in the bar. The open pull requests with no
-  review yet sit below, one click each, and never move the field.
+- **New**: the choices fill the page and one large composer is docked at its
+  foot, with no heading; the crumb names the screen (New review or New chat)
+  and a Review | Chat switch sits at the end of the page's bar. The lists and
+  the dock share one centred 760px column; the dock stays outside the
+  scroller, so the composer never moves and its "/" menu opens over the
+  lists. On top of the column sits a find field and, once two repositories
+  are tracked, a quiet repository filter; both narrow the lists and neither
+  moves the composer's repository. In Review the lists are the open pull
+  requests in two groups, "Not reviewed yet" then "Reviewed", each with its
+  count. A row is 48px: the pull mark, the title and number over the author,
+  repository and age, then the row's one fact as a pill, its size, and a
+  choice mark. A click chooses the row's pull request (its mark fills, the
+  selection layer moves to it) and puts the caret in the composer rather than
+  starting at once. A link or a `#214` pasted into the find field, or typed
+  there and sent with Enter, is chosen the same way and the field empties.
+  In Chat the list is "Recent chats"; a row opens its chat. In the composer's
+  bar, after attach and "/", sits the repository, a quiet button with the
+  forge's mark that opens a searchable command dialog of every tracked
+  repository, the current one checked. In Review the pull request is a pick,
+  not text: a second bar button beside the repository (it reads None until
+  one is chosen) names the choice and opens a searchable dialog of the
+  repository's open pull requests, and the field holds only the brief, what
+  the review should look at (it may be empty). A pasted link or a typed
+  `#214 ` moves into the pick and leaves the text. In Chat the field takes
+  anything about the repository, and Enter opens the chat. The switch is
+  explicit, not guessed from the text: "Is api #214 safe to merge?" names a
+  pull request and is still a question. The note in the bar holds what stops
+  Enter (the target's error, a review with no pull request chosen, a chat
+  over the limit), what Enter will do first (connect an untracked
+  repository), or a refusal; it is empty otherwise. The models sit in the
+  bar. Under 640px a row drops its size and keeps its fact.
 - **Pull request page**: the header (the title over a row of badges: state,
   author, base and head branch, change size, last activity), then four tabs.
   The header holds no review status: the Review tab says where the newest
@@ -230,7 +246,19 @@ It departs from the root `DESIGN.md` (apps/web) in five places:
     reviewer. No boxes: labels, space and hairlines group it. It runs the
     page's full width on the header's gutters, with no chat beside it. The
     conversation ends in a one-line comment field (the composer's row
-    layout). In a bug's Ask, a reply's Thinking line starts folded (a click opens its steps). While it works, the
+    layout). In its prose, inline code that names a file the pull request
+    changes or one of its commits is a badge (`RefChip`, the look of a chat
+    citation): the file's language mark and name with its lines, or a commit
+    glyph and seven characters of the hash. A file badge opens the Changes tab
+    at that file; a commit badge shows the commit's title on hover and opens
+    the commit on its forge. A local repository's commit has no page, so its
+    badge is a label that does not answer the pointer. Anything else stays
+    code. Text that could gain a badge waits for what could give it one (the
+    diff for inline code, the commits for a hash), so badges never swap in
+    after the text. Fenced code in any
+    Markdown drops the indentation its lines share, takes its language from
+    its text when the fence names none, and draws a tab two columns wide. A
+    badge or a code span never makes its line taller. In a bug's Ask, a reply's Thinking line starts folded (a click opens its steps). While it works, the
     newest thought sweeps on one line under it; when the answer begins, that
     line fades out where the answer's first line fades in, on the same
     baseline. The answer goes out a few words at a time at a pace that keeps
@@ -436,8 +464,8 @@ comment field. There is no second implementation.
   button, which spins in place while sending; while a reply arrives it is
   `ComposerStop`. The note is right-aligned meta text, danger for what stops
   Enter, secondary for what Enter does first.
-- **Sizes.** `lg` is a page's main field (New): 15px text, three rows.
-  `md` is everything else, two rows. The `row` layout puts the field and the
+- **Sizes.** `lg` is a page's main field (New): 15px text, two rows, and it
+  grows to eight before it scrolls. `md` is everything else, two rows. The `row` layout puts the field and the
   action on one line for the comment field; an empty note takes no room.
 - **"/" menu.** A slash typed at the start of the field or after a space,
   or the "/" tool beside attach, opens one list over the composer, across its

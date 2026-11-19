@@ -35,6 +35,7 @@ button,
 	color: var(--text-ai);
 	text-wrap: pretty;
 }
+/* Its own line height is 1, so the code face never makes a line of prose taller than the lines around it. */
 .ai-voice code,
 .inline-code {
 	padding: 1px 5px;
@@ -42,6 +43,7 @@ button,
 	background: var(--bg-bubble);
 	font-family: var(--font-code);
 	font-size: 0.8em;
+	line-height: 1;
 }
 
 /* No scrollbar shows anywhere; every scroller still scrolls by wheel, touch and keys. */

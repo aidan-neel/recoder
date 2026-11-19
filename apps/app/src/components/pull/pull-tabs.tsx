@@ -59,7 +59,7 @@ export function PullTabs({ repoId, number, tab, counts }: PullTabsProps) {
 			count: marked ? null : countOf(id, counts),
 			tone: id === 'review' ? 'bugs' : undefined,
 			adornment: marked ? review : undefined,
-			warm: id === 'commits' ? warmCommits : undefined
+			warm: id === 'commits' || id === 'summary' ? warmCommits : undefined
 		};
 	});
 

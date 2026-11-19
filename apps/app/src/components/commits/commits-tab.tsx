@@ -4,6 +4,7 @@ import type { PullCommit } from '@recoder/shared';
 import { Button, CopyButton, HoverList, RowButton, Skeleton, StatusNotice } from '@recoder/ui';
 
 import { LOADING_COMMITS } from '@/lib/commits/loading-commits';
+import { shortSha } from '@/lib/files/ref-label';
 import { usePullCommitsView } from '@/lib/pull/pull-session';
 import { author } from '@/lib/shell/format';
 
@@ -39,7 +40,7 @@ function CommitRow({ commit }: { commit: PullCommit }) {
 					variant="ghost"
 					size="sm"
 					value={commit.sha}
-					label={<span className="mono">{commit.sha.slice(0, 7)}</span>}
+					label={<span className="mono">{shortSha(commit.sha)}</span>}
 					copiedLabel="Copied"
 				/>
 			</span>

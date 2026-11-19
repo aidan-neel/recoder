@@ -1,7 +1,7 @@
 'use client';
 
 import type { PullComment } from '@recoder/shared';
-import { Markdown, Pill, Skeleton, type PillTone } from '@recoder/ui';
+import { Pill, Skeleton, type PillTone } from '@recoder/ui';
 
 import type { PullConversationView } from '@/lib/pull/types';
 import { author } from '@/lib/shell/format';
@@ -10,6 +10,8 @@ import { LOADING_CONVERSATION } from '@/lib/summary/loading-summary';
 import { ChatComposer } from '@/components/ask/chat-composer';
 import { Age } from '@/components/common/age';
 import { Avatar } from '@/components/common/avatar';
+
+import { SummaryProse } from './prose';
 
 const VERDICTS: Record<NonNullable<PullComment['verdict']>, { label: string; tone: PillTone }> = {
 	approved: { label: 'Approved', tone: 'ok' },
@@ -47,16 +49,22 @@ function Entry({ entry }: { entry: PullComment }) {
 			</div>
 			{entry.body ? (
 				<div className="timeline-body">
-					<Markdown>{entry.body}</Markdown>
+					<SummaryProse>{entry.body}</SummaryProse>
 				</div>
 			) : null}
 		</article>
 	);
 }
 
+interface ConversationProps {
+	view: PullConversationView;
+	/** True while an entry could still gain a badge for a file or a commit, so the entries paint once with their badges. */
+	waiting: boolean;
+}
+
 /** The entries, or why there are none yet. While they load, the skeleton is measured from stand-in comments. */
-function Timeline({ view }: { view: PullConversationView }) {
-	const loading = view.phase === 'loading';
+function Timeline({ view, waiting }: ConversationProps) {
+	const loading = view.phase === 'loading' || waiting;
 
 	if (view.phase === 'failed') {
 		return (
@@ -85,7 +93,7 @@ function Timeline({ view }: { view: PullConversationView }) {
  * is other people's: it renders as markdown with no raw HTML. A forge with no
  * conversation shows nothing.
  */
-export function Conversation({ view }: { view: PullConversationView }) {
+export function Conversation({ view, waiting }: ConversationProps) {
 	if (view.phase === 'off') return null;
 
 	return (
@@ -96,7 +104,7 @@ export function Conversation({ view }: { view: PullConversationView }) {
 					{view.entries.length > 0 ? <span className="summary-count">{view.entries.length}</span> : null}
 				</h2>
 			</div>
-			<Timeline view={view} />
+			<Timeline view={view} waiting={waiting} />
 			{view.phase === 'ready' ? (
 				<div className="timeline-reply">
 					<ChatComposer
