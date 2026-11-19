@@ -72,6 +72,7 @@ export function bugMessages(thread: AskThread): AskMessageView[] {
 		text: message.role === 'user' ? message.text : chatText(message.text, message.state !== 'streaming'),
 		state: THREAD_STATE[message.state],
 		error: message.state === 'failed' ? (message.failure?.message ?? NO_REASON) : null,
-		at: message.at ?? null
+		at: message.at ?? null,
+		...(message.role === 'assistant' && message.endedAt ? { endedAt: message.endedAt } : {})
 	}));
 }

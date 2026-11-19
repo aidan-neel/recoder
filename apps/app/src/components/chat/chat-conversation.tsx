@@ -53,6 +53,7 @@ export function ChatConversation({ chat }: { chat: RepoChatView }) {
 					<ChatComposer
 						label={subject}
 						placeholder={subject}
+						minRows={1}
 						limit={ask.limit}
 						busy={ask.replying}
 						onStop={ask.stop}
@@ -73,7 +74,7 @@ export function ChatSkeleton() {
 		<div className="chat-scroll" aria-hidden>
 			<div className="page-column chat-thread chat-skeleton">
 				<SkeletonBox className="chat-skeleton-question" />
-				<SkeletonText lineHeight={22} />
+				<SkeletonText lineHeight={20} />
 			</div>
 		</div>
 	);

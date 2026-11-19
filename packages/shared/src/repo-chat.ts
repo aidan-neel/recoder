@@ -13,6 +13,8 @@ export interface RepoChatMessage {
 	/** Markdown for replies, plain text for the person's messages. */
 	text: string;
 	at: string;
+	/** When a reply stopped working (done, stopped or failed), so its time matches the count it showed while working. */
+	endedAt?: string;
 	status: 'streaming' | 'done' | 'error';
 	/** The model that wrote a reply. */
 	model?: string;

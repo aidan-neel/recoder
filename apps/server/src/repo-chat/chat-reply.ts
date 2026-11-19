@@ -135,6 +135,7 @@ async function writeReply(job: ReplyJob, controller: AbortController): Promise<v
 	} finally {
 		trail.endThinking();
 		clearInterval(heartbeat);
+		reply.endedAt = new Date().toISOString();
 	}
 
 	await saver.close(reply);

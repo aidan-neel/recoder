@@ -67,7 +67,7 @@ function readShapedFence(node: HastElement | undefined): Pick<MarkdownFence, 'co
 function Fence({ node }: ComponentProps<'pre'> & ExtraProps) {
 	const fence = readShapedFence(node);
 
-	return fence ? <CodeBlock code={fence.code} lang={fence.lang} copy /> : null;
+	return fence ? <CodeBlock code={fence.code} lang={fence.lang} title={fence.lang ?? 'text'} copy /> : null;
 }
 
 /** Fenced code rendered on the server, its colors already in the HTML. */

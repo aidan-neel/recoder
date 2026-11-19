@@ -21,7 +21,8 @@ interface FollowEnd {
  * again, `toEnd`, or sending a message follows once more.
  *
  * A press on a button in the thread (opening a reply's trail, say) also leaves the end, so what the person opens
- * grows in place instead of pulling the view down to the newest line.
+ * grows in place instead of pulling the view down to the newest line. A press inside a reply that is still arriving
+ * (`data-live`) keeps following, so its steps opened at the end stay in view as they come.
  *
  * Only a move up counts as the person leaving: a reply that grows faster than scroll events arrive also puts
  * the end out of reach for a moment, and that must not stop the following. The scroller itself is watched too,
@@ -60,7 +61,8 @@ export function useFollowEnd(busy: boolean): FollowEnd {
 		};
 
 		const leaveOnButton = (event: PointerEvent): void => {
-			if (event.target instanceof Element && event.target.closest('button')) following.current = false;
+			if (!(event.target instanceof Element) || !event.target.closest('button')) return;
+			if (!event.target.closest('[data-live]')) following.current = false;
 		};
 
 		const resized = new ResizeObserver(showEnd);

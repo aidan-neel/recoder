@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 
 import { escapeHtml } from './highlight';
 import { CodeBlockView, codeSource } from './code-block-view';
@@ -14,6 +14,8 @@ interface CodeBlockProps {
 	copy?: boolean;
 	/** Wraps long lines instead of scrolling them sideways. */
 	wrap?: boolean;
+	/** A head row that names the code, such as its language; the copy button moves into it. */
+	title?: ReactNode;
 	className?: string;
 }
 
@@ -23,7 +25,7 @@ interface CodeBlockProps {
  * a known language: until then the code shows plain, on the same lines, and
  * the colors swap in with no motion. Once loaded, blocks paint colored at once.
  */
-export function CodeBlock({ code, lang = null, copy = false, wrap = false, className }: CodeBlockProps) {
+export function CodeBlock({ code, lang = null, copy = false, wrap = false, title, className }: CodeBlockProps) {
 	const source = codeSource(code);
 	const highlighter = useHighlighter(lang);
 
@@ -32,5 +34,5 @@ export function CodeBlock({ code, lang = null, copy = false, wrap = false, class
 		[highlighter, source, lang]
 	);
 
-	return <CodeBlockView source={source} html={html} copy={copy} wrap={wrap} className={className} />;
+	return <CodeBlockView source={source} html={html} copy={copy} wrap={wrap} title={title} className={className} />;
 }

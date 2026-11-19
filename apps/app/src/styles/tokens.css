@@ -20,7 +20,7 @@
 	--bg-menu: #222223;
 	--bg-hover: #1e1e1f;
 	--bg-selected: #252526;
-	--bg-bubble: #2c2c2d;
+	--bg-bubble: #262627;
 	--bg-field: #1a1a1b;
 	--bg-search: #1a1a1b;
 
@@ -46,6 +46,8 @@
 	--text-subtle: #939394;
 	--text-faint: #777778;
 	--text-ghost: #535355;
+	/* Capy's quietest words: how long a reply worked, how long a step took. A step under faint in dark only. */
+	--text-dim: color-mix(in srgb, var(--text-faint) 60%, var(--text-ghost));
 	--text-brief-body: #939394;
 
 	--primary: #2f6bf0;
@@ -166,6 +168,7 @@
 	--text-subtle: #646466;
 	--text-faint: #7d7d7f;
 	--text-ghost: #9e9ea0;
+	--text-dim: var(--text-faint);
 	--text-brief-body: #646466;
 
 	--primary: #2f6bf0;

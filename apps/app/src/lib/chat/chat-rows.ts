@@ -114,6 +114,7 @@ function serverRow(
 		state,
 		error: state === 'failed' ? (message.failure?.reason ?? NO_REASON) : null,
 		at: message.at,
+		...(message.endedAt ? { endedAt: message.endedAt } : {}),
 		trail: message.trail ?? [],
 		citations: message.citations,
 		...(message.review ? { review: reviewCard(message.review) } : {})

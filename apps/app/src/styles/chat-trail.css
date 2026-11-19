@@ -6,21 +6,23 @@
  * face at the same optical size. These tokens are the only sizes, inks and gaps below.
  */
 .trail {
-	--trail-font: var(--font-size-label);
-	--trail-line: 22px;
+	--trail-reach: 6px;
+	--trail-font: var(--font-size-body);
+	--trail-line: 20px;
+	--trail-row: 32px;
 	--trail-code-font: 0.92em;
 	--trail-icon: 14px;
 	--trail-stroke: 1.75;
-	--trail-step-gap: 2px;
 	--trail-chip-height: 22px;
 	--trail-label: var(--text-muted);
 	--trail-body: var(--text-secondary);
-	--trail-quiet: var(--text-faint);
+	--trail-quiet: var(--text-dim);
 
 	position: relative;
 	display: flex;
 	min-width: 0;
 	flex-direction: column;
+	margin-inline: calc(-1 * var(--trail-reach));
 	color: var(--trail-label);
 	font-size: var(--trail-font);
 	line-height: var(--trail-line);
@@ -34,25 +36,41 @@
 	stroke-width: var(--trail-stroke);
 }
 
-/* ───────── The line over the steps: how long it worked, centred, with no rule ───────── */
+/*
+ * ───────── The line over the steps: how long it worked, centred in the meta size and the quietest ink. Open, a
+ * hairline runs out to the column's edges on either side of it, as Capy draws it. ─────────
+ */
 .trail-head {
 	display: flex;
 	align-items: center;
-	justify-content: center;
-	gap: 6px;
+	gap: 12px;
+	margin-inline: var(--trail-reach);
 	padding: 0;
 	border: 0;
 	border-radius: var(--radius-chip);
 	background: none;
-	color: inherit;
+	color: var(--trail-quiet);
 	font: inherit;
+	font-size: var(--font-size-meta);
+	line-height: var(--trail-line);
 	cursor: pointer;
 	transition: color var(--dur-hover) var(--ease-hover);
 }
-.trail-head .trail-chevron {
-	width: 12px;
-	height: 12px;
-	margin-left: -2px;
+.trail-head:disabled {
+	cursor: default;
+}
+.trail-head::before,
+.trail-head::after {
+	height: 1px;
+	flex: 1;
+	background: var(--line-control);
+	content: '';
+	opacity: 0;
+	transition: opacity var(--dur-toggle) ease-out;
+}
+.trail[data-state='open'] > .trail-head::before,
+.trail[data-state='open'] > .trail-head::after {
+	opacity: 1;
 }
 .trail-toggle {
 	display: inline-flex;
@@ -70,7 +88,7 @@
 	cursor: pointer;
 	transition: color var(--dur-hover) var(--ease-hover);
 }
-.trail-head:hover,
+.trail-head:enabled:hover,
 .trail-toggle:hover {
 	color: var(--text-primary);
 }
@@ -79,12 +97,22 @@
 	box-shadow: var(--focus-ring);
 	outline: none;
 }
+/* A step's chevron shows where the pointer rests, and on a step that is open. */
 .trail .trail-chevron {
+	width: 12px;
+	height: 12px;
 	color: var(--trail-quiet);
-	transition: rotate var(--dur-toggle) ease-out;
+	opacity: 0;
+	transition:
+		opacity var(--dur-hover) var(--ease-hover),
+		rotate var(--dur-toggle) ease-out;
 }
-[data-state='open'] > .trail-chevron {
-	rotate: 180deg;
+.trail-toggle:is(:hover, :focus-visible) > .trail-chevron,
+.trail-toggle[data-state='open'] > .trail-chevron {
+	opacity: 1;
+}
+.trail-toggle[data-state='open'] > .trail-chevron {
+	rotate: 90deg;
 }
 .trail-said {
 	margin: 0;
@@ -92,13 +120,19 @@
 	overflow-wrap: anywhere;
 }
 
-/* ───────── Steps: one line each, the time it took at the end ───────── */
+/*
+ * ───────── Steps: one line each, the time it took at the end ─────────
+ * The fold clips what it holds, so the body reaches past the column by --trail-reach and pads back in: a step's
+ * focus ring and its pull to the left fall inside the clip.
+ */
+.trail-body {
+	padding-inline: var(--trail-reach);
+}
 .trail-steps {
 	display: flex;
 	flex-direction: column;
-	gap: var(--trail-step-gap);
 	margin: 0;
-	padding: 10px 0 0;
+	padding: 6px 0 0;
 	list-style: none;
 }
 .trail-step {
@@ -107,6 +141,7 @@
 .trail-label {
 	display: flex;
 	min-width: 0;
+	min-height: var(--trail-row);
 	align-items: center;
 	gap: 8px;
 	margin-block: 0;
@@ -145,7 +180,7 @@
 .trail [data-shimmer] {
 	background:
 		linear-gradient(100deg, transparent 35%, var(--text-primary) 50%, transparent 65%) 0 0 / 250% 100% no-repeat,
-		var(--trail-label);
+		var(--shimmer-ink, var(--trail-label));
 	background-clip: text;
 	-webkit-background-clip: text;
 	color: transparent;
@@ -153,6 +188,16 @@
 }
 .trail [data-shimmer] :is(.trail-code, .trail-note) {
 	color: transparent;
+}
+.trail-head [data-shimmer] {
+	--shimmer-ink: var(--trail-quiet);
+}
+/*
+ * A rolling count draws its digits in layers of their own, which a text-clipped sweep cannot paint, so it would show
+ * as a gap that comes and goes. The count keeps the line's ink instead and the sweep crosses the words.
+ */
+.trail [data-shimmer] [data-ui='animated-number'] {
+	color: var(--shimmer-ink, var(--trail-label));
 }
 @keyframes trail-sweep {
 	from {
@@ -169,7 +214,7 @@
 @media (prefers-reduced-motion: reduce) {
 	.trail [data-shimmer] {
 		background: none;
-		color: var(--trail-label);
+		color: var(--shimmer-ink, var(--trail-label));
 		animation: none;
 	}
 	.trail [data-shimmer] .trail-code {

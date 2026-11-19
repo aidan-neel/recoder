@@ -26,15 +26,27 @@ function stepSeconds(step: ChatTrailStep): number | null {
 }
 
 /**
- * How long a finished reply worked before it answered: from the reply's start to the end of its last step, in whole
- * seconds. Null while a step still runs, or when the reply has no start or no step.
+ * How long a finished reply worked, in whole seconds: from its start to its end, the span `Working for` counted, so the
+ * count never steps back when the reply ends. A reply saved without its end counts to the end of its last step. Null
+ * without a start, or with no end and a step still running or none at all.
  */
-export function workedSeconds(startedAt: string | null, steps: readonly ChatTrailStep[]): number | null {
-	if (startedAt === null || steps.length === 0 || steps.some(isStepRunning)) return null;
+export function workedSeconds(
+	startedAt: string | null,
+	endedAt: string | null,
+	steps: readonly ChatTrailStep[]
+): number | null {
+	if (startedAt === null) return null;
 
-	const end = Math.max(...steps.map((step) => Date.parse(step.endedAt ?? step.startedAt)));
+	const end = endedAt ?? lastStepEnd(steps);
 
-	return Math.max(0, Math.round((end - Date.parse(startedAt)) / 1000));
+	return end === null ? null : Math.max(0, Math.floor((Date.parse(end) - Date.parse(startedAt)) / 1000));
+}
+
+/** When the last of the steps ended, or null when there are none or one still runs. */
+function lastStepEnd(steps: readonly ChatTrailStep[]): string | null {
+	if (steps.length === 0 || steps.some(isStepRunning)) return null;
+
+	return new Date(Math.max(...steps.map((step) => Date.parse(step.endedAt ?? step.startedAt)))).toISOString();
 }
 
 /** The trail's line once the reply is done: `Worked for 13s`, or `Worked` when the time is unknown or under a second. */
