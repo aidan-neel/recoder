@@ -16,7 +16,7 @@ curl -fsSL https://recoder.dev/server.sh | sh
 The script installs Docker if it is missing, writes \`/opt/recoder\` (a compose file with Recoder, the updater sidecar and Caddy, a \`.env\`, a Caddyfile, and the updater's token), pulls the release image, starts everything, waits for the health check, and prints one line:
 
 \`\`\`
-Open https://recoder.example.com and enter the setup code: K7QM-4XRP
+Open https://recoder.example.com and enter the setup code: K7QM4XRP
 \`\`\`
 
 Its flags:
@@ -51,7 +51,7 @@ Sign-in reuses the flows Recoder always had: OAuth with a GitHub or GitLab app y
 
 Settings → Server → Updates shows what is available and what an update will do. Updates apply in place: the updater pauses running reviews at their checkpoints, takes a backup, verifies the new image's digest against the signed release manifest, pulls it, restarts on the same data, waits for the health check, and resumes the reviews. If the new version does not become healthy, the updater starts the previous image again and restores the backup it took a minute earlier.
 
-Choose a channel (\`stable\` or \`beta\`) and whether updates install themselves in a weekly window, or leave it on *ask* and press Update when the release notes read well. *Later* hides one version in this browser until a newer one appears.
+Choose a channel (\`stable\` or \`beta\`) and whether updates install themselves automatically, or leave it on *ask* and press Update when the release notes read well. Automatic installs run in the updater's window, every day at 3 AM by default. *Later* hides one version in this browser until a newer one appears.
 
 ## Roll back
 
@@ -59,7 +59,7 @@ The update history lists every version this install has run, newest first. Roll 
 
 ## Back up
 
-Recoder backs its database and settings into one archive under \`/data/backups\`: nightly at the hour you choose, and before every update. Download an archive from Settings → Server → Backups; it holds the sealed credentials but not the secret key, because anyone with both could open every credential — the download offers the key only behind an explicit warning. Restoring a backup runs through the updater and reuses the rollback path.
+Recoder backs its database and settings into one archive under \`/app/data/backups\`: nightly at the hour you choose, and before every update. Download an archive from Settings → Server → Backups; it holds the sealed credentials but not the secret key, because anyone with both could open every credential — the download offers the key only behind an explicit warning. Restoring a backup runs through the updater and reuses the rollback path.
 
 On PostgreSQL, the database's own backups are the ones that count; Recoder says so instead of keeping a second copy.
 
