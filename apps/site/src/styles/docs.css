@@ -1,17 +1,9 @@
 /* ───────── Docs ───────── */
 /*
- * A page arrives top-down (the kit's `data-enter='stagger'`, further and on
- * the site's settle spring: docs are read, not worked in), on every move
- * between pages. Past the fourth block a section rises in as it scrolls into
- * view instead, once; a browser without scroll timelines shows it as it is.
+ * A move between pages is static: the page shows at once. Past the fourth
+ * block a section rises in as it scrolls into view, once; a browser without
+ * scroll timelines shows it as it is.
  */
-.docs-column {
-	--enter-rise: 14px;
-}
-.docs-column[data-enter='stagger'] > * {
-	animation-duration: var(--site-dur-settle);
-	animation-timing-function: var(--site-ease-settle);
-}
 @supports (animation-timeline: view()) {
 	.docs-column > .docs-section:nth-child(n + 5) {
 		animation: docs-reveal linear both;

@@ -99,7 +99,7 @@
 [data-ui='command-bar-field'] {
 	border-radius: var(--radius-card);
 	background-color: var(--bg-field);
-	box-shadow: inset 0 0 0 1px var(--line-control);
+	box-shadow: var(--shadow-field);
 	cursor: text;
 	outline: none;
 	transition:
@@ -107,11 +107,11 @@
 		box-shadow var(--dur-menu) ease-out;
 }
 [data-ui='command-bar-field'][data-slot='trigger']:hover {
-	box-shadow: inset 0 0 0 1px var(--line-hover);
+	box-shadow: var(--shadow-field-hover);
 }
 /* The live field always reads as focused, even while Tab rests on a control in the results. */
 [data-ui='command-bar-field'][data-slot='trigger']:focus-visible,
 [data-ui='command-bar-field'][data-slot='field'] {
 	background-color: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-focus);
+	box-shadow: var(--shadow-field-focus);
 }

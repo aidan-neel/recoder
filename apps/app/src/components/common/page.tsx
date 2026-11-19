@@ -1,6 +1,5 @@
 'use client';
 
-import { useEntrance } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import { SidebarReveal } from '@/components/shell/sidebar-reveal';
@@ -14,16 +13,13 @@ interface PageProps {
 }
 
 /**
- * One page beside the sidebar: a 44px bar, then the page's own content, which lays out and scrolls itself. The
- * content arrives top-down under the bar, which stays still; the page keeps its tabs' bodies, so changing tab never
- * plays it again.
+ * One page beside the sidebar: a 44px bar, then the page's own content, which lays out and scrolls itself. A page
+ * change is static: the new page shows in the same frame, with only its skeleton standing in while it loads.
  */
 export function Page({ start, end, children }: PageProps) {
-	const entrance = useEntrance('stagger');
-
 	return (
-		<main className="page" id="page" tabIndex={-1} {...entrance}>
-			<header className="page-bar" data-chrome>
+		<main className="page" id="page" tabIndex={-1}>
+			<header className="page-bar">
 				<SidebarReveal />
 				<div className="page-bar-side">{start}</div>
 				<div className="page-bar-side" data-side="end">

@@ -1,17 +1,6 @@
 'use client';
 
-import {
-	Button,
-	Card,
-	DURATION,
-	EASE_OUT,
-	RowButton,
-	SkeletonBox,
-	StatusNotice,
-	useEntrance,
-	useMotionVariants,
-	type EntranceProps
-} from '@recoder/ui';
+import { Button, Card, DURATION, EASE_OUT, RowButton, SkeletonBox, StatusNotice, useMotionVariants } from '@recoder/ui';
 import { PlusIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
 
@@ -90,21 +79,18 @@ function FleetHead({ view }: { view: ReposPageView }) {
 
 interface FleetGridProps {
 	view: ReposPageView;
-	/** The tiles' entrance, which only the page's first grid plays. */
-	entrance: EntranceProps;
 }
 
 /**
- * The tiles in a grid. On the page's first reveal they rise in one after another; after that a repository that is
- * stopped fades before the others close the gap, one that is added or brought back by Undo fades in, and another
+ * The tiles in a grid. They show at once with the page; a repository that is stopped fades before the others close the gap, one that is added or brought back by Undo fades in, and another
  * scope or other filter text swaps the grid at once, like any list.
  */
-function FleetGrid({ view, entrance }: FleetGridProps) {
+function FleetGrid({ view }: FleetGridProps) {
 	const variants = useMotionVariants(TILE);
 	const unfiltered = view.scope === 'all' && view.query.trim() === '';
 
 	return (
-		<div className="fleet-grid" {...entrance}>
+		<div className="fleet-grid">
 			<AnimatePresence initial={false}>
 				{view.tiles.map((tile) => (
 					<motion.div
@@ -126,7 +112,6 @@ function FleetGrid({ view, entrance }: FleetGridProps) {
 
 /** The scopes over the tiles, or what the scope and the filter text leave to say with no tile to show. */
 function Fleet({ view }: { view: ReposPageView }) {
-	const entrance = useEntrance('stagger');
 	const query = view.query.trim();
 	const nothing = view.tiles.length === 0 && (view.scope !== 'all' || query !== '');
 
@@ -138,7 +123,7 @@ function Fleet({ view }: { view: ReposPageView }) {
 					<StatusNotice variant="section" heading="h2" title={emptyTitle(view.scope, query)} />
 				</div>
 			) : (
-				<FleetGrid key={`${view.scope}\n${view.query}`} view={view} entrance={entrance} />
+				<FleetGrid key={`${view.scope}\n${view.query}`} view={view} />
 			)}
 		</>
 	);

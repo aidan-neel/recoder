@@ -50,16 +50,16 @@
 		background-color: var(--on-primary);
 	}
 
-	/* ───────── Checkbox: the box fills, the check draws in ───────── */
+	/* ───────── Checkbox: the box fills, the check draws in; a 14px box takes a smaller corner so it stays square ───────── */
 	[data-ui='checkbox'] {
 		display: inline-grid;
 		width: 14px;
 		height: 14px;
 		flex-shrink: 0;
 		place-items: center;
-		border-radius: var(--radius-chip);
+		border-radius: calc(var(--radius-chip) - 2px);
 		background-color: var(--bg-field);
-		box-shadow: inset 0 0 0 1px var(--line-strong);
+		box-shadow: var(--shadow-field-hover);
 		color: var(--on-primary);
 		outline: none;
 		transition:
@@ -169,14 +169,14 @@
 		text-wrap: pretty;
 	}
 
-	/* ───────── Segmented control: the chosen option is filled in place inside a sunken track ───────── */
+	/* ───────── Segmented control: the chosen option is a raised plate, filled in place inside a sunken well ───────── */
 	[data-ui='segmented'] {
 		display: inline-flex;
 		align-items: center;
 		padding: 2px;
 		border-radius: var(--radius-row);
-		background-color: var(--bg-search);
-		box-shadow: inset 0 0 0 1px var(--line-card);
+		background-color: var(--fill-well);
+		box-shadow: var(--shadow-well);
 	}
 	[data-ui='segmented-item'] {
 		display: inline-flex;
@@ -204,7 +204,8 @@
 		color: var(--text-primary);
 	}
 	[data-ui='segmented-item'][data-state='checked'] {
-		background-color: var(--bg-selected);
+		background: var(--fill-raised);
+		box-shadow: var(--shadow-raised);
 	}
 	[data-ui='segmented-label'] {
 		display: inline-flex;
@@ -237,5 +238,8 @@
 	[data-ui='switch']:focus-visible,
 	[data-ui='segmented-item']:focus-visible {
 		box-shadow: var(--focus-ring);
+	}
+	[data-ui='segmented-item'][data-state='checked']:focus-visible {
+		box-shadow: var(--focus-ring), var(--shadow-raised);
 	}
 }

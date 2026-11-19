@@ -3,9 +3,9 @@
 The source of truth for Recoder's UI.
 
 ## Principles
-- **Warm near-black surfaces, flat by default.** Depth comes from 1px rings and a few surface steps. Shadows are for floating things only (menus, modals, toasts, the composer).
+- **Warm near-black surfaces, flat by default.** Depth comes from 1px rings and a few surface steps. Shadows are for floating things only (menus, modals, toasts, the composer). This holds for apps/web; the React apps (apps/app, apps/site) take Capy's edges and lift from the kit's surface recipes, described in `apps/app/DESIGN.md` → Surfaces.
 - **Two voices.** The UI speaks in Cal Sans (Geist as fallback). The AI speaks in Lora serif in summaries, findings and the Home brief; chat replies use the UI sans. Never mix them in one block.
-- **Quiet chrome.** Controls stay transparent until they're hovered. There is one cream primary action per region.
+- **Quiet chrome.** Controls stay transparent until they're hovered. There is one primary action per region: cream in apps/web, blue in the React apps (`apps/app/DESIGN.md`).
 - **No brand mark on AI output.** The serif alone tells you who is speaking.
 
 ## Color
@@ -48,7 +48,8 @@ The source of truth for Recoder's UI.
 | `text.brief-body` | `#8f8a82` |
 
 ### Primary
-- `primary` `#ede9e3` (cream), `on-primary` `#141312`.
+- apps/web: `primary` `#ede9e3` (cream), `on-primary` `#141312`.
+- apps/app and apps/site (the kit): `primary` `#4062e2` with white `on-primary` in both themes (5.2:1). Links and the selected line use the accent (`--accent`, `--accent-text`), never the primary as text.
 - Hover: `filter: brightness(1.08)`. No press scale.
 - Primary must stay swappable. If a light color is picked, on-primary is computed by luminance: dark text when L > 0.3.
 
@@ -92,7 +93,7 @@ Vivid, not pastel: chroma sits at 70–95% of the sRGB maximum for each hue (OKL
 
 ### Buttons
 Heights are 28 (panel), 30 (default) and 32–34 (toolbar or hero).
-- **Primary**: cream background.
+- **Primary**: the primary background (cream in apps/web, blue in the React apps).
 - **Secondary**: transparent with an inset 1px `#2e2b28` ring. On hover: bg `#1f1e1c`, ring `#3a3632`.
 - **Ghost**: `#8a857d` text. On hover: bg `#1c1b19`, text `#ede9e3`.
 - **Icon button**: 28–32 square, same hover as ghost.
@@ -166,7 +167,7 @@ kit keeps them in `packages/ui/src/styles/tokens.css` and `motion/presets.ts`.
 | `menu` | 180ms fade in from 0.97 scale, with no blur and no rise; 150ms out, on the same ease-out curve (`cubic-bezier(0.23, 1, 0.32, 1)`) | 130ms fade in from 0.95 scale, 2px blur and a 3px rise (`--motion-menu-y`); 80ms out |
 | `modal` | 180ms fade in from 0.97 scale, with no blur and no rise; 130ms out, on the menu's curve | 150ms fade in from 0.95 scale, 2px blur and a 3px rise (`--motion-modal-y`); 70ms out |
 | `tooltip` | 80ms fade in from 0.97 scale, with no blur and no rise; 150ms out | Sivir's own |
-| `enter` | Content replaces its skeleton whole, in one 170ms crossfade (`DURATION.swap`), with no rise and no stagger. A load that beat the skeleton, or one that lands while the person scrolls or types, swaps with no fade. A page's first reveal arrives (`useEntrance`, `data-enter`): its blocks, or a list's rows, rise 4px and fade in over 230ms, 30ms apart for the first eight; never on a tab change, a filter or a refresh. Docs rise 10px, and their later sections rise in as they scroll into view | None. Content replaces its skeleton in place with no fade, rise or stagger |
+| `enter` | Content replaces its skeleton whole, in one 170ms crossfade (`DURATION.swap`), with no rise and no stagger. A load that beat the skeleton, or one that lands while the person scrolls or types, swaps with no fade. In the React apps a page change is static: no fade, rise or stagger. Docs sections past the fourth rise in as they scroll into view | None. Content replaces its skeleton in place with no fade, rise or stagger |
 | `toast` | Rises 10px over 150ms, and drops 10px over 150ms as it leaves | Rises from below over 320ms, and leaves over 240ms |
 | `shimmer` | Text: a 1.6s opacity swell; the label rests dim and lights to full once a pass. Skeleton: Skullet sweeps one light across the page every 2s, so every bar on screen is lit by the same band; it holds still under reduced motion | Text: a 1.6s linear sweep of light. Skeleton: a light sweeps across every 1.4s and never rests |
 | `skeleton` | Skullet draws it. A measured skeleton stays unseen for its first 120ms, so data that lands sooner never flashes one; a lone bar is hidden for 120ms (`--skeleton-delay`), then fades in over 170ms | Each bar is hidden for its first 200ms, then shows with no fade |

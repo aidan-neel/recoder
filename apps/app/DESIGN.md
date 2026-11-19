@@ -7,7 +7,7 @@ and merge it or send the fix back. The layout is the one people know from
 pull request tools: a sidebar, a list of pull requests, and a pull request
 page with tabs.
 
-It departs from the root `DESIGN.md` (apps/web) in five places:
+It departs from the root `DESIGN.md` (apps/web) in six places:
 
 - **An inset sidebar shell**, not a top bar with session tabs. The sidebar
   has no surface of its own and sits on the window's tint (`--bg-chrome`);
@@ -19,11 +19,17 @@ It departs from the root `DESIGN.md` (apps/web) in five places:
   hashes and aligned numbers are Geist Mono.
 - **Near-neutral surfaces.** Near-black panels with white hairlines in dark,
   white and light grey in light, all with a faint cool tint. The sidebar sits
-  a step darker than the page and menus a step lighter. One cream primary
-  button and one indigo-blue (`#3777ec`) accent (links, the selected line,
+  a step darker than the page and menus a step lighter. One blue primary
+  button (`#4062e2` with white ink in both themes, its hover the same blue a
+  step darker;
+  the palettes in Settings → Appearance bring their own) and one indigo-blue (`#3777ec`) accent (links, the selected line,
   hunk headers).
 - **Phosphor icons in their bold weight**, set once by the kit's `IconRoot`,
   not Lucide. Import the `*Icon` names (`MagnifyingGlassIcon`).
+- **Capy's edges and lift**, not flat rings. Controls, fields, cards and
+  overlays draw a hairline inside their edge and, in dark, a subtle dark
+  outline outside it; what should feel pressable adds a soft contact shadow
+  (see Surfaces).
 - **A pull request is the unit**, not a review session. A review belongs to a
   pull request and shows inside its page.
 
@@ -303,7 +309,7 @@ It departs from the root `DESIGN.md` (apps/web) in five places:
   - **Commits**.
     The merge strip under the title shows checks and mergeability and holds the
     merge button. It merges at the head commit the page shows, and never with
-    admin rights. The button is cream only when no finding is open and no
+    admin rights. The button is the primary only when no finding is open and no
     review runs; otherwise it is an outline, so the page's one primary is the
     next step. Its checks open under it as a grid of rows (glyph and name;
     the forge link shows on hover) in a scroll area capped at about eight
@@ -453,8 +459,8 @@ Every place a person writes to Recoder or to the forge uses the kit's
 comment field. There is no second implementation.
 
 - **Shape.** One box at the card radius on `--bg-raised`, ringed with
-  `--shadow-composer`; the ring turns `--line-focus` while the field has
-  focus and tints toward danger while the text is invalid. Roomy text on top
+  `--shadow-composer`; `--shadow-composer-focus` brightens its hairline while
+  the field has focus, and the edge tints toward danger while the text is invalid. Roomy text on top
   (22px lines, 14px from the left, 16px at `lg`), a bar at the foot whose
   28px controls sit 6px in from the edges (8px at `lg`). A press on the box's
   empty parts puts the caret in the field.
@@ -521,14 +527,10 @@ Motion explains a change and never makes the person wait.
   one 170ms crossfade. Where the content cannot be laid out (a settings
   group, a chart, one value), `SkeletonRows`, `SkeletonText` and
   `SkeletonBox` stand at its exact size. Never draw a bar by hand.
-- Pages arrive. `Page` gives every page the kit's entrance (`useEntrance`,
-  `kit-motion.css`): the blocks under the bar rise 4px and fade in over
-  `--dur-disclose`, top-down, 30ms apart, while the bar and sidebar stay
-  still. The main lists stagger their own rows the same way (pull requests,
-  a repository's page, the settings groups; the Repositories tiles rise
-  6px), and a block whose list does so does not rise itself. It plays once,
-  on a page's first reveal: changing tab, filtering or a refresh shows what
-  changed at once, and reduced motion keeps only the fade.
+- Pages are static. A page change shows the new page in the same frame:
+  no fade, rise, slide or stagger on the page or its lists. The only motion
+  between pages is the skeleton standing in while data loads and its
+  crossfade to the content.
 - A click changes the page in the same frame. The app renders in the browser
   only, so `Link` and `navigate` (`components/common/link.tsx`,
   `lib/shell/navigation.ts`) change the address with the History API and the
@@ -556,15 +558,15 @@ Motion explains a change and never makes the person wait.
 - **Every async action shows its state**: idle, pending (same width), then
   success or failure with the server's reason. A change shows at once and
   goes back when the save fails.
-- **One primary button per region**, in cream. Everything else is quiet at
-  rest: no background until hover.
+- **One primary button per region**, in blue. Ghost, quiet and icon
+  buttons are quiet at rest: no background until hover. Secondary and outline
+  buttons carry their edge at rest (see Surfaces).
 
 ## Buttons
 
-A button is compact and flat: a 13px label in the regular weight (the
-primary alone is medium), and, where it has an edge, a hairline drawn inside
-the box so it lines up with fields. No sheen, bevel, lift or shadow. The side
-an icon sits on gets 2px less padding than a side with text.
+A button is compact: a 13px label in the regular weight (the primary alone
+is medium), its edge and lift from the surface recipes (see Surfaces). The
+side an icon sits on gets 2px less padding than a side with text.
 
 | Size           | Height      | Padding (text / icon side) | Radius | Use                                                                                                              |
 | -------------- | ----------- | -------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
@@ -575,9 +577,9 @@ an icon sits on gets 2px less padding than a side with text.
 
 | Variant       | At rest                          | Use                                                                                                 |
 | ------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `primary`     | Flat cream (black in light)      | The one next step of a region: Post to pull request, Merge, Save. Never repeated down a list.       |
-| `secondary`   | A faint wash and a hairline      | A standalone action with no primary beside it: Try again in an error notice, Back to pull requests. |
-| `outline`     | Hairline only                    | The action beside a primary, and the action a list row offers (Review, Track, Connect).             |
+| `primary`     | Light blue, raised               | The one next step of a region: Post to pull request, Merge, Save. Never repeated down a list.       |
+| `secondary`   | A raised plate                   | A standalone action with no primary beside it: Try again in an error notice, Back to pull requests. |
+| `outline`     | An edge with no fill             | The action beside a primary, and the action a list row offers (Review, Track, Connect).             |
 | `ghost`       | Muted text, nothing else         | Tertiary actions and row controls: Accept, Dismiss, Disconnect, Cancel, icon buttons.               |
 | `quiet`       | Full-strength text, nothing else | Triggers that name their value: the filter, the model picker.                                       |
 | `destructive` | Red text on a red tint           | A step that deletes, inside its confirmation.                                                       |
@@ -598,16 +600,19 @@ an icon sits on gets 2px less padding than a side with text.
 
 ## Corners and controls
 
-Corners are small and there are four of them, as kit tokens. A surface's
-radius is its inset plus the radius of the rows in it, so a 4px row in a menu
-with a 4px inset sits in an 8px panel. Use the tokens, never a raw radius.
+Corners are soft, a step rounder than Capy Desktop's (6px buttons, 8px cards,
+12px panels), and come from five kit tokens. A surface's radius is its inset
+plus the radius of the rows in it, so a 6px row in a menu with a 4px inset
+sits in a 10px panel, and a 6px segment in a track with a 2px inset in an 8px
+track. Use the tokens, never a raw radius.
 
-| Token              | Radius | On                                                                      |
-| ------------------ | ------ | ----------------------------------------------------------------------- |
-| `--radius-chip`    | 4px    | Badges, keycaps, checkboxes, menu rows, `sm` buttons, segments          |
-| `--radius-control` | 5px    | Buttons, fields, select triggers, tabs, tooltips                        |
-| `--radius-row`     | 6px    | List rows and their highlight, segmented tracks, textareas, code blocks |
-| `--radius-card`    | 8px    | Cards, menus, popovers, toasts, dialogs, the palette                    |
+| Token               | Radius | On                                                                      |
+| ------------------- | ------ | ----------------------------------------------------------------------- |
+| `--radius-chip`     | 6px    | Badges, keycaps, checkboxes, menu rows, `sm` buttons, segments          |
+| `--radius-control`  | 7px    | Buttons, fields, select triggers, tabs, tooltips                        |
+| `--radius-row`      | 8px    | List rows and their highlight, segmented tracks, textareas, code blocks |
+| `--radius-card`     | 10px   | Cards, menus, popovers, toasts, the palette                             |
+| `--radius-composer` | 16px   | The composer; the controls in its bar take its radius less the inset    |
 
 - **Tabs** are text, 26px tall. The open tab is brighter on a quiet fill
   (`--bg-hover`) drawn in place. Every tab has the same weight, so nothing
@@ -619,17 +624,45 @@ with a 4px inset sits in an 8px panel. Use the tokens, never a raw radius.
 - **Dialogs**: 16px padding, the title 4px over its description, the close
   button 12px in from the corner, footer buttons 6px apart. Popovers have
   10px padding, 6px from their trigger.
-- **Fields** are 28px tall with 9px side padding, like a `md` button. Focus
-  is one inset line in `--line-focus`, with no halo.
+- **Fields** are 28px tall with 9px side padding, like a `md` button. They
+  are wells, not plates: the field recipe, whose hairline brightens on hover
+  and again on focus, with no halo.
 - **Switches** are 28×16 with a 12px thumb; **checkboxes** are 14px.
 - **Disclosure lines**: a `ChevronRight` that leads a `CollapsibleTrigger`
   hangs its ink on the trigger's edge, shut and open, so it lines up with the
   text under it. The kit pulls it left by a third of its size and turns it
   about (13.5, 13.5) on its 24-unit grid. A chevron that is not 14px sets
   `--disclosure-chevron-size`.
-- **Shadows**: only what opens over the page floats (menus, popovers,
-  tooltips, toasts and dialogs), on one short, tight shadow. Everything else
-  is flat.
+- **Shadows**: see Surfaces. Panels, rows and the page stay flat.
+
+## Surfaces
+
+aidan's word (AID-8): the app takes Capy Desktop's surface treatment. Every
+bordered thing gets a hairline inside its edge and, in dark, a subtle dark
+outline outside it, so it stays crisp on any surface; the things that should
+feel pressable add a soft lift. The recipes live once, as tokens, in
+`packages/ui/src/styles/tokens.css`, built from a few parts (`--edge`,
+`--edge-strong`, `--edge-focus`, `--edge-outline`, `--edge-highlight`, the
+`--lift-*` shadows and the `--fill-*` fills) that each theme sets. Light needs
+no outline: its hairline is already dark. Components and app styles use a
+recipe and never write a ring or a shadow of their own.
+
+| Recipe | Parts | On |
+| ------ | ----- | -- |
+| `--shadow-primary` + `--fill-primary` | A soft vertical gradient of `--primary`, a top sheen, a ring and a short drop shadow | The primary button |
+| `--shadow-raised` + `--fill-raised` | A soft fill, hairline, top highlight, dark outline and a 1px contact shadow | Secondary buttons, select triggers, the chosen segment |
+| `--shadow-edge` | Hairline and dark outline | Outline buttons, chips, an empty tile |
+| `--shadow-field` | Hairline and dark outline; `-hover` and `-focus` brighten the hairline | Inputs, textareas, the command bar field, the guidelines stream |
+| `--shadow-card` | Hairline, top highlight and dark outline; no drop | Cards, settings groups, repository tiles, notices on a raised fill |
+| `--shadow-well` + `--fill-well` | A sunken fill and a faint hairline | The segmented control's track |
+| `--shadow-menu` | The edge plus a short layered float | Menus, selects, popovers, tooltips, toasts, the palette |
+| `--shadow-modal` | The edge plus a deeper sheet shadow | Dialogs |
+| `--shadow-composer` | The edge plus a soft lift; `-focus` brightens the hairline | The composer |
+
+The values are Capy's own, toned down a step: the reference recipes' gradient
+and contact shadow are kept, at lower contrast. Hover moves the hairline to
+`--edge-strong` and the fill a step lighter; a press flattens the fill and
+never changes size.
 
 ## Copy
 

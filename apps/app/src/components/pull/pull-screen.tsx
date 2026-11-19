@@ -59,7 +59,7 @@ function ChangesTabTools({ mode, onModeChange }: { mode: ChangesMode; onModeChan
 /**
  * Review, while there is none or it is out of date, then the menu and the merge button. `r` presses Review.
  * The merge button is the page's primary only once nothing is open: with findings to read or a review running it
- * steps back to an outline, so the one cream button in view is the next step.
+ * steps back to an outline, so the one primary button in view is the next step.
  */
 function PullActions({ page }: { page: PullPage }) {
 	const run = useRunView();
