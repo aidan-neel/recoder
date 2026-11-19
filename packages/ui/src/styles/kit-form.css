@@ -17,8 +17,8 @@
 		color: var(--text-primary);
 		font-size: var(--font-size-body);
 		transition:
-			background-color var(--dur-menu) ease-out,
-			box-shadow var(--dur-menu) ease-out;
+			background-color var(--dur-hover) var(--ease-hover),
+			box-shadow var(--dur-hover) var(--ease-hover);
 	}
 	[data-ui='input']:hover:not(:focus-within, [data-invalid], [data-disabled]),
 	[data-ui='number-field']:hover:not(:focus-within, [data-invalid], [data-disabled]),
@@ -133,8 +133,8 @@
 		color: var(--text-subtle);
 		outline: none;
 		transition:
-			background-color var(--dur-hover) ease-out,
-			color var(--dur-hover) ease-out;
+			background-color var(--dur-hover) var(--ease-hover),
+			color var(--dur-hover) var(--ease-hover);
 	}
 	[data-ui='number-step']:first-child {
 		border-radius: var(--radius-chip) 0 0 var(--radius-chip);
@@ -175,7 +175,7 @@
 		font-variant-numeric: tabular-nums;
 		text-align: center;
 		outline: none;
-		transition: border-color var(--dur-menu) ease-out;
+		transition: border-color var(--dur-hover) var(--ease-hover);
 	}
 	[data-ui='number-field']:hover:not([data-disabled]) [data-ui='number-input'],
 	[data-ui='number-field']:focus-within [data-ui='number-input'] {

@@ -70,7 +70,7 @@
 	gap: 10px;
 	margin-top: 4px;
 	padding: 10px 12px;
-	transition: background-color var(--dur-hover) ease-out;
+	transition: background-color var(--dur-hover) var(--ease-hover);
 }
 .chat-review:hover {
 	background-color: var(--bg-hover);

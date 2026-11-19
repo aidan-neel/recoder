@@ -65,7 +65,7 @@
 	color: var(--text-faint);
 	transition:
 		rotate var(--dur-toggle) var(--ease-menu),
-		color var(--dur-hover) ease-out;
+		color var(--dur-hover) var(--ease-hover);
 }
 .chooser-trigger:hover > svg:last-child {
 	color: var(--text-muted);
@@ -113,7 +113,7 @@
 	line-height: 18px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .chooser-row[data-off] .chooser-name {
 	color: var(--text-subtle);

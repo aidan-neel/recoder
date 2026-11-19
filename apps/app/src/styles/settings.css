@@ -217,7 +217,7 @@
 }
 .member-remove {
 	opacity: 0;
-	transition: opacity var(--dur-hover) ease-out;
+	transition: opacity var(--dur-hover) var(--ease-hover);
 }
 .settings-row:hover .member-remove,
 .member-remove:focus-visible,

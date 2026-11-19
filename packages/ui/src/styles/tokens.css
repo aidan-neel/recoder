@@ -112,12 +112,16 @@
 	--primary-drop: 0 2px 4px rgb(0 0 0 / 0.32);
 	--scrim: rgba(8, 7, 6, 0.6);
 
-	/* Motion: tuned for a tool opened thousands of times a day. Hover is near
-	   instant; menus and dialogs take a short, visible fade (180ms in, 130 to 150ms out);
-	   only movement that explains a change (a panel unfolding) gets a longer
-	   ease. Tune the app's feel here. */
+	/* Motion: tuned for a tool opened thousands of times a day. Hover eases in
+	   and out over a short 120ms, so a pointer crossing a list leaves a soft
+	   wake instead of a flicker; a press shades in faster (--dur-tap), so a
+	   click still feels instant. Menus and dialogs take a short, visible fade
+	   (180ms in, 130 to 150ms out); only movement that explains a change (a
+	   panel unfolding) gets a longer ease. Tune the app's feel here. */
 	--ease-menu: cubic-bezier(0.23, 1, 0.32, 1);
-	--dur-hover: 80ms;
+	--ease-hover: cubic-bezier(0.4, 0, 0.2, 1);
+	--dur-hover: 120ms;
+	--dur-tap: 60ms;
 	--dur-press: 110ms;
 	--dur-highlight: 100ms;
 	--dur-toggle: 210ms;

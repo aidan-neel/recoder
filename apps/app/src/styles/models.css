@@ -37,7 +37,7 @@
 }
 .model-trigger-quiet {
 	color: var(--text-subtle);
-	transition: color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) var(--ease-hover);
 }
 .model-trigger-chevron {
 	width: 14px;

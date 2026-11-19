@@ -57,7 +57,7 @@ function useSelectionLayer(
 
 /**
  * Our own lists' hover highlight: one layer behind the rows that snaps to the
- * row under the pointer (no travel) and fades in over `--dur-highlight`. It
+ * row under the pointer (no travel) and fades in over `--dur-hover`. It
  * hides when the pointer leaves and follows its row through scrolls and
  * resizes. Touch never shows it. A list with a selection (`selectedSelector`)
  * gets a second layer over the hover's that follows the selected row: a click

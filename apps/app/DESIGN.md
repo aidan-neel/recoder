@@ -563,10 +563,17 @@ Motion explains a change and never makes the person wait.
   `next/navigation`. A screen that has no data yet shows its skeleton; it
   never holds the old page.
 - Durations and easings come from the kit tokens (`--dur-*`, `--motion-*`,
-  `--ease-menu`) and the kit's motion presets (`DURATION`). Hover takes 80ms
-  and the menu highlight 90ms. Nothing on a keyboard path runs longer than
-  about 130ms.
-- `prefers-reduced-motion` turns movement into plain swaps.
+  `--ease-menu`, `--ease-hover`) and the kit's motion presets (`DURATION`).
+  Hover eases in and out over `--dur-hover` (120ms on `--ease-hover`) on
+  buttons, rows, menu items, the segmented control, fields and the composer
+  edge, so a pointer crossing a list leaves a soft wake rather than a
+  flicker. A press shades in faster, over `--dur-tap` (60ms), and eases back
+  on release. The menu highlight still travels between items in 90ms
+  (`--motion-hover`) and lands on the item before its fade ends. Nothing on
+  a keyboard path runs longer than about 130ms.
+- `prefers-reduced-motion` turns movement into plain swaps. Hover's colour
+  fades stay, since they move nothing, and a menu highlight fades in on its
+  item without travelling there.
 
 ## Interaction rules
 
@@ -610,7 +617,7 @@ side an icon sits on gets 2px less padding than a side with text.
 
 - **Hover and press** lay a wash over whatever is behind a see-through
   button, so it still shows inside a hovered row. A press shades the button
-  a step deeper within `--dur-hover`. It never changes size. The primary and
+  a step deeper within `--dur-tap`. It never changes size. The primary and
   secondary keep their gradient through hover and press: only its two stops
   darken (`--fill-primary-*-top` and `-bottom`, `--fill-raised-*`), blended
   as registered colours, so the fill never swaps and never flashes.

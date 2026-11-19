@@ -36,8 +36,9 @@ export type ButtonStatus = 'idle' | 'pending' | 'success' | 'error';
  * behind them, so they still show inside a hovered row. The filled variants
  * draw one gradient whose stops (`--button-top`, `--button-bottom`) are
  * registered colours, so hover and press blend to darker stops instead of
- * swapping the fill for a frame. A press shades the button; it never changes
- * size. A failed action tints the button red while its cross shows. These class lists hold no two classes that conflict, so
+ * swapping the fill for a frame. Hover eases in and out over `--dur-hover`;
+ * a press shades in faster (`--dur-tap`) and eases back on release. A press
+ * shades the button; it never changes size. A failed action tints the button red while its cross shows. These class lists hold no two classes that conflict, so
  * they are plain strings: merging them as the module loads would set up
  * tailwind-merge on every route that imports the kit.
  */
@@ -45,7 +46,8 @@ const BASE = [
 	'relative inline-flex shrink-0 items-center justify-center whitespace-nowrap select-none outline-none',
 	'font-normal text-[length:var(--font-size-button)] leading-none',
 	'shadow-(--button-shadow) focus-visible:shadow-[var(--focus-ring),var(--button-shadow)]',
-	'transition-[background-color,color,box-shadow,filter,--button-top,--button-bottom] duration-(--dur-hover) ease-out',
+	'transition-[background-color,color,box-shadow,filter,--button-top,--button-bottom] duration-(--dur-hover) ease-(--ease-hover)',
+	'active:duration-(--dur-tap) active:ease-out',
 	'disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none [&_svg]:pointer-events-none',
 	'data-[status=error]:[background:var(--danger-tint)] data-[status=error]:text-danger',
 	'data-[status=error]:[--button-shadow:inset_0_0_0_1px_color-mix(in_oklab,var(--danger)_30%,transparent)]'

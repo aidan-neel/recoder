@@ -96,7 +96,7 @@
 	height: 1px;
 	background: var(--line-subtle);
 	content: '';
-	transition: opacity var(--dur-highlight) ease-out;
+	transition: opacity var(--dur-hover) var(--ease-hover);
 }
 .pull-row:hover::before,
 .pull-row:hover + .pull-row::before,
@@ -187,9 +187,9 @@
 .pull-row-menu [data-ui='button'] {
 	opacity: 0;
 	transition:
-		opacity var(--dur-hover) ease-out,
-		background-color var(--dur-hover) ease-out,
-		color var(--dur-hover) ease-out;
+		opacity var(--dur-hover) var(--ease-hover),
+		background-color var(--dur-hover) var(--ease-hover),
+		color var(--dur-hover) var(--ease-hover);
 }
 .pull-row:hover .pull-row-menu [data-ui='button'],
 .pull-row:focus-within .pull-row-menu [data-ui='button'],

@@ -30,7 +30,7 @@
 	color: var(--text-faint);
 	font-size: var(--font-size-meta);
 	font-variant-numeric: tabular-nums;
-	transition: opacity var(--dur-hover) ease-out;
+	transition: opacity var(--dur-hover) var(--ease-hover);
 }
 .settled-more {
 	--row-button-radius: var(--radius-row);

@@ -181,7 +181,7 @@
 		color: var(--text-primary);
 		font-size: 12.5px;
 		font-weight: 500;
-		transition: background-color var(--dur-hover) ease-out;
+		transition: background-color var(--dur-hover) var(--ease-hover);
 	}
 	.ui-toast-action:hover {
 		background: var(--bg-hover);
@@ -211,7 +211,7 @@
 /* Sonner's child fade would otherwise override the action's own hover fill. */
 .ui-toaster .ui-toast-action {
 	transition:
-		background-color var(--dur-hover) ease-out,
+		background-color var(--dur-hover) var(--ease-hover),
 		opacity var(--dur-toggle) var(--ease-menu);
 }
 /* A new toast rises 10px into place as fast as a menu opens; the stack moves with it. */
