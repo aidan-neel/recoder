@@ -31,6 +31,7 @@ import { loadPriceLookup } from './models/model-prices';
 import { updateService } from './update/service';
 import { backfillModelCalls, pruneModelCalls } from './usage/model-calls';
 import { startNightlyBackups } from './storage/backups/service';
+import { bundledApp } from './deploy/bundled-app';
 
 /**
  * Start the agents' checks now so Settings never waits on a cold start:
@@ -143,6 +144,8 @@ async function sealSharedCredentials(): Promise<void> {
 
 logStrayRejections();
 
+const serveApp = env.RECODER_APP_DIR ? bundledApp(env.RECODER_APP_DIR) : undefined;
+
 console.log(`recoder secret key: ${describeSecretKeySource(secretKey().source)}`);
 await initializeStorage();
 startNightlyBackups();
@@ -191,9 +194,11 @@ if (process.env[SUCCESSOR_ENV]) await waitForPortRelease(env.HOST, env.PORT);
 
 const server = Bun.serve({
 	fetch(request, server) {
-		if (isLongLived(new URL(request.url).pathname)) server.timeout(request, 0);
+		const path = new URL(request.url).pathname;
 
-		return app.fetch(request, server);
+		if (isLongLived(path)) server.timeout(request, 0);
+
+		return serveApp?.(request, path) ?? app.fetch(request, server);
 	},
 	port: env.PORT,
 	hostname: env.HOST

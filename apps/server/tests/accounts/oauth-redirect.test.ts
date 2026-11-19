@@ -185,6 +185,24 @@ describe('the callback', () => {
 		expect(getToken('github')).toBeUndefined();
 	});
 
+	test('returns to the public app on the callback origin in a bundled install', async () => {
+		const appDirectory = env.RECODER_APP_DIR;
+
+		env.RECODER_APP_DIR = '/app/public';
+
+		try {
+			answerGithubUser(7, 'octocat');
+
+			const { state, nonce } = await startGithub('?return=/pulls/acme/app/3');
+			const response = await callback('github', { code: 'c', state }, nonce);
+
+			expect(response.headers.get('location')).toBe('/pulls/acme/app/3');
+			expect(cookieValue(response, 'recoder_session')).toHaveLength(43);
+		} finally {
+			env.RECODER_APP_DIR = appDirectory;
+		}
+	});
+
 	test('sends a removed member back with removed and no session', async () => {
 		await createOwnerAccount();
 		answerGithubUser(99, 'stranger');
