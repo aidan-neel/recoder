@@ -10,6 +10,7 @@ import { usageDelta } from '../usage-delta';
 import { exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
 import { devinEnv, runConfig } from './devin-process';
 import { withDevinRetries } from './devin-retry';
+import { retainDevinExport } from './devin-artifacts';
 
 type Env = Record<string, string | undefined>;
 
@@ -73,6 +74,7 @@ export class DevinRun extends SessionRun<RunFiles> {
 		const deadline = this.begin(options.timeoutMs);
 		const partId = `devin_${++this.prompts}`;
 		const asked = options.schema ? `${text}\n\n${JSON_MODE_INSTRUCTION}` : text;
+		let continued = false;
 		let answer = '';
 		let usageRead = true;
 
@@ -80,7 +82,11 @@ export class DevinRun extends SessionRun<RunFiles> {
 			return await withDevinRetries<AgentReply>(deadline.signal, async () => {
 				answer = '';
 
-				await writeFile(this.files.prompt, this.session ? asked : `${this.options.system}\n\n${asked}`, {
+				const next = continued
+					? `Continue the interrupted request from your saved session. Do not repeat completed tools or work. Finish your answer.${options.schema ? `\n\n${JSON_MODE_INSTRUCTION}` : ''}`
+					: asked;
+
+				await writeFile(this.files.prompt, this.session ? next : `${this.options.system}\n\n${next}`, {
 					mode: 0o600
 				});
 
@@ -110,8 +116,13 @@ export class DevinRun extends SessionRun<RunFiles> {
 				if (exit.code !== 0)
 					return {
 						value: { text: answer, error: exitError(exit, answer), tokens },
-						errorOutput: `${exit.stderr}\n${answer}`,
-						partial: Boolean(answer.trim()) && !/^\s*(?:error\b|HTTP\s*429\b)/i.test(answer)
+						errorOutput: exit.stderr.trim() ? exit.stderr : answer,
+						partial: Boolean(answer.trim()) && !/^\s*(?:error\b|HTTP\s*429\b)/i.test(answer),
+						resume: this.session
+							? () => {
+									continued = true;
+								}
+							: undefined
 					};
 
 				return { value: { text: answer, tokens } };
@@ -143,6 +154,8 @@ export class DevinRun extends SessionRun<RunFiles> {
 	 * the end of its step. Null when the CLI exported nothing.
 	 */
 	private async exported(): Promise<TokenUsage | undefined> {
+		await retainDevinExport(this.files.export, this.host.env);
+
 		const exported: DevinExport | null = await readExport(this.files.export);
 
 		this.session = exported?.session_id ?? this.session;

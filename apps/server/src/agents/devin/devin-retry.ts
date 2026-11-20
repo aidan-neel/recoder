@@ -4,13 +4,14 @@ interface Attempt<T> {
 	value: T;
 	errorOutput?: string;
 	partial?: boolean;
+	resume?: () => void;
 }
 
 /** Short request throttles only; a spent subscription must not be replayed or retried before its reset. */
-function retryDelay(output: string, retry: number): number | null {
+export function devinRetryDelay(output: string, retry = 0, requireHint = false): number | null {
 	if (
 		!/rate.?limit|too many requests|\b429\b/i.test(output) ||
-		/free model|quota|usage limit|credit|billing|not logged in|unauthenticated/i.test(output)
+		/quota|usage limit|credit|billing|not logged in|unauthenticated/i.test(output)
 	)
 		return null;
 
@@ -43,20 +44,28 @@ function retryDelay(output: string, retry: number): number | null {
 		}
 	}
 
-	if (hint !== undefined && hint > 120_000) return null;
+	if ((requireHint && hint === undefined) || (hint !== undefined && hint > 60_000)) return null;
 
-	return hint === undefined ? 5_000 * 2 ** retry : Math.max(1_000, hint + 1_000);
+	return hint === undefined ? 5_000 * 2 ** retry : Math.max(1_000, hint + 1_000 + Math.random() * 1_000);
 }
 
-/** At most three retries inside the original prompt's abort/deadline signal; never replay partial answers. */
+/** At most three retries inside the original deadline; partial work requires a session continuation callback. */
 export async function withDevinRetries<T>(signal: AbortSignal, attempt: () => Promise<Attempt<T>>): Promise<T> {
 	for (let retry = 0; ; retry++) {
 		signal.throwIfAborted();
 
 		const result = await attempt();
-		const delay = result.errorOutput ? retryDelay(result.errorOutput, retry) : null;
+		const delay = result.errorOutput ? devinRetryDelay(result.errorOutput, retry, result.partial) : null;
 
-		if (retry >= 3 || result.partial || delay === null) return result.value;
+		if ((result.partial && !result.resume) || delay === null) return result.value;
+
+		if (retry >= 3) {
+			if (result.resume) await sleep(delay, signal);
+
+			return result.value;
+		}
+
+		result.resume?.();
 		console.warn(`[devin] Request throttled; retry ${retry + 1}/3 in ${delay / 1000}s`);
 		await sleep(delay, signal);
 	}

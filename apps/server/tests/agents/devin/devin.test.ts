@@ -35,7 +35,7 @@ describe('Devin tool-free completion throttles', () => {
 			const backedOff = await Promise.race([waiting.then(() => true), work.then(() => false)]);
 
 			expect(backedOff).toBe(true);
-			jest.advanceTimersByTime(3000);
+			jest.advanceTimersByTime(4000);
 			expect(await work).toBe('the reply\n');
 			expect(usages).toHaveLength(1);
 			expect(usages[0]?.inputTokens).toBe(1500);

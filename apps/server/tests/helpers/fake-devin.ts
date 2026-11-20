@@ -81,6 +81,7 @@ else
 fi
 
 case "$FAKE_DEVIN_MODE" in
+partialthrottle) if [ ! -f "$FAKE_DEVIN_LOG.retried" ]; then touch "$FAKE_DEVIN_LOG.retried"; echo 'The scratch test was written.'; echo 'Error: Reached request rate limit. Your limit will reset in 2 seconds.' >&2; exit 1; fi; echo 'the reply' ;;
 throttleonce) if [ ! -f "$FAKE_DEVIN_LOG.retried" ]; then touch "$FAKE_DEVIN_LOG.retried"; echo 'Error: Reached request rate limit. Your limit will reset in 2 seconds.' >&2; exit 1; fi; echo 'the reply' ;;
 missingexport) if [ -n "$resumed" ]; then rm "$export_file"; fi; echo 'the reply' ;;
 signedout) echo "Error: Not logged in. Run devin auth login" >&2; exit 1 ;;

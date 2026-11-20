@@ -13,6 +13,7 @@ import { DEVIN_LOGIN, exitError, readExport, tokenUsage, type DevinExport } from
 import { devinDataHome, devinEnv, removeToolFreeHome, toolFreeHome } from './devin-process';
 import { DevinRun, DEVIN_PRINT_ARGS } from './devin-run';
 import { withDevinRetries } from './devin-retry';
+import { retainDevinExport } from './devin-artifacts';
 
 const INSTALL = 'curl -fsSL https://cli.devin.ai/install.sh | bash';
 
@@ -130,6 +131,7 @@ export class DevinAgent extends SessionCliAgent {
 					];
 
 					if (session) args.push('--resume', session);
+					await retainDevinExport(exportFile, this.env);
 					await rm(exportFile, { force: true });
 
 					let reply: { text: string } | { error: unknown };
@@ -164,6 +166,7 @@ export class DevinAgent extends SessionCliAgent {
 			session ??= (await readExport(exportFile))?.session_id;
 			throw deadline.failure(error, 'Devin request failed.');
 		} finally {
+			await retainDevinExport(exportFile, this.env);
 			await removeScratchDir(this.scratch, scratch);
 			if (session) await this.forget(path, session);
 		}

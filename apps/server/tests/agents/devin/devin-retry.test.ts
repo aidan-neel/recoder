@@ -4,6 +4,21 @@ import { settleOnClock, useFakeClock } from '../../helpers/fake-clock';
 
 useFakeClock();
 
+test('partial session continuation is bounded and waits for each reset without replaying a prompt', async () => {
+	let attempts = 0;
+	const resume = jest.fn();
+
+	const result = withDevinRetries(new AbortController().signal, async () => ({
+		value: ++attempts,
+		partial: true,
+		resume,
+		errorOutput: 'Reached request rate limit. Reset in 2 seconds.'
+	}));
+
+	expect(await settleOnClock(result, 500, 30_000)).toBe(4);
+	expect(resume).toHaveBeenCalledTimes(3);
+});
+
 test.each([
 	'Reached request rate limit. Your limit will reset in 2 seconds (at 04:17 UTC).',
 	'HTTP 429 Too Many Requests\nRetry-After: 2',

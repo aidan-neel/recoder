@@ -1,5 +1,5 @@
 import { describe, expect, jest, test } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { DevinAgent } from '../../../src/agents/devin/devin';
@@ -22,7 +22,7 @@ describe('Devin throttled prompts', () => {
 			const backedOff = await Promise.race([waiting.then(() => true), work.then(() => false)]);
 
 			expect(backedOff).toBe(true);
-			jest.advanceTimersByTime(3000);
+			jest.advanceTimersByTime(4000);
 
 			const reply = await work;
 
@@ -31,6 +31,34 @@ describe('Devin throttled prompts', () => {
 			expect(events.filter((event) => event.type === 'step-start')).toHaveLength(2);
 			expect(events.flatMap((event) => (event.type === 'usage' ? [event.usage.inputTokens] : []))).toEqual([1000, 500]);
 			expect(await readFile(log, 'utf8')).toContain('[--resume] [quiet-owl]');
+		} finally {
+			warning.mockRestore();
+			await run.close();
+		}
+	});
+
+	test('a partial throttled session continues without replaying the tool-using request and keeps raw exports after close', async () => {
+		const { run, log } = await openRun('partialthrottle', undefined, true);
+		const { waiting, warning } = captureRetryWarning();
+
+		try {
+			const work = run.prompt('Original request with tool side effects.', PROMPT);
+
+			expect(await Promise.race([waiting.then(() => true), work.then(() => false)])).toBe(true);
+			jest.advanceTimersByTime(4000);
+			expect((await work).error).toBeUndefined();
+
+			const resumed = await readFile(log, 'utf8');
+
+			expect(resumed).toContain('[--resume] [quiet-owl]');
+			expect(resumed).not.toContain('Original request with tool side effects.');
+			await run.close();
+
+			const exports = await readdir(`${log}.exports`);
+
+			expect(exports).toHaveLength(2);
+			for (const file of exports)
+				expect(JSON.parse(await readFile(`${log}.exports/${file}`, 'utf8')).session_id).toBe('quiet-owl');
 		} finally {
 			warning.mockRestore();
 			await run.close();
@@ -51,9 +79,12 @@ const serversSchema = z.object({
 /** A run on the fake CLI in `mode`, with its events collected and the path of the fake's log. */
 async function openRun(
 	mode = 'reply',
-	userConfig?: Record<string, unknown>
+	userConfig?: Record<string, unknown>,
+	retain = false
 ): Promise<{ run: AgentRun; events: AgentEvent[]; log: string }> {
 	const env = await fakeDevin({ FAKE_DEVIN_MODE: mode }, userConfig);
+
+	if (retain) env.RECODER_DEVIN_EXPORT_DIR = `${env.FAKE_DEVIN_LOG}.exports`;
 
 	const { run, events } = await openCollectingRun(new DevinAgent(env), {
 		model: 'swe-2-high',

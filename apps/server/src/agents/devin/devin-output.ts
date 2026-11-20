@@ -3,6 +3,7 @@ import type { TokenUsage } from '@recoder/shared';
 import { z } from 'zod';
 import { LlmError, UsageLimitError } from '../../models/llm/errors';
 import { quotedLine } from '../quoted-line';
+import { devinRetryDelay } from './devin-retry';
 
 export const DEVIN_LOGIN = 'devin auth login';
 
@@ -67,11 +68,12 @@ export function tokenUsage(metrics: NonNullable<DevinExport['final_metrics']>): 
 }
 
 /**
- * A failed call's error: signed out is a 401, and any limit a usage cap (429), since Devin's limits reset in hours,
- * so the app can say so.
+ * Short hinted throttles stay transient; unknown reset windows and genuine plan exhaustion are usage caps.
  */
 function devinError(text: string): LlmError {
 	if (SIGNED_OUT.test(text)) return new LlmError(401, `Devin is signed out. Run: ${DEVIN_LOGIN}`);
+
+	if (devinRetryDelay(text, 0, true) !== null) return new LlmError(429, text);
 
 	return LIMIT.test(text) ? new UsageLimitError(429, text) : new LlmError(0, text);
 }
