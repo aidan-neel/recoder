@@ -1,7 +1,7 @@
 import { effortLabel, within, type SetupChecklist, type SetupStep } from '@recoder/shared';
 import type { Context } from 'hono';
 import { findAdmin } from '../../accounts/account-store';
-import { isLocalRequest, isSetupLocked } from '../../accounts/setup-gate';
+import { isLocalRequest } from '../../accounts/setup-gate';
 import { opencode } from '../../agents/opencode/opencode';
 import { HOSTED_PROVIDERS } from '../../models/model-providers';
 import { configForOrchestrator, isReviewConfigured } from '../../models/models';
@@ -98,9 +98,8 @@ function checklist(
 }
 
 async function setupSteps(c: Context, readAddress?: AddressReader): Promise<SetupStep[]> {
-	const [admin, locked, { publicUrl, tls }, picks] = await Promise.all([
+	const [admin, { publicUrl, tls }, picks] = await Promise.all([
 		findAdmin(),
-		isSetupLocked(c),
 		diagnosticAddress(readAddress),
 		setupModels()
 	]);
@@ -114,7 +113,7 @@ async function setupSteps(c: Context, readAddress?: AddressReader): Promise<Setu
 		: undefined;
 
 	return [
-		step('claim', !!admin || !locked, claim),
+		step('claim', true, claim),
 		step('address', addressReady, addressFact),
 		step('admin', !!admin, forge && `${forge.login} on ${forgeName(forge.provider)}`),
 		...picks

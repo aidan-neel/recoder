@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 import { capturedEnv, type ServerIdentity } from '../../src/eval/server-identity';
 import { sourceVersion } from '../../src/eval/source-hash';
 

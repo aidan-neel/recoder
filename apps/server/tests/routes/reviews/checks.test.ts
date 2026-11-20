@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { app } from '../../../src/app';
+import { localApp as app } from '../../helpers/local-app';
 import { db } from '../../../src/store';
 import { testReview } from '../../helpers/review';
 

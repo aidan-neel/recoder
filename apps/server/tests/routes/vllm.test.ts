@@ -2,10 +2,11 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { app } from '../../src/app';
+import { grantSetup } from '../../src/accounts/setup-code';
 import { initVllmServers } from '../../src/models/vllm/vllm-store';
 import { setReviewOverrides } from '../../src/review/session/review-settings';
 import { fakeVllm } from '../helpers/fake-vllm';
+import { localApp as app, requestFrom } from '../helpers/local-app';
 
 const dataDir = process.env.RECODER_DATA_DIR;
 
@@ -68,4 +69,25 @@ test('an unreachable server is a 502 with the reason, and nothing is saved', asy
 	expect(response.status).toBe(502);
 	expect((await response.json()).error).toContain('vllm.test:8000');
 	expect((await (await send('', 'GET')).json()).servers).toEqual([]);
+});
+
+test('a remote vLLM connection does not contact the provider until setup is unlocked', async () => {
+	const request = (headers: Record<string, string> = {}) =>
+		requestFrom('192.0.2.14', '/api/settings/vllm', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', ...headers },
+			body: JSON.stringify({ baseUrl: 'vllm.test:8000' })
+		});
+
+	const locked = await request();
+
+	expect(locked.status).toBe(403);
+	expect(await locked.json()).toMatchObject({ kind: 'setup-locked' });
+	expect(vllm.state.requests).toEqual([]);
+
+	const grant = await grantSetup();
+	const connected = await request({ cookie: `recoder_setup=${grant.token}` });
+
+	expect(connected.status).toBe(200);
+	expect(await connected.json()).toMatchObject({ servers: [{ host: 'vllm.test:8000' }] });
 });

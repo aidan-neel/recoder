@@ -44,7 +44,7 @@ export function getSettings(base: string): Promise<ModelSettings> {
 
 /** One read of `/health/identity`: null on 404, an error naming the status on any other failure. */
 async function readServerIdentity(base: string): Promise<ServerIdentity | null> {
-	const response = await fetch(new URL('/health/identity', base));
+	const response = await fetch(new URL('/health/identity', base), { headers: bearerHeader() });
 
 	if (response.status === 404) return null;
 

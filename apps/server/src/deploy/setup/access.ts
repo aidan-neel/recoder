@@ -1,16 +1,9 @@
 import type { ErrorHandler, MiddlewareHandler } from 'hono';
-import { SAFE_METHODS } from '../../accounts/admin-routes';
-import { refuseWhileLocked } from '../../accounts/setup-gate';
-import { trustedOrigin } from '../../routes/trusted-origin';
 
-export const protectDeploymentMutation: MiddlewareHandler = async (c, next) => {
+export const noStoreDeploymentResponse: MiddlewareHandler = async (c, next) => {
 	c.header('Cache-Control', 'no-store');
 
-	if (SAFE_METHODS.has(c.req.method)) return next();
-
-	const locked = await refuseWhileLocked(c);
-
-	return locked ?? trustedOrigin(c, next);
+	await next();
 };
 
 export const deploymentRouteError: ErrorHandler = (_error, c) =>

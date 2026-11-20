@@ -13,7 +13,7 @@ import { clearSessionCookie, requestSessionToken, setSessionCookie, setSetupCook
 import { endSession } from '../accounts/sessions';
 import { grantSetup, isSetupCode } from '../accounts/setup-code';
 import { resolveSignInTarget } from '../accounts/sign-in-target';
-import { isLocalRequest, isSetupLocked, peerAddress, refuseWhileLocked } from '../accounts/setup-gate';
+import { hasSetupAccess, isLocalRequest, peerAddress } from '../accounts/setup-gate';
 import { parseBody } from './parse-body';
 import { trustedOrigin } from './trusted-origin';
 
@@ -41,13 +41,17 @@ app.get('/me', async (c) => {
 	const stored = await findAdmin();
 	const account = stored ? await currentAccount(c) : undefined;
 
-	const setupLocked = await isSetupLocked(c);
+	const setupLocked = !stored && !(await hasSetupAccess(c));
 
 	const state: AuthState = {
 		account: account ? toAccount(account) : null,
 		setup: !stored,
 		forges: SIGN_IN_FORGES.map((provider) => ({ provider, method: signInMethod(provider) })),
-		connected: await offeredConnections(c, { hasAdmin: stored !== undefined, signedIn: account !== undefined }),
+		connected: await offeredConnections(c, {
+			setupLocked,
+			hasAdmin: stored !== undefined,
+			signedIn: account !== undefined
+		}),
 		setupLocked
 	};
 
@@ -58,10 +62,6 @@ app.post('/device', async (c) => {
 	const body = await parseBody(c, startSchema);
 
 	if (body instanceof Response) return body;
-
-	const locked = await refuseWhileLocked(c);
-
-	if (locked) return locked;
 
 	const account = await currentAccount(c);
 	const linker = account?.role === 'admin' ? account : undefined;
@@ -91,10 +91,6 @@ app.post('/adopt', async (c) => {
 
 	if (body instanceof Response) return body;
 	if (await findAdmin()) return signBackIn(c, body.provider);
-
-	const locked = await refuseWhileLocked(c);
-
-	if (locked) return locked;
 
 	try {
 		const adopted = await adoptConnection(body.provider);
@@ -143,9 +139,9 @@ app.post('/logout', async (c) => {
 /** The connections `AuthState.connected` lists: for setup or for a person signing back in at the server's own machine. */
 async function offeredConnections(
 	c: Context,
-	{ hasAdmin, signedIn }: { hasAdmin: boolean; signedIn: boolean }
+	{ setupLocked, hasAdmin, signedIn }: { setupLocked: boolean; hasAdmin: boolean; signedIn: boolean }
 ): Promise<ConnectedForge[]> {
-	if (!hasAdmin) return (await isSetupLocked(c)) ? [] : connectedForges();
+	if (!hasAdmin) return setupLocked ? [] : connectedForges();
 	if (signedIn || !isLocalRequest(c)) return [];
 
 	return connectedAccountForges();

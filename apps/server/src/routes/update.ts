@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { updateService, UpdateBusyError, UpdateRefusedError } from '../update/service';
 import { currentAccount } from '../accounts/enforcement';
-import { protectDeploymentMutation } from '../deploy/setup/access';
+import { noStoreDeploymentResponse } from '../deploy/setup/access';
 import { configuredUpdater } from '../update/container/connection';
 import {
 	beginContainer,
@@ -38,7 +38,7 @@ async function started(c: Context, begin: () => ReturnType<typeof updateService.
 	}
 }
 
-app.use('*', protectDeploymentMutation);
+app.use('*', noStoreDeploymentResponse);
 
 app.get('/', async (c) => c.json(await updateService.status()));
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { createHmac } from 'node:crypto';
 import { mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,7 +30,7 @@ async function get(path: string, headers: Record<string, string> = {}): Promise<
 }
 
 describe('while the server has no account', () => {
-	test('the API is open, as before accounts', async () => {
+	test('a direct loopback caller can use the API without a setup code', async () => {
 		expect((await get('/api/repos')).status).toBe(200);
 	});
 
@@ -112,17 +113,36 @@ describe('once an account exists', () => {
 		expect(JSON.stringify(me)).not.toMatch(/remoteId|refresh/);
 	});
 
-	test('webhooks and health answer without a session', async () => {
+	test('only authenticated webhook deliveries reach a claimed server without a session', async () => {
 		await signedInCookie();
 
-		const hook = await app.request('/api/webhooks/github', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: '{}'
-		});
+		const oldSecret = env.GITHUB_WEBHOOK_SECRET;
+		const body = '{}';
+		const path = '/api/webhooks/github';
 
-		expect(hook.status).not.toBe(401);
-		expect((await get('/health')).status).toBe(200);
+		try {
+			env.GITHUB_WEBHOOK_SECRET = undefined;
+
+			const unconfigured = await app.request(path, { method: 'POST', body });
+
+			expect(unconfigured.status).toBe(401);
+			expect(await unconfigured.json()).toMatchObject({ kind: 'signed-out' });
+			env.GITHUB_WEBHOOK_SECRET = 'test-webhook-secret';
+
+			const unsigned = await app.request(path, { method: 'POST', body });
+			const signature = createHmac('sha256', env.GITHUB_WEBHOOK_SECRET).update(body).digest('hex');
+
+			const signed = await app.request(path, {
+				method: 'POST',
+				headers: { 'x-hub-signature-256': `sha256=${signature}` },
+				body
+			});
+
+			expect(unsigned.status).toBe(401);
+			expect(signed.status).toBe(200);
+		} finally {
+			env.GITHUB_WEBHOOK_SECRET = oldSecret;
+		}
 	});
 
 	test('a change from an origin that is not the app is refused even with a valid session', async () => {

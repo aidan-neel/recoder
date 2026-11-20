@@ -59,7 +59,7 @@ export interface ServerIdentity {
 	policy: Record<string, number>;
 	caches: Record<string, string>;
 	tools: { bun: string; node: string; opencode: string };
-	/** The machine, unnamed: the route answers anyone who can reach it, and the harness records its own hostname. */
+	/** The machine, unnamed; the harness records its own hostname separately. */
 	host: {
 		os: string;
 		arch: string;

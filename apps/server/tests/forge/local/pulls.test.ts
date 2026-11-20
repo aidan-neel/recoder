@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PullPreview, PullRequest, Repo } from '@recoder/shared';
-import { app } from '../../../src/app';
+import { localApp as app } from '../../helpers/local-app';
 import { GhError } from '../../../src/forge/gh';
 import { localHeadSha } from '../../../src/forge/local/pulls';
 import { fetchPullPreview } from '../../../src/forge/pull-preview';

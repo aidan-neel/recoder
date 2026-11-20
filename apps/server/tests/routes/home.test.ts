@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 import { clearHomeBriefCache } from '../../src/home/home-brief';
 import { db } from '../../src/store';
 import { configureTestOrchestrator, resetBriefTestState, stubOrchestratorReplies } from '../home/brief-test-harness';

@@ -90,8 +90,8 @@ app.use('*', async (c, next) => {
 });
 
 app.use('*', cors(corsOptions));
+app.use('*', requireSession);
 app.use('/api/*', jsonCompression());
-app.use('/api/*', requireSession);
 
 app.use('/api/*', async (c, next) => {
 	if (containerOperationPreparing() && !SAFE_METHODS.has(c.req.method))

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { ServerCheck, ServerChecks } from '@recoder/shared';
 import { Hono } from 'hono';
+import { requireSession } from '../../src/accounts/enforcement';
 import { readServerChecks } from '../../src/deploy/diagnostics/checks';
 import { setReviewOverrides } from '../../src/review/session/review-settings';
 import { createServerInfoRoutes } from '../../src/routes/server-info';
@@ -83,7 +84,10 @@ test('two route instances admit only one durable check run', async () => {
 test('a locked browser cannot start a check or send a storage connection probe', async () => {
 	const runCheck = mock(async () => ({ id: 'model' as const, state: 'ok' as const, detail: '' }));
 	const connectPostgres = mock(async () => '16.4');
-	const app = new Hono().route('/api/server', createServerInfoRoutes({ runCheck, connectPostgres }));
+
+	const app = new Hono()
+		.use('*', requireSession)
+		.route('/api/server', createServerInfoRoutes({ runCheck, connectPostgres }));
 
 	for (const [path, init] of [
 		['/api/server/checks?only=model', { method: 'POST' }],

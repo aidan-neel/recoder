@@ -2,9 +2,9 @@
  * Running a Recoder server from the browser: the setup checklist a fresh
  * install walks through, the server's checks and overview, its backups and its
  * log. The contract is plans/AID-deploy-api.md in the Recoder Captain drive.
- * Every route is the admin's once an account exists; before that, the setup
- * routes answer anyone and the ones that change the server refuse a locked
- * browser with 403 `setup-locked`, like the claim routes do.
+ * A locked browser sees only the claim step, then gains setup access after
+ * entering the code. Once claimed, the admin manages the server; signed-in
+ * members see only that setup is complete.
  */
 
 /** The setup checklist's steps, in order. */

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { emptyReviewProgress, type ReviewProgress, type ReviewToolCall } from '@recoder/shared';
-import { app } from '../../../src/app';
+import { localApp as app } from '../../helpers/local-app';
 import { db, reviewProgress } from '../../../src/store';
 import { testReview } from '../../helpers/review';
 

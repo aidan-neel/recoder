@@ -1,13 +1,18 @@
 import { afterAll, expect, test } from 'bun:test';
 import { getServerIdentity } from '../../src/eval/client';
+import { restoreEnvAfterEach } from '../helpers/env';
 
 let status = 500;
 let calls = 0;
+let authorization: string | null = null;
+
+restoreEnvAfterEach(['RECODER_API_TOKEN']);
 
 const server = Bun.serve({
 	port: 0,
-	fetch() {
+	fetch(request) {
 		calls += 1;
+		authorization = request.headers.get('authorization');
 
 		return new Response(status === 404 ? 'Not Found' : 'identity failed', { status });
 	}
@@ -33,4 +38,13 @@ test('only a server without the route, which answers 404, has no identity', asyn
 
 	expect(await getServerIdentity(base)).toBeNull();
 	expect(calls).toBe(1);
+});
+
+test('the benchmark authenticates its server identity read with the machine token', async () => {
+	process.env.RECODER_API_TOKEN = 'test-token-'.padEnd(40, 'x');
+	status = 404;
+
+	await getServerIdentity(base);
+
+	expect(authorization).toBe(`Bearer ${process.env.RECODER_API_TOKEN}`);
 });

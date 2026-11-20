@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { app } from '../src/app';
+import { localApp as app } from './helpers/local-app';
 import { db, reviewDiffs, reviewSandboxes } from '../src/store';
 import { createReviewSession } from '../src/commands/pipeline';
 

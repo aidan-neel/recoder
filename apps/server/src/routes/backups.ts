@@ -1,7 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { currentAccount } from '../accounts/enforcement';
-import { refuseWhileLocked } from '../accounts/setup-gate';
-import { protectDeploymentMutation } from '../deploy/setup/access';
+import { noStoreDeploymentResponse } from '../deploy/setup/access';
 import { secretKey } from '../secrets/secret-key';
 import {
 	backupPolicySchema,
@@ -19,8 +18,7 @@ import { beginContainer, containerOperationPreparing, containerStatus } from '..
 
 const app = new Hono();
 
-app.use('*', async (c, next) => (await refuseWhileLocked(c)) ?? next());
-app.use('*', protectDeploymentMutation);
+app.use('*', noStoreDeploymentResponse);
 
 async function controlled(c: Context, work: () => Response | Promise<Response>): Promise<Response> {
 	try {

@@ -1,5 +1,5 @@
 import type { Finding, Review } from '@recoder/shared';
-import { app } from '../../../src/app';
+import { localApp as app } from '../../helpers/local-app';
 import { db, reviewDiffs } from '../../../src/store';
 import { DIFF } from '../../review/pipeline/harness-fixtures';
 import { testReview } from '../../helpers/review';

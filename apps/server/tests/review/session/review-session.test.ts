@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { ORCHESTRATOR_ID, type Review } from '@recoder/shared';
-import { app } from '../../../src/app';
+import { localApp as app } from '../../helpers/local-app';
 import { createReviewSession, startReviewSession } from '../../../src/commands/pipeline';
 import { db, recoverStaleReviews, reviewProgress } from '../../../src/store';
 import { clearReviewEvents, subscribeReview } from '../../../src/review/session/events';

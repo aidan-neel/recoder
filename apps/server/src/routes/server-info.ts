@@ -5,7 +5,7 @@ import type { AddressReader } from '../deploy/diagnostics/address';
 import { isServerCheckId, readServerChecks, startServerChecks } from '../deploy/diagnostics/checks';
 import { probeServerCheck, serverOverview } from '../deploy/diagnostics/probes';
 import { postgresConnectionUrl, testPostgres } from '../deploy/diagnostics/storage';
-import { deploymentRouteError, protectDeploymentMutation } from '../deploy/setup/access';
+import { deploymentRouteError, noStoreDeploymentResponse } from '../deploy/setup/access';
 
 interface ServerInfoOptions {
 	readAddress?: AddressReader;
@@ -19,7 +19,7 @@ export function createServerInfoRoutes({ readAddress, runCheck, connectPostgres 
 	const app = new Hono();
 
 	app.onError(deploymentRouteError);
-	app.use('*', protectDeploymentMutation);
+	app.use('*', noStoreDeploymentResponse);
 
 	app.get('/', async (c) => c.json(await serverOverview(readAddress)));
 	app.get('/checks', async (c) => c.json(await readServerChecks()));
