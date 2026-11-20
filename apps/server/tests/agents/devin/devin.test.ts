@@ -1,10 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, jest, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { TokenUsage } from '@recoder/shared';
 import { DevinAgent } from '../../../src/agents/devin/devin';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
-import { fakeDevin } from '../../helpers/fake-devin';
+import { captureRetryWarning, fakeDevin } from '../../helpers/fake-devin';
+import { useFakeClock } from '../../helpers/fake-clock';
 import { testCallFailures } from '../../helpers/native-agent';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
@@ -20,6 +21,34 @@ function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 		...overrides
 	};
 }
+
+describe('Devin tool-free completion throttles', () => {
+	useFakeClock();
+
+	test('backs off and resumes a throttled completion without replacing the user prompt with a tool nudge', async () => {
+		const env = await fakeDevin({ FAKE_DEVIN_MODE: 'throttleonce' });
+		const usages: TokenUsage[] = [];
+		const { waiting, warning } = captureRetryWarning();
+
+		try {
+			const work = new DevinAgent(env).complete(call({ onUsage: (usage) => usages.push(usage) }));
+			const backedOff = await Promise.race([waiting.then(() => true), work.then(() => false)]);
+
+			expect(backedOff).toBe(true);
+			jest.advanceTimersByTime(3000);
+			expect(await work).toBe('the reply\n');
+			expect(usages).toHaveLength(1);
+			expect(usages[0]?.inputTokens).toBe(1500);
+
+			const log = await readFile(env.FAKE_DEVIN_LOG ?? '', 'utf8');
+
+			expect(log).toContain('--resume] [quiet-owl]');
+			expect(log).not.toContain('nothing can be run');
+		} finally {
+			warning.mockRestore();
+		}
+	});
+});
 
 test('the models are the runnable lines of the list, with their context windows', async () => {
 	const models = await new DevinAgent(await fakeDevin()).models();

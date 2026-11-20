@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
@@ -12,6 +12,7 @@ import { parseDevinModels } from './devin-models';
 import { DEVIN_LOGIN, exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
 import { devinDataHome, devinEnv, removeToolFreeHome, toolFreeHome } from './devin-process';
 import { DevinRun, DEVIN_PRINT_ARGS } from './devin-run';
+import { withDevinRetries } from './devin-retry';
 
 const INSTALL = 'curl -fsSL https://cli.devin.ai/install.sh | bash';
 
@@ -115,13 +116,43 @@ export class DevinAgent extends SessionCliAgent {
 			for (let attempt = 0; attempt <= TOOL_RETRIES && !text.trim(); attempt++) {
 				if (attempt > 0) await writeFile(promptFile, TOOL_REFUSED_NUDGE, { mode: 0o600 });
 
-				const args = [...DEVIN_PRINT_ARGS, '--prompt-file', promptFile, '--model', opts.model, '--export', exportFile];
+				const result = await withDevinRetries<
+					({ text: string } | { error: unknown }) & { exported: DevinExport | null }
+				>(deadline.signal, async () => {
+					const args = [
+						...DEVIN_PRINT_ARGS,
+						'--prompt-file',
+						promptFile,
+						'--model',
+						opts.model,
+						'--export',
+						exportFile
+					];
 
-				if (session) args.push('--resume', session);
+					if (session) args.push('--resume', session);
+					await rm(exportFile, { force: true });
 
-				text = await this.run(path, args, { cwd, env }, deadline.signal, onToken);
-				exported = await readExport(exportFile);
-				session = exported?.session_id ?? session;
+					let reply: { text: string } | { error: unknown };
+
+					try {
+						reply = { text: await this.run(path, args, { cwd, env }, deadline.signal, onToken) };
+					} catch (error) {
+						reply = { error };
+					}
+
+					const saved = await readExport(exportFile);
+
+					session = saved?.session_id ?? session;
+
+					return {
+						value: { ...reply, exported: saved },
+						errorOutput: 'error' in reply ? String(reply.error) : undefined
+					};
+				});
+
+				exported = result.exported;
+				if ('error' in result) throw result.error;
+				text = result.text;
 			}
 
 			if (exported?.final_metrics) opts.onUsage?.(tokenUsage(exported.final_metrics));

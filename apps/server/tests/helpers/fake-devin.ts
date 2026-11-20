@@ -1,7 +1,15 @@
+import { spyOn } from 'bun:test';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fakeBin } from './fake-bin';
+
+export function captureRetryWarning() {
+	const waiting = Promise.withResolvers<void>();
+	const warning = spyOn(console, 'warn').mockImplementation(waiting.resolve);
+
+	return { waiting: waiting.promise, warning };
+}
 
 /** What the `tool` mode runs with Bun: one MCP call to the server Recoder put in the local MCP config. */
 const TOOL_CALL = [

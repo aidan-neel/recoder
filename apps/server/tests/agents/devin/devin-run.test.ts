@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { DevinAgent } from '../../../src/agents/devin/devin';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
-import { fakeDevin } from '../../helpers/fake-devin';
+import { captureRetryWarning, fakeDevin } from '../../helpers/fake-devin';
 import { useFakeClock } from '../../helpers/fake-clock';
 import { fixtureReview, openCollectingRun, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
@@ -15,13 +15,7 @@ describe('Devin throttled prompts', () => {
 
 	test('retries a CLI throttle within one prompt, resuming its session and retaining both attempts usage', async () => {
 		const { run, events, log } = await openRun('throttleonce');
-		let notify!: () => void;
-
-		const waiting = new Promise<void>((resolve) => {
-			notify = resolve;
-		});
-
-		const warning = jest.spyOn(console, 'warn').mockImplementation(() => notify());
+		const { waiting, warning } = captureRetryWarning();
 
 		try {
 			const work = run.prompt('Review it.', PROMPT);
