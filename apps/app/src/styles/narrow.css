@@ -50,7 +50,8 @@
 		pointer-events: auto;
 	}
 	/* With no sidebar column under it, the topbar's first part holds only what it shows. */
-	.topbar-lead {
+	.topbar-lead,
+	.topbar-side {
 		width: max-content;
 	}
 

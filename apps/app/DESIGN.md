@@ -80,9 +80,13 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   sidebar's right edge a small Search button (Cmd/Ctrl+K, it opens the
   palette) left of the sidebar's toggle. There are no Back and Forward buttons: Cmd/Ctrl+[
   and Cmd/Ctrl+] and the browser's own walk the tab on screen. The first tab
-  starts on the page panel's left edge. With the sidebar hidden the part over
-  it keeps its width, as Capy's toggle stays put: the account, Search and the
-  toggle never move when the sidebar opens or closes. After the
+  starts on the page panel's left edge. With the sidebar hidden the bar is
+  Capy's collapsed bar without its arrows: the toggle alone at the window's
+  left, 8px in like the page panel, and the first tab 8px after it. The part
+  over the sidebar narrows to the toggle on the sidebar's clock, so the toggle
+  and the tabs glide with the page's edge and never snap; the account and
+  Search ride out with it and fade, as Capy keeps them in its sidebar. Cmd/Ctrl+K
+  still opens Search. After the
   last tab, a + (tooltip "New review", Alt+T) opens New review in a new tab;
   the sidebar's first row, New review, opens it in the tab on screen. The design is variant V1,
   "Window bar", of the Paper file
