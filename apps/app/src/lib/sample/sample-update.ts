@@ -18,7 +18,7 @@ const SAMPLE_STEPS: readonly UpdateState[] = ['pausing', 'updating', 'restarting
 const SAMPLE_HISTORY: UpdateHistoryEntry[] = [
 	{
 		id: 'u3',
-		version: '0.2.1',
+		version: '0.3.0',
 		installedAt: '2026-11-12T16:20:00Z',
 		by: 'aidan',
 		durationMs: 134_000,
@@ -27,7 +27,7 @@ const SAMPLE_HISTORY: UpdateHistoryEntry[] = [
 	},
 	{
 		id: 'u2',
-		version: '0.2.0',
+		version: '0.2.1',
 		installedAt: '2026-10-30T09:02:00Z',
 		by: 'aidan',
 		durationMs: 98_000,
@@ -51,7 +51,7 @@ export function createSampleUpdate(): UpdateApi {
 	function status(): UpdateStatus {
 		const state = SAMPLE_STEPS[step] ?? 'idle';
 
-		return { mode: 'git', current: { version: '0.2.1', commit: '1f3a9d6e', branch }, available, state };
+		return { mode: 'git', current: { version: '0.3.0', commit: '1f3a9d6e', branch }, available, state };
 	}
 
 	return {

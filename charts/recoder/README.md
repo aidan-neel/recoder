@@ -6,7 +6,7 @@ For multiple API replicas, configure an external PostgreSQL service as described
 
 ## Choose the image
 
-The chart defaults to the published release image, `ghcr.io/aidan-neel/recoder`, at the tag named by an empty `server.image.tag`, which means the chart's `appVersion`.
+The chart defaults to the published release image, `ghcr.io/aidan-neel/recoder`, at the tag named by an empty `server.image.tag`, which means the chart's `appVersion`: the release tag, `v0.3.0` for this release.
 A released image is signed; the in-app updater verifies it against the signed release manifest.
 Use immutable tags for upgrades: pin `server.image.tag` to a release tag instead of a moving one.
 
@@ -215,7 +215,7 @@ Apply cluster network policies that permit the API to reach only the required da
 
 | Value | Default | Purpose |
 | --- | --- | --- |
-| `server.image.repository`, `server.image.tag` | `ghcr.io/aidan-neel/recoder`, the chart's `appVersion` | The release image, which serves the app and the API. |
+| `server.image.repository`, `server.image.tag` | `ghcr.io/aidan-neel/recoder`, the chart's `appVersion` (the release tag) | The release image, which serves the app and the API. |
 | `server.image.pullPolicy` | `IfNotPresent` | Image pull policy. |
 | `server.replicaCount` | `1` | API replicas; more require PostgreSQL below. |
 | `server.frontendUrl` | `https://recoder.example.org` | The one origin the app and the API are reached at. |
