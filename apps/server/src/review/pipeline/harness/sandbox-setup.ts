@@ -7,6 +7,7 @@ import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { ranCode, runBaselineChecks } from './baseline-run.js';
 import { installedTool, pickBaselineChecks } from './baseline-checks.js';
+import { nonJsChecks } from './non-js-checks.js';
 import { extendDeadlines, type ReviewRun } from './context.js';
 import { describePrep, packagePrepEnabled, preparePackages, type PrepReport } from './package-prep.js';
 import { reviewersRunCode } from './reviewer-tools.js';
@@ -85,7 +86,13 @@ async function prepareChecks(run: ReviewRun, setup: PendingSetup): Promise<Backg
 	const report = await setup.report;
 	const scripts = await workspace.scripts().catch(() => []);
 	const changed = run.units.flatMap((unit) => unit.scope.map((entry) => entry.path));
-	const checks = pickBaselineChecks(scripts, changed, report);
+
+	const native = await workspace
+		.commitTree()
+		.then((tree) => nonJsChecks(tree, changed))
+		.catch(() => []);
+
+	const checks = [...pickBaselineChecks(scripts, changed, report), ...native].slice(0, REVIEW_POLICY.maxBaselineChecks);
 	const runtimes = workspace.runtimes();
 	const prep = packagePrepEnabled() ? await prepareChanged(run, workspace, report, changed, setup.wait) : [];
 
