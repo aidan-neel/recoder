@@ -89,7 +89,9 @@
 @media (prefers-reduced-motion: reduce) {
 	.app-frame,
 	.app-frame .sidebar,
-	.app-frame > .page {
+	.app-frame > .page,
+	.topbar-lead,
+	.topbar-side {
 		transition: none;
 	}
 }
@@ -104,27 +106,47 @@
 	background: var(--bg-chrome);
 }
 /*
- * The part over the sidebar keeps the sidebar's width, so the first tab starts on the page's left edge, as in Capy.
- * The account sits at its start, Search and the toggle at its right edge. It keeps that width with the sidebar
- * hidden, as Capy's toggle stays put: the controls are where they were, whichever way the sidebar went.
+ * The part over the sidebar keeps the sidebar's width, so the first tab starts on the page's left edge, as in Capy:
+ * the account at its start, Search and the toggle at its right edge. With the sidebar hidden it narrows to the toggle
+ * alone at the window's left, on the sidebar's clock, so the toggle and the tabs after it glide with the page's edge.
+ * Everything in it is packed to its right edge: the account and Search ride out past the window's left with the
+ * toggle as it narrows, and fade, and ride back in as it widens. They keep their width all the way, so nothing in
+ * them rewraps or squeezes.
  */
 .topbar-lead {
 	display: flex;
 	width: var(--sidebar-width);
 	flex-shrink: 0;
 	align-items: center;
+	justify-content: flex-end;
 	gap: 2px;
 	padding: 0 8px;
+	transition: width var(--dur-sidebar) var(--ease-sidebar);
 }
-.topbar .account {
-	margin-right: 0;
-}
-.topbar-tools {
+.topbar-side {
 	display: flex;
+	width: calc(var(--sidebar-width) - 16px - 2px - var(--size-icon-md));
 	flex-shrink: 0;
 	align-items: center;
 	gap: 2px;
-	margin-left: auto;
+	transition:
+		opacity var(--dur-sidebar) var(--ease-sidebar),
+		visibility 0s linear;
+}
+@media (min-width: 1024px) {
+	.app-frame[data-sidebar='closed'] .topbar-lead {
+		width: calc(var(--size-icon-md) + 16px);
+	}
+	.app-frame[data-sidebar='closed'] .topbar-side {
+		opacity: 0;
+		visibility: hidden;
+		transition:
+			opacity var(--dur-hover) var(--ease-hover),
+			visibility 0s linear var(--dur-hover);
+	}
+}
+.app-frame:has([data-ui='resize-handle'][data-dragging]) .topbar-lead {
+	transition: none;
 }
 .window-tabs {
 	display: flex;
