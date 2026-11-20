@@ -19,6 +19,8 @@ import type { ChatOptions } from '../models/llm/types';
  * `tools/mcp-host.ts`, which passes each call to Recoder's gate (permitted reads, sandboxed runs).
  */
 export interface AgentAdapter {
+	/** Prompt-only adapters cannot enforce a per-inference tool allowance. */
+	readonly stepGranularity?: 'prompt';
 	/** The adapter id: also the model provider, and the prefix of its model ids (`claude-code:opus`). */
 	readonly id: string;
 	readonly name: string;

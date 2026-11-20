@@ -49,7 +49,8 @@ export class ToolGate<T> {
 		private readonly agentId: string,
 		private readonly turns: { isFinal: () => boolean; nextIsFinal: () => boolean },
 		sentDiscussion: string,
-		private readonly sessionBudget?: { limit: number; onExhausted: () => void }
+		private readonly sessionBudget?: { limit: number; onExhausted: () => void },
+		private readonly opaque = false
 	) {
 		this.sentDiscussion = sentDiscussion;
 	}
@@ -108,12 +109,12 @@ export class ToolGate<T> {
 
 		if (!action) return this.refuse(`There is no tool named ${name}.`);
 
-		if (this.stepCalls >= REVIEW_POLICY.maxRetrievalsPerTurn)
+		if (!this.opaque && this.stepCalls >= REVIEW_POLICY.maxRetrievalsPerTurn)
 			return this.refuse(
 				`At most ${REVIEW_POLICY.maxRetrievalsPerTurn} tool calls per step. Call this one in your next step.`
 			);
 
-		if (action.action === 'run' && this.stepRuns >= REVIEW_POLICY.maxRunsPerTurn)
+		if (!this.opaque && action.action === 'run' && this.stepRuns >= REVIEW_POLICY.maxRunsPerTurn)
 			return this.refuse(`At most ${REVIEW_POLICY.maxRunsPerTurn} runs per step. Run this one in your next step.`);
 
 		const key = JSON.stringify(action);
@@ -126,7 +127,7 @@ export class ToolGate<T> {
 			return this.refuse(`This exact request already failed. ${FINAL_TURN_NOTE}`);
 		}
 
-		if (this.stepCalls++ === 0) this.retrievals++;
+		if (this.stepCalls++ === 0 || this.opaque) this.retrievals++;
 
 		if (action.action === 'run') {
 			this.stepRuns++;
@@ -140,7 +141,7 @@ export class ToolGate<T> {
 		if (this.sessionBudget) this.observations.push(formatToolResults([result]).slice(0, 4000));
 
 		this.runs += result.runs ?? 0;
-		this.stepChars += result.content.length;
+		this.stepChars = this.opaque ? 0 : this.stepChars + result.content.length;
 		if (!result.ok && read) this.failedReads.add(key);
 
 		if (result.ok && result.path)

@@ -14,6 +14,8 @@ The server reads the environment variables below. All are optional. An unset var
 
 **RECODER_DEVIN_MCP_ONLY**: Experimental, off by default. Set to `1` to hide CLI-local tools in Devin verifier sessions using `disabled_tools` and disable subagents. Recoder-owned pre-tool hooks refuse stale local calls with the leased MCP equivalent; existing permission denies remain in place. Requires a Devin CLI supporting `disabled_tools` and command hooks. Other stages, tool-free calls, sandbox permissions and verification verdict rules are unchanged.
 
+**RECODER_VERIFIER_SESSION_FIXES**: Experimental, off by default. Set to `1` for opaque CLI session allowances (four operations per configured tool turn, across prompts and retries, instead of per-inference quotas the adapter cannot observe). Explicit operation caps still apply; deadline, role and sandbox gates remain. Exhaustion forces answer-only finalization, never refutation. Also restricts verification reuse and verified consolidation to identical explicit claims (or exact title/body when absent), preferring duplicate reports over losing a proved claim.
+
 ## Model fallback
 
 Saved model settings win. These variables are the fallback, read by `effectiveReviewEnv` in `apps/server/src/review/session/review-settings.ts`.

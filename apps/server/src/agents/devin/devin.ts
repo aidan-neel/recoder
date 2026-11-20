@@ -39,6 +39,7 @@ const TOOL_RETRIES = 2;
  */
 export class DevinAgent extends SessionCliAgent {
 	readonly id = 'devin';
+	readonly stepGranularity = 'prompt' as const;
 	readonly name = 'Devin';
 	/** Its CLI documents no image input; the prompt goes in as text (`--prompt-file`). */
 	readonly readsImages = false;

@@ -21,6 +21,7 @@ import { StepRelay } from './step-relay.js';
 import { FINAL_TURN_NOTE, ToolGate } from './tool-gate.js';
 import type { JsonAgentOptions } from './options.js';
 import { verifierOpBudget } from './verifier-budget.js';
+import { verifierSessionFixes } from '../verify/session-policy.js';
 
 type AgentResult<T> = { value: T | null; error?: string; opBudgetExhausted?: boolean };
 
@@ -89,7 +90,11 @@ class NativeRun<T> {
 		initialDiscussion: string
 	) {
 		this.limits = limits;
-		this.opBudget = opts.toolOpBudget === undefined ? verifierOpBudget(opts.stage) : opts.toolOpBudget;
+
+		const opaque = agent.stepGranularity === 'prompt' && verifierSessionFixes();
+		const configured = opts.toolOpBudget === undefined ? verifierOpBudget(opts.stage) : opts.toolOpBudget;
+
+		this.opBudget = configured ?? (opaque ? Math.max(1, toolTurns(opts)) * REVIEW_POLICY.maxRetrievalsPerTurn : null);
 		this.endpoint = llmEndpoint(opts.config);
 		this.spendOpts = { consumeReserve: opts.consumeReserve };
 		this.toolsOn = toolTurns(opts) > 0;
@@ -110,7 +115,8 @@ class NativeRun<T> {
 				: {
 						limit: this.opBudget,
 						onExhausted: () => this.stop(this.promptTools ? 'final' : 'runaway')
-					}
+					},
+			opaque
 		);
 	}
 
