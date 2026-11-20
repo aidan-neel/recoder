@@ -4,6 +4,7 @@
  */
 
 export * from './diff';
+export * from './diff-moves';
 export * from './metrics';
 export * from './model-markdown';
 export * from './progress';

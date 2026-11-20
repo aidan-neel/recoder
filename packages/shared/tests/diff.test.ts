@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { collapseFileDiff, expandFileDiff, parseUnifiedDiff } from '../src/diff';
+import { detectMoves } from '../src/diff-moves';
+
+test('Git-quoted rename paths decode octal UTF-8 and escaped whitespace', () => {
+	const files = parseUnifiedDiff(String.raw`diff --git a/old b/new
+similarity index 100%
+rename from "caf\303\251\told.ts"
+rename to "new\tfile.ts"`);
+
+	expect(files[0]).toMatchObject({ path: 'new\tfile.ts', oldPath: 'café\told.ts', status: 'renamed' });
+});
 
 const SINGLE = `diff --git a/a.ts b/a.ts
 --- a/a.ts
@@ -10,6 +20,33 @@ const SINGLE = `diff --git a/a.ts b/a.ts
 +new
 +added
  tail`;
+
+test.each(['rename', 'copy'])('metadata-only %s retains its destination, source and similarity', (operation) => {
+	const files = parseUnifiedDiff(
+		`diff --git a/old.ts b/new.ts\nsimilarity index 100%\n${operation} from old.ts\n${operation} to new.ts`
+	);
+
+	expect(files).toMatchObject([
+		{
+			path: 'new.ts',
+			oldPath: 'old.ts',
+			status: operation === 'rename' ? 'renamed' : 'copied',
+			similarity: 100,
+			hunks: []
+		}
+	]);
+
+	expect(detectMoves(files)).toMatchObject([{ exact: true, fromPath: 'old.ts', toPath: 'new.ts' }]);
+});
+
+test('rename hunks keep their destination and never treat header-like code as move metadata', () => {
+	const [file] = parseUnifiedDiff(
+		'diff --git a/old.ts b/new.ts\nsimilarity index 90%\nrename from old.ts\nrename to new.ts\n--- a/old.ts\n+++ b/new.ts\n@@ -1 +1 @@\n-rename from source\n+copy to target'
+	);
+
+	expect(file).toMatchObject({ path: 'new.ts', oldPath: 'old.ts', similarity: 90, additions: 1, deletions: 1 });
+	expect(file.hunks[0].lines.map((line) => line.text)).toEqual(['rename from source', 'copy to target']);
+});
 
 describe('parseUnifiedDiff', () => {
 	test('parses hunks with counts and line numbers', () => {

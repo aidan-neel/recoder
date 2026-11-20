@@ -4,6 +4,7 @@ import {
 	findingSeverity,
 	type ClaimStep,
 	type DropStage,
+	type DiffMove,
 	type FixEdit,
 	type Finding,
 	type FindingSeverity,
@@ -30,6 +31,7 @@ import type { ChangeIntent, IntentClaim } from './intent/types.js';
 import { lensCategories, lensOwning } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
 import type { PublishedBy } from './published-by.js';
+import { pureMoveAt } from './move-awareness';
 
 export { isHeldBack, isReportable, publishHeldBack } from './published-by.js';
 
@@ -43,6 +45,7 @@ const toBackendSeverity: Record<string, FindingSeverity> = {
 const INTENT_CLAIM_ID = /\b[ACGN]\d+\b/g;
 
 export interface CandidateFinding extends Finding {
+	move?: { relation: DiffMove; reason: string };
 	candidateId: string;
 	valid: boolean;
 	dropReason?: string;
@@ -113,7 +116,8 @@ function locationProblem(
 	path: string,
 	line: number | undefined,
 	side: 'old' | 'new',
-	link?: RepairLink
+	link?: RepairLink,
+	metadataMove = false
 ): string | undefined {
 	const file = inventory.files.find((entry) => entry.path === path);
 
@@ -122,7 +126,13 @@ function locationProblem(
 
 	const linked = file.status !== 'added' && link?.file === path && addedLine(inventory, path, link.line);
 
-	if (side === 'new' && line && !linked && !newSideAnchored(inventory, file.path, line)) {
+	if (
+		side === 'new' &&
+		line &&
+		!linked &&
+		!(metadataMove && file.hunks.length === 0) &&
+		!newSideAnchored(inventory, file.path, line)
+	) {
 		return 'new-side line is not associated with this change';
 	}
 
@@ -269,21 +279,41 @@ export function validateCandidate(
 	);
 
 	const dismissed = [...(ctx.dismissed ?? [])].some((held) => matchesDismissal(held, dismissal));
+	const tier = findingTier({ tier: raw.tier, severity: toBackendSeverity[raw.severity] });
+	const move = pureMoveAt(ctx.inventory, raw.file, line, side);
+	const moveReason = raw.moveReason?.trim();
 
 	const drop = firstDrop([
-		['location', locationProblem(ctx.inventory, raw.file, line, side, link)],
+		[
+			'location',
+			locationProblem(
+				ctx.inventory,
+				raw.file,
+				line,
+				side,
+				link,
+				Boolean(move && move.toLines.end === null && moveReason)
+			)
+		],
+		[
+			'covered',
+			move &&
+				tier !== 'fyi' &&
+				!moveReason &&
+				'exactly moved code needs evidence of a behavior change caused by the move'
+		],
 		['evidence', raw.evidenceIds.length > 0 && evidenceIds.length === 0 && 'cited evidence was not provided'],
 		['category', categoryIssue(raw, meta.lenses, ctx)?.reason],
 		['dismissed', dismissed && 'a person dismissed this finding in an earlier review']
 	]);
 
-	const tier = findingTier({ tier: raw.tier, severity: toBackendSeverity[raw.severity] });
 	const ledgerRule = findLedgerRule(ctx.ledger, ruleId);
 
 	return {
 		id: crypto.randomUUID(),
 		title: raw.title,
 		candidateId: meta.candidateId,
+		...(move && moveReason && { move: { relation: move, reason: moveReason } }),
 		file: raw.file,
 		line,
 		endLine,
@@ -451,6 +481,7 @@ export function toFinding(candidate: CandidateFinding): Finding {
 		fix: _fix,
 		examples: _examples,
 		repair: _repair,
+		move: _move,
 		ruleCheck,
 		...finding
 	} = candidate;

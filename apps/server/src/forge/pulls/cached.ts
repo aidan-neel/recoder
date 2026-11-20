@@ -1,5 +1,6 @@
 import {
 	parseUnifiedDiff,
+	withDiffMoves,
 	type PrCheck,
 	type PullComment,
 	type PullCommit,
@@ -170,7 +171,7 @@ async function diffAtSteadyHead(repo: Repo, n: number, headBefore: string): Prom
 		const head = await pullHead(repo, n);
 
 		if (fetched.pr.headSha === expected && head === expected) {
-			return { headSha: expected, files: parseUnifiedDiff(fetched.diff) };
+			return { headSha: expected, files: withDiffMoves(parseUnifiedDiff(fetched.diff)) };
 		}
 
 		expected = head;

@@ -394,6 +394,7 @@ function findingResponseSchema(): Record<string, unknown> {
 			line,
 			endLine: line,
 			tier: { type: 'string', enum: ['bug', 'warning', 'fyi'] },
+			moveReason: { type: ['string', 'null'], maxLength: 600 },
 			category: { type: 'string', enum: [...FINDING_CATEGORIES] },
 			symbol: nullableStr,
 			ruleId: nullableStr,

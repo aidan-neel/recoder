@@ -111,6 +111,7 @@ export const reviewerFindingSchema = z.preprocess(
 		.object({
 			...findingShape(z.enum(['high', 'medium', 'low'])),
 			side: z.enum(['old', 'new']).optional(),
+			moveReason: z.string().trim().min(1).max(600).nullable().optional(),
 			category: z.preprocess(normalizeCategory, z.enum(FINDING_CATEGORIES)),
 			/** The enclosing symbol's qualified name from the change model, when there is one. */
 			symbol: z.string().max(200).nullable().optional(),

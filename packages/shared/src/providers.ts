@@ -1,4 +1,5 @@
 import type { Provider } from './repo';
+import type { FileDiff } from './diff';
 
 /** CLI auth state for one provider. */
 export interface ProviderAuth {
@@ -56,6 +57,8 @@ export interface PrCheck {
 
 export interface PullFile {
 	path: string;
+	status?: FileDiff['status'];
+	oldPath?: string;
 	additions: number;
 	deletions: number;
 }
