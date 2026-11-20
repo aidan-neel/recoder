@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 
 test('the limits route reads a URL-encoded provider key', async () => {
 	const response = await app.request('/api/agent/limits/cli%3Acursor');

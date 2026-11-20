@@ -10,7 +10,6 @@ import { isKnownHost } from '../accounts/forge-host';
 import { ForgeOAuthError } from '../accounts/forge-oauth';
 import { knownForgeHosts } from '../accounts/members';
 import { setSessionCookie } from '../accounts/session-cookie';
-import { refuseWhileLocked } from '../accounts/setup-gate';
 import { completeSignIn } from '../accounts/sign-in';
 import { normalizeGitlabHost } from '../forge/gitlab-host';
 import { clearAllCaches } from '../util/ttl-cache';
@@ -35,10 +34,6 @@ app.post('/token', async (c) => {
 	const body = await parseBody(c, tokenSchema);
 
 	if (body instanceof Response) return body;
-
-	const locked = await refuseWhileLocked(c);
-
-	if (locked) return locked;
 
 	const { provider, token } = body;
 	const rawHost = provider === 'gitlab' ? (body.host?.trim() ?? '') : '';

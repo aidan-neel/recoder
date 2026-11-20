@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { StoredImage } from '@recoder/shared';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 import {
 	deleteReviewImages,
 	reviewImageUploads,

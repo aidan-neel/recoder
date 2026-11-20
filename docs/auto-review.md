@@ -91,7 +91,7 @@ Polling is the default and needs nothing from the forge, which suits a
 server on a laptop that GitLab can't reach. Each check lists the open pull
 requests updated since the last one and reads their comments.
 
-If GitLab or GitHub can reach the server, add a webhook as well, so reviews
+Once the server is claimed, if GitLab or GitHub can reach it, add a webhook as well, so reviews
 start within seconds. Polling can stay on: the two never start the same
 review twice.
 

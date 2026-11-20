@@ -1,10 +1,10 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { PullState } from '@recoder/shared';
-import { app } from '../../src/app';
 import { env } from '../../src/env';
 import { pullStateKey, pullStates } from '../../src/forge/pulls/pull-states';
 import { saveAutoReviewSettings } from '../../src/forge/watch/settings';
 import { db } from '../../src/store';
+import { localApp as app } from '../helpers/local-app';
 
 afterEach(() => {
 	env.GITLAB_WEBHOOK_SECRET = undefined;

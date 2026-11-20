@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { findAdmin } from '../../src/accounts/account-store';
 import { REDIRECT_TTL_MS, beginRedirect, claimRedirect } from '../../src/accounts/oauth-redirects';
 import { removeMember } from '../../src/accounts/members';
+import { grantSetup } from '../../src/accounts/setup-code';
 import { collection } from '../../src/storage/backend';
 import { env } from '../../src/env';
 import { getToken } from '../../src/forge/tokens';
@@ -146,6 +147,31 @@ describe('starting a redirect sign-in', () => {
 });
 
 describe('the callback', () => {
+	test('an unlocked remote browser can claim the server when the callback has the forge’s origin', async () => {
+		answerGithubUser(7, 'octocat');
+
+		const setup = `recoder_setup=${(await grantSetup()).token}`;
+		const started = await requestFrom(TAILNET_PEER, '/api/auth/oauth/github/start', { headers: { cookie: setup } });
+		const state = authorizeQuery(started).get('state') ?? '';
+		const nonce = cookieValue(started, 'recoder_oauth');
+		const path = `/api/auth/oauth/github/callback?${new URLSearchParams({ code: 'the-code', state })}`;
+		const headers = { cookie: `recoder_oauth=${nonce}`, origin: 'https://github.com' };
+
+		const locked = await requestFrom(TAILNET_PEER, path, { headers });
+
+		expect(errorCode(locked)).toBe('setup-locked');
+		expect(forgeCalls()).toHaveLength(0);
+
+		const response = await requestFrom(TAILNET_PEER, path, {
+			headers: { ...headers, cookie: `${headers.cookie}; ${setup}` }
+		});
+
+		expect(response.status).toBe(302);
+		expect(response.headers.get('location')).toBe(`${FRONTEND}/`);
+		expect(cookieValue(response, 'recoder_session')).toHaveLength(43);
+		expect((await findAdmin())?.forges[0].login).toBe('octocat');
+	});
+
 	test('creates the admin during setup, trades the code with the secret and verifier, and sets the session', async () => {
 		answerGithubUser(7, 'octocat');
 

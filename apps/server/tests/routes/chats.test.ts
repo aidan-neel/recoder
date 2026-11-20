@@ -7,7 +7,7 @@ import {
 	type RepoChatEvent,
 	type RepoChatMessage
 } from '@recoder/shared';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 import { imageDataUrl } from '../../src/models/llm/message-images';
 import { WRITER_HEARTBEAT_MS } from '../../src/repo-chat/chat-record';
 import { replySettled } from '../../src/repo-chat/chat-reply';

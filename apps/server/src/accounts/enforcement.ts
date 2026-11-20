@@ -1,44 +1,100 @@
 import type { Context, MiddlewareHandler } from 'hono';
+import { matchedRoutes } from 'hono/route';
+import type { SetupChecklist } from '@recoder/shared';
+import { env } from '../env';
 import { isTrustedOrigin } from '../routes/trusted-origin';
 import { sameSecret } from '../util/same-secret';
 import { ADMIN_ACCOUNT_ID, type StoredAccount } from './account-records';
 import { findAccountById, findAdmin } from './account-store';
 import { isAdminOnly, SAFE_METHODS } from './admin-routes';
 import { serverAccessToken } from './local-access-token';
+import { redirectSignInError } from './oauth-return';
 import { requestSessionToken, setSessionCookie } from './session-cookie';
 import { findSession } from './sessions';
+import { hasSetupAccess } from './setup-gate';
+
+const PUBLIC_ROUTES = new Set([
+	'GET /health',
+	'HEAD /health',
+	'GET /health/ready',
+	'HEAD /health/ready',
+	'GET /api/auth/me',
+	'POST /api/auth/setup'
+]);
+
+const OAUTH_REDIRECT_ROUTES = new Set([
+	'GET /api/auth/oauth/github/start',
+	'GET /api/auth/oauth/github/callback',
+	'GET /api/auth/oauth/gitlab/start',
+	'GET /api/auth/oauth/gitlab/callback'
+]);
+
+const SIGN_IN_ROUTES = new Set([
+	...OAUTH_REDIRECT_ROUTES,
+	'POST /api/auth/token',
+	'POST /api/auth/adopt',
+	'POST /api/auth/device',
+	'POST /api/auth/logout'
+]);
+
+/** An attempt ID is a capability. A new literal route beside the poll must not inherit its exemption. */
+function isDevicePoll(c: Context): boolean {
+	if (c.req.method !== 'GET' || !/^\/api\/auth\/device\/[^/]+$/.test(c.req.path)) return false;
+
+	const routes = matchedRoutes(c).filter(({ method, path }) => method === 'GET' || !path.endsWith('*'));
+
+	return routes.length === 1 && routes[0]?.path === '/api/auth/device/:attemptId';
+}
+
+/** Only configured webhooks may authenticate outside a Recoder session, by verifying the delivery in the handler. */
+function hasWebhookAuth(route: string): boolean {
+	return (
+		(route === 'POST /api/webhooks/github' && !!env.GITHUB_WEBHOOK_SECRET) ||
+		(route === 'POST /api/webhooks/gitlab' && !!env.GITLAB_WEBHOOK_SECRET)
+	);
+}
 
 /**
- * The routes that stay open once an account exists: the ones that report or change who is signed in (pasting a token
- * is one, since it is how a person without OAuth signs back in, and it checks the token's owner itself; the OAuth redirect's start and callback are two more, since a signed-out
- * person uses them), and
- * webhooks, which carry their own signature. Everything else under `/api/auth` (status, repo lists, removing a
- * token) needs a session.
- */
-const OPEN_ROUTES =
-	/^\/api\/(auth\/(me|logout|token|adopt|setup|device(\/[^/]+)?|oauth\/[^/]+\/(start|callback))|webhooks\/[^/]+)$/;
-
-/**
- * Keeps the API behind sign-in, and the admin's routes behind the admin (see `isAdminOnly`). While no account
- * exists the API is open, as it was before accounts; once one does, a request needs the session cookie, or the
- * bearer token programs on this machine use. A cookie-authenticated request that changes something must also come
- * from a trusted origin (or none, as curl does).
+ * All dynamic routes default to requiring a setup grant before claim, then a session. The machine bearer token
+ * remains an alternative to a session after claim. Before claim even reads using loopback access must not expose
+ * their contents to an unrelated website; after claim the session cookie and CORS protect reads.
  */
 export const requireSession: MiddlewareHandler = async (c, next) => {
-	if (OPEN_ROUTES.test(c.req.path) || hasBearerAccess(c)) return next();
-	if (!(await findAdmin())) return next();
+	const route = `${c.req.method} ${c.req.path}`;
 
-	const account = await currentAccount(c);
+	if (PUBLIC_ROUTES.has(route)) return next();
 
-	if (!account) return c.json({ error: 'Sign in to continue.', kind: 'signed-out' }, 401);
+	const claimed = (await findAdmin()) !== undefined;
 
-	if (account.role !== 'admin' && isAdminOnly(c.req.method, c.req.path)) {
-		return c.json({ error: 'admin-only' }, 403);
+	if (!claimed) {
+		if (!(await hasSetupAccess(c))) {
+			c.header('Cache-Control', 'no-store');
+
+			if (route === 'GET /api/setup') {
+				return c.json({ complete: false, steps: [{ id: 'claim', done: false }] } satisfies SetupChecklist);
+			}
+
+			if (OAUTH_REDIRECT_ROUTES.has(route)) return redirectSignInError(c, 'setup-locked');
+
+			return c.json({ error: 'Setup is locked. Enter the setup code from the server log.', kind: 'setup-locked' }, 403);
+		}
+
+		if (OAUTH_REDIRECT_ROUTES.has(route) && c.req.path.endsWith('/callback')) return next();
+	} else {
+		if (SIGN_IN_ROUTES.has(route) || isDevicePoll(c) || hasWebhookAuth(route) || hasBearerAccess(c)) return next();
+
+		const account = await currentAccount(c);
+
+		if (!account) return c.json({ error: 'Sign in to continue.', kind: 'signed-out' }, 401);
+
+		if (account.role !== 'admin' && isAdminOnly(c.req.method, c.req.path)) {
+			return c.json({ error: 'admin-only' }, 403);
+		}
 	}
 
 	const origin = c.req.header('origin');
 
-	if (!SAFE_METHODS.has(c.req.method) && origin && !isTrustedOrigin(origin, c.req.url)) {
+	if ((!claimed || !SAFE_METHODS.has(c.req.method)) && origin && !isTrustedOrigin(origin, c.req.url)) {
 		return c.json({ error: 'Untrusted origin' }, 403);
 	}
 
@@ -68,10 +124,13 @@ export async function currentAccount(c: Context): Promise<StoredAccount | undefi
 
 /** Whether the request carries the machine's API bearer token. */
 export function hasBearerAccess(c: Context): boolean {
-	const expected = serverAccessToken();
 	const presented = /^Bearer (\S+)$/.exec(c.req.header('authorization') ?? '')?.[1];
 
-	return expected !== undefined && presented !== undefined && sameSecret(expected, presented);
+	if (!presented) return false;
+
+	const expected = serverAccessToken();
+
+	return expected !== undefined && sameSecret(expected, presented);
 }
 
 /**

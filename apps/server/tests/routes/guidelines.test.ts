@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 import { db } from '../../src/store';
 import { localForgeFixture } from '../helpers/local-forge';
 

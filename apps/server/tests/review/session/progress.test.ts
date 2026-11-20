@@ -1,6 +1,7 @@
 import { expect, jest, test } from 'bun:test';
 import { applyProgressMessage, emptyReviewProgress, taskSummary, type Review } from '@recoder/shared';
 import { app } from '../../../src/app';
+import { localApp } from '../../helpers/local-app';
 import { db, reviewProgress } from '../../../src/store';
 import {
 	emitReviewEvent,
@@ -98,7 +99,7 @@ test('terminal SSE delivers final findings and stays connected for subsequent co
 	const review = await storeRunningReview('Test');
 	const { id } = review;
 
-	const response = await app.request(`/api/reviews/${id}/events`);
+	const response = await localApp.request(`/api/reviews/${id}/events`);
 	const reader = response.body!.getReader();
 
 	await reader.read();
@@ -168,7 +169,7 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 
 	reportReviewTask(id, { id: 'fetch', label: 'Metadata', status: 'done', message: 'Fetched' });
 
-	const response = await app.request('/api/reviews/' + id + '/events');
+	const response = await localApp.request('/api/reviews/' + id + '/events');
 	const reader = response.body!.getReader();
 	const first = new TextDecoder().decode((await reader.read()).value);
 	const event = JSON.parse(first.slice(6).trim());
@@ -180,7 +181,7 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 	expect(listenerCount(id)).toBe(0);
 	await db.reviews.set({ ...(await db.reviews.get(id))!, status: 'failed', summary: 'Server restarted' });
 
-	const completed = await app.request('/api/reviews/' + id + '/events');
+	const completed = await localApp.request('/api/reviews/' + id + '/events');
 	const completedReader = completed.body!.getReader();
 
 	const terminal = JSON.parse(
@@ -199,7 +200,7 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 test('a real HTTP subscription survives idle periods and still delivers review and chat updates', async () => {
 	const review = await storeRunningReview('SSE liveness');
 	const { id } = review;
-	const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: app.fetch });
+	const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: (request, server) => app.fetch(request, server) });
 	const controller = new AbortController();
 	let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 

@@ -5,7 +5,7 @@ import { copilot } from '../../src/agents/copilot/copilot';
 import { devin } from '../../src/agents/devin/devin';
 import { opencode } from '../../src/agents/opencode/opencode';
 import { forgetAgentModels } from '../../src/agents/registry';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 import { db } from '../../src/store';
 import { configForOrchestrator, isReviewConfigured } from '../../src/models/models';
 import { initReviewSettings, setReviewOverrides } from '../../src/review/session/review-settings';

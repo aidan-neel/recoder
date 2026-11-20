@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Review } from '@recoder/shared';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 import { closeStore, db, reviewDiffs, reviewMetrics, reviewSandboxes } from '../../src/store';
 import { chatCompletion, resetLlmLimiter, streamChatCompletion } from '../../src/models/llm';
 import {

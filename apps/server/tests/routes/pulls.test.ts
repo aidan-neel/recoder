@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, expect, test } from 'bun:test';
 import type { PullDiff, PullList, PullPage } from '@recoder/shared';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 import { pullStateKey, pullStates } from '../../src/forge/pulls/pull-states';
 import { db } from '../../src/store';
 import { fakeGh, type GhReply } from '../helpers/fake-gh';

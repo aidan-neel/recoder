@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 import { putVllmServer } from '../../src/models/vllm/vllm-store';
 import { saveReviewSettings, setConnection } from '../../src/review/session/review-settings';
 import { isolateSettings } from '../helpers/settings-env';

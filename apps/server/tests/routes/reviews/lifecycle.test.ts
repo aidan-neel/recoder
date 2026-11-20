@@ -16,7 +16,7 @@ import {
 	type ReviewListItem,
 	type ReviewTask
 } from '@recoder/shared';
-import { app } from '../../../src/app';
+import { localApp as app } from '../../helpers/local-app';
 import { pullStateKey, pullStates } from '../../../src/forge/pulls/pull-states';
 import type { RunTokenCall, StoredMetrics } from '../../../src/models/metrics';
 import { reviewInstructions } from '../../../src/review/chat/review-chat';

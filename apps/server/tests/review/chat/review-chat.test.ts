@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { ORCHESTRATOR_ID, emptyReviewProgress } from '@recoder/shared';
 import { db, recoverStaleReviews, reviewProgress } from '../../../src/store';
-import { app } from '../../../src/app';
+import { localApp as app } from '../../helpers/local-app';
 import { rerunReviewSession } from '../../../src/commands/rerun';
 import { discussionContext, startReviewChat, stopReviewChat } from '../../../src/review/chat/review-chat';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';

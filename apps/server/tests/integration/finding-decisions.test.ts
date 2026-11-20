@@ -12,7 +12,7 @@ function resultOf(output: string): unknown {
 const setup = `
 const {initializeStorage,closeStorage,settingsOperation}=await import('./apps/server/src/storage/backend.ts');
 const {db,reviewDiffs}=await import('./apps/server/src/store.ts');
-const {app}=await import('./apps/server/src/app.ts');
+const {localApp:app}=await import('./apps/server/tests/helpers/local-app.ts');
 const {testReview}=await import('./apps/server/tests/helpers/review.ts');
 const {DIFF}=await import('./apps/server/tests/review/pipeline/harness-fixtures.ts');
 const {topicTallies}=await import('./apps/server/src/review/guidelines/learned/votes.ts');

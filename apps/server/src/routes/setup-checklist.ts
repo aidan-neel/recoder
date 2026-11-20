@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { currentAccount, hasBearerAccess } from '../accounts/enforcement';
 import type { AddressReader } from '../deploy/diagnostics/address';
 import { storageIdentity } from '../deploy/diagnostics/storage';
-import { deploymentRouteError, protectDeploymentMutation } from '../deploy/setup/access';
+import { deploymentRouteError, noStoreDeploymentResponse } from '../deploy/setup/access';
 import { confirmBuiltin, finishSetup, readSetupChecklist } from '../deploy/setup/checklist';
 
 interface SetupChecklistOptions {
@@ -20,7 +20,7 @@ export function createSetupChecklistRoutes({ readAddress }: SetupChecklistOption
 	const app = new Hono();
 
 	app.onError(deploymentRouteError);
-	app.use('*', protectDeploymentMutation);
+	app.use('*', noStoreDeploymentResponse);
 
 	app.get('/', async (c) => {
 		if (!hasBearerAccess(c) && (await currentAccount(c))?.role === 'member') {

@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Repo, RepoOverview, SkillSummary } from '@recoder/shared';
-import { app } from '../../src/app';
+import { localApp as app } from '../helpers/local-app';
 import { saveAutoReviewSettings } from '../../src/forge/watch/settings';
 import { db } from '../../src/store';
 import { git } from '../helpers/git';

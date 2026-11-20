@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
-import { app } from '../../../src/app';
+import { localApp as app } from '../../helpers/local-app';
 import { db } from '../../../src/store';
 import { clearReviewEvents, emitReviewEvent, flushReviewEvents } from '../../../src/review/session/events';
 import { testReview } from '../../helpers/review';

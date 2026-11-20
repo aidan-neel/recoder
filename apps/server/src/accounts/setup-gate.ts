@@ -1,5 +1,4 @@
 import type { Context } from 'hono';
-import { findAdmin } from './account-store';
 import { requestSetupToken } from './session-cookie';
 import { isSetupGranted } from './setup-code';
 
@@ -38,24 +37,8 @@ export function isLocalRequest(c: Context): boolean {
 	);
 }
 
-/**
- * Whether claiming the server is locked for this request: during setup, unless the request is local or carries a
- * valid setup cookie. False once an account exists, since then nothing can be claimed.
- */
-export async function isSetupLocked(c: Context): Promise<boolean> {
-	if (await findAdmin()) return false;
-
-	return !(await isUnlocked(c));
-}
-
-/** The 403 a claim route answers while setup is locked for the request, or undefined when it may go on. */
-export async function refuseWhileLocked(c: Context): Promise<Response | undefined> {
-	if (!(await isSetupLocked(c))) return undefined;
-
-	return c.json({ error: 'Setup is locked. Enter the setup code from the server log.', kind: 'setup-locked' }, 403);
-}
-
-async function isUnlocked(c: Context): Promise<boolean> {
+/** Whether a request is direct loopback or carries an unexpired setup grant. Only valid before claim. */
+export async function hasSetupAccess(c: Context): Promise<boolean> {
 	if (isLocalRequest(c)) return true;
 
 	const token = requestSetupToken(c);

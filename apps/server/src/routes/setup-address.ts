@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { isHttps } from '../accounts/session-cookie';
 import type { AddressDeps } from '../deploy/setup/address';
 import { readSetupAddress, realDeps, setDomainAddress, setExternalAddress } from '../deploy/setup/address';
-import { deploymentRouteError, protectDeploymentMutation } from '../deploy/setup/access';
+import { deploymentRouteError, noStoreDeploymentResponse } from '../deploy/setup/access';
 
 const setAddressSchema = z.union([z.object({ domain: z.string() }), z.object({ external: z.string() })]);
 
@@ -21,7 +21,7 @@ export function createSetupAddressRoutes({ deps = realDeps() }: SetupAddressOpti
 	const app = new Hono();
 
 	app.onError(deploymentRouteError);
-	app.use('*', protectDeploymentMutation);
+	app.use('*', noStoreDeploymentResponse);
 
 	app.get('/', async (c) => c.json(await readSetupAddress(reachedAt(c), deps)));
 

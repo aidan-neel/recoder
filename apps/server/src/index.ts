@@ -8,6 +8,7 @@ import { initReviewSettings } from './review/session/review-settings';
 import { initVllmServers } from './models/vllm/vllm-store';
 import { startVllmSync } from './models/vllm/vllm-sync';
 import { findAdmin } from './accounts/account-store';
+import { serverAccessToken } from './accounts/local-access-token';
 import { startSetupCode } from './accounts/setup-code';
 import { sealStoredRefreshToken, startTokenRefresh } from './accounts/token-refresh';
 import { forgeAuthStatus } from './forge/auth-status';
@@ -154,6 +155,7 @@ const serveApp = env.RECODER_APP_DIR ? bundledApp(env.RECODER_APP_DIR) : undefin
 
 console.log(`recoder secret key: ${describeSecretKeySource(secretKey().source)}`);
 await initializeStorage();
+serverAccessToken();
 protectUpdaterBackups(readBackupProtection);
 startNightlyBackups();
 await deleteChatGptTokens(serverDataDir());

@@ -35,7 +35,7 @@ curl -s localhost:3201/health
 curl -s localhost:3201/health/identity
 ```
 
-`GET /health` answers `HealthResponse` (`packages/shared/src/review.ts`). `GET /health/identity` answers the flags, limits and code hash a benchmark records (`apps/server/src/routes/health.ts`).
+`GET /health` answers `HealthResponse` (`packages/shared/src/review.ts`). The protected `GET /health/identity` answers the flags, limits and code hash a benchmark records. Direct loopback can read it before claim; after claim the benchmark sends the machine API token.
 
 Stop it:
 
