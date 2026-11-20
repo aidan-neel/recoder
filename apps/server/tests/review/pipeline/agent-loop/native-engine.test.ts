@@ -100,6 +100,66 @@ test('a tool call from OpenCode reads the review evidence and each model step sp
 	expect(budget.used).toBe(2);
 });
 
+test('a verifier exhausted inside one CLI prompt resumes answer-only with evidence and persists its session totals', async () => {
+	const original = process.env.RECODER_VERIFIER_OP_BUDGET;
+
+	process.env.RECODER_VERIFIER_OP_BUDGET = '1';
+
+	const evidence = new EvidenceStore(null, buildInventory(diff), 12000);
+	const review = await db.reviews.set(testReview({ repoId: 'missing-repo' }));
+
+	try {
+		await withUsageMetrics(review.id, 'pipeline', async () => {
+			const result = await runNativeAgent(
+				agentOptions({
+					stage: 'verifier',
+					evidence,
+					user: script([[readDiff, readDiff, readDiff]]),
+					checkFinal: () => 'Do more work'
+				}),
+				await startAgent()
+			);
+
+			expect(result.value?.done).toBe(true);
+			expect(result.value?.prompt).toContain('+1|new');
+			expect(result.opBudgetExhausted).toBe(true);
+		});
+
+		const calls = (await reviewMetrics.get(review.id))!.calls;
+		const session = calls.at(-1)?.verifierSession;
+
+		expect(session).toMatchObject({ opBudget: 1, prompts: 2, exhausted: true });
+		expect(session!.ops).toBeGreaterThanOrEqual(1);
+		expect(session!.refusals).toBe(session!.ops - 1);
+		expect(calls.filter((c) => c.verifierSession).every((c) => c.verifierSession!.id === session!.id)).toBe(true);
+
+		process.env.RECODER_VERIFIER_OP_BUDGET = '0';
+
+		await withUsageMetrics(review.id, 'pipeline', async () => {
+			const result = await runNativeAgent(
+				agentOptions({ stage: 'verifier', user: script([[readDiff], [readDiff]]) }),
+				await startAgent()
+			);
+
+			expect(result.value?.done).toBe(true);
+		});
+
+		expect((await reviewMetrics.get(review.id))!.calls.at(-1)?.verifierSession).toMatchObject({
+			opBudget: null,
+			ops: 2,
+			refusals: 0,
+			prompts: 1,
+			internalTurns: null,
+			exhausted: false
+		});
+	} finally {
+		await db.reviews.delete(review.id);
+		await reviewMetrics.delete(review.id);
+		if (original === undefined) delete process.env.RECODER_VERIFIER_OP_BUDGET;
+		else process.env.RECODER_VERIFIER_OP_BUDGET = original;
+	}
+});
+
 test('a read-only agent sees run but its call is refused by the role gate', async () => {
 	const target = await startAgent();
 	const run = { tool: 'run', args: { command: 'id' } };

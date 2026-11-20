@@ -111,6 +111,7 @@ describe('DevinAgent.openRun', () => {
 		expect(events).toEqual([
 			{ type: 'step-start' },
 			{ type: 'text', delta: 'the reply\n', partId: 'devin_1' },
+			{ type: 'internal-turns', total: 4 },
 			{
 				type: 'usage',
 				usage: {
@@ -140,6 +141,19 @@ describe('DevinAgent.openRun', () => {
 		expect(text).toContain('[--resume] [quiet-owl]');
 		expect(logged(text, 'prompt')).toBe('Continue.');
 		expect(usage).toEqual([1000, 500]);
+		expect(events.flatMap((event) => (event.type === 'internal-turns' ? [event.total] : []))).toEqual([4, 7]);
+	});
+
+	test('a resumed prompt without an export leaves internal turns and usage unknown instead of reusing old totals', async () => {
+		const { run, events } = await openRun('missingexport');
+
+		await run.prompt('Review it.', PROMPT);
+
+		const reply = await run.prompt('Continue.', PROMPT);
+
+		await run.close();
+		expect(reply.tokens).toBeUndefined();
+		expect(events.flatMap((event) => (event.type === 'internal-turns' ? [event.total] : []))).toEqual([4, null]);
 	});
 
 	testPromptFailures(openRun, [

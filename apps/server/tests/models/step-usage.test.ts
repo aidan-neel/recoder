@@ -40,3 +40,22 @@ test('every step retains its session prefix hashes across later prompts and dura
 
 	for (const row of rows) expect(row).not.toHaveProperty('type');
 });
+
+test('session instrumentation arriving after cancellation survives in durable model usage', async () => {
+	const session = { id: 'v1', opBudget: null, ops: 0, refusals: 0, prompts: 1, internalTurns: null, exhausted: false };
+
+	await withUsageMetrics('empty-verifier', 'pipeline', async () => {
+		const usage = new StepUsage({ model: 'fake' });
+
+		usage.stepStarted();
+		usage.settle(new DOMException('Model request cancelled', 'AbortError'));
+		usage.stepFinished(STEP_TOKENS);
+		await usage.finishPrompt(undefined, new Error('cancelled'));
+		usage.verifierSession(session);
+	});
+
+	const row = (await modelCalls.list()).find((call) => call.verifierSession?.id === 'v1');
+
+	expect(row?.verifierSession).toEqual(session);
+	expect(row?.outcome).toBe('cancelled');
+});

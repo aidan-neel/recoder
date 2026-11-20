@@ -67,12 +67,13 @@ done
 env > "$FAKE_DEVIN_LOG.env"
 
 if [ -n "$resumed" ]; then
-	echo '{"session_id":"quiet-owl","final_metrics":{"total_prompt_tokens":1500,"total_completion_tokens":50,"total_cached_tokens":900}}' > "$export_file"
+	echo '{"session_id":"quiet-owl","final_metrics":{"total_prompt_tokens":1500,"total_completion_tokens":50,"total_cached_tokens":900,"total_steps":7}}' > "$export_file"
 else
-	echo '{"session_id":"quiet-owl","final_metrics":{"total_prompt_tokens":1000,"total_completion_tokens":20,"total_cached_tokens":600}}' > "$export_file"
+	echo '{"session_id":"quiet-owl","final_metrics":{"total_prompt_tokens":1000,"total_completion_tokens":20,"total_cached_tokens":600,"total_steps":4}}' > "$export_file"
 fi
 
 case "$FAKE_DEVIN_MODE" in
+missingexport) if [ -n "$resumed" ]; then rm "$export_file"; fi; echo 'the reply' ;;
 signedout) echo "Error: Not logged in. Run devin auth login" >&2; exit 1 ;;
 empty) exit 0 ;;
 refused) if [ -n "$resumed" ]; then echo "the reply"; fi ;;

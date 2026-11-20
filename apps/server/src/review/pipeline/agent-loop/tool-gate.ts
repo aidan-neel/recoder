@@ -29,6 +29,10 @@ export class ToolGate<T> {
 	/** Steps in which the agent retrieved something, and commands it ran. */
 	retrievals = 0;
 	runs = 0;
+	ops = 0;
+	refusals = 0;
+	exhausted = false;
+	private readonly observations: string[] = [];
 
 	/** A read that already failed was asked again: asking more won't go differently. */
 	stuck = false;
@@ -44,9 +48,22 @@ export class ToolGate<T> {
 		private readonly opts: JsonAgentOptions<T>,
 		private readonly agentId: string,
 		private readonly turns: { isFinal: () => boolean; nextIsFinal: () => boolean },
-		sentDiscussion: string
+		sentDiscussion: string,
+		private readonly sessionBudget?: { limit: number; onExhausted: () => void }
 	) {
 		this.sentDiscussion = sentDiscussion;
+	}
+
+	/** Evidence survives a CLI that cannot resume an interrupted first prompt. */
+	finalEvidence(): string {
+		return this.observations.join('\n\n');
+	}
+
+	private refuse(text: string): { text: string; isError: boolean } {
+		this.refusals++;
+		if (this.exhausted) this.sessionBudget?.onExhausted();
+
+		return refusal(text);
 	}
 
 	/** A model step ended: the next step's allowances start over. */
@@ -71,27 +88,33 @@ export class ToolGate<T> {
 
 	private async call(name: string, args: unknown): Promise<{ text: string; isError: boolean }> {
 		const { opts } = this;
+		const wasExhausted = this.exhausted;
+		const wasFinal = this.turns.isFinal();
 
-		if (opts.signal.aborted) return refusal('The review was stopped.');
-		if (this.turns.isFinal()) return refusal(FINAL_TURN_NOTE);
+		this.ops++;
+		this.exhausted = Boolean(this.sessionBudget && this.ops >= this.sessionBudget.limit);
+
+		if (opts.signal.aborted) return this.refuse('The review was stopped.');
+		if (wasExhausted) return this.refuse(FINAL_TURN_NOTE);
+		if (wasFinal) return this.refuse(FINAL_TURN_NOTE);
 
 		const offer = { exec: Boolean(opts.exec), delegate: Boolean(opts.delegate) };
 		const offered = nativeToolNames(offer);
 
 		if (nativeToolNames({ exec: true, delegate: true }).includes(name) && !offered.includes(name))
-			return refusal(`Tool ${name} is not available to your role. Your tools: ${offered.join(', ')}.`);
+			return this.refuse(`Tool ${name} is not available to your role. Your tools: ${offered.join(', ')}.`);
 
 		const action = toolAction(name, args, offer);
 
-		if (!action) return refusal(`There is no tool named ${name}.`);
+		if (!action) return this.refuse(`There is no tool named ${name}.`);
 
 		if (this.stepCalls >= REVIEW_POLICY.maxRetrievalsPerTurn)
-			return refusal(
+			return this.refuse(
 				`At most ${REVIEW_POLICY.maxRetrievalsPerTurn} tool calls per step. Call this one in your next step.`
 			);
 
 		if (action.action === 'run' && this.stepRuns >= REVIEW_POLICY.maxRunsPerTurn)
-			return refusal(`At most ${REVIEW_POLICY.maxRunsPerTurn} runs per step. Run this one in your next step.`);
+			return this.refuse(`At most ${REVIEW_POLICY.maxRunsPerTurn} runs per step. Run this one in your next step.`);
 
 		const key = JSON.stringify(action);
 		const read = !['run', 'writeFile', 'delegate'].includes(action.action);
@@ -100,7 +123,7 @@ export class ToolGate<T> {
 			this.stuck = true;
 			opts.onLog?.(`${opts.label} repeated a request that failed; asking for its answer`);
 
-			return refusal(`This exact request already failed. ${FINAL_TURN_NOTE}`);
+			return this.refuse(`This exact request already failed. ${FINAL_TURN_NOTE}`);
 		}
 
 		if (this.stepCalls++ === 0) this.retrievals++;
@@ -114,6 +137,8 @@ export class ToolGate<T> {
 
 		const result = await this.execute(action);
 
+		if (this.sessionBudget) this.observations.push(formatToolResults([result]).slice(0, 4000));
+
 		this.runs += result.runs ?? 0;
 		this.stepChars += result.content.length;
 		if (!result.ok && read) this.failedReads.add(key);
@@ -121,7 +146,9 @@ export class ToolGate<T> {
 		if (result.ok && result.path)
 			opts.onLog?.(`Reading ${result.path}${result.startLine ? `:${result.startLine}` : ''}`);
 
-		const closing = this.turns.nextIsFinal() ? LAST_TOOLS_NOTE : '';
+		const closing = this.exhausted || this.turns.nextIsFinal() ? LAST_TOOLS_NOTE : '';
+
+		if (this.exhausted) this.sessionBudget?.onExhausted();
 
 		return { text: formatToolResults([result]) + (await this.discussionNote()) + closing, isError: false };
 	}

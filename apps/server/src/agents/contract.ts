@@ -127,6 +127,8 @@ export type ToolRunner = (name: string, args: unknown) => Promise<ToolOutcome>;
 export type AgentEvent =
 	| { type: 'prompt-start'; session: string; turn: number; prefix?: ModelCallRow['prefix'] }
 	| { type: 'step-start'; step?: string }
+	/** Cumulative internal model turns, when an opaque CLI exports them separately from its prompts. */
+	| { type: 'internal-turns'; total: number | null }
 	| { type: 'text'; delta: string; partId: string }
 	| { type: 'reasoning'; delta: string; partId: string }
 	| { type: 'tool-call'; name: string }

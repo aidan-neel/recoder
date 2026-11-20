@@ -3,6 +3,7 @@ import { stageTokens, type StageTokens } from './benchmark-tokens';
 import type { BenchmarkReport, ScoredRun } from './benchmark-report';
 import { NOT_RECORDED, type ReviewerMix } from './identity';
 import type { RunRecord } from './report';
+import type { VerifierSessionUsage } from '@recoder/shared';
 
 /** The calls of one pipeline run; `run` is null for calls stored before runs were recorded. */
 export interface SegmentAudit {
@@ -38,6 +39,7 @@ interface LockedPick {
 
 /** A benchmark run's reviewer, read from its review's stored metrics after the review finished. */
 export interface RunReviewer {
+	verifierSessions?: VerifierSessionUsage[];
 	/** The picks the review's last pipeline run locked; `not recorded` when the row predates runs or the run went unlocked. */
 	orchestrator: LockedPick | typeof NOT_RECORDED;
 	specialist: LockedPick | typeof NOT_RECORDED;
@@ -200,6 +202,14 @@ export function runReviewer(stored: StoredMetrics | null, declared: string[] | n
 
 	const differs = picksReason(locked, declared);
 
+	const sessions = [
+		...new Map(
+			(stored?.calls ?? [])
+				.filter((c) => c.scope === 'pipeline' && c.verifierSession)
+				.map((c) => [c.verifierSession!.id, c.verifierSession!])
+		).values()
+	];
+
 	return {
 		...locked,
 		pipelineRuns: verdict.runs,
@@ -209,7 +219,11 @@ export function runReviewer(stored: StoredMetrics | null, declared: string[] | n
 		verdict: verdict.status,
 		mixed: verdict.status === 'MIXED' || differs.length > 0,
 		reasons: [...verdict.reasons, ...differs],
-		...(stored && { tokens: stageTokens(stored.calls), ...callOutcomes(stored) }),
+		...(stored && {
+			tokens: stageTokens(stored.calls),
+			...callOutcomes(stored),
+			...(sessions.length ? { verifierSessions: sessions } : {})
+		}),
 		...(last?.history && { history: last.history })
 	};
 }

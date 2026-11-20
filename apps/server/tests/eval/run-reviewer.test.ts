@@ -47,6 +47,25 @@ function row(locks: (string | null)[] | null, calls: [string, number?][]): Store
 const asRuns = (...reviewers: ReturnType<typeof runReviewer>[]) =>
 	reviewers.map((reviewer) => ({ reviewer }) as ScoredRun);
 
+test('benchmark reports keep the latest cumulative snapshot per verifier session, not a sum across prompts', () => {
+	const stored = row(
+		['muse/muse-mini'],
+		[
+			['muse', 0],
+			['muse', 0]
+		]
+	);
+
+	const initial = { id: 'v', opBudget: 2, ops: 2, refusals: 0, prompts: 1, internalTurns: 4, exhausted: true };
+	const final = { ...initial, prompts: 2, internalTurns: 5 };
+
+	stored.calls[0].verifierSession = initial;
+	stored.calls[1].verifierSession = final;
+	expect(runReviewer(stored, DECLARED).verifierSessions).toEqual([final]);
+	expect(runReviewer(null, DECLARED).verifierSessions).toBeUndefined();
+	expect(runReviewer(row(null, []), DECLARED).verifierSessions).toBeUndefined();
+});
+
 test('a review that called a model outside its locked picks makes the report mixed; every clean review makes it false', () => {
 	const clean = runReviewer(
 		row(

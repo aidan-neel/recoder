@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TokenUsage } from '@recoder/shared';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
@@ -58,6 +58,7 @@ async function writeRunFiles(files: RunFiles, env: Env, lease: ToolLease | null)
  */
 export class DevinRun extends SessionRun<RunFiles> {
 	private used: TokenUsage | null = null;
+	private turnsMissing = false;
 
 	static async open(host: SessionHost, options: AgentRunOptions): Promise<DevinRun> {
 		const root = await SessionRun.scratchDirectory('devin');
@@ -77,6 +78,8 @@ export class DevinRun extends SessionRun<RunFiles> {
 		this.options.onEvent({ type: 'step-start' });
 
 		try {
+			await rm(this.files.export, { force: true });
+
 			const exit = await streamCli({
 				argv: [this.host.path, ...this.args()],
 				cwd: this.files.cwd,
@@ -127,6 +130,11 @@ export class DevinRun extends SessionRun<RunFiles> {
 		const exported: DevinExport | null = await readExport(this.files.export);
 
 		this.session = exported?.session_id ?? this.session;
+
+		const turns = exported?.final_metrics?.total_steps;
+
+		this.turnsMissing ||= turns === undefined;
+		this.options.onEvent({ type: 'internal-turns', total: this.turnsMissing ? null : turns! });
 
 		if (!exported?.final_metrics) return undefined;
 

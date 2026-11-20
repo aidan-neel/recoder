@@ -1,5 +1,5 @@
 import type { ModelProvider, ReasoningEffort } from './models';
-import type { TokenStage, TokenUsage } from './metrics';
+import type { TokenStage, TokenUsage, VerifierSessionUsage } from './metrics';
 import type { Provider } from './repo';
 import type { ReportPerson, UsageDays } from './usage';
 
@@ -39,6 +39,7 @@ export interface ModelCallRow {
 	effort?: ReasoningEffort;
 	/** Provider-reported counts; nulls where the provider reported nothing. */
 	usage: TokenUsage;
+	verifierSession?: VerifierSessionUsage;
 	/** Wall-clock start to settle; absent on rows backfilled from records that did not keep it. */
 	durationMs?: number;
 	outcome: ModelCallOutcome;

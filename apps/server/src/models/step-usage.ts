@@ -1,4 +1,4 @@
-import type { ModelProvider, ReasoningEffort, TokenUsage, ModelCallRow } from '@recoder/shared';
+import type { ModelProvider, ReasoningEffort, TokenUsage, ModelCallRow, VerifierSessionUsage } from '@recoder/shared';
 import { trackTokenCall } from './metrics';
 
 /** How long a prompt's last step may take to report its usage after the prompt itself has answered. */
@@ -30,8 +30,14 @@ export class StepUsage {
 	private promptCalls: StepCall[] = [];
 	private awaiting: StepCall[] = [];
 	private onReported: (() => void) | null = null;
+	private last: ReturnType<typeof trackTokenCall> | undefined;
 
 	constructor(private readonly model: StepModel) {}
+
+	/** Updates the last call even after it settled, so interrupted prompts keep their session counters. */
+	verifierSession(value: VerifierSessionUsage): void {
+		this.last?.verifierSession(value);
+	}
 
 	/** Where the next steps sit: their agent session and the prompt's turn in it. */
 	promptStarted(position: { session: string; turn: number } & Pick<ModelCallRow, 'prefix'>): void {
@@ -96,7 +102,9 @@ export class StepUsage {
 	private track(): ReturnType<typeof trackTokenCall> {
 		const { model, provider, reasoningEffort } = this.model;
 
-		return trackTokenCall(model, provider ?? 'openai-compatible', reasoningEffort, this.position);
+		this.last = trackTokenCall(model, provider ?? 'openai-compatible', reasoningEffort, this.position);
+
+		return this.last;
 	}
 
 	private recordMissed(tokens: TokenUsage | undefined, error?: unknown): void {

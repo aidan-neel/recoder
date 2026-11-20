@@ -17,6 +17,7 @@ const exportSchema = z.object({
 	session_id: z.string().optional(),
 	final_metrics: z
 		.object({
+			total_steps: z.number().int().nonnegative().optional(),
 			total_prompt_tokens: z.number().optional(),
 			total_completion_tokens: z.number().optional(),
 			total_cached_tokens: z.number().optional()

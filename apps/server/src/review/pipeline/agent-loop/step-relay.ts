@@ -1,4 +1,4 @@
-import type { TokenUsage } from '@recoder/shared';
+import type { TokenUsage, VerifierSessionUsage } from '@recoder/shared';
 import type { AgentEvent } from '../../../agents/contract.js';
 import { StepUsage } from '../../../models/step-usage.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
@@ -44,6 +44,7 @@ export class StepRelay<T> {
 	 * before the next one calls anything, so tool limits count from this.
 	 */
 	finished = 0;
+	internalTurns: number | null = null;
 
 	private readonly base: string;
 	private readonly usage: StepUsage;
@@ -62,12 +63,18 @@ export class StepRelay<T> {
 	/** Acts on the events that carry a step, usage, reasoning, text or an error; tool events are the gate's. */
 	readonly onEvent = (event: AgentEvent): void => {
 		if (event.type === 'prompt-start') this.usage.promptStarted(event);
+		else if (event.type === 'internal-turns') this.internalTurns = event.total;
 		else if (event.type === 'step-start') this.stepStarted(event.step);
 		else if (event.type === 'usage') this.stepFinished(event.usage, event.step);
 		else if (event.type === 'reasoning') this.reasoned(event.delta);
 		else if (event.type === 'text') this.narrated(event.delta, event.partId);
 		else if (event.type === 'error') this.opts.onLog?.(`${this.opts.label}: ${event.message}`);
 	};
+
+	/** Session totals live on the most recent usage row, including a failed or cancelled one. */
+	verifierSession(value: VerifierSessionUsage): void {
+		this.usage.verifierSession(value);
+	}
 
 	/**
 	 * The id the final result's message is shown under: what the model wrote

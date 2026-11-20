@@ -339,6 +339,7 @@ export function trackTokenCall(
 			...(effort && { effort }),
 			...position,
 			usage: call.usage,
+			...(call.verifierSession && { verifierSession: call.verifierSession }),
 			...(durationMs !== undefined && { durationMs }),
 			outcome,
 			...(errorKind && { errorKind }),
@@ -371,6 +372,10 @@ export function trackTokenCall(
 	save();
 
 	return {
+		verifierSession: (value: NonNullable<RunTokenCall['verifierSession']>) => {
+			call.verifierSession = structuredClone(value);
+			save();
+		},
 		usage: (usage: TokenUsage) => {
 			if (tally && usage.outputTokens !== null) {
 				tally.outputTokens = (tally.outputTokens ?? 0) + usage.outputTokens - (call.usage.outputTokens ?? 0);

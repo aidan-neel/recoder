@@ -128,7 +128,9 @@ function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean
  * turn by turn. Those calls share one conversation, so a transport that keeps
  * a session reuses the provider's prompt cache.
  */
-export function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
+export function runJsonAgent<T>(
+	opts: JsonAgentOptions<T>
+): Promise<{ value: T | null; error?: string; opBudgetExhausted?: boolean }> {
 	return withTokenStage(opts.stage, () =>
 		withAgentSlot(opts.stage, opts.signal, async () => {
 			const agent = agentById(opts.config.provider);

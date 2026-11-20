@@ -40,6 +40,7 @@ import { candidateRepairOn, repairCandidate } from './repair.js';
 import { diffChanges, type DiffChanges } from './run-outcome.js';
 import { recordBaseline } from './verify-baseline.js';
 import { VerifyQueue } from './verify-queue.js';
+import { needsBudgetFallback } from '../verify/budget-fallback.js';
 
 interface VerifyContext {
 	evidence: EvidenceStore;
@@ -187,6 +188,7 @@ interface VerifierSpec {
 	mutation: boolean;
 	/** The verifier's turn limit, the last of which is its final answer. */
 	turns: number;
+	toolOpBudget?: number | null;
 }
 
 /** Bugs are reproduced by running code; quality findings are checked by reading and searching. */
@@ -275,7 +277,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 		return true;
 	}
 
-	const spec = verifierSpec(candidate, ctx);
+	const spec = { ...verifierSpec(candidate, ctx), toolOpBudget: attempt > 1 ? null : undefined };
 
 	delete candidate.publishedBy;
 
@@ -307,10 +309,10 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 		if (typeof outcome !== 'string') {
 			await settle(candidate, outcome, ctx, cfg, { taskId, label, meta });
 
-			return true;
+			if (!needsBudgetFallback(candidate, outcome.budgetExhausted)) return true;
+		} else {
+			candidate.verification = stampedVerification({ status: 'unverified', reason: `Not verified: ${outcome}.` }, cfg);
 		}
-
-		candidate.verification = stampedVerification({ status: 'unverified', reason: `Not verified: ${outcome}.` }, cfg);
 	} finally {
 		ctx.workspace?.release(agentId);
 	}
@@ -327,6 +329,7 @@ interface VerifierTask {
 }
 
 interface VerifierRunOutcome {
+	budgetExhausted?: boolean;
 	value: VerdictOutput;
 	agentId: string;
 	retrievals: number;
@@ -335,7 +338,7 @@ interface VerifierRunOutcome {
 /** One verifier run: its verdict and the agent that gave it, or why it gave none. */
 async function runVerifier(
 	candidate: CandidateFinding,
-	{ system, user, exec, mutation, turns }: VerifierSpec,
+	{ system, user, exec, mutation, turns, toolOpBudget }: VerifierSpec,
 	ctx: VerifyContext,
 	cfg: ModelConfig,
 	{ taskId, label, meta, agentId }: VerifierTask & { agentId: string }
@@ -345,6 +348,7 @@ async function runVerifier(
 
 	try {
 		const result = await runJsonAgent({
+			toolOpBudget,
 			stage: 'verifier',
 			label: `verify ${candidate.candidateId}`,
 			agentId,
@@ -384,7 +388,7 @@ async function runVerifier(
 		});
 
 		return result.value
-			? { value: result.value, agentId, retrievals }
+			? { value: result.value, agentId, retrievals, budgetExhausted: result.opBudgetExhausted }
 			: (result.error ?? 'the verifier did not finish');
 	} catch (err) {
 		if (err instanceof ModelBlockedError || err instanceof ReviewAbortedError) throw err;
