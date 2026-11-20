@@ -1,5 +1,6 @@
 import {
 	REVIEW_CANCELLED,
+	findingTier,
 	settleAssignments,
 	type BriefQuestionReport,
 	type CoverageSummary,
@@ -51,6 +52,8 @@ export function reviewFunnel(
 	run: Pick<ReviewRun, 'candidates' | 'hidden'> & Partial<Pick<ReviewRun, 'intent'>>,
 	shown: number
 ): ReviewFunnel {
+	const candidates = run.candidates.filter((candidate) => findingTier(candidate) !== 'fyi');
+
 	const dropped: ReviewFunnel['dropped'] = {
 		location: 0,
 		evidence: 0,
@@ -61,18 +64,18 @@ export function reviewFunnel(
 		covered: 0
 	};
 
-	for (const candidate of run.candidates) {
+	for (const candidate of candidates) {
 		if (!candidate.valid && candidate.dropStage) dropped[candidate.dropStage]++;
 		if (isHeldBack(candidate)) dropped.severity++;
 	}
 
-	const notRun = notRunCandidates(run.candidates).length;
+	const notRun = notRunCandidates(candidates).length;
 
 	return {
-		raised: run.candidates.length,
+		raised: candidates.length,
 		dropped,
-		unproven: run.hidden.length,
-		verified: run.candidates.filter(
+		unproven: run.hidden.filter((candidate) => findingTier(candidate) !== 'fyi').length,
+		verified: candidates.filter(
 			(candidate) => candidate.valid && !isHeldBack(candidate) && candidate.verification?.status === 'verified'
 		).length,
 		...(notRun && { notRun }),
@@ -158,7 +161,7 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
 	return {
 		findings: confirmed,
 		unconfirmed: [...run.hidden, ...refutedCandidates(run)].map(toFinding),
-		funnel: reviewFunnel(run, confirmed.length),
+		funnel: reviewFunnel(run, confirmed.filter((finding) => findingTier(finding) !== 'fyi').length),
 		...measuredContext(run, confirmed),
 		summary,
 		outcome: 'complete',
@@ -213,7 +216,7 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 	return {
 		findings: confirmed,
 		unconfirmed: run.hidden.map(toFinding),
-		funnel: reviewFunnel(run, confirmed.length),
+		funnel: reviewFunnel(run, confirmed.filter((finding) => findingTier(finding) !== 'fyi').length),
 		...measuredContext(run, confirmed),
 		summary: `${summary} The review ran out of time after ${minutes} minutes; findings still being verified then are hidden.`,
 		outcome: 'complete',

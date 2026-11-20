@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FINDING_CATEGORIES, READABILITY_SMELLS, type FindingCategory } from '@recoder/shared';
 import { reviewerFindingSchema } from './finding-schema.js';
+import { normalizeFindingTier } from './finding-tier.js';
 import {
 	ANSWERED_RESPONSE,
 	answeredSchema,
@@ -46,20 +47,6 @@ const reviewerOutputSchema = z.object({
 
 export type ReviewerOutput = z.infer<typeof reviewerOutputSchema>;
 export type SubagentRequest = z.infer<typeof subagentRequestSchema>;
-
-const SEVERITY_ALIASES: Record<string, string> = {
-	critical: 'high',
-	blocker: 'high',
-	major: 'high',
-	error: 'high',
-	moderate: 'medium',
-	warning: 'medium',
-	warn: 'medium',
-	minor: 'low'
-};
-
-/** Informational notes aren't reported; a finding with one of these severities is dropped. */
-const DROPPED_SEVERITIES = new Set(['info', 'informational', 'nit', 'trivial', 'note', 'suggestion', 'style']);
 
 function positiveInt(value: unknown): number | null | undefined {
 	if (value === null) return null;
@@ -181,7 +168,7 @@ function repairQualityFields(f: Record<string, unknown>): void {
 		.slice(0, 6);
 }
 
-/** Repairs one finding, or drops it when it isn't an object or its severity is only informational. */
+/** Repairs one finding, retaining observations as FYI rather than silently dropping them. */
 function normalizeFinding(item: unknown, defaultCategory: FindingCategory): Record<string, unknown>[] {
 	if (!isRecord(item)) return [];
 
@@ -190,12 +177,7 @@ function normalizeFinding(item: unknown, defaultCategory: FindingCategory): Reco
 	f.file ??= f.path ?? f.filePath ?? f.file_path;
 	f.body ??= f.description ?? f.explanation ?? f.details ?? f.message;
 
-	if (typeof f.severity === 'string') {
-		const severity = f.severity.trim().toLowerCase();
-
-		if (DROPPED_SEVERITIES.has(severity)) return [];
-		f.severity = SEVERITY_ALIASES[severity] ?? severity;
-	}
+	normalizeFindingTier(f);
 
 	if (typeof f.category !== 'string' || !f.category.trim()) f.category = defaultCategory;
 
@@ -411,7 +393,7 @@ function findingResponseSchema(): Record<string, unknown> {
 			file: str,
 			line,
 			endLine: line,
-			severity: { type: 'string', enum: ['high', 'medium', 'low'] },
+			tier: { type: 'string', enum: ['bug', 'warning', 'fyi'] },
 			category: { type: 'string', enum: [...FINDING_CATEGORIES] },
 			symbol: nullableStr,
 			ruleId: nullableStr,
@@ -431,7 +413,7 @@ function findingResponseSchema(): Record<string, unknown> {
 			evidenceIds: { type: 'array', items: str },
 			side: { type: 'string', enum: ['old', 'new'] }
 		},
-		required: ['title', 'file', 'severity', 'category', 'claim', 'body', 'evidenceIds']
+		required: ['title', 'file', 'tier', 'category', 'body', 'evidenceIds']
 	};
 }
 

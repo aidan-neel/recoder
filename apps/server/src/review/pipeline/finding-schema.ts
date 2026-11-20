@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FINDING_CATEGORIES, READABILITY_SMELLS, type FindingCategory } from '@recoder/shared';
 import { findingShape } from './schemas.js';
+import { tieredFinding } from './finding-tier.js';
 
 /**
  * Words weaker models use for a category, mapped onto the closed list. A
@@ -76,6 +77,14 @@ const claimSchema = z.object({
 	existingGuard: z.string().max(600).nullable().optional()
 });
 
+const observationClaimSchema = claimSchema
+	.extend({
+		trigger: z.string().trim().max(600).default(''),
+		consequence: z.string().trim().max(600).default(''),
+		violatedContract: z.string().trim().max(600).default('')
+	})
+	.default({ trigger: '', executionPath: [], consequence: '', violatedContract: '' });
+
 /** A find-and-replace a quality finding suggests; the verifier turns it into a checked patch. */
 const fixEditSchema = z.object({
 	file: z.string().min(1).max(500),
@@ -96,30 +105,43 @@ const locationSchema = z.object({
  * checked when the candidate is validated, so one bad finding never fails the
  * lens's whole answer.
  */
-export const reviewerFindingSchema = z.object({
-	...findingShape(z.enum(['high', 'medium', 'low'])),
-	side: z.enum(['old', 'new']).optional(),
-	category: z.preprocess(normalizeCategory, z.enum(FINDING_CATEGORIES)),
-	/** The enclosing symbol's qualified name from the change model, when there is one. */
-	symbol: z.string().max(200).nullable().optional(),
-	ruleId: z
-		.string()
-		.regex(/^R\d+$/)
-		.nullable()
-		.optional(),
-	smell: z.enum(READABILITY_SMELLS).nullable().optional(),
-	/** The brief question (`Q3`) this finding confirms; a confirmed answer holds only with a finding that names it. */
-	questionId: z
-		.string()
-		.regex(/^Q\d+$/)
-		.nullable()
-		.optional(),
-	claim: claimSchema,
-	/** Comparable existing code a convention finding rests on. */
-	examples: z.array(stepSchema).max(6).default([]),
-	fix: z.array(fixEditSchema).max(6).default([]),
-	evidenceIds: z.array(z.string().min(1).max(40)).max(12).default([]),
-	relatedLocations: z.array(locationSchema).max(20).optional()
-});
+export const reviewerFindingSchema = z.preprocess(
+	tieredFinding,
+	z
+		.object({
+			...findingShape(z.enum(['high', 'medium', 'low'])),
+			side: z.enum(['old', 'new']).optional(),
+			category: z.preprocess(normalizeCategory, z.enum(FINDING_CATEGORIES)),
+			/** The enclosing symbol's qualified name from the change model, when there is one. */
+			symbol: z.string().max(200).nullable().optional(),
+			ruleId: z
+				.string()
+				.regex(/^R\d+$/)
+				.nullable()
+				.optional(),
+			smell: z.enum(READABILITY_SMELLS).nullable().optional(),
+			/** The brief question (`Q3`) this finding confirms; a confirmed answer holds only with a finding that names it. */
+			questionId: z
+				.string()
+				.regex(/^Q\d+$/)
+				.nullable()
+				.optional(),
+			claim: observationClaimSchema,
+			/** Comparable existing code a convention finding rests on. */
+			examples: z.array(stepSchema).max(6).default([]),
+			fix: z.array(fixEditSchema).max(6).default([]),
+			evidenceIds: z.array(z.string().min(1).max(40)).max(12).default([]),
+			relatedLocations: z.array(locationSchema).max(20).optional()
+		})
+		.superRefine((finding, ctx) => {
+			if (finding.tier === 'fyi') return;
+
+			const claim = claimSchema.safeParse(finding.claim);
+
+			if (!claim.success) {
+				for (const issue of claim.error.issues) ctx.addIssue({ ...issue, path: ['claim', ...issue.path] });
+			}
+		})
+);
 
 export type ReviewerFinding = z.infer<typeof reviewerFindingSchema>;

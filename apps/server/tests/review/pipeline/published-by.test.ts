@@ -64,12 +64,12 @@ function belowBarRuleCandidate(rule: RepoRule): CandidateFinding {
 }
 
 describe('publishHeldBack for repository rules', () => {
-	test('keeps a verified low-severity mandatory rule violation visible with its FindingRule attached', () => {
+	test('retains FYI rule observations with their FindingRule without promoting them as violations', () => {
 		const candidate = belowBarRuleCandidate(MANDATORY_RULE);
 
 		publishHeldBack(candidate, LEDGER);
 
-		expect(candidate.publishedBy).toBe('rule');
+		expect(candidate.publishedBy).toBeUndefined();
 		expect(isHeldBack(candidate)).toBe(false);
 
 		const published = consolidateFindings([candidate], BAR_INVENTORY);
@@ -90,14 +90,14 @@ describe('publishHeldBack for repository rules', () => {
 		});
 	});
 
-	test('holds back a low-severity advisory rule finding below the medium reporting bar', () => {
+	test('FYI advisory observations bypass the reporting bar without a publication exception', () => {
 		const candidate = belowBarRuleCandidate(ADVISORY_RULE);
 
 		publishHeldBack(candidate, LEDGER);
 
 		expect(candidate.publishedBy).toBeUndefined();
-		expect(isHeldBack(candidate)).toBe(true);
-		expect(consolidateFindings([candidate], BAR_INVENTORY)).toEqual([]);
+		expect(isHeldBack(candidate)).toBe(false);
+		expect(consolidateFindings([candidate], BAR_INVENTORY)).toMatchObject([{ tier: 'fyi' }]);
 	});
 
 	test('holds back a low-severity rule candidate whose ruleCheck did not establish both applicability and violation', () => {

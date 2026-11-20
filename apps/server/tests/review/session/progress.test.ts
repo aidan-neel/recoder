@@ -121,7 +121,11 @@ test('terminal SSE delivers final findings and stays connected for subsequent co
 			.trim()
 	);
 
-	expect(event.review).toEqual(final);
+	expect(event.review).toEqual({
+		...final,
+		findings: final.findings.map((finding) => ({ ...finding, tier: 'warning' }))
+	});
+
 	expect(event.snapshot.outcome).toBe('complete');
 	expect(applyProgressMessage(emptyReviewProgress(id), event)).toEqual(event.snapshot);
 	expect(listenerCount(id)).toBe(1);

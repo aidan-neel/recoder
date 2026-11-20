@@ -173,6 +173,28 @@ function context(): CandidateContext {
 
 const ctx = context();
 
+test('an unverified FYI survives consolidation without hiding or promoting a defect with the same claim', () => {
+	const defect = verified('c1', SPOOFED, ['E1']);
+
+	const note: CandidateFinding = {
+		...defect,
+		id: 'note',
+		candidateId: 'c2',
+		severity: 'info' as const,
+		tier: 'fyi' as const,
+		belowBar: true,
+		verification: undefined
+	};
+
+	const invalid = { ...note, id: 'invalid', candidateId: 'c3', valid: false };
+	const findings = consolidateFindings([note, defect, invalid], ctx.inventory);
+
+	expect(findings).toHaveLength(2);
+	expect(findings.map((finding) => finding.tier)).toEqual(['bug', 'fyi']);
+	expect(findings[0].memberIds).toEqual([defect.id]);
+	expect(findings[1].verification).toBeUndefined();
+});
+
 /** A verified report of `src/cache.ts` line 2 unless `report` says otherwise. */
 function verified(
 	candidateId: string,
@@ -268,13 +290,13 @@ test('reversing the order of the candidates gives byte-identical findings', () =
 	expect(reversed).toBe(forward);
 });
 
-test('a merged finding keeps every member id, earliest raised first, including one held below the bar', () => {
+test('a merged finding keeps every member id, earliest raised first, including a warning-tier report', () => {
 	const traced = verified('c1', SPOOFED, ['E1']);
 	const ran = verified('c2', FORGED, ['E2'], 'run');
-	const held = verified('c3', { ...CROSS_TENANT, severity: 'low' }, ['E3']);
+	const held = verified('c3', { ...CROSS_TENANT, severity: 'medium' }, ['E3']);
 	const [finding, ...rest] = consolidateFindings([held, ran, traced], ctx.inventory);
 
-	expect(held.belowBar).toBe(true);
+	expect(held.tier).toBe('warning');
 	expect(rest).toHaveLength(0);
 	expect(finding.id).toBe(ran.id);
 	expect(finding.memberIds).toEqual([traced.id, ran.id, held.id]);

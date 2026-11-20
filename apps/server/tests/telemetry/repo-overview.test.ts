@@ -5,6 +5,22 @@ import { testReview } from '../helpers/review';
 
 const NOW = new Date('2026-11-16T12:00:00.000Z');
 
+test('FYI stays in findings totals without making a review buggy or creating bug hotspots', () => {
+	const result = overview({
+		reviews: [
+			testReview({
+				repoId: 'repo',
+				startedAt: '2026-11-15T10:00:00.000Z',
+				findings: [bug('note', 'src/a.ts', { tier: 'fyi' }), bug('legacy-note', 'src/b.ts', { severity: 'info' })]
+			})
+		]
+	});
+
+	expect(result.findings.raised).toBe(2);
+	expect(result.hotspots).toEqual([]);
+	expect(result.daily.find((day) => day.day === '2026-11-15')?.withBugs).toBe(0);
+});
+
 /** A high bug in `file`; `overrides` replace any field. */
 function bug(id: string, file: string, overrides: Partial<Finding> = {}): Finding {
 	return { id, title: id, file, line: 1, severity: 'error', message: id, ...overrides };

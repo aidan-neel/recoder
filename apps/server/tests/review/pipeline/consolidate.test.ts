@@ -127,10 +127,10 @@ test('each dropped candidate names the stage that dropped it', () => {
 	expect(candidate({ category: 'performance' }, 'correctness').dropStage).toBe('category');
 });
 
-test('a low-severity finding stays valid but below the bar unless Settings asks for low severity', () => {
+test('a legacy low finding becomes FYI and is never held below the reporting bar', () => {
 	const low = candidate({ severity: 'low' });
 
-	expect([low.valid, low.belowBar, low.dropStage]).toEqual([true, true, undefined]);
+	expect([low.valid, low.tier, low.belowBar, low.dropStage]).toEqual([true, 'fyi', undefined, undefined]);
 	expect(candidate({ severity: 'medium' }).belowBar).toBeUndefined();
 	expect(candidate({ severity: 'low' }, null, { ...context(), reportLowSeverity: true }).belowBar).toBeUndefined();
 });
@@ -141,20 +141,20 @@ test('a low-severity finding that fails validation is dropped at that stage, not
 	expect([low.valid, low.dropStage, low.belowBar]).toEqual([false, 'location', undefined]);
 });
 
-test('a verified candidate below the bar is not published', () => {
+test('FYI stays in review data regardless of the reporting bar', () => {
 	const held = verified(candidate({ severity: 'low' }));
 
-	expect(consolidateFindings([held], INVENTORY)).toEqual([]);
+	expect(consolidateFindings([held], INVENTORY)).toMatchObject([{ tier: 'fyi' }]);
 	expect(toFinding(held)).not.toHaveProperty('belowBar');
 });
 
-test('a candidate below the bar that merges with one above it is published as the one above', () => {
+test('FYI and a warning about the same line remain separate without promoting the observation', () => {
 	const ctx = context();
 	const above = verified(candidate({ severity: 'medium', line: 2 }, null, ctx));
 	const below = verified(candidate({ severity: 'low', line: 2 }, null, ctx), 'run');
 	const [finding, ...rest] = consolidateFindings([below, above], INVENTORY);
 
-	expect(rest).toHaveLength(0);
+	expect(rest).toMatchObject([{ tier: 'fyi' }]);
 	expect(finding.severity).toBe('warning');
 	expect(finding.verification?.method).toBe('trace');
 });
@@ -190,16 +190,17 @@ test('validateCandidate drops findings that break their category or lens require
 	).toBe(true);
 });
 
-test('a held-back candidate a run reproduced is published and keeps the severity the reviewer gave it', () => {
+test('FYI is not promoted by legacy reproduction evidence', () => {
 	const held = verified(candidate({ severity: 'low' }), 'run');
 
 	publishHeldBack(held, null);
 
-	expect(held).toMatchObject({ valid: true, severity: 'info', belowBar: true, publishedBy: 'reproduced' });
+	expect(held).toMatchObject({ valid: true, severity: 'info', tier: 'fyi' });
+	expect(held.publishedBy).toBeUndefined();
 	expect(consolidateFindings([held], INVENTORY)).toMatchObject([{ severity: 'info' }]);
 });
 
-test('a held-back candidate stays held when it was only traced or its run ends the same way before the change', () => {
+test('FYI retention does not depend on a trace or a changed baseline result', () => {
 	const traced = verified(candidate({ severity: 'low' }));
 	const ran = verified(candidate({ severity: 'low' }), 'run');
 	const evidence = { command: 'bun t.ts', exitCode: 1, observed: 'x', evidenceId: 'E1' };
@@ -213,7 +214,7 @@ test('a held-back candidate stays held when it was only traced or its run ends t
 	publishHeldBack(sameOnBase, null);
 
 	expect([traced.publishedBy, sameOnBase.publishedBy]).toEqual([undefined, undefined]);
-	expect(consolidateFindings([traced, sameOnBase], INVENTORY)).toEqual([]);
+	expect(consolidateFindings([traced, sameOnBase], INVENTORY)).toMatchObject([{ tier: 'fyi' }]);
 });
 
 const RULES: CandidateContext['ledger'] = {
@@ -231,22 +232,22 @@ function lowRule(ruleId = 'R1', over: Partial<ReviewerFinding> = {}): CandidateF
 	});
 }
 
-test('a verified low repo-rule violation of a ledger rule is published as a rule violation and stays low', () => {
+test('FYI rule observations retain their category without being promoted to rule violations', () => {
 	const held = verified(lowRule(), 'rule');
 
 	publishHeldBack(held, RULES);
 
-	expect(held.publishedBy).toBe('rule');
+	expect(held.publishedBy).toBeUndefined();
 	expect(consolidateFindings([held], INVENTORY)).toMatchObject([{ severity: 'info', category: 'repo-rule' }]);
 });
 
-test('a low repo-rule finding stays held when its rule id is not in the ledger', () => {
+test('a retained FYI with an unknown rule is not promoted by old rule evidence', () => {
 	const held = verified({ ...lowRule(), ruleId: 'R9' }, 'rule');
 
 	publishHeldBack(held, RULES);
 
 	expect(held.publishedBy).toBeUndefined();
-	expect(consolidateFindings([held], INVENTORY)).toEqual([]);
+	expect(consolidateFindings([held], INVENTORY)).toMatchObject([{ tier: 'fyi' }]);
 });
 
 test('a low finding of another category stays held even when it names a ledger rule', () => {

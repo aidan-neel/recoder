@@ -9,6 +9,18 @@ function candidate(over: Partial<CandidateFinding>): CandidateFinding {
 
 const verified = { status: 'verified', method: 'trace', reason: 'checked' } as const;
 
+test('FYI is retained without being counted as verified or held below the reporting bar', () => {
+	const note = candidate({ severity: 'info', tier: 'fyi', belowBar: true, verification: verified });
+
+	expect(candidateOutcome(note)).toEqual({ stage: null, reason: null, verified: false });
+
+	expect(candidateOutcome({ ...note, valid: false, dropStage: 'location', dropReason: 'outside diff' })).toEqual({
+		stage: 'location',
+		reason: 'outside diff',
+		verified: false
+	});
+});
+
 test('a verified candidate held back below the bar stopped at severity but was still verified', () => {
 	expect(candidateOutcome(candidate({ belowBar: true, verification: verified }))).toMatchObject({
 		stage: 'severity',

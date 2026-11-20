@@ -10,6 +10,21 @@ import {
 
 const runs = (...keys: string[][]) => keys.map((run) => new Set(run));
 
+test('FYI is excluded from scoring counts and stability, including legacy informational findings', () => {
+	const metrics = stabilityMetrics([
+		[finding({ tier: 'fyi', fingerprint: 'note' }), finding({ severity: 'info', fingerprint: 'old-note' })],
+		[]
+	]);
+
+	expect(metrics.perRun.map((run) => [run.findings, run.bugs])).toEqual([
+		[0, 0],
+		[0, 0]
+	]);
+
+	expect(metrics.findings).toEqual([]);
+	expect(metrics.strict.meanStability).toBe(1);
+});
+
 function finding(overrides: Partial<EvalFinding>): EvalFinding {
 	return { file: 'src/a.ts', line: 1, category: 'correctness', severity: 'error', message: '', ...overrides };
 }
