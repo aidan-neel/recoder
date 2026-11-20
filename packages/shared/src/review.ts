@@ -2,6 +2,7 @@ import type { ImageUpload } from './attachments';
 import type { AutoReviewReason } from './auto-review';
 import type { ReviewContext } from './context';
 import type { Finding } from './findings';
+import type { DiffGuide } from './diff-guide';
 import type { ObligationReport } from './obligations';
 import type { BriefQuestionReport } from './questions';
 import type { Provider } from './repo';
@@ -89,6 +90,7 @@ export interface Review {
 	funnel?: ReviewFunnel;
 	/** What each reviewer received, read and cited, and what bounds left out; absent on reviews older than recording it. */
 	context?: ReviewContext;
+	diffGuide?: DiffGuide;
 	/** Obligations derived from risky changes and how each investigation ended; absent unless `RECODER_OBLIGATIONS` was on. */
 	obligations?: ObligationReport;
 	/** The brief's open questions and how the review settled each; absent when the brief had none. */

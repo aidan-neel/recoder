@@ -183,6 +183,12 @@ export async function withUsageMetrics<T>(ownerId: string, scope: TokenScope, ru
 }
 
 const stages = new AsyncLocalStorage<TokenStage>();
+const purposes = new AsyncLocalStorage<string>();
+
+/** Tags an auxiliary task without adding a new top-level agent stage. */
+export function withTokenPurpose<T>(purpose: string, run: () => T): T {
+	return purposes.run(purpose, run);
+}
 
 /** Tags every model call `run` starts, however nested, with the kind of agent making it; an inner stage wins. */
 export function withTokenStage<T>(stage: TokenStage, run: () => T): T {
@@ -293,6 +299,7 @@ export function trackTokenCall(
 	const owner = context.getStore();
 	const tally = tallies.getStore();
 	const stage = stages.getStore();
+	const purpose = purposes.getStore();
 	const pipeline = owner?.run !== undefined;
 	const worker = currentLease()?.ownerId;
 
@@ -307,6 +314,7 @@ export function trackTokenCall(
 		provider,
 		scope: owner?.scope ?? 'pipeline',
 		...(stage && { stage }),
+		...(purpose && { purpose }),
 		status: 'pending',
 		usage: emptyTokenUsage(),
 		...(pipeline && { run: owner.run }),
@@ -334,6 +342,7 @@ export function trackTokenCall(
 			kind: owner?.kind ?? 'other',
 			ownerId: owner?.kind === 'review' || owner?.kind === 'chat' ? owner.ownerId : null,
 			...(call.stage && { stage: call.stage }),
+			...(call.purpose && { purpose: call.purpose }),
 			provider: call.provider,
 			model: call.model,
 			...(effort && { effort }),

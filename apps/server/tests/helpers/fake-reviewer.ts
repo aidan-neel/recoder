@@ -81,6 +81,7 @@ export function pickModels(ids: string[]): void {
 
 /** The kind of pipeline call a stubbed request is, read from its prompts. */
 function kindOf(system: string, user: string): string {
+	if (system.startsWith('You organize a diff into a reading guide')) return 'diff-guide';
 	if (system.includes('You write the brief a code change is reviewed against')) return 'brief';
 	if (system.includes('You verify one code review finding')) return 'verifier';
 	if (system.includes('Role: subagent.')) return 'subagent';
@@ -99,6 +100,7 @@ function reply(body: unknown): Response {
 
 /** The fake model's answer: the reviewer reports one finding and asks one subagent; verifiers confirm it. */
 function answer(kind: string, messages: { content: string }[]): Response {
+	if (kind === 'diff-guide') return reply({ groups: [] });
 	if (kind === 'brief') return reply({ summary: 'Changes a.ts.' });
 	if (kind === 'reviewer') return reply({ ...NOTHING, findings: [FINDING], subagents: [SUBAGENT] });
 	if (kind !== 'verifier') return reply(NOTHING);

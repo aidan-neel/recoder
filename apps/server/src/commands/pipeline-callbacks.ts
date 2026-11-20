@@ -11,7 +11,7 @@ import {
 	reportReviewTask,
 	reportReviewTool
 } from '../review/session/events';
-import { reviewCheckpoints } from '../store';
+import { db, reviewCheckpoints } from '../store';
 import { CHECKPOINT_VERSION, type ReviewCheckpoint } from '../review/session/review-checkpoint';
 
 type HarnessCallbacks = Parameters<typeof runAdaptiveReview>[1];
@@ -28,6 +28,13 @@ export function harnessCallbacks(
 	const { headSha, mergeBaseSha } = revision;
 
 	return {
+		onDiffGuide: (diffGuide) => {
+			emitReviewEvent(reviewId, { type: 'step', step: 'diff-guide', message: '', data: { diffGuide } });
+
+			enqueueReviewWrite(reviewId, async () => {
+				await db.reviews.update(reviewId, (review) => (review ? { ...review, diffGuide } : undefined));
+			});
+		},
 		onTask: (task) => reportReviewTask(reviewId, task),
 		onMessage: (message) =>
 			recordChatMessage(reviewId, { ...message, from: 'assistant', at: new Date().toISOString() }),

@@ -49,6 +49,7 @@ export const PROGRESS_SNAPSHOT_KEYS = [
 	'stage',
 	'orchestratorModel',
 	'guidelines',
+	'diffGuide',
 	'workerWait'
 ] as const;
 

@@ -3,6 +3,7 @@ import type {
 	CoverageGap,
 	CoverageSummary,
 	Finding,
+	DiffGuide,
 	ImageUpload,
 	ModelFailure,
 	ObligationReport,
@@ -27,6 +28,7 @@ import type { LensId } from '../lenses/types.js';
 
 /** Callbacks the harness reports progress through; every one is optional. */
 export interface HarnessEvents {
+	onDiffGuide?: (guide: DiffGuide) => void;
 	onTask?: (task: Omit<ReviewTask, 'updatedAt'>) => void;
 	onLog?: (message: string, meta?: { assignmentId?: string; role?: string }) => void;
 	onPlan?: (data: { planVersion: number; summary: string; assignments: ReviewAssignment[] }) => void;
@@ -97,6 +99,7 @@ export interface AdaptiveReviewInput {
 }
 
 export interface AdaptiveReviewResult {
+	diffGuide?: DiffGuide;
 	findings: Finding[];
 	unconfirmed: Finding[];
 	/** Where the candidates went; absent when the review failed. */

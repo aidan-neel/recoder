@@ -160,6 +160,7 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
 
 	return {
 		findings: confirmed,
+		...(run.diffGuide && { diffGuide: run.diffGuide }),
 		unconfirmed: [...run.hidden, ...refutedCandidates(run)].map(toFinding),
 		funnel: reviewFunnel(run, confirmed.filter((finding) => findingTier(finding) !== 'fyi').length),
 		...measuredContext(run, confirmed),

@@ -28,6 +28,9 @@ export interface BriefStage {
 
 /** One call that writes part of the brief. */
 export interface BriefCall<T> extends BriefStage {
+	/** Presentation calls do not retry or take more than their own time allowance. */
+	singleAttempt?: boolean;
+	maxWallMs?: number;
 	/** `unit-2` or `context`, for the log. */
 	label: string;
 	system: string;
@@ -80,8 +83,8 @@ function omissionOf(error: string): BriefOmission {
 }
 
 /** This call's share of the time left before the review's deadline. */
-function timeLimit(run: ReviewRun): { finalTurnAfterMs: number; maxWallMs: number } {
-	const ms = Math.max(1, Math.floor((run.deadlineAt - reviewNow()) * TIME_SHARE));
+function timeLimit(run: ReviewRun, cap = Infinity): { finalTurnAfterMs: number; maxWallMs: number } {
+	const ms = Math.max(1, Math.min(cap, Math.floor((run.deadlineAt - reviewNow()) * TIME_SHARE)));
 
 	return { finalTurnAfterMs: ms, maxWallMs: ms };
 }
@@ -103,7 +106,7 @@ async function callOnce<T>(
 			user,
 			maxTurns: 1,
 			deadlineAt: run.deadlineAt,
-			timeLimit: timeLimit(run),
+			timeLimit: timeLimit(run, call.maxWallMs),
 			parse: (raw) => {
 				const parsed = call.schema.safeParse(raw);
 
@@ -155,6 +158,7 @@ export async function askBrief<T>(run: ReviewRun, cfg: ModelConfig, call: BriefC
 	const cached = cachedAnswer(key, call);
 
 	if (cached !== null) return { value: cached };
+	if (call.singleAttempt) return cannotStart(run) ?? (await callOnce(run, cfg, call, call.user));
 
 	for (const user of [call.user, call.user + RETRY_NOTE]) {
 		const answer = await callWithSlot(run, cfg, call, user);
