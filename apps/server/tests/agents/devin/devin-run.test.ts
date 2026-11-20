@@ -1,6 +1,5 @@
 import { describe, expect, jest, test } from 'bun:test';
-import { readFile, readdir, watch } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { readFile, readdir } from 'node:fs/promises';
 import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { DevinAgent } from '../../../src/agents/devin/devin';
@@ -8,6 +7,7 @@ import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import { captureRetryWarning, fakeDevin } from '../../helpers/fake-devin';
 import { useFakeClock } from '../../helpers/fake-clock';
 import { fixtureReview, openCollectingRun, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
+import { whenFileExists } from '../../helpers/when-found';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
@@ -104,11 +104,10 @@ function logged(text: string, label: string): string {
 describe('DevinAgent.openRun', () => {
 	test('an aborted prompt returns its available export usage as well as emitting it', async () => {
 		const { run, events, log } = await openRun('spawn');
-		const files = watch(dirname(log));
 		const pending = run.prompt('Review it.', PROMPT);
 
 		try {
-			for await (const file of files) if (file.filename?.endsWith('.pids')) break;
+			await whenFileExists(`${log}.pids`);
 			await run.abort();
 
 			const reply = await pending;
