@@ -4,6 +4,7 @@ import type {
 	PrCheck,
 	PullComment,
 	PullCommit,
+	PullDescriptionState,
 	PullDiff,
 	PullList,
 	PullPage
@@ -47,6 +48,10 @@ export const pullsApi = {
 	commits: (repoId: string, number: number) => request<PullCommit[]>(`${pullPath(repoId, number)}/commits`),
 	checks: (repoId: string, number: number) => request<PrCheck[]>(`${pullPath(repoId, number)}/checks`),
 	comments: (repoId: string, number: number) => request<PullComment[]>(`${pullPath(repoId, number)}/comments`),
+	description: (repoId: string, number: number) =>
+		request<PullDescriptionState>(`${pullPath(repoId, number)}/description`),
+	describe: (repoId: string, number: number) =>
+		post<PullDescriptionState>(`${pullPath(repoId, number)}/description`, {}),
 
 	comment: (repoId: string, number: number, body: string) =>
 		post<PullComment>(`${pullPath(repoId, number)}/comments`, { body }),
