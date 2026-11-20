@@ -5,6 +5,7 @@ import {
 	type ReleaseManifestInput
 } from '../../../src/cli/upgrade/release-manifest';
 import { parseReleaseTag } from '../../../src/cli/upgrade/release-tag';
+import { DATA_VERSION, OLDEST_DATA_VERSION } from '../../../src/storage/data-version';
 
 const INDEX = `sha256:${'a'.repeat(64)}`;
 const AMD64 = `sha256:${'b'.repeat(64)}`;
@@ -29,8 +30,8 @@ describe('buildReleaseManifest', () => {
 			image: 'ghcr.io/aidan-neel/recoder',
 			indexDigest: INDEX,
 			platforms: { 'linux/amd64': AMD64, 'linux/arm64': ARM64 },
-			dataVersion: 1,
-			minDataVersion: 0,
+			dataVersion: DATA_VERSION,
+			minDataVersion: OLDEST_DATA_VERSION,
 			minVersion: '0.1.0',
 			notes: '## What changed'
 		});

@@ -43,12 +43,12 @@ function retryWait(err: unknown, tries: number): number {
  * callers stop once text has reached the user.
  */
 export async function withRetries<T>(
-	opts: Pick<ChatOptions, 'signal' | 'timeoutMs' | 'provider'>,
+	opts: Pick<ChatOptions, 'signal' | 'timeoutMs' | 'provider' | 'maxRetries'>,
 	deadline: number,
 	attempt: (timeoutMs: number) => Promise<T>,
 	canRetry: () => boolean = () => true
 ): Promise<T> {
-	const max = llmRetries();
+	const max = opts.maxRetries ?? llmRetries();
 
 	for (let tries = 0; ; tries++) {
 		try {

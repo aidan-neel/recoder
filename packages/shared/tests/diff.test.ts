@@ -42,6 +42,24 @@ describe('parseUnifiedDiff', () => {
 		expect(parseUnifiedDiff('nothing here\n')).toEqual([]);
 	});
 
+	test('the complete inventory retains hunkless changes and uses a rename destination', () => {
+		const raw = `diff --git a/old.ts b/new.ts
+similarity index 100%
+rename from old.ts
+rename to new.ts
+diff --git a/icon.png b/icon.png
+Binary files a/icon.png and b/icon.png differ
+diff --git a/build script.sh b/build script.sh
+old mode 100644
+new mode 100755`;
+
+		expect(parseUnifiedDiff(raw)).toEqual([]);
+
+		expect(parseUnifiedDiff(raw, { includeHunkless: true })).toEqual(
+			['new.ts', 'icon.png', 'build script.sh'].map((path) => ({ path, additions: 0, deletions: 0, hunks: [] }))
+		);
+	});
+
 	test('skips no-newline markers', () => {
 		const [file] = parseUnifiedDiff(
 			'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old\n\\ No newline at end of file\n+new'

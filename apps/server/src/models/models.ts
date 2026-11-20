@@ -17,12 +17,16 @@
 import { z } from 'zod';
 import {
 	DEFAULT_CONTEXT_WINDOW,
+	REASONING_EFFORTS,
 	VLLM_MODEL_PREFIX,
+	looksLikeModelId,
+	prettyModelName,
 	supportedEffort,
 	type ContextWindowSource,
 	type ModelProvider,
 	type ModelRuntimeProfile,
 	type ProviderRef,
+	type PullDescription,
 	type ReasoningEffort
 } from '@recoder/shared';
 import { lockedModels, runLocked, starterPicks, type LockedModels } from './llm/locked-models.js';
@@ -250,8 +254,22 @@ export function savedReviewModelId(): string | undefined {
  * with no reasoning control is never sent one.
  */
 function resolveConfig(role: StageRole, effort?: ReasoningEffort): ModelConfig {
+	const { entryId, requested } = stagePick(role);
+	const entry = savedEntry(entryId);
+
+	const resolve = (wanted: ReasoningEffort | null | undefined): ModelConfig => {
+		if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, wanted);
+
+		return (entryId ? agentConfig(entryId, wanted ?? undefined) : null) ?? entryConfig(entry, wanted);
+	};
+
+	const config = resolve(requested);
+
+	return effort && config.reasoningEffort ? resolve(effort) : config;
+}
+
+function stagePick(role: StageRole) {
 	const stored = getStoredSettings();
-	const entries = stored.models ?? [];
 	const member = starterPicks();
 	const reviewId = member?.orchestratorModelId ?? savedReviewModelId();
 	const reviewEffort = member ? member.orchestratorEffort : stored.orchestratorEffort;
@@ -270,18 +288,41 @@ function resolveConfig(role: StageRole, effort?: ReasoningEffort): ModelConfig {
 	const inheritedEffort = followsReview ? reviewEffort : undefined;
 	const requested = role === 'orchestrator' ? ownEffort : (ownEffort ?? inheritedEffort);
 
-	const resolve = (wanted: ReasoningEffort | null | undefined): ModelConfig => {
-		if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, wanted);
+	return { entryId, requested };
+}
 
-		return (
-			(entryId ? agentConfig(entryId, wanted ?? undefined) : null) ??
-			entryConfig(entries.find((e) => e.id === entryId) ?? entries[0], wanted)
-		);
+function savedEntry(id: string | undefined): StoredModelEntry | undefined {
+	const entries = getStoredSettings().models ?? [];
+
+	return entries.find((entry) => entry.id === id) ?? entries[0];
+}
+
+/** Resolve a stage's plain chat endpoint and display identity without starting a CLI or inheriting a saved effort. */
+export function lowestEffortChatPick(role: 'orchestrator' | 'subagent'): {
+	config: ModelConfig;
+	model: PullDescription['model'];
+} | null {
+	const { entryId } = stagePick(role);
+
+	if (entryId && agentForModel(entryId)) return null;
+
+	const vllmId = entryId?.startsWith(VLLM_MODEL_PREFIX) ? entryId : undefined;
+	const entry = vllmId ? undefined : savedEntry(entryId);
+	const config = vllmId ? vllmConfig(vllmId, 'lowest') : entryConfig(entry, lowestEffort(entry?.efforts));
+	const label = entry?.label ?? config.model;
+
+	return {
+		config,
+		model: {
+			id: vllmId ?? entry?.id ?? config.model,
+			label: looksLikeModelId(label) ? prettyModelName(label) : label,
+			effort: config.reasoningEffort ?? null
+		}
 	};
+}
 
-	const config = resolve(requested);
-
-	return effort && config.reasoningEffort ? resolve(effort) : config;
+function lowestEffort(efforts: readonly ReasoningEffort[] | undefined): ReasoningEffort | undefined {
+	return REASONING_EFFORTS.find((effort) => efforts?.includes(effort));
 }
 
 /**
@@ -358,7 +399,7 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
  * (`vllm:<server>/<model>`). The call goes straight to the server's
  * OpenAI-compatible endpoint, naming the model id the server listed.
  */
-function vllmConfig(entryId: string, requested: ReasoningEffort | null | undefined): ModelConfig {
+function vllmConfig(entryId: string, requested: ReasoningEffort | 'lowest' | null | undefined): ModelConfig {
 	const target = vllmTarget(entryId);
 
 	if ('error' in target) throw new ModelConfigError(target.error);
@@ -370,7 +411,8 @@ function vllmConfig(entryId: string, requested: ReasoningEffort | null | undefin
 		apiKey,
 		model,
 		contextWindow: contextWindowFor(entryId, target.contextWindow).tokens,
-		reasoningEffort: supportedEffort(requested ?? undefined, efforts, defaultEffort),
+		reasoningEffort:
+			requested === 'lowest' ? lowestEffort(efforts) : supportedEffort(requested, efforts, defaultEffort),
 		runtime: resolveRuntime(model)
 	};
 }
