@@ -100,6 +100,33 @@ export function buildReleaseManifest(input: ReleaseManifestInput): ReleaseManife
 	};
 }
 
+/**
+ * Parses the per-platform digests the release workflow passes in `RELEASE_PLATFORMS`: one JSON object of
+ * platform name to manifest digest, read from the pushed image's index. Throws, naming the variable, on
+ * input the manifest builder would otherwise reach as a broken JSON parse.
+ */
+export function parsePlatforms(raw: string): Record<string, string> {
+	if (raw.length === 0)
+		throw new CliError(
+			"RELEASE_PLATFORMS is empty: the workflow did not read the pushed image's per-platform digests.",
+			EXIT.failed
+		);
+
+	let parsed: unknown;
+
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		throw new CliError('RELEASE_PLATFORMS is not a JSON object of platform digests.', EXIT.failed);
+	}
+
+	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+		throw new CliError('RELEASE_PLATFORMS is not a JSON object of platform digests.', EXIT.failed);
+	}
+
+	return parsed as Record<string, string>;
+}
+
 /** The environment variables the release workflow sets: the tag, the pushed image's digests, and the release. */
 function inputFromEnv(): ReleaseManifestInput {
 	const tag = process.env.RELEASE_TAG ?? '';
@@ -108,7 +135,7 @@ function inputFromEnv(): ReleaseManifestInput {
 		tag: isReleaseTag(tag) ? tag : (tag as ReleaseTag),
 		image: process.env.RELEASE_IMAGE ?? '',
 		indexDigest: process.env.RELEASE_INDEX_DIGEST ?? '',
-		platforms: JSON.parse(process.env.RELEASE_PLATFORMS ?? '{}') as Record<string, string>,
+		platforms: parsePlatforms(process.env.RELEASE_PLATFORMS ?? ''),
 		notes: '',
 		releasedAt: process.env.RELEASED_AT ?? ''
 	};

@@ -101,10 +101,12 @@ jobs:
       - id: digests
         name: Read the per-platform digests the index points at
         run: |
-          platforms="$(docker buildx imagetools inspect "${IMAGE}@${{ steps.push.outputs.digest }}" --json |
-            jq -c '[.manifests[] | select(.platform.os == "linux")]
-                   | map({ key: "\(.platform.os)/\(.platform.architecture)", value: .digest })
-                   | from_entries')"
+          set -euo pipefail
+          platforms="$(docker buildx imagetools inspect --raw "${IMAGE}@${{ steps.push.outputs.digest }}" |
+            jq -e -c '[.manifests[] | select(.platform.os == "linux")]
+                      | if length == 0 then error("the image index carries no linux manifests") else
+                          map({ key: "\(.platform.os)/\(.platform.architecture)", value: .digest }) | from_entries
+                        end')"
           echo "platforms=$platforms" >> "$GITHUB_OUTPUT"
 
   publish:

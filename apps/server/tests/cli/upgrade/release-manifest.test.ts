@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
 	buildReleaseManifest,
+	parsePlatforms,
 	RELEASE_SCHEMA_VERSION,
 	type ReleaseManifestInput
 } from '../../../src/cli/upgrade/release-manifest';
@@ -55,5 +56,24 @@ describe('buildReleaseManifest', () => {
 
 	test('an image build that answered no platform digests is refused', () => {
 		expect(() => buildReleaseManifest({ ...input, platforms: {} })).toThrow('no platform digests');
+	});
+});
+
+describe('parsePlatforms', () => {
+	test('the empty RELEASE_PLATFORMS the workflow can hand over names the variable', () => {
+		expect(() => parsePlatforms('')).toThrow('RELEASE_PLATFORMS is empty');
+	});
+
+	test('malformed or non-object RELEASE_PLATFORMS names the variable', () => {
+		expect(() => parsePlatforms('{"linux/amd64"')).toThrow('RELEASE_PLATFORMS is not');
+		expect(() => parsePlatforms('["linux/amd64"]')).toThrow('RELEASE_PLATFORMS is not');
+		expect(() => parsePlatforms('null')).toThrow('RELEASE_PLATFORMS is not');
+	});
+
+	test("the digests step's JSON object parses as-is", () => {
+		expect(parsePlatforms(JSON.stringify({ 'linux/amd64': AMD64, 'linux/arm64': ARM64 }))).toEqual({
+			'linux/amd64': AMD64,
+			'linux/arm64': ARM64
+		});
 	});
 });
