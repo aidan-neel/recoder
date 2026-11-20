@@ -1,19 +1,17 @@
-{{- range $component := list "server" "app" }}
-{{- $config := index $.Values $component }}
-{{- $port := ternary 3001 3000 (eq $component "server") }}
-{{- $shared := and (eq $component "server") (not (empty $.Values.server.database.existingSecret)) }}
+{{- $config := .Values.server }}
+{{- $shared := not (empty $config.database.existingSecret) }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "recoder.name" $ }}-{{ $component }}
+  name: {{ include "recoder.name" $ }}
   labels:
     {{- include "recoder.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: {{ $component }}
+    app.kubernetes.io/component: server
 spec:
   replicas: {{ $config.replicaCount }}
   strategy:
-    {{- if or $shared (eq $component "app") }}
+    {{- if $shared }}
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 0
@@ -25,12 +23,12 @@ spec:
     matchLabels:
       app.kubernetes.io/name: {{ $.Chart.Name }}
       app.kubernetes.io/instance: {{ $.Release.Name }}
-      app.kubernetes.io/component: {{ $component }}
+      app.kubernetes.io/component: server
   template:
     metadata:
       labels:
         {{- include "recoder.labels" $ | nindent 8 }}
-        app.kubernetes.io/component: {{ $component }}
+        app.kubernetes.io/component: server
     spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
@@ -45,7 +43,7 @@ spec:
             matchLabels:
               app.kubernetes.io/name: {{ $.Chart.Name }}
               app.kubernetes.io/instance: {{ $.Release.Name }}
-              app.kubernetes.io/component: {{ $component }}
+              app.kubernetes.io/component: server
       {{- end }}
       {{- with $.Values.imagePullSecrets }}
       imagePullSecrets:
@@ -60,8 +58,8 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: {{ $component }}
-          image: {{ printf "%s:%s" $config.image.repository $config.image.tag | quote }}
+        - name: server
+          image: {{ printf "%s:%s" $config.image.repository ($config.image.tag | default $.Chart.AppVersion) | quote }}
           imagePullPolicy: {{ $config.image.pullPolicy }}
           securityContext:
             allowPrivilegeEscalation: false
@@ -70,11 +68,10 @@ spec:
               drop: [ALL]
           ports:
             - name: http
-              containerPort: {{ $port }}
+              containerPort: 3001
           env:
             - name: PORT
-              value: {{ $port | quote }}
-            {{- if eq $component "server" }}
+              value: "3001"
             - name: HOST
               value: 0.0.0.0
             - name: HOME
@@ -97,33 +94,33 @@ spec:
                   name: {{ $config.database.existingSecret }}
                   key: {{ $config.database.secretKey }}
             {{- end }}
+            {{- if $config.managedCommand }}
+            - name: RECODER_MANAGED_COMMAND
+              value: {{ $config.managedCommand | quote }}
+            {{- end }}
             {{- range $name, $value := $config.env }}
             - name: {{ $name }}
               value: {{ $value | quote }}
             {{- end }}
-            {{- else }}
-            - name: HOSTNAME
-              value: 0.0.0.0
-            {{- end }}
-          {{- if and (eq $component "server") $config.existingSecret }}
+          {{- if $config.existingSecret }}
           envFrom:
             - secretRef:
                 name: {{ $config.existingSecret }}
           {{- end }}
           startupProbe:
             httpGet:
-              path: {{ ternary "/health/ready" (ternary "/health" "/" (eq $component "server")) $shared }}
+              path: {{ ternary "/health/ready" "/health" $shared }}
               port: http
             periodSeconds: 5
             failureThreshold: 30
           readinessProbe:
             httpGet:
-              path: {{ ternary "/health/ready" (ternary "/health" "/" (eq $component "server")) $shared }}
+              path: {{ ternary "/health/ready" "/health" $shared }}
               port: http
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: {{ ternary "/health" "/" (eq $component "server") }}
+              path: /health
               port: http
             periodSeconds: 20
           resources:
@@ -131,17 +128,14 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            {{- if eq $component "server" }}
             - name: data
               mountPath: /app/data
             - name: work
               mountPath: /tmp/recoder-work
-            {{- end }}
       volumes:
         - name: tmp
           emptyDir:
             sizeLimit: {{ $config.tmpSizeLimit }}
-        {{- if eq $component "server" }}
         - name: data
           {{- if $shared }}
           emptyDir:
@@ -153,5 +147,3 @@ spec:
         - name: work
           emptyDir:
             sizeLimit: {{ $config.workSizeLimit }}
-        {{- end }}
-{{- end }}

@@ -73,7 +73,7 @@ One server runs on the built-in database. Multiple API replicas need PostgreSQL;
 
 ## Helm
 
-The Helm chart stays for Kubernetes. A Helm install updates by \`helm upgrade\`, not from the browser: the app shows the exact command instead of an Update button when the chart sets \`RECODER_MANAGED_COMMAND\` in the server's environment. The chart still expects images you build and push yourself; see its [README](https://github.com/aidan-neel/recoder/blob/main/charts/recoder/README.md).
+The Helm chart stays for Kubernetes. A Helm install updates by \`helm upgrade\`, not from the browser: set \`server.managedCommand\` in the chart to the exact \`helm upgrade\` command for the release, and the app shows it instead of an Update button (\`RECODER_MANAGED_COMMAND\`). The chart defaults to the published release image; see its [README](https://github.com/aidan-neel/recoder/blob/main/charts/recoder/README.md).
 
 ## Uninstall
 

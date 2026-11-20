@@ -9,10 +9,11 @@ server:
     existingSecret: ''
     secretKey: RECODER_SECRET_KEY
   image:
-    repository: ''
+    repository: ghcr.io/aidan-neel/recoder
     tag: ''
     pullPolicy: IfNotPresent
-  frontendUrl: http://localhost:3000
+  frontendUrl: https://recoder.example.org
+  managedCommand: ''
   existingSecret: ''
   env:
     RECODER_EXEC: 'off'
@@ -30,18 +31,3 @@ server:
     existingClaim: ''
     storageClass: null
     size: 10Gi
-
-app:
-  replicaCount: 1
-  image:
-    repository: ''
-    tag: ''
-    pullPolicy: IfNotPresent
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: '1'
-      memory: 1Gi
-  tmpSizeLimit: 256Mi
