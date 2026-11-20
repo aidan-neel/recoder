@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { readFile, utimes } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseUnifiedDiff } from '@recoder/shared';
 import type { ReviewTarget } from '../../../src/cli/review/options';
@@ -82,8 +82,15 @@ test('a review started from a git hook ignores the variables git exports to hook
 	expect(repositoryState(dir)).toBe(before);
 });
 
-/** A time well in the past, so any refresh of a file's time shows. */
-const LONG_AGO = new Date('2001-01-01T00:00:00Z');
+/** Git readers refresh shared-index mtimes as liveness markers; the immutable content is what must survive. */
+async function sharedIndexState(dir: string): Promise<[string, string][]> {
+	const gitDir = join(dir, '.git');
+	const names = (await readdir(gitDir)).filter((name) => name.startsWith('sharedindex.')).sort();
+
+	return Promise.all(
+		names.map(async (name): Promise<[string, string]> => [name, (await readFile(join(gitDir, name))).toString('hex')])
+	);
+}
 
 test('in a sparse checkout, staged and uncommitted reviews match git diff --cached and git diff HEAD', async () => {
 	const dir = await sparseRepository();
@@ -105,24 +112,19 @@ test.each(['sha1', 'sha256'] as const)(
 		git(dir, ['config', 'core.splitIndex', 'true']);
 		git(dir, ['update-index', '--split-index']);
 
-		const sharedIndex = join(
-			dir,
-			'.git',
-			readdirSync(join(dir, '.git')).find((name) => name.startsWith('sharedindex.')) ?? ''
-		);
-
 		const before = repositoryState(dir);
+		const sharedBefore = await sharedIndexState(dir);
 
-		await utimes(sharedIndex, LONG_AGO, LONG_AGO);
+		expect(sharedBefore.length).toBeGreaterThan(0);
 
 		for (const kind of ['staged', 'uncommitted'] as const) {
 			const resolved = await resolveTarget(targetRequest(dir, { kind }));
 
 			expect(resolved.diff).toContain('+staged');
 			await resolved.dispose();
+			expect(await sharedIndexState(dir)).toEqual(sharedBefore);
 		}
 
-		expect(statSync(sharedIndex).mtime).toEqual(LONG_AGO);
 		expect(repositoryState(dir)).toBe(before);
 	}
 );
