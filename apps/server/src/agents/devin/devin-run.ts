@@ -9,6 +9,7 @@ import type { ToolLease } from '../tools/mcp-host';
 import { usageDelta } from '../usage-delta';
 import { exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
 import { devinEnv, runConfig } from './devin-process';
+import { withDevinRetries } from './devin-retry';
 
 type Env = Record<string, string | undefined>;
 
@@ -73,35 +74,50 @@ export class DevinRun extends SessionRun<RunFiles> {
 		const partId = `devin_${++this.prompts}`;
 		const asked = options.schema ? `${text}\n\n${JSON_MODE_INSTRUCTION}` : text;
 		let answer = '';
-
-		await writeFile(this.files.prompt, this.session ? asked : `${this.options.system}\n\n${asked}`, { mode: 0o600 });
-		this.options.onEvent({ type: 'step-start' });
+		let usageRead = true;
 
 		try {
-			await rm(this.files.export, { force: true });
+			return await withDevinRetries<AgentReply>(deadline.signal, async () => {
+				answer = '';
 
-			const exit = await streamCli({
-				argv: [this.host.path, ...this.args()],
-				cwd: this.files.cwd,
-				env: { ...devinEnv(this.host.env), XDG_CONFIG_HOME: this.files.configHome },
-				stdin: null,
-				signal: deadline.signal,
-				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
-				onOutput: (piece) => {
-					answer += piece;
-					this.options.onEvent({ type: 'text', delta: piece, partId });
-				},
-				running: this.host.running,
-				name: 'Devin'
+				await writeFile(this.files.prompt, this.session ? asked : `${this.options.system}\n\n${asked}`, {
+					mode: 0o600
+				});
+
+				this.options.onEvent({ type: 'step-start' });
+				await rm(this.files.export, { force: true });
+				usageRead = false;
+
+				const exit = await streamCli({
+					argv: [this.host.path, ...this.args()],
+					cwd: this.files.cwd,
+					env: { ...devinEnv(this.host.env), XDG_CONFIG_HOME: this.files.configHome },
+					stdin: null,
+					signal: deadline.signal,
+					maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
+					onOutput: (piece) => {
+						answer += piece;
+						this.options.onEvent({ type: 'text', delta: piece, partId });
+					},
+					running: this.host.running,
+					name: 'Devin'
+				});
+
+				const tokens = await this.exported();
+
+				usageRead = true;
+
+				if (exit.code !== 0)
+					return {
+						value: { text: answer, error: exitError(exit, answer), tokens },
+						errorOutput: `${exit.stderr}\n${answer}`,
+						partial: Boolean(answer.trim()) && !/^\s*(?:error\b|HTTP\s*429\b)/i.test(answer)
+					};
+
+				return { value: { text: answer, tokens } };
 			});
-
-			const tokens = await this.exported();
-
-			if (exit.code !== 0) return { text: answer, error: exitError(exit, answer), tokens };
-
-			return { text: answer, tokens };
 		} catch (error) {
-			await this.exported();
+			if (!usageRead) await this.exported();
 
 			return { text: answer, error: deadline.failure(error, 'Devin run failed.') };
 		}

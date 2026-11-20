@@ -1,13 +1,48 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, jest, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { DevinAgent } from '../../../src/agents/devin/devin';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import { fakeDevin } from '../../helpers/fake-devin';
+import { useFakeClock } from '../../helpers/fake-clock';
 import { fixtureReview, openCollectingRun, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
+
+describe('Devin throttled prompts', () => {
+	useFakeClock();
+
+	test('retries a CLI throttle within one prompt, resuming its session and retaining both attempts usage', async () => {
+		const { run, events, log } = await openRun('throttleonce');
+		let notify!: () => void;
+
+		const waiting = new Promise<void>((resolve) => {
+			notify = resolve;
+		});
+
+		const warning = jest.spyOn(console, 'warn').mockImplementation(() => notify());
+
+		try {
+			const work = run.prompt('Review it.', PROMPT);
+			const backedOff = await Promise.race([waiting.then(() => true), work.then(() => false)]);
+
+			expect(backedOff).toBe(true);
+			jest.advanceTimersByTime(3000);
+
+			const reply = await work;
+
+			expect(reply.error).toBeUndefined();
+			expect(reply.text).toBe('the reply\n');
+			expect(events.filter((event) => event.type === 'step-start')).toHaveLength(2);
+			expect(events.flatMap((event) => (event.type === 'usage' ? [event.usage.inputTokens] : []))).toEqual([1000, 500]);
+			expect(await readFile(log, 'utf8')).toContain('[--resume] [quiet-owl]');
+		} finally {
+			warning.mockRestore();
+			await run.close();
+		}
+	});
+});
 
 /** The config file the CLI ran under, as the fake logged it. */
 const configSchema = z.object({
