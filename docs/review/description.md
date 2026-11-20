@@ -1,0 +1,9 @@
+# Pull request descriptions
+
+Recoder can summarize a pull request before it has a review. The description explains what changed and why, groups changed files by what they do, and calls out short notes for the reviewer. It doesn't edit the pull request's own description or publish anything to its forge.
+
+`GET /api/repos/:repoId/pulls/:number/description` reads the current head's result. If none exists, it starts generation and returns `pending` while the model works. Poll the same endpoint for `ready` or `failed`. A failed result can be retried by GET after one minute. `POST` on the same path regenerates the current head, including a ready or failed one, or joins a generation that's already pending. If there's no chat model or no changed files, the endpoint returns `unavailable`.
+
+The server makes one plain chat completion on the configured Subagent (worker) model, at the lowest reasoning effort the model advertises. If the Subagent pick is a CLI model, Recoder tries the Review pick instead; if neither is a plain chat endpoint, no model is called. The prompt uses the pull request's title, body, and the same diff as the pull page. It trims the largest hunks first to stay near 60,000 characters without dropping file paths or stats. The result names the model and effort used, and the model call is labeled `description` in server telemetry.
+
+The result is stored by repository, pull request number, and head commit, in SQLite or the shared PostgreSQL database. A transactional claim lets only one replica start generation for a given head at a time. An uncompleted claim can be taken over after three minutes; the original executor can't publish once its claim has expired or been replaced. Recoder keeps the latest three heads per pull request, plus any still-active claims until they finish or expire. No separate configuration is needed.

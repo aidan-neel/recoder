@@ -25,4 +25,5 @@ export type Table =
 	| 'member_models'
 	| 'update_state'
 	| 'pull_states'
+	| 'pull_descriptions'
 	| 'model_calls';

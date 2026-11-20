@@ -1,6 +1,6 @@
 import type { ModelProvider, TokenBudget } from './models';
 
-export type TokenScope = 'pipeline' | 'discussion' | 'fix';
+export type TokenScope = 'pipeline' | 'discussion' | 'fix' | 'description';
 
 /** The kinds of agent that make calls, so a review's tokens can be split by the work that spent them. */
 export const TOKEN_STAGES = [
