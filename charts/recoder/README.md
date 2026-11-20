@@ -1,48 +1,43 @@
 # Deploy Recoder on Kubernetes
 
-This chart deploys the Recoder API and Next.js review app on Linux nodes with Kubernetes 1.26 or newer and Helm 3 or newer.
-The default uses one API replica with SQLite and requires a `ReadWriteOnce` storage provisioner or existing writable claim.
+This chart deploys Recoder as one API pod that serves both the API and the review app, on Linux nodes with Kubernetes 1.26 or newer and Helm 3 or newer.
+The default uses one replica with SQLite and requires a `ReadWriteOnce` storage provisioner or existing writable claim.
 For multiple API replicas, configure an external PostgreSQL service as described below.
 
-## Build the images
+## Choose the image
 
-Build both images from the same Recoder revision and push them to your registry. The chart does not assume a published image exists.
-Use immutable tags for upgrades.
-HA images must include the shared PostgreSQL runtime and its asynchronous storage prerequisite, [PR #157](https://github.com/aidan-neel/recoder/pull/157).
-The HA chart depends on those runtime changes. An older API image lacks `/health/ready` and cannot pass the PostgreSQL readiness probe.
+The chart defaults to the published release image, `ghcr.io/aidan-neel/recoder`, at the tag named by an empty `server.image.tag`, which means the chart's `appVersion`.
+A released image is signed; the in-app updater verifies it against the signed release manifest.
+Use immutable tags for upgrades: pin `server.image.tag` to a release tag instead of a moving one.
+
+To use your own registry, override the repository and tag. The image must be built from a revision that includes the shared PostgreSQL runtime and its asynchronous storage prerequisite, [PR #157](https://github.com/aidan-neel/recoder/pull/157).
+An older API image lacks `/health/ready` and cannot pass the PostgreSQL readiness probe.
 
 ```sh
-docker build -f apps/server/Dockerfile -t registry.example.org/recoder/server:REVISION .
-docker build -f apps/app/Dockerfile \
-  --build-arg NEXT_PUBLIC_API_URL=https://api.recoder.example.org \
-  -t registry.example.org/recoder/app:REVISION .
-docker push registry.example.org/recoder/server:REVISION
-docker push registry.example.org/recoder/app:REVISION
+docker build -t registry.example.org/recoder:REVISION .
+docker push registry.example.org/recoder:REVISION
 ```
-
-`NEXT_PUBLIC_API_URL` must be reachable from the user's browser. A Kubernetes service DNS name is not a browser URL.
-The app compiles this URL into its JavaScript bundle. Rebuild the app image when the URL changes.
-For local port forwarding, build with `http://localhost:3001` instead.
 
 ## Configure the release
 
-Create `recoder-values.yaml` with your image names and non-secret configuration.
+Create `recoder-values.yaml` with your image and non-secret configuration.
 
 ```yaml
 server:
   image:
-    repository: registry.example.org/recoder/server
-    tag: REVISION
+    tag: v0.3.0
   frontendUrl: https://recoder.example.org
   existingSecret: recoder-credentials
+  managedCommand: helm upgrade recoder --namespace recoder --reuse-values
   env:
     RECODER_REVIEW_BASE_URL: https://models.example.org/v1
     RECODER_REVIEW_MODEL: your-review-model
-app:
-  image:
-    repository: registry.example.org/recoder/app
-    tag: REVISION
 ```
+
+`server.frontendUrl` is the origin people reach the app at. The app and the API share one origin now, and the
+same URL also reaches the API, so OAuth callbacks and the session cookie work without extra domains.
+`server.managedCommand` names the command that updates this install; the app shows it instead of an Update
+button (`RECODER_MANAGED_COMMAND`), since a Helm release updates by `helm upgrade`, not from the browser.
 
 Create a Secret that holds the key that seals the credentials Recoder saves, and name it in `server.encryptionKey`.
 Make the key with `openssl rand -base64 32`. The chart requires it on every release: the server's home is a temporary
@@ -68,9 +63,9 @@ bearer access with more than one replica). The OAuth client ids `RECODER_GITHUB_
 are public, so set them under `server.env`. Omit `existingSecret` when credentials are unnecessary.
 Never put credentials in Helm values or command-line overrides. See [server configuration](../../.env.example).
 
-The chart creates two private `ClusterIP` services, `<release>-recoder-server` on port 3001 and
-`<release>-recoder-app` on port 3000. Your infrastructure must provide the namespace, Secret, registry access,
-TLS, authentication, and routes for the browser-facing app and API URLs. Preserve streaming responses at the API proxy.
+The chart creates one private `ClusterIP` service, `<release>-recoder`, on port 3001, which serves the review app
+and the API from the same pod. Your infrastructure must provide the namespace, Secret, registry access,
+TLS, authentication, and routes to that one URL. Preserve streaming responses at the proxy.
 The chart creates no ingress, namespace, model server, worker, or database service.
 Restrict access to trusted users. The API's CORS configuration is not access control.
 
@@ -84,8 +79,6 @@ server:
   database:
     existingSecret: recoder-database
     secretKey: RECODER_DATABASE_URL
-app:
-  replicaCount: 2
 ```
 
 Provision `recoder-database` in the release namespace through your secret manager.
@@ -124,15 +117,13 @@ helm upgrade --install recoder charts/recoder \
   --namespace recoder --values recoder-values.yaml --wait --timeout 5m
 ```
 
-For a local app image built with `http://localhost:3001`, set `server.frontendUrl` to `http://localhost:3000`
-and run these commands in separate terminals.
+For a local test, set `server.frontendUrl` to `http://localhost:3001` and run this in one terminal.
 
 ```sh
-kubectl --namespace recoder port-forward service/recoder-recoder-server 3001:3001
-kubectl --namespace recoder port-forward service/recoder-recoder-app 3000:3000
+kubectl --namespace recoder port-forward service/recoder-recoder 3001:3001
 ```
 
-Open `http://localhost:3000`. `http://localhost:3001/health` reports API process health.
+Open `http://localhost:3001`. `/health` reports API process health.
 In PostgreSQL mode, `/health/ready` also checks shared storage before the API pod receives traffic.
 Neither probe verifies model connectivity or review completion.
 
@@ -141,7 +132,6 @@ Neither probe verifies model connectivity or review completion.
 In the default SQLite mode, the API mounts its database, review progress, connected tokens, and settings at `/app/data`.
 The default claim is `<release>-recoder-data`, with 10 GiB and the cluster's default storage class.
 The API uses `Recreate` updates and one replica. An upgrade causes downtime and never starts a second SQLite writer.
-The frontend can scale independently and uses rolling updates.
 
 The API handles `SIGTERM` by flushing review progress and exiting. The pod has a 30-second termination grace period.
 This does not drain active reviews. Wait for reviews to finish before an upgrade or backup.
@@ -154,7 +144,7 @@ Shared review data remains in PostgreSQL when a pod is replaced. Temporary check
 An update can interrupt model calls and event connections; clients must reconnect and work may repeat.
 Keep API images on a mutually compatible database schema throughout a rollout.
 
-Back up the data before an upgrade, then update both image tags and run the install command again.
+Back up the data before an upgrade, then update `server.image.tag` and run the install command again.
 Keep the release name, namespace, and storage settings stable across upgrades. Existing volume sizes and storage classes
 follow the storage provider's expansion and immutability rules.
 
@@ -175,7 +165,7 @@ For SQLite, back up the retained claim with this procedure.
 2. Stop the API writer.
 
    ```sh
-   kubectl --namespace recoder scale deployment/recoder-recoder-server --replicas=0
+   kubectl --namespace recoder scale deployment/recoder-recoder --replicas=0
    kubectl --namespace recoder wait --for=delete pod \
      --selector=app.kubernetes.io/instance=recoder,app.kubernetes.io/component=server --timeout=90s
    ```
@@ -185,8 +175,8 @@ For SQLite, back up the retained claim with this procedure.
 4. Start the API again.
 
    ```sh
-   kubectl --namespace recoder scale deployment/recoder-recoder-server --replicas=1
-   kubectl --namespace recoder rollout status deployment/recoder-recoder-server
+   kubectl --namespace recoder scale deployment/recoder-recoder --replicas=1
+   kubectl --namespace recoder rollout status deployment/recoder-recoder
    ```
 
 To restore, stop the API and restore the complete backup into a separate writable claim in the release namespace.
@@ -210,9 +200,9 @@ Uninstalling a PostgreSQL release leaves the external database and its Secret un
 
 ## Runtime limits
 
-The supplied server image supports remote OpenAI-compatible model endpoints and read-only reviews.
+The supplied image supports remote OpenAI-compatible model endpoints and read-only reviews.
 The chart sets `RECODER_EXEC=off`. Linux code execution needs bubblewrap and a runtime that allows its user and mount namespaces.
-The supplied Dockerfile does not install bubblewrap, and the chart grants no privileged mode or extra capabilities.
+The supplied image does not install bubblewrap, and the chart grants no privileged mode or extra capabilities.
 Sandboxed test execution, overlay mounts, local model servers, and distributed workers are unsupported by this chart.
 macOS Seatbelt and native Windows sandbox modes cannot run in these Linux containers.
 Agent CLIs such as OpenCode are not installed in the supplied image. Configure an external model endpoint instead.
@@ -225,34 +215,16 @@ Apply cluster network policies that permit the API to reach only the required da
 
 | Value | Default | Purpose |
 | --- | --- | --- |
-| `server.image.repository`, `server.image.tag` | Required | API image built from `apps/server/Dockerfile`. |
-| `app.image.repository`, `app.image.tag` | Required | Review app image built from `apps/app/Dockerfile`. |
-| `server.image.pullPolicy`, `app.image.pullPolicy` | `IfNotPresent` | Image pull policy. |
-| `imagePullSecrets` | `[]` | Existing registry secrets as a list of `{name: secret-name}` objects. |
-| `server.replicaCount`, `app.replicaCount` | `1`, `1` | API and frontend replicas. Multiple API replicas require `server.database.existingSecret`. |
-| `server.database.existingSecret` | Empty | Existing Secret that enables shared PostgreSQL storage. |
-| `server.database.secretKey` | `RECODER_DATABASE_URL` | Secret key holding the database connection URL. |
-| `server.frontendUrl` | `http://localhost:3000` | Browser origin for trusted-origin checks and links. |
-| `server.existingSecret` | Empty | Existing Secret whose keys become API environment variables. |
-| `server.env` | `RECODER_EXEC: 'off'` | Additional non-secret server settings. Fixed ports and storage paths cannot be overridden. |
-| `server.persistence.existingClaim` | Empty | Existing claim instead of a chart-created volume. |
-| `server.persistence.storageClass` | `null` | Cluster default when null; `''` selects no storage class. |
-| `server.persistence.size` | `10Gi` | Requested capacity of a chart-created claim. |
-| `server.workSizeLimit` | `10Gi` | Disposable checkout capacity. |
-| `server.tmpSizeLimit`, `app.tmpSizeLimit` | `1Gi`, `256Mi` | Disposable temporary storage capacity. |
-| `server.dataSizeLimit` | `1Gi` | Disposable `/app/data` capacity in PostgreSQL mode. |
-| `server.resources` | 250m/512Mi requests, 2 CPU/2Gi limits | API compute budget. |
-| `app.resources` | 100m/256Mi requests, 1 CPU/1Gi limits | App compute budget. |
-
-## Validate the chart
-
-The test values use intentionally unreachable image names for rendering only.
-
-```sh
-helm lint --strict charts/recoder -f charts/recoder/tests/values.yaml
-bun test charts/recoder/tests/render.test.ts
-```
-
-These checks cover manifests, storage selection, secret references, replica safety, update strategies, and disruption budgets.
-They do not prove that a model endpoint can complete a review. Before production use, complete a review with your
-model configuration, restart the API, upgrade the release, and confirm that the saved review remains available.
+| `server.image.repository`, `server.image.tag` | `ghcr.io/aidan-neel/recoder`, the chart's `appVersion` | The release image, which serves the app and the API. |
+| `server.image.pullPolicy` | `IfNotPresent` | Image pull policy. |
+| `server.replicaCount` | `1` | API replicas; more require PostgreSQL below. |
+| `server.frontendUrl` | Required | The one origin the app and the API are reached at. |
+| `server.managedCommand` | `''` | The update command the app shows instead of an Update button (`RECODER_MANAGED_COMMAND`). |
+| `server.existingSecret` | `''` | A Secret whose keys become API environment variables. |
+| `server.env` | `RECODER_EXEC: 'off'` | Non-secret API environment; reserved names are rejected. |
+| `server.resources` | 250m/512Mi, 2 CPU/2Gi | Container resources. |
+| `server.persistence` | 10 GiB claim | Retained SQLite storage; empty in PostgreSQL mode. |
+| `server.workSizeLimit`, `server.tmpSizeLimit`, `server.dataSizeLimit` | 10Gi, 1Gi, 1Gi | Bounded `emptyDir` sizes. |
+| `server.database` | Empty | PostgreSQL mode: the Secret and key holding `RECODER_DATABASE_URL`. |
+| `server.encryptionKey` | Required | The Secret and key holding `RECODER_SECRET_KEY`. |
+| `imagePullSecrets` | `[]` | Registry pull secrets. |
