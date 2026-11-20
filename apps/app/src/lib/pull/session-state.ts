@@ -2,6 +2,7 @@ import type {
 	PrCheck,
 	PullComment,
 	PullCommit,
+	PullDescriptionState,
 	PullDiff,
 	PullMergeMethod,
 	PullPage,
@@ -38,6 +39,8 @@ export interface SessionData {
 	commits: Load<PullCommit[]>;
 	checks: Load<PrCheck[]>;
 	conversation: Load<PullComment[]>;
+	/** The AI description of the head, read again while it is being written. */
+	description: Load<PullDescriptionState>;
 	posting: boolean;
 	/** The newest review in full, once read; it follows the review's live events. */
 	review: Review | null;
@@ -89,6 +92,7 @@ export function initialSession(viewed: Record<string, string>): SessionData {
 		commits: IDLE,
 		checks: IDLE,
 		conversation: IDLE,
+		description: IDLE,
 		posting: false,
 		review: null,
 		previousReview: null,

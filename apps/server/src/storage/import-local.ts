@@ -39,7 +39,8 @@ const collections = [
 	'review_replays',
 	'repo_chats',
 	'images',
-	'review_images'
+	'review_images',
+	'pull_descriptions'
 ] as const;
 
 const recordSchema = z.object({ id: z.string().min(1).max(200) }).passthrough();

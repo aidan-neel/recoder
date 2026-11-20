@@ -11,6 +11,7 @@ import type {
 	PrCheck,
 	PullComment,
 	PullCommit,
+	PullDescriptionState,
 	PullDiff,
 	PullList,
 	ProgressMessage,
@@ -85,6 +86,10 @@ export interface ApiClient {
 	pullCommits: (repoId: string, number: number) => Promise<PullCommit[]>;
 	pullChecks: (repoId: string, number: number) => Promise<PrCheck[]>;
 	pullComments: (repoId: string, number: number) => Promise<PullComment[]>;
+	/** The AI description of the pull request's head; asking for one that is not written yet starts it. */
+	pullDescription: (repoId: string, number: number) => Promise<PullDescriptionState>;
+	/** Writes the head's description again. */
+	redescribePull: (repoId: string, number: number) => Promise<PullDescriptionState>;
 	postPullComment: (repoId: string, number: number, body: string) => Promise<PullComment>;
 	mergePull: (repoId: string, number: number, input: MergePullInput) => Promise<MergePullResult>;
 	reviews: () => Promise<ReviewListItem[]>;
@@ -178,6 +183,8 @@ export const liveApi: ApiClient = {
 	pullCommits: pullsApi.commits,
 	pullChecks: pullsApi.checks,
 	pullComments: pullsApi.comments,
+	pullDescription: pullsApi.description,
+	redescribePull: pullsApi.describe,
 	postPullComment: pullsApi.comment,
 	mergePull: pullsApi.merge,
 	reviews: reviewsApi.list,

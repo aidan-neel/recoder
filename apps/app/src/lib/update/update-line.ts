@@ -33,7 +33,7 @@ export type UpdateLine =
 			kind: 'available';
 			version: string | null;
 			headline: string;
-			/** `You run 0.2.1 · released Nov 18`. */
+			/** `You run 0.3.0 · released Nov 19`. */
 			since: string;
 			touches: string | null;
 			/** The release notes, in Markdown; null when the updater has none (a git install lists commits). */

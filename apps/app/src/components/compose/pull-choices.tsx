@@ -1,9 +1,8 @@
-import { HoverList, RowButton, SkeletonRows } from '@recoder/ui';
+import { DiffStat, HoverList, RowButton, SkeletonRows } from '@recoder/ui';
 
 import type { ComposeList, PickTarget } from '@/lib/compose/types';
 import type { PullRow } from '@/lib/pulls/types';
 
-import { DiffStat } from '@/components/common/diff-stat';
 import { PullMark } from '@/components/common/pull-mark';
 import { PullMeta } from '@/components/common/pull-meta';
 import { StatusPill } from '@/components/pulls/pull-status';

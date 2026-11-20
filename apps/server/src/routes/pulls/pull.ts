@@ -13,6 +13,7 @@ import {
 import { newestReviews } from '../../forge/pulls/list';
 import { detectProvider } from '../../forge/providers';
 import { db } from '../../store';
+import description from './description';
 import { pullRoute } from './shared';
 import writes from './write';
 
@@ -99,6 +100,7 @@ app.get(
 	})
 );
 
+app.route('/', description);
 app.route('/', writes);
 
 /** Whether an `If-None-Match` header names `headSha`'s ETag, in a list or as a weak tag. */

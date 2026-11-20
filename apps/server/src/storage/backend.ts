@@ -71,9 +71,13 @@ export async function initializeStorage(): Promise<void> {
 			await initializeSharedSettings(sql);
 			await reviewCoordinator.initialize();
 			await initializePublication(sql);
-		}
+		},
+		pullDescriptionMigration
 	]);
 }
+
+/** Version 2 adds a SQLite table; PostgreSQL already stores all collections in `recoder_records`. */
+async function pullDescriptionMigration(): Promise<void> {}
 
 export async function storageDataVersion(): Promise<number> {
 	return postgres ? postgresDataVersion(postgres) : sqliteDataVersion(sqlite());

@@ -1,7 +1,7 @@
 'use client';
 
 import type { PullComment } from '@recoder/shared';
-import { Pill, Skeleton, type PillTone } from '@recoder/ui';
+import { FileChip, Pill, Skeleton, type PillTone } from '@recoder/ui';
 
 import type { PullConversationView } from '@/lib/pull/types';
 import { author } from '@/lib/shell/format';
@@ -19,20 +19,10 @@ const VERDICTS: Record<NonNullable<PullComment['verdict']>, { label: string; ton
 	commented: { label: 'Reviewed', tone: 'neutral' }
 };
 
-/** Where an inline comment sits: `lease.ts:20`. */
-function place(entry: PullComment): string | null {
-	if (!entry.path) return null;
-
-	const file = entry.path.split('/').pop() ?? entry.path;
-
-	return entry.line ? `${file}:${entry.line}` : file;
-}
-
 /** One entry of the timeline: who, what kind, where, when, then what they wrote. */
 function Entry({ entry }: { entry: PullComment }) {
 	const by = author(entry.author.login);
 	const verdict = entry.verdict ? VERDICTS[entry.verdict] : null;
-	const where = place(entry);
 
 	return (
 		<article className="timeline-entry" aria-label={`${by.name} wrote`}>
@@ -40,11 +30,7 @@ function Entry({ entry }: { entry: PullComment }) {
 			<div className="timeline-head">
 				<span className="timeline-author">{entry.byRecoder ? 'Recoder' : by.name}</span>
 				{verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : null}
-				{where ? (
-					<Pill face="code" title={entry.path}>
-						{where}
-					</Pill>
-				) : null}
+				{entry.path ? <FileChip path={entry.path} line={entry.line} framed /> : null}
 				<Age at={entry.createdAt} className="timeline-age" />
 			</div>
 			{entry.body ? (

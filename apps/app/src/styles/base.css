@@ -294,23 +294,6 @@ a.ref-chip {
 	flex-shrink: 0;
 }
 
-/* Lines added and removed: mono, the sign carries the meaning with the hue. */
-.diff-stat {
-	display: inline-flex;
-	flex-shrink: 0;
-	gap: 8px;
-	font-family: var(--font-code);
-	font-size: 12px;
-	font-variant-numeric: tabular-nums;
-	line-height: 16px;
-}
-.diff-stat [data-sign='add'] {
-	color: var(--success);
-}
-.diff-stat [data-sign='del'] {
-	color: var(--danger);
-}
-
 /* The pull request mark, tinted by state. */
 .pull-mark {
 	width: 16px;
@@ -430,7 +413,7 @@ a.ref-chip {
 .app-skin [data-ui='pill'][data-face='code'] {
 	font-size: 11px;
 }
-.app-skin [data-ui='pill'] .diff-stat {
+.app-skin [data-ui='pill'] [data-ui='diff-stat'] {
 	gap: 6px;
 	font-size: inherit;
 }

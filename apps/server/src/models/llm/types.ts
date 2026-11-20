@@ -35,6 +35,8 @@ export interface ChatOptions {
 	/** Fixed seed for deterministic output. Only sent when set (some servers reject unknown fields). */
 	seed?: number;
 	maxTokens?: number;
+	/** Override the default number of retries for a transient provider failure. */
+	maxRetries?: number;
 	/**
 	 * The call's own budget, counted from when it gets a concurrency slot. Unset, it is
 	 * {@link DEFAULT_TIMEOUT_MS}, or none when `settleBy` is set.

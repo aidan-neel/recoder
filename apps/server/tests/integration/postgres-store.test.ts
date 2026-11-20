@@ -43,7 +43,10 @@ integration('concurrent PostgreSQL startup applies and records the migration onc
 		await transaction`CREATE TABLE migration_fixture (id int)`;
 	};
 
-	await Promise.all([migratePostgres(first, [migration]), migratePostgres(second, [migration])]);
+	await Promise.all([
+		migratePostgres(first, [unrestricted, migration]),
+		migratePostgres(second, [unrestricted, migration])
+	]);
 
 	expect(applied).toBe(1);
 	expect(await postgresDataVersion(second)).toBe(DATA_VERSION);

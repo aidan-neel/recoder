@@ -182,6 +182,13 @@ export async function withUsageMetrics<T>(ownerId: string, scope: TokenScope, ru
 	}
 }
 
+/** A pull description costs tokens, but it is not part of a stored review or conversation. */
+export function withDescriptionUsage<T>(ownerId: string, person: string, run: () => T): T {
+	return context.run({ ownerId, scope: 'description', kind: 'other', person }, () =>
+		withLlmLane({ id: ownerId, recordWait: recordQueueDelay }, run)
+	);
+}
+
 const stages = new AsyncLocalStorage<TokenStage>();
 const purposes = new AsyncLocalStorage<string>();
 
@@ -341,7 +348,7 @@ export function trackTokenCall(
 			person: owner?.person ?? null,
 			kind: owner?.kind ?? 'other',
 			ownerId: owner?.kind === 'review' || owner?.kind === 'chat' ? owner.ownerId : null,
-			...(call.stage && { stage: call.stage }),
+			...(call.scope === 'description' ? { stage: 'description' as const } : call.stage && { stage: call.stage }),
 			...(call.purpose && { purpose: call.purpose }),
 			provider: call.provider,
 			model: call.model,
@@ -360,7 +367,7 @@ export function trackTokenCall(
 		const row = telemetry();
 
 		queueFor(queueId).push(async () => {
-			if (owner) {
+			if (owner && owner.scope !== 'description') {
 				await reviewMetrics.update(owner.ownerId, (metrics) => {
 					if (!metrics) return metrics;
 

@@ -61,10 +61,12 @@ export function createSession(client: ApiClient, list: ListStore, repoId: string
 
 			const stopChecks = pages.pollChecks();
 			const stopMergeability = pages.pollMergeability();
+			const stopDescription = pages.pollDescription();
 
 			return () => {
 				stopChecks();
 				stopMergeability();
+				stopDescription();
 				review.close();
 			};
 		}

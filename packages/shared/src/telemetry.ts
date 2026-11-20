@@ -26,8 +26,8 @@ export interface ModelCallRow {
 	kind: ModelCallKind;
 	/** The review's or chat's id; null for `other` calls. */
 	ownerId: string | null;
-	/** The kind of agent that made the call; absent on calls made outside an agent run. */
-	stage?: TokenStage;
+	/** The kind of work that made the call, when known. */
+	stage?: TokenStage | 'description';
 	/** Agent session identifier; absent on older rows and engines that do not report it. */
 	session?: string;
 	/** One-based prompt index within that agent session. */

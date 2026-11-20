@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Finding, VerificationEvidence } from '@recoder/shared';
 
-import { baseSentence, bugView, shortWhere } from '../../src/lib/bugs/bug-view';
+import { baseSentence, bugView } from '../../src/lib/bugs/bug-view';
 
 const NO_COMMENTS = { findingComments: undefined };
 
@@ -56,7 +56,7 @@ describe('bugView evidence', () => {
 		});
 	});
 
-	test('a traced finding shows its execution path with short locations and no proof', () => {
+	test('a traced finding shows its execution path and no proof', () => {
 		const claim = {
 			trigger: 'A retry',
 			executionPath: [{ file: 'apps/server/src/review/pipeline/run.ts', line: 40, note: 'Retries the step' }],
@@ -71,7 +71,10 @@ describe('bugView evidence', () => {
 		);
 
 		expect(view).toMatchObject({ evidence: 'traced', evidenceLabel: 'Traced in code', proof: null, rule: null });
-		expect(view.trace).toEqual([{ where: 'review/pipeline/run.ts:40', note: 'Retries the step' }]);
+
+		expect(view.trace).toEqual([
+			{ file: 'apps/server/src/review/pipeline/run.ts', line: 40, note: 'Retries the step' }
+		]);
 	});
 
 	test('a rule finding cites its rule', () => {
@@ -138,12 +141,5 @@ describe('baseSentence', () => {
 		expect(baseSentence({ exitCode: 1, differs: false })).toBe('Ends the same way on the base branch.');
 		expect(baseSentence({ unavailable: 'The base branch did not build.' })).toBe('The base branch did not build.');
 		expect(baseSentence(undefined)).toBeNull();
-	});
-});
-
-describe('shortWhere', () => {
-	test('keeps the two nearest folders and the file name, with the line when there is one', () => {
-		expect(shortWhere('apps/server/src/review/session/lease.ts', 20)).toBe('review/session/lease.ts:20');
-		expect(shortWhere('src/a.ts', null)).toBe('src/a.ts');
 	});
 });

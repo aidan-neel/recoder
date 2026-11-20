@@ -497,8 +497,24 @@ The pull request screens show facts, not sentences about facts.
   gap. Paths, branches, commits and commands use `face="code"`. A pill whose
   text may not fit ends in an ellipsis and shows the whole on hover.
 - **Colour only for meaning.** Severity (high, medium, low, with a dot), pass
-  or fail, and a reproduced bug are tinted. Category, traced, rule, file and
-  time stay neutral; an icon tells them apart.
+  or fail, and a reproduced bug are tinted. Category, traced, rule and time
+  stay neutral; an icon tells them apart. A file's type mark is the one
+  exception: it keeps its language's hue, because the hue is how a reader
+  spots a TypeScript file among Markdown ones.
+- **One file chip.** Wherever the app names a file (a diff's header, the file
+  tree, a bug's place, a rule's source, a suggested fix, a comment's line, a
+  chat's tool steps), it is the kit's `FileChip`: the type's mark, then the
+  file's name only, with `:line` and its size when they matter. The whole
+  path is its tooltip and its accessible name, so no list prints folders.
+  The mark is the language's (`simple-icons`) in its own hue, eased toward
+  the ink on each theme so a deep brand colour still reads, and a brand near
+  black or white takes the text colour; a kind of file no language owns
+  (an image, a table, a lock file, an archive) gets a Phosphor glyph, and an
+  unknown name a plain page. A chip is bare in a list and framed (a tint,
+  the badge height) where it stands alone among words or badges. A picker
+  that searches files (Files, the composer's +) keeps each row's folder as
+  its second line, because there the folder is what tells two `index.ts`
+  apart.
 - **Not every word is a badge.** Titles, the model's prose and the person's
   comments stay text; only a link in a person's words shows as an embed.
 - **Long prose is clamped.** Model-written text (what changed, the
@@ -880,8 +896,8 @@ tree.
   every file.
 - **A file** is a card with the kit's card edge, drawn over its content so
   the coloured lines and the sticky header never cover it. Its 40px header
-  stays in view while its diff scrolls: caret, the language's mark, the
-  name in ink and its folder quiet (the folder gives way first), then its
+  stays in view while its diff scrolls: caret, then the file chip (the
+  type's mark and the name in ink; the folder is its tooltip), then its
   findings pill, the size and Viewed. Marking it viewed shuts it; a diff
   over 800 lines starts shut behind Show it; a renamed or binary file says
   it has no lines. Off screen it skips layout and paint, and its diff

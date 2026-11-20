@@ -28,8 +28,6 @@ export interface BugView {
 	file: string;
 	line: number | null;
 	endLine: number | null;
-	/** `review/session/lease.ts:20`, with the long folder prefix dropped. */
-	where: string;
 	evidence: EvidenceClass;
 	/** The shared label for `evidence`. */
 	evidenceLabel: string;
@@ -38,7 +36,7 @@ export interface BugView {
 	/** Set when `evidence` is `reproduced`. */
 	proof: BugProof | null;
 	/** Set when `evidence` is `traced`: how execution reaches the problem, one step per row. */
-	trace: { where: string; note: string }[];
+	trace: { file: string; line: number | null; note: string }[];
 	/** Set when `evidence` is `rule`. */
 	rule: FindingRule | null;
 	/** The suggested fix: a unified diff when the review checked one, else the reviewer's words; null when it gave none. */

@@ -7,9 +7,15 @@ describe('pullTabOf', () => {
 		expect(pullTabOf('bugs')).toBe('review');
 	});
 
-	test('falls back to Changes for no tab or one the page does not have', () => {
-		expect(pullTabOf(null)).toBe('changes');
-		expect(pullTabOf('constructor')).toBe('changes');
+	test('names no tab for an address without one or with one the page does not have', () => {
+		expect(pullTabOf(null)).toBeNull();
+		expect(pullTabOf('constructor')).toBeNull();
+	});
+
+	test('names Changes in a link to it, since an address without a tab may land elsewhere', () => {
+		const tab = new URL(pullHref('', 'r1', 12, 'changes'), 'http://app').searchParams.get('tab');
+
+		expect(pullTabOf(tab)).toBe('changes');
 	});
 
 	test('reads back the tab a pull request link names', () => {

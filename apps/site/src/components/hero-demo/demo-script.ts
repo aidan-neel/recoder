@@ -38,7 +38,7 @@ interface Demo {
  * The hero demo's script: apps/app's own screens on its sample, on a
  * timeline of about 17 seconds. It opens the reviewed pull request from the
  * list, reads its changes, dismisses one bug and posts another, and ends on
- * the summary. The two decisions go through the sample's client, the way the
+ * the description. The two decisions go through the sample's client, the way the
  * buttons send them, so the page changes as it does for a person. `show`
  * gets each new frame.
  */
@@ -77,7 +77,7 @@ export function createDemo(show: (view: DemoView) => void): Demo {
 		view.api.postFinding(SAMPLE_REVIEW.id, POSTED_BUG).catch(reportError);
 	});
 
-	after(2600, () => change({ screen: 'summary' }));
+	after(2600, () => change({ screen: 'description' }));
 	after(3200, () => change({ shown: false }));
 	after(320, reset);
 

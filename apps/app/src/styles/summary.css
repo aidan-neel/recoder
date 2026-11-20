@@ -236,3 +236,282 @@
 	background: var(--primary);
 	color: var(--on-primary);
 }
+
+/* ───────── Description: the change as a model wrote it, in groups, with the findings and notes beside ───────── */
+/* The rail sits beside the reading while both fit, and under it when they do not. */
+.description-layout {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	column-gap: 48px;
+}
+.description-layout > .summary-column {
+	min-width: 0;
+	flex: 1 1 520px;
+}
+.description-rail {
+	position: sticky;
+	top: 0;
+	display: flex;
+	min-width: 0;
+	flex: 1 0 260px;
+	flex-direction: column;
+	gap: 24px;
+	padding-block: 24px 48px;
+}
+@media (min-width: 1100px) {
+	.description-rail {
+		flex-grow: 0;
+		flex-basis: 288px;
+	}
+}
+
+.description-meta {
+	display: flex;
+	min-height: 28px;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 8px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 20px;
+}
+.description-by {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.description-by .meta-sep {
+	margin-inline: 0;
+}
+.description-by .mono {
+	font-size: 11.5px;
+}
+.description-by-mark {
+	width: 13px;
+	height: 13px;
+	color: var(--text-subtle);
+}
+.description-author-toggle [data-ui='icon'],
+.description-author-toggle svg {
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+[data-state='open'] > .description-meta .description-author-toggle svg {
+	rotate: 180deg;
+}
+.description-redo {
+	margin-left: auto;
+}
+
+/* A group: its place, title and note as the toggle, its files as chips under them, how it works inside. */
+.change-groups {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.change-group {
+	padding-block: 6px 12px;
+	border-top: 1px solid var(--line-subtle);
+}
+.change-group-head {
+	display: grid;
+	width: calc(100% + 16px);
+	align-items: start;
+	margin-inline: -8px;
+	padding: 6px 8px;
+	border: 0;
+	border-radius: var(--radius-control);
+	background: none;
+	color: inherit;
+	cursor: pointer;
+	font: inherit;
+	grid-template-columns: 28px minmax(0, 1fr) auto;
+	text-align: left;
+	transition: background-color var(--dur-hover) var(--ease-hover);
+}
+.change-group-head:hover {
+	background: rgb(var(--wash-rgb) / 0.05);
+}
+.change-group-head:focus-visible {
+	box-shadow: var(--focus-ring);
+	outline: none;
+}
+.change-group-place {
+	display: inline-grid;
+	width: 20px;
+	height: 20px;
+	border-radius: 5px;
+	box-shadow: var(--shadow-edge);
+	color: var(--text-subtle);
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
+	place-items: center;
+}
+.change-group-text {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+	padding-right: 16px;
+}
+.change-group-title {
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+	line-height: 20px;
+}
+.change-group-note {
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	line-height: 18px;
+}
+.change-group-facts {
+	display: flex;
+	height: 20px;
+	align-items: center;
+	gap: 10px;
+}
+.change-group-caret {
+	width: 14px;
+	height: 14px;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.change-group[data-state='open'] .change-group-caret {
+	rotate: 180deg;
+}
+.change-group-files {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 4px 0 0 28px;
+	padding: 0;
+	list-style: none;
+}
+.change-group-body {
+	padding-left: 28px;
+}
+.change-group-explanation {
+	padding-top: 10px;
+	color: var(--text-secondary);
+}
+.change-group-explanation [data-ui='markdown'] {
+	font-size: var(--font-size-body);
+	line-height: 22px;
+}
+.change-group-body > .finding-links {
+	padding-top: 8px;
+}
+
+/* A finding as a line that opens it: its severity's square, its title, then its severity and file. */
+.finding-links {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.finding-link {
+	--finding-mark: var(--sev-low);
+	--finding-ink: var(--sev-low);
+}
+.finding-link[data-tone='high'] {
+	--finding-mark: var(--sev-high-icon);
+	--finding-ink: var(--sev-high);
+}
+.finding-link[data-tone='medium'] {
+	--finding-mark: var(--sev-medium);
+	--finding-ink: var(--sev-medium);
+}
+.finding-link-button {
+	display: grid;
+	width: calc(100% + 16px);
+	align-items: start;
+	margin-inline: -8px;
+	padding: 6px 8px;
+	border: 0;
+	border-radius: var(--radius-control);
+	background: none;
+	color: inherit;
+	column-gap: 10px;
+	cursor: pointer;
+	font: inherit;
+	grid-template-columns: 8px minmax(0, 1fr);
+	text-align: left;
+	transition: background-color var(--dur-hover) var(--ease-hover);
+}
+.finding-link-button:hover {
+	background: rgb(var(--wash-rgb) / 0.05);
+}
+.finding-link-button:focus-visible {
+	box-shadow: var(--focus-ring);
+	outline: none;
+}
+.finding-link-mark {
+	width: 8px;
+	height: 8px;
+	margin-top: 6px;
+	border-radius: 2px;
+	background: var(--finding-mark);
+}
+.finding-link-text {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+}
+.finding-link-title {
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	line-height: 20px;
+}
+.finding-link-meta {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 18px;
+}
+.finding-link-severity {
+	color: var(--finding-ink);
+	font-weight: 500;
+}
+/* In a group there is room for one line: the title, then its severity and file at the right. */
+.change-group .finding-link-text {
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+.change-group .finding-link-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.change-group .finding-link-meta {
+	flex-shrink: 0;
+}
+
+.description-notes {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0;
+	padding-left: 16px;
+	color: var(--text-muted);
+	list-style: disc;
+}
+.description-notes li::marker {
+	color: var(--text-faint);
+}
+.description-notes [data-ui='markdown'] {
+	font-size: var(--font-size-label);
+	line-height: 20px;
+}
+.description-rail-quiet {
+	color: var(--text-faint);
+	font-size: var(--font-size-label);
+	line-height: 20px;
+}

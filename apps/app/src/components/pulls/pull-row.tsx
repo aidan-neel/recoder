@@ -2,6 +2,7 @@
 
 import {
 	Button,
+	DiffStat,
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
@@ -17,7 +18,6 @@ import { copyLink } from '@/lib/shell/copy-link';
 import { useIntent } from '@/lib/shell/intent';
 import { pullHref } from '@/lib/shell/routes';
 
-import { DiffStat } from '@/components/common/diff-stat';
 import { Link } from '@/components/common/link';
 import { PullMark } from '@/components/common/pull-mark';
 import { PullMeta } from '@/components/common/pull-meta';

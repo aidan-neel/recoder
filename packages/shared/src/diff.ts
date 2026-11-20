@@ -75,6 +75,10 @@ function unquote(path: string): string {
  * in the name) spans several space-separated tokens up to its closing quote.
  */
 function gitHeaderPath(header: string): string {
+	const samePath = /^diff --git a\/(.+) b\/\1$/.exec(header);
+
+	if (samePath) return `a/${samePath[1]}`;
+
 	const parts = header.split(' ');
 	let rawPath = parts[2] ?? 'unknown';
 
@@ -102,8 +106,9 @@ function blankFile(path: string): FileDiff {
  * to give orphan hunks a file. `\ No newline at end of file` lines are skipped. A hunk holds exactly the lines its
  * header counts, so a removed `-- comment` or an added `++x` inside it is content, not a file header, and the empty
  * entry a trailing newline leaves after the last hunk is not a context line.
+ * Consumers that need the file inventory can also retain entries with no text hunks.
  */
-export function parseUnifiedDiff(input: string): FileDiff[] {
+export function parseUnifiedDiff(input: string, options?: { includeHunkless?: boolean }): FileDiff[] {
 	const files: FileDiff[] = [];
 	let current: FileDiff | null = null;
 	let hunk: DiffHunk | null = null;
@@ -226,7 +231,9 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 			file.status = 'deleted';
 	}
 
-	return files.filter((f) => f.hunks.length > 0 || f.status === 'renamed' || f.status === 'copied');
+	return options?.includeHunkless
+		? files
+		: files.filter((f) => f.hunks.length > 0 || f.status === 'renamed' || f.status === 'copied');
 }
 
 /** File lines without the empty entry a trailing newline leaves behind. */

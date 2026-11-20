@@ -241,8 +241,3 @@
 .attach-dialog {
 	max-width: 560px;
 }
-.attach-counts {
-	font-family: var(--font-code);
-	font-size: var(--font-size-meta);
-	font-variant-numeric: tabular-nums;
-}

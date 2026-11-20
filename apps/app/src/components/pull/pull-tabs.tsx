@@ -13,8 +13,8 @@ import { type PageTab, PageTabs } from '@/components/common/page-tabs';
 import { reviewTabMark } from './review-tab-mark';
 
 const LABELS: Record<PullTab, string> = {
+	description: 'Description',
 	changes: 'Changes',
-	summary: 'Summary',
 	review: 'Review',
 	commits: 'Commits'
 };
@@ -26,9 +26,9 @@ interface PullTabsProps {
 	counts: PullPageView['counts'];
 }
 
-/** The number a tab wears: files, open bugs or commits. Summary has none. */
+/** The number a tab wears: files, open bugs or commits. Description has none. */
 function countOf(tab: PullTab, counts: PullPageView['counts']): number | null {
-	return { changes: counts.files, summary: null, review: counts.bugs, commits: counts.commits }[tab];
+	return { changes: counts.files, description: null, review: counts.bugs, commits: counts.commits }[tab];
 }
 
 /**
@@ -43,8 +43,8 @@ export function PullTabs({ repoId, number, tab, counts }: PullTabsProps) {
 	const warmCommits = useWarmCommits();
 
 	useKeys({
-		'1': () => open('changes'),
-		'2': () => open('summary'),
+		'1': () => open('description'),
+		'2': () => open('changes'),
 		'3': () => open('review'),
 		'4': () => open('commits')
 	});
@@ -59,7 +59,7 @@ export function PullTabs({ repoId, number, tab, counts }: PullTabsProps) {
 			count: marked ? null : countOf(id, counts),
 			tone: id === 'review' ? 'bugs' : undefined,
 			adornment: marked ? review : undefined,
-			warm: id === 'commits' || id === 'summary' ? warmCommits : undefined
+			warm: id === 'commits' || id === 'description' ? warmCommits : undefined
 		};
 	});
 
