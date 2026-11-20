@@ -6,7 +6,7 @@ const DEVIN_MODEL_PREFIX = 'devin:';
 /** What `devin models list` leaves out for a model, and the window most of them have. */
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 
-const LINE = /^\s{2}([a-z0-9][\w.-]*)\s{2,}(.+?)\s{2,}\[(\d+)([KM])? context\b/i;
+const LINE = /^\s{2}([a-z0-9][\w.-]*)\s{2,}(.+?)\s{2,}\[(\d+(?:\.\d+)?)([KM])? context\b/i;
 
 /** `262K` → 262000, `1M` → 1000000, a bare count as it is. */
 function contextWindow(count: string, unit: string | undefined): number {
