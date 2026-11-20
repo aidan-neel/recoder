@@ -33,6 +33,8 @@ function frameworkEntry(file: string): boolean {
  * symbol whose name was not fully searched for is never reported.
  */
 export function deadCodeResults(model: ChangeModel | null, inventory: ReviewInventory): DetectorResult[] {
+	if (process.env.RECODER_SKIP_UNUSED_EXPORTS === '1') return [];
+
 	const sources = new Set(inventory.files.filter((file) => file.classification === 'source').map((file) => file.path));
 
 	return (model?.symbols ?? [])

@@ -37,6 +37,25 @@ function model(symbols: ChangedSymbol[], p95 = { lines: 40, maxDepth: 3, params:
 }
 
 describe('deadCodeResults', () => {
+	test('the library API ablation skips local-reference heuristics without disabling other detectors', () => {
+		const previous = process.env.RECODER_SKIP_UNUSED_EXPORTS;
+		const changed = model([symbol({ name: 'publicApi', metrics: { lines: 200, maxDepth: 7, params: 8 } })]);
+
+		try {
+			delete process.env.RECODER_SKIP_UNUSED_EXPORTS;
+			expect(deadCodeResults(changed, INVENTORY)).toHaveLength(1);
+			process.env.RECODER_SKIP_UNUSED_EXPORTS = '1';
+			expect(deadCodeResults(changed, INVENTORY)).toEqual([]);
+			expect(deadCodeResults(null, INVENTORY)).toEqual([]);
+			expect(complexityResults(changed, addedLines(INVENTORY))).toHaveLength(1);
+			process.env.RECODER_SKIP_UNUSED_EXPORTS = '0';
+			expect(deadCodeResults(changed, INVENTORY)).toHaveLength(1);
+		} finally {
+			if (previous === undefined) delete process.env.RECODER_SKIP_UNUSED_EXPORTS;
+			else process.env.RECODER_SKIP_UNUSED_EXPORTS = previous;
+		}
+	});
+
 	test('flags an added export that only its own file names, even with a test file beside the module', () => {
 		const results = deadCodeResults(
 			model([

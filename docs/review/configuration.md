@@ -10,6 +10,8 @@ The server reads the environment variables below. All are optional. An unset var
 - **Kill switches.** On by default. Setting one turns a stage off: `RECODER_EXEC=off`, `RECODER_OVERLAY=off`, `RECODER_LANES=off`, `RECODER_BASELINE_CACHE=off`, `RECODER_PACKAGE_PREP=0`, `RECODER_CANDIDATE_REPAIR=0`. Any other value leaves the stage on.
 - **Tuning knobs.** Every other variable. They size, place or credential work and do not add or remove a stage.
 
+**RECODER_SKIP_UNUSED_EXPORTS**: Experimental ablation, off by default. Set to `1` to skip the deterministic added-export/no-external-reference heuristic, which cannot establish whether a library's public API has external consumers. It also suppresses genuine orphan exports from this detector. Compiler diagnostics, model findings and all other detectors are unchanged.
+
 ## Model fallback
 
 Saved model settings win. These variables are the fallback, read by `effectiveReviewEnv` in `apps/server/src/review/session/review-settings.ts`.
