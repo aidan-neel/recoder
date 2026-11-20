@@ -21,11 +21,12 @@ console.log(JSON.stringify({refusal, result: await response.json(), hidden:confi
 
 async function open(stage: 'verifier' | 'reviewer', flag?: string, tools = ['read_file', 'run']) {
 	const env = await fakeDevin({
-		FAKE_DEVIN_MODE: stage === 'verifier' && flag === '1' && tools.length ? 'blockedtool' : 'reply',
+		FAKE_DEVIN_MODE: stage === 'verifier' && flag !== '0' && tools.length ? 'blockedtool' : 'reply',
 		BLOCKED_TOOL_CALL: BLOCKED_CALL
 	});
 
 	if (flag !== undefined) env.RECODER_DEVIN_MCP_ONLY = flag;
+	else delete env.RECODER_DEVIN_MCP_ONLY;
 
 	const { run } = await openCollectingRun(new DevinAgent(env), {
 		model: 'swe-2-flash-medium',
@@ -37,8 +38,8 @@ async function open(stage: 'verifier' | 'reviewer', flag?: string, tools = ['rea
 	return { run, log: env.FAKE_DEVIN_LOG! };
 }
 
-test('a denied builtin gets a corrective result and the session can continue through its leased MCP tools', async () => {
-	const { run } = await open('verifier', '1');
+test('default verifier routing corrects a stale builtin and continues through its leased MCP tools', async () => {
+	const { run } = await open('verifier');
 
 	try {
 		const reply = await run.prompt('Verify.', { tools: true, timeoutMs: 10_000 });
@@ -70,9 +71,9 @@ test('the hook names only an offered equivalent and never grants missing shell a
 	}
 });
 
-test('default, non-verifier and toolless sessions retain their existing permission policy', async () => {
+test('opted-out, non-verifier and toolless sessions retain their existing permission policy', async () => {
 	for (const [stage, flag, tools] of [
-		['verifier', undefined, ['read_file']],
+		['verifier', '0', ['read_file']],
 		['reviewer', '1', ['read_file']],
 		['verifier', '1', []]
 	] as const) {

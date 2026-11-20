@@ -69,7 +69,7 @@ export class DevinRun extends SessionRun<RunFiles> {
 		const run = new DevinRun(host, options, root, runFiles(root));
 
 		const tools =
-			host.env.RECODER_DEVIN_MCP_ONLY === '1' && options.stage === 'verifier' && run.lease
+			host.env.RECODER_DEVIN_MCP_ONLY !== '0' && options.stage === 'verifier' && run.lease
 				? mcpOnlyTools(run.lease.name, options.tools)
 				: {};
 
