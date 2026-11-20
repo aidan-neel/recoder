@@ -10,12 +10,16 @@ const { track } = useTempStore('finding-tiers-');
 
 test('legacy full records and cached summaries gain tiers on read without rewriting the stored review', async () => {
 	const review = testReview({
-		findings: (['error', 'warning', 'info'] as FindingSeverity[]).map((severity) => ({
-			id: severity,
-			file: 'a.ts',
-			message: 'm',
-			severity
-		}))
+		findings: [
+			...(['error', 'warning', 'info'] as FindingSeverity[]).map((severity) => ({
+				id: severity,
+				file: 'a.ts',
+				message: 'm',
+				severity
+			})),
+			{ id: 'explicit-fyi', file: 'a.ts', message: 'note', severity: 'info', tier: 'fyi' }
+		],
+		unconfirmed: [{ id: 'legacy-low', file: 'a.ts', message: 'risk', severity: 'info' }]
 	});
 
 	const records = collection<typeof review>('reviews');
@@ -26,9 +30,10 @@ test('legacy full records and cached summaries gain tiers on read without rewrit
 	const cached: ReviewListItem = { ...review };
 
 	sqlite().query('INSERT INTO review_list_items (id, value) VALUES (?, ?)').run(review.id, JSON.stringify(cached));
-	expect((await db.reviews.get(review.id))?.findings.map((f) => f.tier)).toEqual(['bug', 'warning', 'fyi']);
-	expect((await db.reviews.list()).find((r) => r.id === review.id)?.findings[2].tier).toBe('fyi');
-	expect((await db.reviews.summaries())[0].findings.map((f) => f.tier)).toEqual(['bug', 'warning', 'fyi']);
-	expect((await records.get(review.id))?.findings.some((f) => f.tier !== undefined)).toBe(false);
+	expect((await db.reviews.get(review.id))?.findings.map((f) => f.tier)).toEqual(['bug', 'warning', 'warning', 'fyi']);
+	expect((await db.reviews.get(review.id))?.unconfirmed?.[0].tier).toBe('warning');
+	expect((await db.reviews.list()).find((r) => r.id === review.id)?.findings[2].tier).toBe('warning');
+	expect((await db.reviews.summaries())[0].findings.map((f) => f.tier)).toEqual(['bug', 'warning', 'warning', 'fyi']);
+	expect((await records.get(review.id))?.findings).toEqual(review.findings);
 	expect(await db.reviews.get('absent')).toBeUndefined();
 });

@@ -67,6 +67,8 @@ describe('publishHeldBack for repository rules', () => {
 	test('retains FYI rule observations with their FindingRule without promoting them as violations', () => {
 		const candidate = belowBarRuleCandidate(MANDATORY_RULE);
 
+		candidate.tier = 'fyi';
+
 		publishHeldBack(candidate, LEDGER);
 
 		expect(candidate.publishedBy).toBeUndefined();
@@ -92,6 +94,8 @@ describe('publishHeldBack for repository rules', () => {
 
 	test('FYI advisory observations bypass the reporting bar without a publication exception', () => {
 		const candidate = belowBarRuleCandidate(ADVISORY_RULE);
+
+		candidate.tier = 'fyi';
 
 		publishHeldBack(candidate, LEDGER);
 

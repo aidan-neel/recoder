@@ -127,10 +127,10 @@ test('each dropped candidate names the stage that dropped it', () => {
 	expect(candidate({ category: 'performance' }, 'correctness').dropStage).toBe('category');
 });
 
-test('a legacy low finding becomes FYI and is never held below the reporting bar', () => {
+test('a legacy low finding remains a reportable warning', () => {
 	const low = candidate({ severity: 'low' });
 
-	expect([low.valid, low.tier, low.belowBar, low.dropStage]).toEqual([true, 'fyi', undefined, undefined]);
+	expect([low.valid, low.tier, low.belowBar, low.dropStage]).toEqual([true, 'warning', undefined, undefined]);
 	expect(candidate({ severity: 'medium' }).belowBar).toBeUndefined();
 	expect(candidate({ severity: 'low' }, null, { ...context(), reportLowSeverity: true }).belowBar).toBeUndefined();
 });
@@ -142,7 +142,7 @@ test('a low-severity finding that fails validation is dropped at that stage, not
 });
 
 test('FYI stays in review data regardless of the reporting bar', () => {
-	const held = verified(candidate({ severity: 'low' }));
+	const held = verified(candidate({ severity: 'low', tier: 'fyi' }));
 
 	expect(consolidateFindings([held], INVENTORY)).toMatchObject([{ tier: 'fyi' }]);
 	expect(toFinding(held)).not.toHaveProperty('belowBar');
@@ -151,7 +151,7 @@ test('FYI stays in review data regardless of the reporting bar', () => {
 test('FYI and a warning about the same line remain separate without promoting the observation', () => {
 	const ctx = context();
 	const above = verified(candidate({ severity: 'medium', line: 2 }, null, ctx));
-	const below = verified(candidate({ severity: 'low', line: 2 }, null, ctx), 'run');
+	const below = verified(candidate({ severity: 'low', tier: 'fyi', line: 2 }, null, ctx), 'run');
 	const [finding, ...rest] = consolidateFindings([below, above], INVENTORY);
 
 	expect(rest).toMatchObject([{ tier: 'fyi' }]);
@@ -191,7 +191,7 @@ test('validateCandidate drops findings that break their category or lens require
 });
 
 test('FYI is not promoted by legacy reproduction evidence', () => {
-	const held = verified(candidate({ severity: 'low' }), 'run');
+	const held = verified(candidate({ severity: 'low', tier: 'fyi' }), 'run');
 
 	publishHeldBack(held, null);
 
@@ -201,8 +201,8 @@ test('FYI is not promoted by legacy reproduction evidence', () => {
 });
 
 test('FYI retention does not depend on a trace or a changed baseline result', () => {
-	const traced = verified(candidate({ severity: 'low' }));
-	const ran = verified(candidate({ severity: 'low' }), 'run');
+	const traced = verified(candidate({ severity: 'low', tier: 'fyi' }));
+	const ran = verified(candidate({ severity: 'low', tier: 'fyi' }), 'run');
 	const evidence = { command: 'bun t.ts', exitCode: 1, observed: 'x', evidenceId: 'E1' };
 
 	const sameOnBase = {
@@ -233,7 +233,7 @@ function lowRule(ruleId = 'R1', over: Partial<ReviewerFinding> = {}): CandidateF
 }
 
 test('FYI rule observations retain their category without being promoted to rule violations', () => {
-	const held = verified(lowRule(), 'rule');
+	const held = verified(lowRule('R1', { tier: 'fyi' }), 'rule');
 
 	publishHeldBack(held, RULES);
 
@@ -242,7 +242,7 @@ test('FYI rule observations retain their category without being promoted to rule
 });
 
 test('a retained FYI with an unknown rule is not promoted by old rule evidence', () => {
-	const held = verified({ ...lowRule(), ruleId: 'R9' }, 'rule');
+	const held = verified({ ...lowRule('R1', { tier: 'fyi' }), ruleId: 'R9' }, 'rule');
 
 	publishHeldBack(held, RULES);
 

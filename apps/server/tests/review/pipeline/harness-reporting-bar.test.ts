@@ -16,7 +16,7 @@ const DIFF = addedFile('src/a.ts', 5);
 test('FYI is retained without verifier spend or bug-funnel counts even when code cannot run', async () => {
 	let verifiers = 0;
 
-	stubFindings([{ ...finding('quiet problem', 'low'), line: 1 }], () => verifiers++);
+	stubFindings([{ ...finding('quiet problem', 'low'), tier: 'fyi', line: 1 }], () => verifiers++);
 
 	const result = await runAdaptiveReview({ diff: DIFF, sandboxPath: null });
 

@@ -10,7 +10,8 @@ export const FINDING_TIERS = ['fyi', 'warning', 'bug'] as const;
 /** Bugs are probable defects; warnings are risky, uncertain or lower-impact problems; FYI is non-defect commentary. */
 export type FindingTier = (typeof FINDING_TIERS)[number];
 
-const LEGACY_TIERS: Record<FindingSeverity, FindingTier> = { error: 'bug', warning: 'warning', info: 'fyi' };
+/** Stored info findings were reportable low-severity risks, not the model's discarded informational notes. */
+const LEGACY_TIERS: Record<FindingSeverity, FindingTier> = { error: 'bug', warning: 'warning', info: 'warning' };
 
 /** Resolves a stored finding's canonical tier without requiring a data migration. */
 export function findingTier(finding: { tier?: FindingTier; severity: FindingSeverity }): FindingTier {
@@ -19,7 +20,7 @@ export function findingTier(finding: { tier?: FindingTier; severity: FindingSeve
 
 /** The compatibility severity for clients that have not adopted tiers. */
 export function findingSeverity(tier: FindingTier): FindingSeverity {
-	return FINDING_SEVERITIES.find((severity) => LEGACY_TIERS[severity] === tier)!;
+	return FINDING_SEVERITIES[FINDING_TIERS.indexOf(tier)];
 }
 
 export interface FindingLocation {

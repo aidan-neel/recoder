@@ -10,19 +10,20 @@ import {
 
 const runs = (...keys: string[][]) => keys.map((run) => new Set(run));
 
-test('FYI is excluded from scoring counts and stability, including legacy informational findings', () => {
+test('FYI is excluded from scoring counts and stability while legacy low findings still count', () => {
 	const metrics = stabilityMetrics([
 		[finding({ tier: 'fyi', fingerprint: 'note' }), finding({ severity: 'info', fingerprint: 'old-note' })],
 		[]
 	]);
 
 	expect(metrics.perRun.map((run) => [run.findings, run.bugs])).toEqual([
-		[0, 0],
+		[1, 1],
 		[0, 0]
 	]);
 
-	expect(metrics.findings).toEqual([]);
-	expect(metrics.strict.meanStability).toBe(1);
+	expect(metrics.findings).toHaveLength(1);
+	expect(metrics.findings[0].key).toBe('old-note');
+	expect(metrics.strict.meanStability).toBe(0.5);
 });
 
 function finding(overrides: Partial<EvalFinding>): EvalFinding {

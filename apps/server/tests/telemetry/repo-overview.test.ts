@@ -5,7 +5,7 @@ import { testReview } from '../helpers/review';
 
 const NOW = new Date('2026-11-16T12:00:00.000Z');
 
-test('FYI stays in findings totals without making a review buggy or creating bug hotspots', () => {
+test('FYI stays out of bug hotspots while legacy low findings still count as bugs', () => {
 	const result = overview({
 		reviews: [
 			testReview({
@@ -17,8 +17,8 @@ test('FYI stays in findings totals without making a review buggy or creating bug
 	});
 
 	expect(result.findings.raised).toBe(2);
-	expect(result.hotspots).toEqual([]);
-	expect(result.daily.find((day) => day.day === '2026-11-15')?.withBugs).toBe(0);
+	expect(result.hotspots).toEqual([{ path: 'src/', findings: 1 }]);
+	expect(result.daily.find((day) => day.day === '2026-11-15')?.withBugs).toBe(1);
 });
 
 /** A high bug in `file`; `overrides` replace any field. */

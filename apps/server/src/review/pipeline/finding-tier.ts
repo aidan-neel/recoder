@@ -8,8 +8,9 @@ const ALIASES: Record<string, FindingTier> = {
 	medium: 'warning',
 	moderate: 'warning',
 	warn: 'warning',
-	low: 'fyi',
-	minor: 'fyi',
+	low: 'warning',
+	minor: 'warning',
+	info: 'fyi',
 	informational: 'fyi',
 	nit: 'fyi',
 	trivial: 'fyi',
@@ -28,7 +29,9 @@ export function normalizeFindingTier(finding: Record<string, unknown>): void {
 	const legacy = FINDING_SEVERITIES.find((severity) => severity === key);
 
 	const tier =
-		FINDING_TIERS.find((tier) => tier === key) ?? (legacy ? findingTier({ severity: legacy }) : ALIASES[key]);
+		FINDING_TIERS.find((tier) => tier === key) ??
+		ALIASES[key] ??
+		(legacy ? findingTier({ severity: legacy }) : undefined);
 
 	if (!tier) return;
 	finding.tier = tier;

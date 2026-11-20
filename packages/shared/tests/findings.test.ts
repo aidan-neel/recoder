@@ -6,13 +6,15 @@ test('review-list payloads load legacy tiers and use explicit tiers rather than 
 	const review = {
 		findings: [
 			{ id: 'note', severity: 'error', tier: 'fyi' },
-			{ id: 'legacy', severity: 'warning' }
+			{ id: 'legacy', severity: 'warning' },
+			{ id: 'legacy-low', severity: 'info' }
 		]
 	} as ReviewListItem;
 
 	const item = reviewListItem(review);
 
-	expect(item.findings.map((f) => f.tier)).toEqual(['fyi', 'warning']);
+	expect(item.findings.map((f) => f.tier)).toEqual(['fyi', 'warning', 'warning']);
+	expect(reviewTally({ ...item, findings: item.findings.slice(2) }, {}).tone).toBe('medium');
 	expect(reviewTally({ ...item, findings: item.findings.slice(0, 1) }, {}).tone).toBe('low');
 });
 

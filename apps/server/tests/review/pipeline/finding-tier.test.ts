@@ -16,7 +16,8 @@ test.each([
 	['fyi', 'fyi'],
 	['high', 'bug'],
 	['medium', 'warning'],
-	['low', 'fyi'],
+	['low', 'warning'],
+	['minor', 'warning'],
 	['info', 'fyi'],
 	['Error', 'bug'],
 	['Informational', 'fyi']

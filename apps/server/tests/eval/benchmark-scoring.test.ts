@@ -41,9 +41,9 @@ const run = {
 
 const report = { prs: [{ id: 'pr-1', runs: [run] }] } as unknown as BenchmarkReport;
 
-test('rescoring excludes FYI at every stage and keeps the remaining finding ids aligned', async () => {
+test('rescoring excludes FYI but retains legacy low findings and keeps their ids aligned', async () => {
 	const note: EvalFinding = { ...finding, severity: 'error', tier: 'fyi', message: 'FYI-only observation' };
-	const legacy: EvalFinding = { ...note, tier: undefined, severity: 'info' };
+	const legacy: EvalFinding = { ...note, tier: undefined, severity: 'info', message: 'Legacy low risk.' };
 	const bug: EvalFinding = { ...finding, severity: 'error', tier: 'bug' };
 
 	const pool = [note, legacy, bug].map((finding, index) => ({
@@ -72,9 +72,9 @@ test('rescoring excludes FYI at every stage and keeps the remaining finding ids 
 		pool
 	);
 
-	expect(scored.findings).toEqual([bug]);
-	expect(scored.findingIds).toEqual(['f2']);
-	expect(scored.pool?.map((candidate) => candidate.id)).toEqual(['f2']);
+	expect(scored.findings).toEqual([legacy, bug]);
+	expect(scored.findingIds).toEqual(['f1', 'f2']);
+	expect(scored.pool?.map((candidate) => candidate.id)).toEqual(['f1', 'f2']);
 	expect(scored.score?.found).toEqual({ d1: 0 });
 	expect(scored.unconfirmed).toEqual([]);
 });
