@@ -62,13 +62,15 @@
 	white-space: nowrap;
 }
 .file-crumb-current {
+	display: flex;
 	min-width: 0;
 	flex: 0 1 auto;
-	overflow: hidden;
 	padding: 0 5px;
+}
+.file-crumb-current [data-ui='file-chip'] {
 	color: var(--text-primary);
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	font-family: inherit;
+	font-size: inherit;
 }
 .file-panel-actions {
 	display: flex;

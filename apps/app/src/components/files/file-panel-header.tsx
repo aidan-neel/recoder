@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, CopyButton, Tooltip } from '@recoder/ui';
+import { Button, CopyButton, FileChip, Tooltip } from '@recoder/ui';
 import { ArrowUpRightIcon, CaretRightIcon, SidebarSimpleIcon, XIcon } from '@phosphor-icons/react';
 import { Fragment } from 'react';
 
@@ -33,8 +33,6 @@ export function FilePanelHeader({
 	onRevealFolder,
 	onClose
 }: FilePanelHeaderProps) {
-	const fileName = path.slice(path.lastIndexOf('/') + 1);
-
 	return (
 		<header className="file-panel-head">
 			<Tooltip content={treeOpen ? 'Hide files' : 'Show files'}>
@@ -58,7 +56,7 @@ export function FilePanelHeader({
 					</Fragment>
 				))}
 				<span className="file-crumb-current" aria-current="page">
-					{fileName}
+					<FileChip path={path} />
 				</span>
 			</nav>
 			<div className="file-panel-actions">

@@ -1,6 +1,6 @@
 'use client';
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@recoder/ui';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger, FileChip } from '@recoder/ui';
 import { CaretDownIcon } from '@phosphor-icons/react';
 import { memo, useRef, useState, type KeyboardEvent } from 'react';
 
@@ -114,9 +114,7 @@ export const BugCard = memo(function BugCard({ bug, view, open, onToggle, place,
 					</span>
 					{category ? <span className="bug-category">{category}</span> : null}
 					<span className="bug-title">{bug.title}</span>
-					<span className="bug-where" title={bug.file}>
-						{bug.where}
-					</span>
+					<FileChip path={bug.file} line={bug.line} className="bug-where" />
 					<CaretDownIcon aria-hidden className="bug-caret" />
 				</CollapsibleTrigger>
 				<CollapsibleContent className="bug-body">
