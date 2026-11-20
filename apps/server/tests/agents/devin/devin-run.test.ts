@@ -1,5 +1,6 @@
 import { describe, expect, jest, test } from 'bun:test';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, watch } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { DevinAgent } from '../../../src/agents/devin/devin';
@@ -101,6 +102,25 @@ function logged(text: string, label: string): string {
 }
 
 describe('DevinAgent.openRun', () => {
+	test('an aborted prompt returns its available export usage as well as emitting it', async () => {
+		const { run, events, log } = await openRun('spawn');
+		const files = watch(dirname(log));
+		const pending = run.prompt('Review it.', PROMPT);
+
+		try {
+			for await (const file of files) if (file.filename?.endsWith('.pids')) break;
+			await run.abort();
+
+			const reply = await pending;
+
+			expect(reply.error?.message).toMatch(/cancel/i);
+			expect(reply.tokens?.inputTokens).toBe(1000);
+			expect(events.filter((event) => event.type === 'usage')).toHaveLength(1);
+		} finally {
+			await run.close();
+		}
+	});
+
 	test('denies the CLI its own tools and gives it only Recoder’s MCP server, in the local config of its directory', async () => {
 		const { run, log } = await openRun();
 

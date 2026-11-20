@@ -9,7 +9,7 @@ import { CLI_OUTPUT_CAP_BYTES, streamCli } from '../cli-stream';
 import { SessionCliAgent } from '../session-run';
 import type { AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { parseDevinModels } from './devin-models';
-import { DEVIN_LOGIN, exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
+import { DEVIN_LOGIN, exitError, readExport, tokenUsage } from './devin-output';
 import { devinDataHome, devinEnv, removeToolFreeHome, toolFreeHome } from './devin-process';
 import { DevinRun, DEVIN_PRINT_ARGS } from './devin-run';
 import { withDevinRetries } from './devin-retry';
@@ -112,14 +112,11 @@ export class DevinAgent extends SessionCliAgent {
 
 			const env = { ...devinEnv(this.env), XDG_CONFIG_HOME: await toolFreeHome(this.env) };
 			let text = '';
-			let exported: DevinExport | null = null;
 
 			for (let attempt = 0; attempt <= TOOL_RETRIES && !text.trim(); attempt++) {
 				if (attempt > 0) await writeFile(promptFile, TOOL_REFUSED_NUDGE, { mode: 0o600 });
 
-				const result = await withDevinRetries<
-					({ text: string } | { error: unknown }) & { exported: DevinExport | null }
-				>(deadline.signal, async () => {
+				const result = await withDevinRetries<{ text: string } | { error: unknown }>(deadline.signal, async () => {
 					const args = [
 						...DEVIN_PRINT_ARGS,
 						'--prompt-file',
@@ -147,17 +144,14 @@ export class DevinAgent extends SessionCliAgent {
 					session = saved?.session_id ?? session;
 
 					return {
-						value: { ...reply, exported: saved },
+						value: reply,
 						errorOutput: 'error' in reply ? String(reply.error) : undefined
 					};
 				});
 
-				exported = result.exported;
 				if ('error' in result) throw result.error;
 				text = result.text;
 			}
-
-			if (exported?.final_metrics) opts.onUsage?.(tokenUsage(exported.final_metrics));
 
 			if (!text.trim()) throw new LlmError(0, 'Devin ended without a reply.');
 
@@ -166,6 +160,9 @@ export class DevinAgent extends SessionCliAgent {
 			session ??= (await readExport(exportFile))?.session_id;
 			throw deadline.failure(error, 'Devin request failed.');
 		} finally {
+			const saved = await readExport(exportFile);
+
+			if (saved?.final_metrics) opts.onUsage?.(tokenUsage(saved.final_metrics));
 			await retainDevinExport(exportFile, this.env);
 			await removeScratchDir(this.scratch, scratch);
 			if (session) await this.forget(path, session);

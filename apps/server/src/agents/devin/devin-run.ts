@@ -128,9 +128,9 @@ export class DevinRun extends SessionRun<RunFiles> {
 				return { value: { text: answer, tokens } };
 			});
 		} catch (error) {
-			if (!usageRead) await this.exported();
+			const tokens = !usageRead ? await this.exported() : undefined;
 
-			return { text: answer, error: deadline.failure(error, 'Devin run failed.') };
+			return { text: answer, tokens, error: deadline.failure(error, 'Devin run failed.') };
 		}
 	}
 

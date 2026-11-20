@@ -100,8 +100,8 @@ test('a review that called a model outside its locked picks makes the report mix
 		mixed: false,
 		reasons: [],
 		tokens: [
-			{ stage: 'other', model: 'muse', calls: 1, input: 3, cached: 0, written: 0, output: 2 },
-			{ stage: 'other', model: 'muse-mini', calls: 1, input: 3, cached: 0, written: 0, output: 2 }
+			{ stage: 'other', model: 'muse', calls: 1, unknownCalls: 0, input: 3, cached: 0, written: 0, output: 2 },
+			{ stage: 'other', model: 'muse-mini', calls: 1, unknownCalls: 0, input: 3, cached: 0, written: 0, output: 2 }
 		],
 		completedCalls: 2,
 		failedCalls: 0

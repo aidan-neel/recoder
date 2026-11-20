@@ -37,8 +37,7 @@ describe('Devin tool-free completion throttles', () => {
 			expect(backedOff).toBe(true);
 			jest.advanceTimersByTime(4000);
 			expect(await work).toBe('the reply\n');
-			expect(usages).toHaveLength(1);
-			expect(usages[0]?.inputTokens).toBe(1500);
+			expect(usages.map((usage) => usage.inputTokens)).toEqual([1500]);
 
 			const log = await readFile(env.FAKE_DEVIN_LOG ?? '', 'utf8');
 
@@ -60,6 +59,14 @@ test('the models are the runnable lines of the list, with their context windows'
 });
 
 describe('DevinAgent.complete', () => {
+	test('a failed completion still forwards the exported usage before rejecting', async () => {
+		const usages: TokenUsage[] = [];
+		const agent = new DevinAgent(await fakeDevin({ FAKE_DEVIN_MODE: 'crash' }));
+
+		await expect(agent.complete(call({ onUsage: (usage) => usages.push(usage) }))).rejects.toThrow('boom');
+		expect(usages.map((usage) => usage.inputTokens)).toEqual([1000]);
+	});
+
 	test('runs under a config that denies every tool, without the server keys, and counts the exported tokens', async () => {
 		const env = await fakeDevin({ RECODER_SECRET_KEY: 'k', DEVIN_MODEL: 'other', FAKE_DEVIN_SIGNED_IN: '1' });
 		const log = env.FAKE_DEVIN_LOG ?? '';
