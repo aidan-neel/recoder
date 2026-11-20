@@ -3,6 +3,7 @@ import type { EvidenceStore } from '../../../evidence/evidence.js';
 import { SANDBOX_NETWORK } from '../../../sandbox/exec-sandbox.js';
 import type { CandidateFinding } from '../consolidate.js';
 import { TOOL_ECONOMY_RULES } from '../prompts.js';
+import { compactCitedEvidence } from './compact.js';
 
 /** The JSON a bug verifier ends with. */
 const VERDICT_JSON =
@@ -17,7 +18,7 @@ const EXPECTED_RULE = '- "expected" is one sentence on what your cited run print
  * whose code cannot run does not verify bugs at all. A weak-test finding
  * (`mutation`) is settled by planting the bug the test should catch.
  */
-export function verifierSystemPrompt(mutation = false): string {
+export function verifierSystemPrompt(mutation = false, compact = false): string {
 	const shared = `${TOOL_ECONOMY_RULES}
 The finding came from another reviewer and may be wrong. Your job is to prove or disprove it with tools, not to agree with it.
 - The reason is shown to the developer: one or two plain sentences about what you ran or read, naming the command or \`file:line\`.
@@ -37,9 +38,13 @@ ${EXPECTED_RULE}
 ${VERDICT_JSON}`;
 	}
 
+	const fastPath = compact
+		? '\n- Fast path: if the supplied source and setup are sufficient, use one run operation to create a scratch assertion and execute it, importing the real repository code. Finish as soon as that run proves the verdict. This is not a one-run cap: on missing context or a setup/import failure, use the normal read, search, write and run tools and repair the repro. Never treat a setup failure as a confirmation or refutation.'
+		: '';
+
 	return `You verify one code review finding by running code. You have a sandboxed shell on the PR checkout: ${SANDBOX_NETWORK}, no secrets, only the checkout is writable, dependencies already installed.
 ${shared}
-- Always run something. Write the smallest repro that would fail if the finding is true: a scratch test next to the code, or a script that imports the changed code and calls it with the triggering input. Run it. Existing tests, type checks and linters also count when their output shows the problem.
+- Always run something. Write the smallest repro that would fail if the finding is true: a scratch test next to the code, or a script that imports the changed code and calls it with the triggering input. Run it. Existing tests, type checks and linters also count when their output shows the problem.${fastPath}
 - If the first repro does not run (an import path, a missing fixture), fix the script and run it again; read the code to find the right entry point.
 - "confirmed": a command you ran shows the problem. "refuted": a command you ran shows the behavior is correct. "unverified": you could not settle it by running code (needs the network, a service, timing you cannot reproduce).
 - Make the repro decide for itself: compare the actual value with the expected one and exit nonzero (a failing \`expect\`, a throw, \`process.exit(1)\`) when the finding is true. A script that only prints values and exits 0 proves nothing on its own. If the assertion passes, the finding is refuted.
@@ -105,14 +110,21 @@ export function verifierUserPrompt(
 	candidate: CandidateFinding,
 	evidence: EvidenceStore,
 	notes: VerifierNotes,
-	turns: number
+	turns: number,
+	compact = false
 ): string {
-	const cited = citedEvidence(candidate, evidence);
+	const cited = compact ? compactCitedEvidence(candidate, evidence) : citedEvidence(candidate, evidence);
+	const sharedSetup = notes.sharedSetupNotes ?? notes.setupNotes;
+
+	const update =
+		compact && notes.setupNotes.startsWith(sharedSetup)
+			? notes.setupNotes.slice(sharedSetup.length).trim()
+			: notes.setupNotes;
 
 	return [
 		notes.intent,
 		notes.skills,
-		notes.sharedSetupNotes ?? notes.setupNotes,
+		sharedSetup,
 		`Finding ${candidate.candidateId} (${candidate.severity}, ${candidate.agent}) at ${candidateLocation(candidate)}`,
 		candidate.title ? `Title: ${candidate.title}` : '',
 		claimBlock(candidate.claim),
@@ -120,7 +132,7 @@ export function verifierUserPrompt(
 		cited
 			? `Evidence the reviewer cited (reuse a run id if it already proves the claim):\n${cited}`
 			: 'The reviewer cited no evidence.',
-		notes.sharedSetupNotes !== undefined && notes.setupNotes !== notes.sharedSetupNotes ? notes.setupNotes : '',
+		notes.sharedSetupNotes !== undefined && notes.setupNotes !== notes.sharedSetupNotes ? update : '',
 		`You have ${turns - 1} action rounds and a final turn.`
 	]
 		.filter(Boolean)
