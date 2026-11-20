@@ -11,6 +11,7 @@ import { exitError, readExport, tokenUsage, type DevinExport } from './devin-out
 import { devinEnv, runConfig } from './devin-process';
 import { withDevinRetries } from './devin-retry';
 import { retainDevinExport } from './devin-artifacts';
+import { mcpOnlyTools } from './devin-tools';
 
 type Env = Record<string, string | undefined>;
 
@@ -42,8 +43,8 @@ function runFiles(root: string): RunFiles {
  * whose only content is the local MCP config naming Recoder's server (the CLI reads `.devin/mcp_config.local.json`
  * of the directory it runs in).
  */
-async function writeRunFiles(files: RunFiles, env: Env, lease: ToolLease | null): Promise<void> {
-	await Bun.write(join(files.configHome, 'devin', 'config.json'), await runConfig(env, lease?.name ?? null));
+async function writeRunFiles(files: RunFiles, env: Env, lease: ToolLease | null, tools = {}): Promise<void> {
+	await Bun.write(join(files.configHome, 'devin', 'config.json'), await runConfig(env, lease?.name ?? null, tools));
 	await mkdir(files.cwd, { recursive: true });
 
 	if (!lease) return;
@@ -61,12 +62,21 @@ async function writeRunFiles(files: RunFiles, env: Env, lease: ToolLease | null)
 export class DevinRun extends SessionRun<RunFiles> {
 	private used: TokenUsage | null = null;
 	private turnsMissing = false;
+	private mcpNotice = '';
 
 	static async open(host: SessionHost, options: AgentRunOptions): Promise<DevinRun> {
 		const root = await SessionRun.scratchDirectory('devin');
 		const run = new DevinRun(host, options, root, runFiles(root));
 
-		return SessionRun.ready(run, () => writeRunFiles(run.files, host.env, run.lease));
+		const tools =
+			host.env.RECODER_DEVIN_MCP_ONLY === '1' && options.stage === 'verifier' && run.lease
+				? mcpOnlyTools(run.lease.name, options.tools)
+				: {};
+
+		if ('disabled_tools' in tools && run.lease)
+			run.mcpNotice = `The CLI working directory is empty, not the checkout. Its local tools are disabled. Repository access is ONLY through Recoder MCP server ${run.lease.name}: use mcp_list_tools with server_name=${run.lease.name}, then mcp_call_tool on that server. Available Recoder operations: ${options.tools.join(', ')}. A tool refusal is not a verdict; use the MCP equivalent and continue.\n\n`;
+
+		return SessionRun.ready(run, () => writeRunFiles(run.files, host.env, run.lease, tools));
 	}
 
 	/** Runs the agent on `text` until it answers. Devin takes no system prompt, so the first prompt carries it. */
@@ -86,7 +96,7 @@ export class DevinRun extends SessionRun<RunFiles> {
 					? `Continue the interrupted request from your saved session. Do not repeat completed tools or work. Finish your answer.${options.schema ? `\n\n${JSON_MODE_INSTRUCTION}` : ''}`
 					: asked;
 
-				await writeFile(this.files.prompt, this.session ? next : `${this.options.system}\n\n${next}`, {
+				await writeFile(this.files.prompt, this.session ? next : `${this.options.system}\n\n${this.mcpNotice}${next}`, {
 					mode: 0o600
 				});
 

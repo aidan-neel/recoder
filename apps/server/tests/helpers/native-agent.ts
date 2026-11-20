@@ -61,7 +61,7 @@ export async function fixtureReview(
 /** A run of `agent` whose tools all answer `ok`, with the events it sends collected in order. */
 export async function openCollectingRun(
 	agent: AgentAdapter,
-	options: Pick<AgentRunOptions, 'model' | 'reasoningEffort' | 'system' | 'tools'>
+	options: Pick<AgentRunOptions, 'model' | 'reasoningEffort' | 'system' | 'tools' | 'stage'>
 ): Promise<{ run: AgentRun; events: AgentEvent[] }> {
 	const events: AgentEvent[] = [];
 

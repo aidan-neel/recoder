@@ -180,6 +180,7 @@ class NativeRun<T> {
 			reasoningEffort: opts.config.reasoningEffort,
 			system: forNativeTools(opts.system) + (this.toolsOn ? NATIVE_REPLY_RULES : TOOLLESS_REPLY_RULES) + CHAT_STYLE,
 			tools: toolTurns(opts) > 0 ? nativeToolNames(this.listedTools()) : [],
+			stage: opts.stage,
 			runTool: this.gate.run,
 			onEvent: this.relay.onEvent,
 			signal: opts.signal,

@@ -62,7 +62,7 @@ const IMPORT_SOURCES = ['cursor', 'windsurf', 'claude', 'opencode', 'zed', 'copi
  * own file and only runs the CLI under this one, in another `XDG_CONFIG_HOME`, so the user's hooks, MCP servers,
  * rules and skills never load, and no other tool's config is imported.
  */
-async function callConfig(env: Env, permissions: { allow?: string[]; deny: string[] }): Promise<string> {
+async function callConfig(env: Env, permissions: { allow?: string[]; deny: string[] }, tools = {}): Promise<string> {
 	const user = await userConfig(env);
 	const orgId = user.devin?.org_id;
 
@@ -70,7 +70,8 @@ async function callConfig(env: Env, permissions: { allow?: string[]; deny: strin
 		version: user.version ?? 1,
 		...(orgId ? { devin: { org_id: orgId } } : {}),
 		read_config_from: Object.fromEntries(IMPORT_SOURCES.map((source) => [source, false])),
-		permissions
+		permissions,
+		...tools
 	});
 }
 
@@ -96,10 +97,10 @@ function toolFreeConfig(env: Env): Promise<string> {
  * The config for an agent run: the CLI's own tools denied, and the tools of Recoder's MCP server `server`
  * allowed, so the model reaches the repository only through them.
  */
-export function runConfig(env: Env, server: string | null): Promise<string> {
+export function runConfig(env: Env, server: string | null, tools = {}): Promise<string> {
 	const allow = server ? [`mcp__${server}__*`] : [];
 
-	return callConfig(env, { allow, deny: server ? BUILT_IN_TOOLS : DENIED_TOOLS });
+	return callConfig(env, { allow, deny: server ? BUILT_IN_TOOLS : DENIED_TOOLS }, tools);
 }
 
 let home: Promise<string> | null = null;

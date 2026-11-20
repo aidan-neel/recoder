@@ -140,6 +140,8 @@ export type AgentEvent =
 
 export interface AgentRunOptions {
 	model: string;
+	/** Pipeline scope for adapter-specific session policies. */
+	stage?: ModelCallRow['stage'];
 	reasoningEffort?: ReasoningEffort;
 	/** The system prompt, in place of the CLI's own. */
 	system: string;

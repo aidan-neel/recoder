@@ -12,6 +12,8 @@ The server reads the environment variables below. All are optional. An unset var
 
 **RECODER_SKIP_UNUSED_EXPORTS**: Experimental ablation, off by default. Set to `1` to skip the deterministic added-export/no-external-reference heuristic, which cannot establish whether a library's public API has external consumers. It also suppresses genuine orphan exports from this detector. Compiler diagnostics, model findings and all other detectors are unchanged.
 
+**RECODER_DEVIN_MCP_ONLY**: Experimental, off by default. Set to `1` to hide CLI-local tools in Devin verifier sessions using `disabled_tools` and disable subagents. Recoder-owned pre-tool hooks refuse stale local calls with the leased MCP equivalent; existing permission denies remain in place. Requires a Devin CLI supporting `disabled_tools` and command hooks. Other stages, tool-free calls, sandbox permissions and verification verdict rules are unchanged.
+
 ## Model fallback
 
 Saved model settings win. These variables are the fallback, read by `effectiveReviewEnv` in `apps/server/src/review/session/review-settings.ts`.

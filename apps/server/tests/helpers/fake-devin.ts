@@ -89,6 +89,7 @@ empty) exit 0 ;;
 refused) if [ -n "$resumed" ]; then echo "the reply"; fi ;;
 crash) echo "boom" >&2; exit 1 ;;
 tool) bun -e "$TOOL_CALL" ;;
+blockedtool) bun -e "$BLOCKED_TOOL_CALL" ;;
 spawn) sleep 30 & echo "$$ $!" > "$FAKE_DEVIN_LOG.pids"; wait ;;
 limited) printf '%s\n' 'Error: Agent error: Reached free model rate limit. Your limit will reset in 3 hours (at Oct 9 00:01 UTC). (trace ID: 21f5): {' '  "cognition.ai/errorKind": "unavailable",' '  "cognition.ai/retryable": true' '}' >&2; exit 1 ;;
 *) echo "the reply" ;;
