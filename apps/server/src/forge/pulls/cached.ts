@@ -156,7 +156,14 @@ export async function pullDiff(
 
 	if (diff.headSha !== headSha) diffCache.delete(key);
 
-	return options?.includeHunkless ? diff : { ...diff, files: diff.files.filter((file) => file.hunks.length > 0) };
+	return options?.includeHunkless
+		? diff
+		: {
+				...diff,
+				files: diff.files.filter(
+					(file) => file.hunks.length > 0 || file.status === 'renamed' || file.status === 'copied'
+				)
+			};
 }
 
 /**
