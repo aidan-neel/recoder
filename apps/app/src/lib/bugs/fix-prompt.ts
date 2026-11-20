@@ -24,7 +24,10 @@ function evidenceLines(bug: BugView): string[] {
 	}
 
 	if (bug.trace.length > 0)
-		return ['How execution reaches it:', ...bug.trace.map((step) => `- ${step.where}: ${step.note}`)];
+		return [
+			'How execution reaches it:',
+			...bug.trace.map((step) => `- ${step.line === null ? step.file : `${step.file}:${step.line}`}: ${step.note}`)
+		];
 	if (bug.rule) return [`The repository rule it breaks (${bug.rule.source.path}): ${citedRuleWords(bug.rule)}`];
 
 	return [];

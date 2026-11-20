@@ -8,14 +8,13 @@ import {
 	CommandInput,
 	CommandItem,
 	CommandList,
+	DiffStat,
 	FileIcon,
 	type CommandHint
 } from '@recoder/ui';
 import { CheckIcon } from '@phosphor-icons/react';
 
 import type { FileEntry, FileGroup, GuidePart } from '@/lib/changes/types';
-
-import { DiffStat } from '@/components/common/diff-stat';
 
 const HINTS: CommandHint[] = [
 	{ keys: ['ArrowUp', 'ArrowDown'], label: 'move' },
@@ -92,7 +91,7 @@ export function FilesMenu({ open, onOpenChange, groups, parts, current, onOpen }
 								key={entry.path}
 								value={entry.path}
 								keywords={[entry.name]}
-								leading={<FileIcon path={entry.path} className="files-menu-icon" />}
+								leading={<FileIcon path={entry.path} />}
 								description={parts ? entry.path.slice(0, entry.path.lastIndexOf('/')) || undefined : undefined}
 								detail={<FileEnd entry={entry} />}
 								className={entry.change === 'deleted' ? 'files-menu-deleted' : undefined}

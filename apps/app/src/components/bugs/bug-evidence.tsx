@@ -1,7 +1,7 @@
 'use client';
 
 import { citedRuleWords, parseUnifiedDiff } from '@recoder/shared';
-import { ClampedText, CodeLines, type CodeLine, langForPath, Markdown, Pill } from '@recoder/ui';
+import { ClampedText, CodeLines, type CodeLine, FileChip, langForPath, Markdown, Pill } from '@recoder/ui';
 import { CheckCircleIcon } from '@phosphor-icons/react';
 import { useMemo } from 'react';
 
@@ -48,8 +48,8 @@ function TraceBlock({ trace }: Pick<BugView, 'trace'>) {
 			<h3 className="section-label">How execution reaches it</h3>
 			<ol className="trace">
 				{trace.map((step) => (
-					<li key={step.where + step.note}>
-						<span className="trace-where">{step.where}</span>
+					<li key={`${step.file}:${step.line}:${step.note}`}>
+						<FileChip path={step.file} line={step.line} className="trace-where" />
 						<span className="trace-note">{step.note}</span>
 					</li>
 				))}
@@ -64,7 +64,6 @@ function TraceBlock({ trace }: Pick<BugView, 'trace'>) {
  * that says it word for word. A rule the file states as a preference says so.
  */
 function RuleBlock({ rule }: { rule: NonNullable<BugView['rule']> }) {
-	const line = rule.source.line ? `:${rule.source.line}` : '';
 	const words = citedRuleWords(rule);
 
 	return (
@@ -72,10 +71,7 @@ function RuleBlock({ rule }: { rule: NonNullable<BugView['rule']> }) {
 			<div className="bug-section-head">
 				<h3 className="section-label">{rule.level === 'advisory' ? 'Advisory rule' : 'Rule'}</h3>
 				<Pill face="code">{rule.id}</Pill>
-				<Pill face="code" title={rule.source.path + line}>
-					{rule.source.path}
-					{line}
-				</Pill>
+				<FileChip path={rule.source.path} line={rule.source.line} framed />
 			</div>
 			{rule.verbatim === false ? (
 				<p className="rule-restated">{words}</p>
@@ -113,11 +109,7 @@ function FixBlock({ fix }: { fix: NonNullable<BugView['fix']> }) {
 		<section className="fix" aria-label="Suggested fix">
 			<div className="fix-head">
 				Suggested fix
-				{patch ? (
-					<span className="fix-path" title={patch.path}>
-						{patch.path.slice(patch.path.lastIndexOf('/') + 1)}
-					</span>
-				) : null}
+				{patch ? <FileChip path={patch.path} className="fix-path" /> : null}
 				{checks.length > 0 ? (
 					<span className="fix-checks" title={checks.join(', ')}>
 						<CheckCircleIcon aria-hidden />

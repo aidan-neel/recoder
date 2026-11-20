@@ -253,37 +253,10 @@
 	padding: 4px 0 0;
 	list-style: none;
 }
-.trail-chips [data-ui='pill'][data-face] {
+.trail-chips [data-ui='file-chip'] {
 	height: var(--trail-chip-height);
-	gap: 6px;
-	padding: 0 8px 0 6px;
-	border-radius: 999px;
-	color: var(--trail-body);
-	font-size: var(--trail-font);
-	line-height: var(--trail-chip-height);
-}
-.trail-chips [data-ui='pill'] svg {
-	color: var(--trail-quiet);
-}
-.trail-chips [data-ui='pill-text'] {
 	font-size: var(--trail-code-font);
-}
-
-/* A chip that opens its file once something handles file references. */
-.trail-chip-button {
-	padding: 0;
-	border: 0;
-	border-radius: 999px;
-	background: none;
-	cursor: pointer;
-}
-.trail-chip-button:hover [data-ui='pill'] {
-	background: var(--bg-hover);
-	color: var(--text-primary);
-}
-.trail-chip-button:focus-visible {
-	box-shadow: var(--focus-ring);
-	outline: none;
+	line-height: var(--trail-chip-height);
 }
 
 /* Citations: a reference chip (`.ref-chip`) in the line of the answer, and the card it opens. */

@@ -73,6 +73,9 @@
 	--sev-info: #b9b3aa;
 	--sev-info-tint: rgb(var(--wash-rgb) / 0.07);
 	--success: #67da7e;
+	/* A file type's mark keeps its language's hue, eased toward the ink so a deep brand colour still reads. */
+	--file-hue-toward: white;
+	--file-hue-ease: 22%;
 	--success-tint: rgba(103, 218, 126, 0.13);
 	--danger: #fb756e;
 	--danger-tint: rgba(251, 117, 110, 0.13);
@@ -202,6 +205,8 @@
 	--sev-info: #5c5750;
 	--sev-info-tint: rgba(60, 45, 30, 0.07);
 	--success: #136a2d;
+	--file-hue-toward: black;
+	--file-hue-ease: 28%;
 	--success-tint: rgba(26, 127, 55, 0.12);
 	--danger: #ac2723;
 	--danger-tint: rgba(196, 48, 43, 0.1);

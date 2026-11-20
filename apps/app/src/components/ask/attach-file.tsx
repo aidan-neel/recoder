@@ -8,10 +8,12 @@ import {
 	CommandItem,
 	CommandList,
 	ComposerTool,
+	DiffStat,
+	FileIcon,
 	focusComposerField,
 	type CommandHint
 } from '@recoder/ui';
-import { GitDiffIcon, PlusIcon } from '@phosphor-icons/react';
+import { PlusIcon } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 
 import { useSessionData } from '@/lib/pull/pull-session';
@@ -67,11 +69,12 @@ export function AttachFile({ onAttach }: { onAttach: (path: string) => void }) {
 						<CommandItem
 							key={file.path}
 							value={file.path}
-							icon={GitDiffIcon}
-							detail={<FileCounts additions={file.additions} deletions={file.deletions} />}
+							leading={<FileIcon path={file.path} />}
+							description={file.path.slice(0, Math.max(0, file.path.lastIndexOf('/'))) || undefined}
+							detail={<DiffStat additions={file.additions} deletions={file.deletions} />}
 							onSelect={() => attach(file.path)}
 						>
-							{file.path}
+							{file.path.slice(file.path.lastIndexOf('/') + 1)}
 						</CommandItem>
 					))}
 					<CommandEmpty>No changed file matches</CommandEmpty>
@@ -79,14 +82,5 @@ export function AttachFile({ onAttach }: { onAttach: (path: string) => void }) {
 				<CommandFooter hints={HINTS} />
 			</CommandDialog>
 		</>
-	);
-}
-
-/** Lines added and removed, in the diff's colours. */
-function FileCounts({ additions, deletions }: { additions: number; deletions: number }) {
-	return (
-		<span className="attach-counts">
-			<span className="text-ok">+{additions}</span> <span className="text-danger">−{deletions}</span>
-		</span>
 	);
 }

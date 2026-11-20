@@ -149,9 +149,6 @@
 }
 
 /* The file menu: a file's row ends in its finding dot, then a check once viewed, else its size. */
-.files-menu-icon {
-	color: var(--text-faint);
-}
 .file-end {
 	display: inline-flex;
 	align-items: center;
@@ -271,33 +268,16 @@
 .file-card[data-open] .file-caret {
 	rotate: 90deg;
 }
-.file-icon {
-	width: 14px;
-	height: 14px;
-	color: var(--text-muted);
-}
-.file-path {
-	display: flex;
-	min-width: 0;
-	align-items: baseline;
-	gap: 8px;
-	white-space: nowrap;
-}
-.file-path strong {
-	flex-shrink: 0;
+.file-name {
 	color: var(--text-primary);
 	font-size: var(--font-size-label);
 	font-weight: 500;
 }
-.file-dir {
-	overflow: hidden;
-	color: var(--text-faint);
-	direction: rtl;
-	font-size: 12.5px;
-	text-align: left;
-	text-overflow: ellipsis;
+.file-name > [data-ui='file-icon'] {
+	width: 14px;
+	height: 14px;
 }
-.file-card[data-viewed] .file-path strong {
+.file-card[data-viewed] .file-name {
 	color: var(--text-faint);
 }
 .file-head-end {

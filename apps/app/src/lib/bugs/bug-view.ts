@@ -26,9 +26,6 @@ const BASE_SENTENCE: Record<BaseComparisonResult, string> = {
 
 const SEVERITY: Record<BugTone, string> = { high: 'High', medium: 'Medium', low: 'Low' };
 
-/** How many folders of a path `where` keeps before the file name. */
-const KEPT_FOLDERS = 2;
-
 /** The comparison with the base branch as one sentence; null when the run was not compared. */
 export function baseSentence(baseline: VerificationBaseline | undefined): string | null {
 	if (!baseline) return null;
@@ -36,16 +33,6 @@ export function baseSentence(baseline: VerificationBaseline | undefined): string
 	if ('unavailable' in baseline) return baseline.unavailable;
 
 	return baseline.differs ? 'Ends differently on the base branch.' : 'Ends the same way on the base branch.';
-}
-
-/** `review/session/lease.ts:20`: the file with its nearest folders, the long prefix dropped. */
-export function shortWhere(file: string, line: number | null): string {
-	const kept = file
-		.split('/')
-		.slice(-(KEPT_FOLDERS + 1))
-		.join('/');
-
-	return line === null ? kept : `${kept}:${line}`;
 }
 
 /** The finding's tone: an error is high, a warning medium, the rest low. */
@@ -110,7 +97,6 @@ export function bugView(finding: Finding, review: Pick<Review, 'findingComments'
 		file: finding.file,
 		line,
 		endLine: finding.endLine ?? line,
-		where: shortWhere(finding.file, line),
 		evidence,
 		evidenceLabel: EVIDENCE_LABELS[evidence],
 		explanation: body,
@@ -118,7 +104,8 @@ export function bugView(finding: Finding, review: Pick<Review, 'findingComments'
 		trace:
 			evidence === 'traced'
 				? (finding.claim?.executionPath ?? []).map((step) => ({
-						where: shortWhere(step.file, step.line),
+						file: step.file,
+						line: step.line ?? null,
 						note: step.note ?? ''
 					}))
 				: [],

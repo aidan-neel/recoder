@@ -171,7 +171,7 @@
 	margin-right: -9px;
 }
 /* A pull request with no lines changed has no size, so the size, the menu and the fact name their lanes. */
-.pull-row .diff-stat {
+.pull-row [data-ui='diff-stat'] {
 	grid-column: 3;
 	justify-content: flex-end;
 }

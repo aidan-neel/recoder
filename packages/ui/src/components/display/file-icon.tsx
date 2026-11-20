@@ -1,20 +1,37 @@
 'use client';
 
-import { FileTextIcon } from '@phosphor-icons/react';
-
 import { cn } from '../../lib/cn';
-import { fileLanguageIcon } from './file-icons';
+import { fileMark } from './file-icons';
 
-/** The mark of the language a file is written in, in the current text color; a page for any other file. 12px unless sized. */
+/**
+ * The type of a file at a glance: its language's mark in the language's hue, a glyph for a kind of file no language
+ * owns (an image, a lock file, a table), or a plain page. The hue is set inline so no surrounding rule that colours
+ * icons can grey it; it is eased toward the ink on each theme so a deep brand colour still reads. 12px unless sized.
+ */
 export function FileIcon({ path, className }: { path: string; className?: string }) {
 	const classes = cn('size-3 shrink-0', className);
-	const icon = fileLanguageIcon(path);
+	const mark = fileMark(path);
 
-	if (!icon) return <FileTextIcon aria-hidden className={classes} />;
+	if (mark.kind === 'glyph') {
+		const Glyph = mark.glyph;
+
+		return <Glyph aria-hidden data-ui="file-icon" className={classes} />;
+	}
 
 	return (
-		<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={classes}>
-			<path d={icon.path} />
+		<svg
+			viewBox="0 0 24 24"
+			fill="currentColor"
+			aria-hidden
+			data-ui="file-icon"
+			style={
+				mark.hue
+					? { color: `color-mix(in oklab, ${mark.hue}, var(--file-hue-toward) var(--file-hue-ease))` }
+					: undefined
+			}
+			className={classes}
+		>
+			<path d={mark.path} />
 		</svg>
 	);
 }
