@@ -22,7 +22,9 @@ function manifests(...args: string[]) {
 }
 
 function serverOf(docs: ReturnType<typeof manifests>) {
-	return docs.find((doc) => doc.kind === 'Deployment' && doc.metadata.labels['app.kubernetes.io/component'] === 'server');
+	return docs.find(
+		(doc) => doc.kind === 'Deployment' && doc.metadata.labels['app.kubernetes.io/component'] === 'server'
+	);
 }
 
 test('a release runs one pod that serves the app and the API, and mounts retained data apart from checkouts', () => {
@@ -58,10 +60,10 @@ test('a release runs one pod that serves the app and the API, and mounts retaine
 	});
 });
 
-test('the published image is the default, and an empty tag means the chart version', () => {
+test("the published image is the default, and an empty tag means the chart's appVersion", () => {
 	expect(
-		serverOf(manifests('--set', 'server.encryptionKey.existingSecret=keys', '--set', 'server.image.tag=')).spec.template.spec.containers[0]
-			.image
+		serverOf(manifests('--set', 'server.encryptionKey.existingSecret=keys', '--set', 'server.image.tag=')).spec.template
+			.spec.containers[0].image
 	).toBe('ghcr.io/aidan-neel/recoder:0.2.1');
 
 	expect(
@@ -143,8 +145,8 @@ test('a managed install is told its helm upgrade command instead of an Update bu
 
 	expect(without.some((entry) => entry.name === 'RECODER_MANAGED_COMMAND')).toBe(false);
 
-	const with_ = serverOf(manifests('--set', 'server.managedCommand=helm upgrade recoder --reuse-values')).spec.template.spec
-		.containers[0].env;
+	const with_ = serverOf(manifests('--set', 'server.managedCommand=helm upgrade recoder --reuse-values')).spec.template
+		.spec.containers[0].env;
 
 	expect(with_).toContainEqual({
 		name: 'RECODER_MANAGED_COMMAND',
@@ -153,7 +155,8 @@ test('a managed install is told its helm upgrade command instead of an Update bu
 });
 
 test('fractional CPU resources reach the container without conversion', () => {
-	const container = serverOf(manifests('--set-string', 'server.resources.requests.cpu=0.5')).spec.template.spec.containers[0];
+	const container = serverOf(manifests('--set-string', 'server.resources.requests.cpu=0.5')).spec.template.spec
+		.containers[0];
 
 	expect(container.resources.requests.cpu).toBe('0.5');
 });
@@ -221,13 +224,19 @@ test('API pods run between 1 and 32 reviews at once, never 0, since every pod sh
 	expect(result.exitCode).not.toBe(0);
 	expect(result.stderr.toString()).toContain('schema');
 
-	const container = serverOf(manifests('--set-string', 'server.env.RECODER_JOB_CONCURRENCY=4')).spec.template.spec.containers[0];
+	const container = serverOf(manifests('--set-string', 'server.env.RECODER_JOB_CONCURRENCY=4')).spec.template.spec
+		.containers[0];
 
 	expect(container.env).toContainEqual({ name: 'RECODER_JOB_CONCURRENCY', value: '4' });
 });
 
 test('invalid image tags, replica overrides and reserved environment overrides fail before installation', () => {
-	for (const setting of ['server.replicas=2', 'server.env.PORT=4000', 'server.tmpSizeLimit=unbounded', 'server.tmpSizeLimit=0']) {
+	for (const setting of [
+		'server.replicas=2',
+		'server.env.PORT=4000',
+		'server.tmpSizeLimit=unbounded',
+		'server.tmpSizeLimit=0'
+	]) {
 		const result = render('--set-string', setting);
 
 		expect(result.exitCode).not.toBe(0);

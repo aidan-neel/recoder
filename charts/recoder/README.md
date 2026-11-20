@@ -218,7 +218,7 @@ Apply cluster network policies that permit the API to reach only the required da
 | `server.image.repository`, `server.image.tag` | `ghcr.io/aidan-neel/recoder`, the chart's `appVersion` | The release image, which serves the app and the API. |
 | `server.image.pullPolicy` | `IfNotPresent` | Image pull policy. |
 | `server.replicaCount` | `1` | API replicas; more require PostgreSQL below. |
-| `server.frontendUrl` | Required | The one origin the app and the API are reached at. |
+| `server.frontendUrl` | `https://recoder.example.org` | The one origin the app and the API are reached at. |
 | `server.managedCommand` | `''` | The update command the app shows instead of an Update button (`RECODER_MANAGED_COMMAND`). |
 | `server.existingSecret` | `''` | A Secret whose keys become API environment variables. |
 | `server.env` | `RECODER_EXEC: 'off'` | Non-secret API environment; reserved names are rejected. |
