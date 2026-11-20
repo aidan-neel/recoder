@@ -1,4 +1,4 @@
-import type { PrCheck, PullComment, PullCommit, PullDiff, PullPage } from '@recoder/shared';
+import type { PrCheck, PullComment, PullCommit, PullDescriptionState, PullDiff, PullPage } from '@recoder/shared';
 import { langForPath, preloadHighlighter } from '@recoder/ui';
 
 import { ApiError, failureText, isOffline, plainly } from '../api/http';
@@ -13,6 +13,9 @@ interface Part<Value> {
 
 /** Running checks are read again this often while the page is visible. */
 const CHECKS_MS = 15_000;
+
+/** A description being written is read again this often while the page is visible. */
+const DESCRIPTION_MS = 3_000;
 
 /** The forge works out whether an open pull request can merge after it is asked; the page asks again this often until it knows. */
 const MERGEABILITY_MS = 4_000;
@@ -71,7 +74,11 @@ export function createPageLoads(context: SessionContext, events: PageEvents) {
 		conversation: {
 			read: () => get().conversation,
 			write: (conversation) => state.setState({ conversation })
-		} satisfies Part<PullComment[]>
+		} satisfies Part<PullComment[]>,
+		description: {
+			read: () => get().description,
+			write: (description) => state.setState({ description })
+		} satisfies Part<PullDescriptionState>
 	};
 
 	/** A failed page read: a 404 is a page that does not exist; a refresh that fails keeps the page it had. */
@@ -106,12 +113,26 @@ export function createPageLoads(context: SessionContext, events: PageEvents) {
 		}
 	}
 
-	/** Reads the diff again when the pull request moved past it, and the checks of the head. */
+	/** Reads the diff and the description again when the pull request moved past them, and the checks of the head. */
 	function followHead(page: PullPage): void {
 		const shown = loaded(get().diff);
 
 		if (shown && shown.headSha !== page.pull.headSha) void loadDiff();
+		if (describedHead() !== null && describedHead() !== page.pull.headSha) void load.description();
 		if (page.capabilities.checks) void loadChecks();
+	}
+
+	/** The head the description on screen is about, or null when none is. */
+	function describedHead(): string | null {
+		const description = loaded(get().description);
+
+		if (description?.status === 'ready') return description.description.headSha;
+
+		return description && 'headSha' in description ? description.headSha : null;
+	}
+
+	function descriptionPending(): boolean {
+		return loaded(get().description)?.status === 'pending';
 	}
 
 	/**
@@ -150,7 +171,9 @@ export function createPageLoads(context: SessionContext, events: PageEvents) {
 		checks: () => deduped('checks', loadChecks),
 		commits: () => deduped('commits', () => fill(parts.commits, () => client.pullCommits(repoId, number))),
 		conversation: () =>
-			deduped('conversation', () => fill(parts.conversation, () => client.pullComments(repoId, number)))
+			deduped('conversation', () => fill(parts.conversation, () => client.pullComments(repoId, number))),
+		description: () =>
+			deduped('description', () => fill(parts.description, () => client.pullDescription(repoId, number)))
 	};
 
 	return {
@@ -159,6 +182,14 @@ export function createPageLoads(context: SessionContext, events: PageEvents) {
 		loadChecks: load.checks,
 		loadCommits: load.commits,
 		loadConversation: load.conversation,
+		loadDescription: load.description,
+
+		/** Asks for the description to be written again; it shows as being written until the new one lands. */
+		redescribe: () =>
+			deduped('description', () => fill(parts.description, () => client.redescribePull(repoId, number))),
+
+		/** Reads the description again while it is being written and the page is visible; returns the stop. */
+		pollDescription: () => whileVisible(DESCRIPTION_MS, () => void (descriptionPending() && load.description())),
 
 		/** Reads the checks again while one runs and the page is visible; returns the stop. */
 		pollChecks: () => whileVisible(CHECKS_MS, () => void (checksRunning() && load.checks())),

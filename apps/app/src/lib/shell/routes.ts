@@ -36,8 +36,11 @@ export function pullHref(base: string, repoId: string, number: number, tab?: Pul
 	return tab && tab !== 'changes' ? `${path}?tab=${tab}` : path;
 }
 
-/** Old names of tabs that still open them: the Review tab was the Bugs tab. */
-const PULL_TAB_ALIASES: ReadonlyMap<string, PullTab> = new Map([['bugs', 'review']]);
+/** Old names of tabs that still open them: the Review tab was the Bugs tab, and the Description tab the Summary tab. */
+const PULL_TAB_ALIASES: ReadonlyMap<string, PullTab> = new Map([
+	['bugs', 'review'],
+	['summary', 'description']
+]);
 
 /** The tab a pull request address names (`?tab=review`); Changes when it names none or one the page does not have. */
 export function pullTabOf(value: string | null): PullTab {

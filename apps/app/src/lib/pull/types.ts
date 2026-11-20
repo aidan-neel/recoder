@@ -3,13 +3,14 @@ import type {
 	PullCheckTally,
 	PullComment,
 	PullCommit,
+	PullDescriptionState,
 	PullDiff,
 	PullMergeMethod,
 	PullPage
 } from '@recoder/shared';
 
 /** The tabs of the pull request page, in order. The tab lives in the URL (`?tab=`); `changes` is the default. */
-export const PULL_TABS = ['changes', 'summary', 'review', 'commits'] as const;
+export const PULL_TABS = ['changes', 'description', 'review', 'commits'] as const;
 
 export type PullTab = (typeof PULL_TABS)[number];
 
@@ -39,6 +40,12 @@ export interface PullPageView {
 
 /** The diff of the Changes tab. */
 export type PullDiffView = Loadable<PullDiff>;
+
+/** The Description tab: the AI description of the head, and asking for it to be written again. */
+export interface PullDescriptionView {
+	state: Loadable<PullDescriptionState>;
+	redescribe: () => void;
+}
 
 /** The Commits tab, oldest first. */
 export type PullCommitsView = Loadable<PullCommit[]>;

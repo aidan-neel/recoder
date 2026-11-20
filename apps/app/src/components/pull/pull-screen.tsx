@@ -6,6 +6,7 @@ import { ArrowUpRightIcon } from '@phosphor-icons/react';
 import { useCallback, useState, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
+import type { BugView } from '@/lib/bugs/types';
 import { useBugsView } from '@/lib/bugs/use-bugs';
 import { useChangesNav } from '@/lib/changes/use-changes';
 import { forgeLabel } from '@/lib/connections/forges';
@@ -27,7 +28,7 @@ import { CancelReviewHost } from '@/components/common/cancel-review';
 import { Crumbs } from '@/components/common/crumbs';
 import { Page } from '@/components/common/page';
 import { TokenUsageButton } from '@/components/common/token-usage-modal';
-import { SummaryTab } from '@/components/summary/summary-tab';
+import { DescriptionTab } from '@/components/summary/description-tab';
 
 import { ChecksList } from './checks';
 import { MergeActions, MergeFacts } from './merge-facts';
@@ -126,16 +127,32 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 		[nav, changesHref]
 	);
 
+	/** Opens the Changes tab at a finding, under its line. */
+	const openFinding = useCallback(
+		(bug: BugView) => {
+			nav.goTo(bug.file, bug.line, bug.id);
+			replaceAddress(changesHref);
+		},
+		[nav, changesHref]
+	);
+
 	const tools: Record<PullTab, ReactNode> = {
 		changes: <ChangesTools mode={mode} onModeChange={setMode} />,
-		summary: null,
+		description: null,
 		review: <ReviewTabTools />,
 		commits: null
 	};
 
 	const bodies: Record<PullTab, ReactNode> = {
 		changes: <ChangesTab repoId={repoId} number={number} mode={mode} />,
-		summary: <SummaryTab onOpenGuide={openGuide} onOpenFile={openFile} />,
+		description: (
+			<DescriptionTab
+				onOpenGuide={openGuide}
+				onOpenFile={openFile}
+				onOpenFinding={openFinding}
+				onOpenReview={() => replaceAddress(pullHref(base, repoId, number, 'review'))}
+			/>
+		),
 		review: <BugsTab />,
 		commits: <CommitsTab />
 	};

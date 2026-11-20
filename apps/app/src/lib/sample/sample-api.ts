@@ -24,6 +24,7 @@ import { createSampleRepoChats } from './sample-repo-chat';
 import { sampleRepoOverview } from './sample-repo-overview';
 import { createSampleSkills } from './sample-skills';
 import { sampleClaims } from './sample-claims';
+import { sampleDescription, sampleRedescribe } from './sample-description';
 import { sampleCommits } from './sample-pulls';
 import { SAMPLE_REVIEW } from './sample-review';
 import { adoptSampleRun, playSampleRun, type RunScript, type SampleRun } from './sample-run';
@@ -262,6 +263,8 @@ export function createSampleApi(): ApiClient {
 		pullCommits: async (repoId, number) => sampleCommits(world.findPull(repoId, number)),
 		pullChecks: async (repoId, number) => world.findPull(repoId, number).checks,
 		pullComments: async (repoId, number) => world.data().comments[`${repoId}#${number}`] ?? [],
+		pullDescription: async (repoId, number) => sampleDescription(repoId, number),
+		redescribePull: async (repoId, number) => sampleRedescribe(repoId, number),
 
 		async postPullComment(repoId, number, body) {
 			const key = `${repoId}#${number}`;

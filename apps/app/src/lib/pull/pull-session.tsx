@@ -15,6 +15,7 @@ import type {
 	PullChecksView,
 	PullCommitsView,
 	PullConversationView,
+	PullDescriptionView,
 	PullDiffView,
 	PullPageView
 } from './types';
@@ -123,6 +124,24 @@ export function useWarmCommits(): () => void {
 	return useCallback(() => {
 		if (session.state.getState().commits.phase === 'idle') void session.pages.loadCommits();
 	}, [session]);
+}
+
+/** The Description tab's AI description; it loads the first time the tab is used and reads again while it is written. */
+export function usePullDescriptionView(): PullDescriptionView {
+	const session = useSession();
+	const description = useSessionData((data) => data.description);
+
+	useEffect(() => {
+		if (session.state.getState().description.phase === 'idle') void session.pages.loadDescription();
+	}, [session]);
+
+	return useMemo(
+		() => ({
+			state: loadable(description, () => void session.pages.loadDescription()),
+			redescribe: () => void session.pages.redescribe()
+		}),
+		[description, session]
+	);
 }
 
 /** The Commits tab; it loads the first time it is used, if the pointer resting on its link has not loaded it already. */
