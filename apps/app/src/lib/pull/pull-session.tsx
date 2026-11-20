@@ -1,11 +1,12 @@
 'use client';
 
 import type { PrCheck, PullCheckTally, Review, ReviewListItem } from '@recoder/shared';
-import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
 import { useListStore, useSessionCache } from '../api/client';
 import { openCounts, shortRepoName } from '../pulls/pull-rows';
+import { landingTab } from './landing-tab';
 import { chosenMethod, mergeBlock } from './merge';
 import type { Session } from './session';
 import { loaded, type Load, type SessionData } from './session-state';
@@ -17,7 +18,8 @@ import type {
 	PullConversationView,
 	PullDescriptionView,
 	PullDiffView,
-	PullPageView
+	PullPageView,
+	PullTab
 } from './types';
 
 const SessionContext = createContext<Session | null>(null);
@@ -124,6 +126,20 @@ export function useWarmCommits(): () => void {
 	return useCallback(() => {
 		if (session.state.getState().commits.phase === 'idle') void session.pages.loadCommits();
 	}, [session]);
+}
+
+/**
+ * The open tab: the one the address names, else where the page lands. The landing is decided once, when the
+ * description is first read, so a later failure to write it again never moves the reader to another tab.
+ */
+export function useOpenTab(named: PullTab | null): PullTab {
+	const description = useSessionData((data) => data.description);
+	const [landed, setLanded] = useState<PullTab | null>(null);
+	const decided = named || landed ? null : landingTab(description);
+
+	if (decided) setLanded(decided);
+
+	return named ?? landed ?? decided ?? 'description';
 }
 
 /** The Description tab's AI description; it loads the first time the tab is used and reads again while it is written. */

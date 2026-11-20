@@ -11,7 +11,13 @@ import { useBugsView } from '@/lib/bugs/use-bugs';
 import { useChangesNav } from '@/lib/changes/use-changes';
 import { forgeLabel } from '@/lib/connections/forges';
 import { LOADING_PULL_PAGE } from '@/lib/pull/loading-page';
-import { PullSessionProvider, useMergeView, usePullChecksView, usePullPageView } from '@/lib/pull/pull-session';
+import {
+	PullSessionProvider,
+	useMergeView,
+	useOpenTab,
+	usePullChecksView,
+	usePullPageView
+} from '@/lib/pull/pull-session';
 import type { PullTab } from '@/lib/pull/types';
 import { usePullTab } from '@/lib/pull/use-pull-tab';
 import { isLive } from '@/lib/run/run-phase';
@@ -43,8 +49,8 @@ interface PullScreenProps {
 }
 
 interface PullOnTabProps extends PullScreenProps {
-	/** The open tab. */
-	tab: PullTab;
+	/** The tab the address names; null to land where the page decides. */
+	tab: PullTab | null;
 }
 
 /** The Review tab's tools; they read the review, so they mount only on that tab. */
@@ -100,11 +106,12 @@ function LoadingHeader() {
 
 /**
  * The page inside its session: the bar, the header with its merge facts, the tabs and the open tab. The tabs
- * come from the address, so they stand from the first frame; while the page loads, the header is a skeleton
+ * stand from the first frame, on the tab the address names or where the page lands; while the page loads, the header is a skeleton
  * measured from a stand-in page and the open tab shows its own.
  */
-function PullFrame({ repoId, number, tab }: PullOnTabProps) {
+function PullFrame({ repoId, number, tab: named }: PullOnTabProps) {
 	const { base } = useApi();
+	const tab = useOpenTab(named);
 	const view = usePullPageView();
 	const [mode, setMode] = useState<ChangesMode>('files');
 	const nav = useChangesNav();
@@ -212,7 +219,7 @@ function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 }
 
 /**
- * A pull request's page on `tab`. Everything under it reads one session for
+ * A pull request's page on `tab`, or where it lands. Everything under it reads one session for
  * this pull request; another pull request gets a fresh one.
  */
 export function PullOnTab({ repoId, number, tab }: PullOnTabProps) {
@@ -223,7 +230,7 @@ export function PullOnTab({ repoId, number, tab }: PullOnTabProps) {
 	);
 }
 
-/** A pull request's page on the tab its address names. */
+/** A pull request's page on the tab its address names, or where it lands when it names none. */
 export function PullScreen({ repoId, number }: PullScreenProps) {
 	return <PullOnTab repoId={repoId} number={number} tab={usePullTab()} />;
 }

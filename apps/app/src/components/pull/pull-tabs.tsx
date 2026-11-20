@@ -13,8 +13,8 @@ import { type PageTab, PageTabs } from '@/components/common/page-tabs';
 import { reviewTabMark } from './review-tab-mark';
 
 const LABELS: Record<PullTab, string> = {
-	changes: 'Changes',
 	description: 'Description',
+	changes: 'Changes',
 	review: 'Review',
 	commits: 'Commits'
 };
@@ -43,8 +43,8 @@ export function PullTabs({ repoId, number, tab, counts }: PullTabsProps) {
 	const warmCommits = useWarmCommits();
 
 	useKeys({
-		'1': () => open('changes'),
-		'2': () => open('description'),
+		'1': () => open('description'),
+		'2': () => open('changes'),
 		'3': () => open('review'),
 		'4': () => open('commits')
 	});
