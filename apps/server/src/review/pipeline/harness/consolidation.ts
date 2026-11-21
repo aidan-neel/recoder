@@ -3,7 +3,6 @@ import { withTopics } from '../../guidelines/learned/topics.js';
 import { findLedgerRule, toFindingRule, type RuleLedger } from '../../guidelines/ledger/types.js';
 import { consolidateFindings } from '../consolidate-merge.js';
 import { orchestratorSays, publishCandidates, type ReviewRun } from './context.js';
-import { deduplicatePublished } from './duplicate-stage.js';
 
 export interface Consolidated {
 	confirmed: Finding[];
@@ -46,14 +45,14 @@ export function confirmedFindings(run: ReviewRun): Finding[] {
  * run, merge deterministically into findings. Unproven ones were hidden by the
  * verify stage and never show.
  */
-export async function consolidate(run: ReviewRun): Promise<Consolidated> {
+export function consolidate(run: ReviewRun): Consolidated {
 	const { task } = run;
 
 	run.events?.onStage?.('consolidation');
 	publishCandidates(run);
 
 	const checks = [...run.recommended];
-	const confirmed = await deduplicatePublished(run, confirmedFindings(run));
+	const confirmed = confirmedFindings(run);
 
 	task(
 		'consolidation',

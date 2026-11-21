@@ -148,7 +148,7 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 
 	await finishVerification(run);
 
-	const consolidated = await consolidate(run);
+	const consolidated = consolidate(run);
 
 	publishCoverage(run);
 	publishBudget(run);

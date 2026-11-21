@@ -52,7 +52,7 @@ def stop_isolated_server():
         raise RuntimeError('isolated server did not terminate; refusing to start another listener')
 
 
-def main(plan=None, prefix='verifier-ab', dataset=None, set_name='dev-v0', immutable_dataset=False):
+def main(plan=None, prefix='verifier-ab', dataset=None, set_name='dev-v0', immutable_dataset=False, release_generation=True):
     data = Path(dataset) if dataset is not None else DATA
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     work = ROOT/'metrics'/(prefix+'-'+stamp)
@@ -167,9 +167,11 @@ def main(plan=None, prefix='verifier-ab', dataset=None, set_name='dev-v0', immut
                     time.sleep(1)
         state['finished_at']=datetime.datetime.now(datetime.timezone.utc).isoformat();save()
     finally:
-        if state['generation_paused']:
+        if state['generation_paused'] and release_generation:
             PAUSE.unlink(missing_ok=True)
             state['generation_released']=True
+        elif state['generation_paused']:
+            state['generation_held_for_report']=True
         if child is not None:
             start({},'restored-baseline')
             api('/api/settings/models',original,method='PATCH')

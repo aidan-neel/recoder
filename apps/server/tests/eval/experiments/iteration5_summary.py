@@ -15,10 +15,11 @@ from verifier_ab_summary import summarize
 from ledger import quantile
 
 
-def summary(directory, arms=('A', 'F'), titles=('A legacy', 'F defaults'), iteration=5, policy='Application policy unchanged.'):
+def summary(directory, arms=('A', 'F'), titles=('A legacy', 'F defaults'), iteration=5, policy='Application policy unchanged.', sample_counts=None):
+    sample_counts=sample_counts or {arm:2 for arm in arms}
     state=json.loads((directory/'state.json').read_text())
-    assert state.get('generation_released') and state.get('finished_at')
-    assert len(state['arms'])==4 and all(a['status']=='completed' and a['ledger_exit_code']==0 for a in state['arms'])
+    assert state.get('finished_at') and (state.get('generation_released') or state.get('generation_held_for_report'))
+    assert len(state['arms'])==sum(sample_counts.values()) and all(a['status']=='completed' and a['ledger_exit_code']==0 for a in state['arms'])
     frozen=Path(state['dataset']);manifest=json.loads((frozen/'manifest.json').read_text())
     for file,digest in json.loads((frozen/'SHA256SUMS.json').read_text()).items():
         assert hashlib.sha256((frozen/file).read_bytes()).hexdigest()==digest,file
@@ -57,7 +58,7 @@ def summary(directory, arms=('A', 'F'), titles=('A legacy', 'F defaults'), itera
         denied,raw_sessions,unreadable=denied_events(directory,timestamp(report['startedAt']),timestamp(report['finishedAt']))
         events.extend(dict(sample=arm['arm'],**e) for e in denied)
         v=s['verifier'];assert v['sessions']>0
-        s.update(sample=arm['arm'],arm=arm['arm'][0],source=str(reportfiles[0]),strata=strata,
+        s.update(sample=arm['arm'],arm=arm['arm'].split('-')[0],source=str(reportfiles[0]),source_commit=arm.get('source_commit',state['source_commit']),strata=strata,
             findings=dict(Counter(classes)),raw_findings=dict(Counter(rawclasses)),precision=precision_bounds(classes),raw_precision=precision_bounds(rawclasses),
             controls=dict(prs=len(controlrows),classes=dict(Counter(controlclasses)),rawClasses=dict(Counter(controlraw)),findings=len(controlclasses),findings_per_control=len(controlclasses)/len(controlrows),
                 precision=precision_bounds(controlclasses),rawPrecision=precision_bounds(controlraw),false_prs=sum(r['classes'].get('false',0)>0 for r in controlrows),
@@ -67,7 +68,7 @@ def summary(directory, arms=('A', 'F'), titles=('A legacy', 'F defaults'), itera
             case_latency_ms={str(q):quantile(case_durations,q) for q in (.5,.95)})
         samples.append(s)
     assert set(overlay)<=observed,'overlay refers to unobserved findings'
-    assert Counter(s['arm'] for s in samples)=={arm:2 for arm in arms}
+    assert Counter(s['arm'] for s in samples)==sample_counts
     fields={
         'Candidate /59':lambda s:s['recall']['found'],'Verified /59':lambda s:s['recall']['verified'],'Published /59':lambda s:s['recall']['published'],
         'Adjudicated false':lambda s:s['findings'].get('false',0),'Unresolved':lambda s:s['findings'].get('unresolved',0),'Duplicate':lambda s:s['findings'].get('duplicate',0),
@@ -88,7 +89,8 @@ def summary(directory, arms=('A', 'F'), titles=('A legacy', 'F defaults'), itera
     fields['Scored not found /59']=lambda s:sum(not d['found'] for d in s['by_defect'].values())
     fields['Found but unverified /59']=lambda s:sum(d['found'] and not d['verified'] for d in s['by_defect'].values())
     fields['Verified but unpublished /59']=lambda s:sum(d['verified'] and not d['published'] for d in s['by_defect'].values())
-    aggregates={};lines=['## Results','',f'Artifacts: `{directory}`; experiment commit `{state["source_commit"]}`. Four completed samples, 60 reviews ingested. Cells: mean [min, max] over two samples. {policy} Cached input is included in input; tokens exclude judge calls. Unknown-input/output calls are excluded in full, never treated as zero. These are accounting bounds, not confidence intervals.','', '| Metric | '+' | '.join(titles)+' |','|---|---:|---:|']
+    counts=', '.join(f'{arm}: {sample_counts[arm]}' for arm in arms)
+    aggregates={};lines=['## Results','',f'Artifacts: `{directory}`; experiment commit `{state["source_commit"]}`. {len(samples)} completed samples, {sum(s["reviews"] for s in samples)} reviews ingested. Cells: mean [min, max]; sample counts {counts}. {policy} Cached input is included in input; tokens exclude judge calls. Unknown-input/output calls are excluded in full, never treated as zero. These are accounting bounds, not confidence intervals.','', '| Metric | '+' | '.join(titles)+' |','|---|'+'---:|'*len(arms)]
     for name,measure in fields.items():
         values={arm:[measure(s) for s in samples if s['arm']==arm] for arm in arms}
         for arm in arms:aggregates.setdefault(arm,{})[name]=None if None in values[arm] else dict(mean=statistics.mean(values[arm]),min=min(values[arm]),max=max(values[arm]))
@@ -102,7 +104,7 @@ def summary(directory, arms=('A', 'F'), titles=('A legacy', 'F defaults'), itera
     for s in samples:lines.append('| '+s['sample']+' | '+' | '.join('/'.join(str(s['strata'][stratum][stage]) for stage in ('found','verified','published')) for stratum in ('repository-heldout','new-PR-same-repository'))+' |')
     lines += ['','### Every control run','','| Sample | Control | Findings | False | Unresolved | Additional |','|---|---|---:|---:|---:|---:|']
     for r in controls:lines.append(f'| {r["sample"]} | {r["pr"]} | {r["findings"]} | {r["classes"].get("false",0)} | {r["classes"].get("unresolved",0)} | {r["classes"].get("additional",0)} |')
-    lines += ['','### Per-defect publication spread','','| Defect | '+' | '.join(arm+' candidate/verified/published out of 2' for arm in arms)+' |','|---|---|---|']
+    lines += ['','### Per-defect publication spread','','| Defect | '+' | '.join(arm+f' candidate/verified/published out of {sample_counts[arm]}' for arm in arms)+' |','|---|'+'---|'*len(arms)]
     for key in sorted(samples[0]['by_defect']):
         cells=['/'.join(str(sum(bool(s['by_defect'][key][stage]) for s in samples if s['arm']==arm)) for stage in ('found','verified','published')) for arm in arms];lines.append('| '+key+' | '+' | '.join(cells)+' |')
     text='\n'.join(lines)+'\n';(directory/'comparison.md').write_text(text)
