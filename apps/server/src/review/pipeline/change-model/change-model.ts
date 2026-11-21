@@ -10,6 +10,7 @@ import { findUsage } from './references.js';
 import { byCodePoint, readAt, readTracked } from './repo.js';
 import { symbolsOf, type ParsedSymbol } from './symbols.js';
 import type { ChangedSymbol, ChangeModel } from './types.js';
+import { precisionFixes } from '../detectors/precision-policy.js';
 
 export { symbolAt, unitContext, unitContextParts } from './lookup.js';
 
@@ -157,6 +158,8 @@ function withPrevious(owned: Owned[], old: ParsedSymbol[]): Owned[] {
 	return owned.map((symbol) => {
 		const prior = before.get(symbol.id);
 
+		if (precisionFixes() && prior && symbol.change === 'added') symbol = { ...symbol, change: 'modified' };
+
 		if (symbol.change !== 'modified' || !prior) return symbol;
 
 		return prior.signature !== symbol.signature || prior.exported !== symbol.exported
@@ -175,13 +178,19 @@ async function modelFile(
 
 	const headSource = file.status === 'deleted' ? null : await readTracked(input.checkoutPath, file.path, tracked);
 	const head = headSource === null ? null : await symbolsOf(file.path, headSource);
-	const wantOld = Boolean(input.baseSha) && file.status !== 'added' && file.deletions > 0;
+	const wantOld = Boolean(input.baseSha) && file.status !== 'added' && (file.deletions > 0 || precisionFixes());
 	const oldSource = wantOld ? await readAt(input.checkoutPath, input.baseSha!, file.path, input.signal) : null;
 	const old = oldSource === null ? null : await symbolsOf(file.path, oldSource);
 
 	if (!head && !old) return { owned: [], unparsed: true };
 
-	const modified = withPrevious(headOwned(file, head ?? [], hunks), old ?? []);
+	const owned = headOwned(file, head ?? [], hunks).map((symbol) =>
+		precisionFixes() && file.status !== 'added' && old === null && symbol.change === 'added'
+			? { ...symbol, change: 'modified' as const }
+			: symbol
+	);
+
+	const modified = withPrevious(owned, old ?? []);
 
 	return {
 		owned: [

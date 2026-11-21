@@ -12,6 +12,8 @@ python3 -m unittest discover -s apps/server/tests/eval/experiments -v
 python3 apps/server/tests/eval/experiments/iteration5_freeze.py
 VERIFIER_AB_START_PAUSED=1 python3 apps/server/tests/eval/experiments/iteration5_benchmark.py
 python3 apps/server/tests/eval/experiments/iteration5_summary.py /home/ubuntu/eval-work/metrics/<completed-artifacts>
+VERIFIER_AB_START_PAUSED=1 python3 apps/server/tests/eval/experiments/iteration6_benchmark.py
+python3 apps/server/tests/eval/experiments/iteration6_summary.py /home/ubuntu/eval-work/metrics/<completed-artifacts>
 ```
 
 The freeze includes all verified, published SWE-2 cases outside dev-v0 at its
@@ -35,3 +37,8 @@ The summary reports raw and post-audit precision separately; overlays require
 source/contract evidence and cannot overwrite planted or duplicate matches.
 Rerunning it regenerates the Results section; keep narrative audit evidence in
 a separate artifact before appending it to the final report.
+
+Iteration 6 reuses the same immutable snapshot and report implementation, with
+F1/G1/F2/G2. F explicitly sets `RECODER_PRECISION_FIXES=0`; G sets it to `1`.
+The driver's restored server uses the current default with experiment flags
+cleared. F retains the promoted MCP-only routing and verifier-session fixes.

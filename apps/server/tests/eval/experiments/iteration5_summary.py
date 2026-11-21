@@ -15,7 +15,7 @@ from verifier_ab_summary import summarize
 from ledger import quantile
 
 
-def summary(directory):
+def summary(directory, arms=('A', 'F'), titles=('A legacy', 'F defaults'), iteration=5, policy='Application policy unchanged.'):
     state=json.loads((directory/'state.json').read_text())
     assert state.get('generation_released') and state.get('finished_at')
     assert len(state['arms'])==4 and all(a['status']=='completed' and a['ledger_exit_code']==0 for a in state['arms'])
@@ -67,7 +67,7 @@ def summary(directory):
             case_latency_ms={str(q):quantile(case_durations,q) for q in (.5,.95)})
         samples.append(s)
     assert set(overlay)<=observed,'overlay refers to unobserved findings'
-    assert Counter(s['arm'] for s in samples)=={'A':2,'F':2}
+    assert Counter(s['arm'] for s in samples)=={arm:2 for arm in arms}
     fields={
         'Candidate /59':lambda s:s['recall']['found'],'Verified /59':lambda s:s['recall']['verified'],'Published /59':lambda s:s['recall']['published'],
         'Adjudicated false':lambda s:s['findings'].get('false',0),'Unresolved':lambda s:s['findings'].get('unresolved',0),'Duplicate':lambda s:s['findings'].get('duplicate',0),
@@ -88,13 +88,13 @@ def summary(directory):
     fields['Scored not found /59']=lambda s:sum(not d['found'] for d in s['by_defect'].values())
     fields['Found but unverified /59']=lambda s:sum(d['found'] and not d['verified'] for d in s['by_defect'].values())
     fields['Verified but unpublished /59']=lambda s:sum(d['verified'] and not d['published'] for d in s['by_defect'].values())
-    aggregates={};lines=['## Results','',f'Artifacts: `{directory}`; experiment commit `{state["source_commit"]}`. Four completed samples, 60 reviews ingested. Cells: mean [min, max] over two samples. Application policy unchanged. Cached input is included in input; tokens exclude judge calls. Unknown-input/output calls are excluded in full, never treated as zero. These are accounting bounds, not confidence intervals.','', '| Metric | A legacy | F defaults |','|---|---:|---:|']
+    aggregates={};lines=['## Results','',f'Artifacts: `{directory}`; experiment commit `{state["source_commit"]}`. Four completed samples, 60 reviews ingested. Cells: mean [min, max] over two samples. {policy} Cached input is included in input; tokens exclude judge calls. Unknown-input/output calls are excluded in full, never treated as zero. These are accounting bounds, not confidence intervals.','', '| Metric | '+' | '.join(titles)+' |','|---|---:|---:|']
     for name,measure in fields.items():
-        values={arm:[measure(s) for s in samples if s['arm']==arm] for arm in 'AF'}
-        for arm in 'AF':aggregates.setdefault(arm,{})[name]=None if None in values[arm] else dict(mean=statistics.mean(values[arm]),min=min(values[arm]),max=max(values[arm]))
+        values={arm:[measure(s) for s in samples if s['arm']==arm] for arm in arms}
+        for arm in arms:aggregates.setdefault(arm,{})[name]=None if None in values[arm] else dict(mean=statistics.mean(values[arm]),min=min(values[arm]),max=max(values[arm]))
         render=(lambda a:f'{statistics.mean(a):.3f} [{min(a):.3f}, {max(a):.3f}]') if name=='MCP refusals/session' else fmt
         if name=='Findings/control':render=lambda a:f'{statistics.mean(a):.2f} [{min(a):.2f}, {max(a):.2f}]'
-        lines.append('| '+name+' | '+' | '.join('undefined (empty sample)' if None in values[a] else render(values[a]) for a in 'AF')+' |')
+        lines.append('| '+name+' | '+' | '.join('undefined (empty sample)' if None in values[a] else render(values[a]) for a in arms)+' |')
     lines += ['','### Precision intervals','','TP = planted + adjudicated additional; U = unresolved; N = all published findings including duplicates. Lower TP/N; upper (TP+U)/N. Empty N is undefined, not 100%. The raw intervals precede any overlay.','', '| Sample | Raw overall | Post-audit overall | Raw controls | Post-audit controls |','|---|---|---|---|---|']
     def interval(x):return f'{100*x["lower"]:.1f}%–{100*x["upper"]:.1f}% (N={x["published"]}, U={x["unresolved"]})' if x else 'undefined (N=0)'
     for s in samples:lines.append('| '+s['sample']+' | '+' | '.join(interval(v) for v in [s['raw_precision'],s['precision'],s['controls']['rawPrecision'],s['controls']['precision']])+' |')
@@ -102,13 +102,13 @@ def summary(directory):
     for s in samples:lines.append('| '+s['sample']+' | '+' | '.join('/'.join(str(s['strata'][stratum][stage]) for stage in ('found','verified','published')) for stratum in ('repository-heldout','new-PR-same-repository'))+' |')
     lines += ['','### Every control run','','| Sample | Control | Findings | False | Unresolved | Additional |','|---|---|---:|---:|---:|---:|']
     for r in controls:lines.append(f'| {r["sample"]} | {r["pr"]} | {r["findings"]} | {r["classes"].get("false",0)} | {r["classes"].get("unresolved",0)} | {r["classes"].get("additional",0)} |')
-    lines += ['','### Per-defect publication spread','','| Defect | A candidate/verified/published out of 2 | F candidate/verified/published out of 2 |','|---|---|---|']
+    lines += ['','### Per-defect publication spread','','| Defect | '+' | '.join(arm+' candidate/verified/published out of 2' for arm in arms)+' |','|---|---|---|']
     for key in sorted(samples[0]['by_defect']):
-        cells=['/'.join(str(sum(bool(s['by_defect'][key][stage]) for s in samples if s['arm']==arm)) for stage in ('found','verified','published')) for arm in 'AF'];lines.append('| '+key+' | '+' | '.join(cells)+' |')
+        cells=['/'.join(str(sum(bool(s['by_defect'][key][stage]) for s in samples if s['arm']==arm)) for stage in ('found','verified','published')) for arm in arms];lines.append('| '+key+' | '+' | '.join(cells)+' |')
     text='\n'.join(lines)+'\n';(directory/'comparison.md').write_text(text)
-    for name,value in [('iteration5-summary',dict(state=state,samples=samples,aggregate=aggregates)),('control-findings',[x for x in unmatched if x['control']]),('unmatched-findings',unmatched),('miss-evidence',misses),('verifier-session-refusals',sessions),('denied-tool-events',events)]:
+    for name,value in [(f'iteration{iteration}-summary',dict(state=state,samples=samples,aggregate=aggregates)),('control-findings',[x for x in unmatched if x['control']]),('unmatched-findings',unmatched),('miss-evidence',misses),('verifier-session-refusals',sessions),('denied-tool-events',events)]:
         (directory/(name+'.json')).write_text(json.dumps(value,indent=2)+'\n')
-    report=ROOT/'metrics/ITERATION-5.md';report.write_text(report.read_text().split('## Results')[0]+text)
+    report=ROOT/f'metrics/ITERATION-{iteration}.md';report.write_text((report.read_text().split('## Results')[0] if report.exists() else f'# Iteration {iteration}\n\n')+text)
     print('\n'.join(lines[:50]))
 
 

@@ -2,6 +2,8 @@ import type { ChangeModel, ChangedSymbol, RepoMetricsBaseline, SymbolMetrics } f
 import type { ReviewInventory } from '../inventory.js';
 import type { AddedLines } from './changed-lines.js';
 import type { DetectorResult } from './types.js';
+import { isTestPath } from '../change-model/test-files.js';
+import { precisionFixes } from './precision-policy.js';
 
 /**
  * A symbol counts as complex only past both the repo's own p95 and these
@@ -26,6 +28,16 @@ function frameworkEntry(file: string): boolean {
 	return (file.split('/').pop() ?? '').startsWith('+');
 }
 
+/** Test runners discover declarations without an import or textual call site. */
+function discoveredTest(symbol: ChangedSymbol): boolean {
+	if (symbol.language === 'python' && /(^|\/)conftest\.py$/.test(symbol.file)) return true;
+	if (!isTestPath(symbol.file) && !/(^|\/)test(?:-[^/]+)?\.[cm]?[jt]sx?$/.test(symbol.file)) return false;
+	if (symbol.language === 'go')
+		return symbol.kind === 'function' && /^(?:Test|Benchmark|Example|Fuzz)(?:$|[^a-z])/.test(symbol.name);
+
+	return true;
+}
+
 /**
  * Exported symbols the change adds that nothing outside their own file names,
  * tests included: an export no one imports. A test file that sits beside the
@@ -41,6 +53,7 @@ export function deadCodeResults(model: ChangeModel | null, inventory: ReviewInve
 		.filter(
 			(symbol) =>
 				symbol.change === 'added' &&
+				(!precisionFixes() || (!symbol.previousSignature && !discoveredTest(symbol))) &&
 				symbol.exported &&
 				symbol.kind !== 'module' &&
 				symbol.name !== 'default' &&
