@@ -25,14 +25,14 @@ const HASH = '[0-9a-f]{7,40}';
 
 const COMMIT_HASH = new RegExp(`^${HASH}$`, 'i');
 
-const INLINE_HASH = new RegExp(`\`${HASH}\``, 'i');
+const INLINE_HASH = new RegExp(`(?:\`${HASH}\`|<code\\b[^>]*>${HASH}</code>)`, 'i');
 
 /**
- * True when Markdown holds inline code, the only text that can become a file's badge. Prose without any does not
- * change when the diff arrives, so it need not wait for it.
+ * True when Markdown holds inline code (backticks or HTML `<code>`), the only text that can become
+ * a file's badge. Prose without any does not change when the diff arrives, so it need not wait for it.
  */
 export function mayNameFile(markdown: string): boolean {
-	return markdown.includes('`');
+	return markdown.includes('`') || /<code\b/i.test(markdown);
 }
 
 /** True when Markdown holds inline code shaped like a commit's hash, the only text the commits can change. */

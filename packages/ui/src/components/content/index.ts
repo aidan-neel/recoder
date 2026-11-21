@@ -5,6 +5,7 @@ export { CodeLines, type CodeLine } from './code-lines';
 export { escapeHtml, preloadHighlighter } from './highlight';
 export { whenIdle } from './idle';
 export { langForPath } from './languages';
+export { GitHubMarkdown, type GitHubMarkdownProps } from './github-markdown';
 export { Markdown } from './markdown';
 export { prepareMarkdown, StaticMarkdown } from './markdown-render';
 export {

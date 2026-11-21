@@ -20,5 +20,6 @@
 @import './kit-display-resize.css';
 @import './kit-display-chart.css';
 @import './kit-content.css';
+@import './kit-content-github.css';
 
 @custom-variant dark (&:where(.dark, .dark *));

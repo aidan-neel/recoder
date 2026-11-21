@@ -1,7 +1,7 @@
 'use client';
 
 import type { PullCommit } from '@recoder/shared';
-import { FileIcon, InlineCode, Markdown } from '@recoder/ui';
+import { FileIcon, GitHubMarkdown, InlineCode, Markdown } from '@recoder/ui';
 import { GitCommitIcon } from '@phosphor-icons/react';
 import { createContext, use } from 'react';
 
@@ -10,10 +10,12 @@ import { readProseRef, type ProseSources } from '@/lib/summary/prose-refs';
 
 import { RefChip } from '@/components/common/ref-chip';
 
-/** What the Summary's prose may name, and how a file it names opens. */
+/** What the Summary's prose may name, how a file it names opens, and which forge its `@mentions` link to. */
 interface ProseRefs {
 	sources: ProseSources;
 	openFile: (path: string) => void;
+	/** The forge origin (`https://github.com`, a self-hosted GitLab host), or null on a local repository. */
+	forgeOrigin: string | null;
 }
 
 /** Null outside the Summary, where inline code stays code. */
@@ -66,7 +68,18 @@ function ProseCode({ code }: { code: string }) {
 	);
 }
 
-/** The Summary's Markdown: the review's account, the author's description and the conversation, with their badges. */
+/** The Summary's model-written Markdown (overview, groups and notes), with file and commit badges. */
 export function SummaryProse({ children }: { children: string }) {
 	return <Markdown inlineCode={ProseCode}>{children}</Markdown>;
+}
+
+/** Forge-authored Markdown (the pull request's description and conversation), with sanitized GitHub HTML and badges. */
+export function ForgeProse({ children }: { children: string }) {
+	const refs = use(ProseRefsContext);
+
+	return (
+		<GitHubMarkdown inlineCode={ProseCode} forgeOrigin={refs ? refs.forgeOrigin : undefined}>
+			{children}
+		</GitHubMarkdown>
+	);
 }
