@@ -14,6 +14,7 @@ VERIFIER_AB_START_PAUSED=1 python3 apps/server/tests/eval/experiments/iteration5
 python3 apps/server/tests/eval/experiments/iteration5_summary.py /home/ubuntu/eval-work/metrics/<completed-artifacts>
 VERIFIER_AB_START_PAUSED=1 python3 apps/server/tests/eval/experiments/iteration6_benchmark.py /home/ubuntu/eval-work/metrics/<original-f1-g1-f2>
 python3 apps/server/tests/eval/experiments/iteration6_summary.py /home/ubuntu/eval-work/metrics/<original-f1-g1-f2> /home/ubuntu/eval-work/metrics/<completed-detector-continuation>
+python3 apps/server/tests/eval/experiments/iteration6_latency.py /home/ubuntu/eval-work/metrics/<original-f1-g1-f2> /home/ubuntu/eval-work/metrics/<detector-continuation>
 ```
 
 The freeze includes all verified, published SWE-2 cases outside dev-v0 at its
@@ -53,3 +54,7 @@ The driver's restored server uses the current default with experiment flags
 cleared. F retains the promoted MCP-only routing and verifier-session fixes.
 Generation remains paused after this continuation for control auditing, reporting
 and the promotion decision. Release its owned pause marker explicitly afterward.
+The latency analyzer only reads the four completed F1/G1/F2/G′1 reports, stored
+progress and model-call records. It never launches a review. Its per-PR CSV and
+stage-union tables distinguish overlapping verification time from additive wall
+time and keep observed provider backoff separate from internal CLI unknowns.
