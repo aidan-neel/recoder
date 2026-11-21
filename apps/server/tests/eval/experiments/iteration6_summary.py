@@ -1,10 +1,10 @@
 """Compare F1-F3, detector-only Gprime1/Gprime2, and the rejected semantic G1."""
 import json
 from pathlib import Path
-import shutil
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from iteration5_summary import summary
+from comparison_artifacts import prepare_comparison, promotion_decision
 
 
 def combined_state(previous, continuation):
@@ -28,35 +28,11 @@ def combined_state(previous, continuation):
 def prepare(previous, continuation):
     states=[json.loads((p/'state.json').read_text()) for p in (previous,continuation)]
     state=combined_state(*states)
-    directory=continuation/'combined'
-    directory.mkdir(exist_ok=True)
-    for source,data in zip((previous,continuation),states):
-        for arm in data['arms']:
-            tag=arm['arm']+'-attempt'+str(arm['attempt'])+'-reports'
-            shutil.copytree(source/tag,directory/tag,dirs_exist_ok=True)
-        exports=directory/'raw-exports'
-        exports.mkdir(exist_ok=True)
-        for export in (source/'raw-exports').iterdir():
-            target=exports/export.name
-            if target.exists():assert target.read_bytes()==export.read_bytes(),export.name
-            else:shutil.copy2(export,target)
-    state['work']=str(directory)
-    (directory/'state.json').write_text(json.dumps(state,indent=2)+'\n')
-    return directory
+    return prepare_comparison((previous, continuation), state, continuation/'combined')
 
 
 def promotion(samples):
-    baseline=[s for s in samples if s['arm']=='F']
-    candidate=[s for s in samples if s['arm']=='Gprime']
-    assert len(baseline)==3 and len(candidate)==2
-    published=lambda group:sum(s['recall']['published'] for s in group)
-    false=lambda group:sum(s['controls']['classes'].get('false',0) for s in group)
-    losses=[sum(d['verified'] and not d['published'] for d in s['by_defect'].values()) for s in candidate]
-    recall_no_worse=published(candidate)*len(baseline)>=published(baseline)*len(candidate)
-    control_false_improved=false(candidate)*len(baseline)<false(baseline)*len(candidate)
-    return dict(promote=recall_no_worse and control_false_improved and not any(losses),
-                recall_no_worse=recall_no_worse,control_false_improved=control_false_improved,
-                candidate_verified_unpublished=losses)
+    return promotion_decision(samples, 'Gprime', improve=True)
 
 
 if __name__ == '__main__':
