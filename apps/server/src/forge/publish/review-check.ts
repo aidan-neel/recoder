@@ -1,11 +1,17 @@
-import { FINDING_SEVERITIES, type CheckThreshold, type Finding, type FindingSeverity } from '@recoder/shared';
+import {
+	FINDING_SEVERITIES,
+	findingTier,
+	type CheckThreshold,
+	type Finding,
+	type FindingSeverity
+} from '@recoder/shared';
 import type { CommitStatus } from './forge';
 
 const SEVERITY_WORD: Record<FindingSeverity, string> = { error: 'error', warning: 'warning', info: 'low' };
 
 /** True when a reportable finding's severity meets or exceeds `threshold`. */
-export function failsCheckThreshold(finding: Pick<Finding, 'severity'>, threshold: CheckThreshold): boolean {
-	if (threshold === 'off') return false;
+export function failsCheckThreshold(finding: Pick<Finding, 'severity' | 'tier'>, threshold: CheckThreshold): boolean {
+	if (threshold === 'off' || findingTier(finding) === 'fyi') return false;
 
 	return FINDING_SEVERITIES.indexOf(finding.severity) >= FINDING_SEVERITIES.indexOf(threshold);
 }

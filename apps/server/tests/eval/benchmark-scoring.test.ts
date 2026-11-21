@@ -41,6 +41,44 @@ const run = {
 
 const report = { prs: [{ id: 'pr-1', runs: [run] }] } as unknown as BenchmarkReport;
 
+test('rescoring excludes FYI but retains legacy low findings and keeps their ids aligned', async () => {
+	const note: EvalFinding = { ...finding, severity: 'error', tier: 'fyi', message: 'FYI-only observation' };
+	const legacy: EvalFinding = { ...note, tier: undefined, severity: 'info', message: 'Legacy low risk.' };
+	const bug: EvalFinding = { ...finding, severity: 'error', tier: 'bug' };
+
+	const pool = [note, legacy, bug].map((finding, index) => ({
+		...finding,
+		id: `f${index}`,
+		stage: null,
+		reason: null,
+		verified: true
+	}));
+
+	const judge: Judge = {
+		chat: async (_system, user) => {
+			expect(user).not.toContain(note.message);
+
+			return '{"matches":[{"defect":"d1","finding":0,"sameBehavior":true,"sameCause":true,"reason":"same"}]}';
+		},
+		model: { model: `judge-${crypto.randomUUID()}`, provider: 'test', effort: null }
+	};
+
+	const scored = await scoreRun(
+		judge,
+		{ id: 'pr-1', defects: [defect] },
+		{ ...run, findings: [note, legacy, bug], findingIds: ['f0', 'f1', 'f2'], unconfirmed: [note] },
+		'http://server',
+		{},
+		pool
+	);
+
+	expect(scored.findings).toEqual([legacy, bug]);
+	expect(scored.findingIds).toEqual(['f1', 'f2']);
+	expect(scored.pool?.map((candidate) => candidate.id)).toEqual(['f1', 'f2']);
+	expect(scored.score?.found).toEqual({ d1: 0 });
+	expect(scored.unconfirmed).toEqual([]);
+});
+
 test('a rescore starts no review and asks the judge nothing again about findings it already scored', async () => {
 	const requests: string[] = [];
 	let judged = 0;

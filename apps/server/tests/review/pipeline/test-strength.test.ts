@@ -12,6 +12,7 @@ import { git } from '../../helpers/git';
 import {
 	NOTHING,
 	confirmingVerifier,
+	isDiffGuide,
 	isVerifier,
 	modelReply,
 	restoreAfterEach,
@@ -182,7 +183,7 @@ const INTENT_PROMPT = 'You write the brief a code change is reviewed against';
  * execution off, sorted, apart from the intent brief `reviewOf` leaves out;
  * none is a verifier. The flag must not add to it: one reviewer reads `src/a.ts` and the other the test file.
  */
-const REVIEWER_CALLS = ['reviewer-1', 'reviewer-2'];
+const REVIEWER_CALLS = ['diff-guide', 'reviewer-1', 'reviewer-2'];
 
 /**
  * Reviews a repo whose head commit adds or edits an AVA test file, and returns
@@ -209,7 +210,8 @@ async function reviewOf(files: { base?: Record<string, string>; head: Record<str
 		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 			if (systemOf(init).includes(INTENT_PROMPT)) return modelReply({ message: 'ok', ...NOTHING });
 
-			calls.push(unitOf(init) ?? (isVerifier(init) ? 'verifier' : 'other'));
+			calls.push(unitOf(init) ?? (isVerifier(init) ? 'verifier' : isDiffGuide(init) ? 'diff-guide' : 'other'));
+			if (isDiffGuide(init)) return modelReply({ groups: [] });
 
 			return modelReply({ message: 'ok', ...((isVerifier(init) ? confirmingVerifier(init) : NOTHING) as object) });
 		}) as unknown as typeof fetch;

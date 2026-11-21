@@ -1,8 +1,31 @@
 import { expect, test } from 'bun:test';
-import { emptyReviewProgress, type ReviewProgress, type ReviewToolCall } from '@recoder/shared';
+import { emptyReviewProgress, type FileDiff, type ReviewProgress, type ReviewToolCall } from '@recoder/shared';
 import { localApp as app } from '../../helpers/local-app';
-import { db, reviewProgress } from '../../../src/store';
+import { db, reviewDiffs, reviewProgress } from '../../../src/store';
 import { testReview } from '../../helpers/review';
+
+test('review diff payloads retain metadata-only renames and their move relations', async () => {
+	const review = await db.reviews.set(testReview());
+
+	try {
+		await reviewDiffs.set(
+			review.id,
+			'diff --git a/old.ts b/new.ts\nsimilarity index 100%\nrename from old.ts\nrename to new.ts'
+		);
+
+		const response = await app.request(`/api/reviews/${review.id}/files`);
+		const files = (await response.json()) as FileDiff[];
+
+		expect(response.status).toBe(200);
+
+		expect(files).toMatchObject([
+			{ status: 'renamed', oldPath: 'old.ts', path: 'new.ts', moves: [{ kind: 'renamed-file', exact: true }] }
+		]);
+	} finally {
+		await db.reviews.delete(review.id);
+		await reviewDiffs.delete(review.id);
+	}
+});
 
 /** The first server-sent event on a review's stream (one `data:` line), parsed; the stream is closed after it. */
 async function firstEvent(path: string): Promise<{ type: string; snapshot: ReviewProgress }> {

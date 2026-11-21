@@ -29,6 +29,13 @@ function finding(id: string, overrides: Partial<Finding> = {}): Finding {
 	};
 }
 
+test('FYI is not published inline or in the forge summary even with old verified evidence', () => {
+	const result = plan([finding('note', { tier: 'fyi', severity: 'error' }), finding('warning')]);
+
+	expect(result.inline.map((item) => item.finding.id)).toEqual(['warning']);
+	expect(result.listed).toEqual([]);
+});
+
 function plan(findings: Finding[], overrides: Partial<PlanInput> = {}) {
 	return planFindingsReview({
 		findings,
@@ -52,12 +59,12 @@ test('a finding on a shown line goes inline and one without a shown line goes to
 });
 
 test('findings past the cap go to the summary, keeping the worst inline', () => {
-	const result = plan([finding('low', { severity: 'info' }), finding('bad', { severity: 'error' })], {
+	const result = plan([finding('warning'), finding('bad', { severity: 'error' })], {
 		settings: { ignoredPaths: [], maxInlineComments: 1 }
 	});
 
 	expect(result.inline.map((item) => item.finding.id)).toEqual(['bad']);
-	expect(ids(result.listed)).toEqual(['low']);
+	expect(ids(result.listed)).toEqual(['warning']);
 });
 
 test('findings under an ignored path, unverified, dismissed or quieted are not posted', () => {

@@ -171,6 +171,11 @@ function isIntent(init?: RequestInit): boolean {
 	return systemOf(init).includes('You write the brief a code change is reviewed against');
 }
 
+/** The auxiliary reading-guide call is not a reviewer or a planning coordinator. */
+export function isDiffGuide(init?: RequestInit): boolean {
+	return systemOf(init).startsWith('You organize a diff into a reading guide');
+}
+
 /** The first evidence id anywhere in the call's messages, such as the scoped patch a reviewer starts with. */
 function evidenceIn(init?: RequestInit): string | null {
 	return (
@@ -193,7 +198,11 @@ export function confirmingVerifier(init?: RequestInit): unknown {
 
 /** The stage a stubbed call belongs to: a reviewer or obligation id, `verifier`, `intent`, or `other` for any stage not expected to call a model. */
 function stageOf(init?: RequestInit): string {
-	return unitOf(init) ?? obligationOf(init) ?? (isVerifier(init) ? 'verifier' : isIntent(init) ? 'intent' : 'other');
+	return (
+		unitOf(init) ??
+		obligationOf(init) ??
+		(isVerifier(init) ? 'verifier' : isIntent(init) ? 'intent' : isDiffGuide(init) ? 'diff-guide' : 'other')
+	);
 }
 
 /** A brief call's answer: for a unit, one statement about line 1 of its first file; for the context, a summary. */
@@ -217,6 +226,7 @@ export function stubModel(calls: string[], failing?: string) {
 		const kind = stageOf(init);
 
 		calls.push(kind);
+		if (kind === 'diff-guide') return modelReply({ groups: [] });
 		if (kind === failing) return new Response('bad request', { status: 400 });
 		if (kind === 'verifier') return modelReply(confirmingVerifier(init));
 		if (kind === 'intent') return modelReply(briefReply(init));

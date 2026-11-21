@@ -72,7 +72,17 @@ async function describePull(repoUrl: string, pull: LocalPull): Promise<{ pr: Pul
 	const headSha = await localHeadSha(repoPath, pull.number);
 
 	const files = parseNumstat(
-		await localGitOutput(repoPath, ['diff', '--numstat', '-z', '--find-renames', pull.baseSha, headSha, '--'])
+		await localGitOutput(repoPath, [
+			'diff',
+			'--numstat',
+			'-z',
+			'-M',
+			'-C',
+			'--find-copies-harder',
+			pull.baseSha,
+			headSha,
+			'--'
+		])
 	);
 
 	return {
@@ -137,6 +147,9 @@ export async function fetchLocalPull(
 		'--no-ext-diff',
 		'--no-textconv',
 		'--no-color',
+		'-M',
+		'-C',
+		'--find-copies-harder',
 		'--src-prefix=a/',
 		'--dst-prefix=b/',
 		pull.baseSha,

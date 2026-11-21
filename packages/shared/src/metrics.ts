@@ -41,6 +41,8 @@ export interface OutputRate {
 }
 
 export interface TokenCall {
+	/** Optional subtask within a stage, such as a diff guide using the brief model. */
+	purpose?: string;
 	id: string;
 	/** When the call started, an ISO timestamp; unset on calls stored before it was recorded. */
 	at?: string;

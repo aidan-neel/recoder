@@ -1,6 +1,7 @@
 import { evaluateRuleApplicability } from '../guidelines/ledger/applicability.js';
 import { findLedgerRule, type RuleLedger } from '../guidelines/ledger/types.js';
 import type { CandidateFinding } from './consolidate.js';
+import { findingTier } from '@recoder/shared';
 
 /**
  * Why a candidate below the reporting bar is published anyway: a verifier
@@ -13,7 +14,12 @@ export type PublishedBy = (typeof PUBLISHED_BY)[number];
 
 /** Whether the candidate is verified like the rest but held back from the findings for being below the reporting bar. */
 export function isHeldBack(candidate: CandidateFinding): boolean {
-	return candidate.valid && candidate.belowBar === true && candidate.publishedBy === undefined;
+	return (
+		findingTier(candidate) !== 'fyi' &&
+		candidate.valid &&
+		candidate.belowBar === true &&
+		candidate.publishedBy === undefined
+	);
 }
 
 /**
@@ -54,7 +60,7 @@ function isRuleViolation(candidate: CandidateFinding, ledger: RuleLedger | null)
 export function publishHeldBack(candidate: CandidateFinding, ledger: RuleLedger | null): void {
 	delete candidate.publishedBy;
 
-	if (!candidate.belowBar) return;
+	if (findingTier(candidate) === 'fyi' || !candidate.belowBar) return;
 
 	if (isReproduced(candidate)) candidate.publishedBy = 'reproduced';
 	else if (isRuleViolation(candidate, ledger)) candidate.publishedBy = 'rule';

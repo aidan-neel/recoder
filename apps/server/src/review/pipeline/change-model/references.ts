@@ -6,7 +6,7 @@ import { languageFor } from './languages.js';
 import { fileReferences, inTestFile, lineKind, type FileReferences } from './reference-kinds.js';
 import { mapLimit } from '../../../util/map-limit.js';
 import { byCodePoint, readTracked } from './repo.js';
-import { isTestPath, testStem } from './test-files.js';
+import { isTestPath, testStem, testSourceKey } from './test-files.js';
 import type { BehaviorAspect, ReferenceKind, SymbolRange, SymbolReference } from './types.js';
 
 /** Symbols whose references are searched; the rest keep an empty list, so cost stays bounded. */
@@ -24,9 +24,6 @@ const MAX_CLASSIFIED_FILES = 150;
 
 /** Most relevant first when the cap cuts: calls, then tests, types, imports and the rest. */
 const KIND_RANK: Record<ReferenceKind, number> = { call: 0, test: 1, type: 2, import: 3, other: 4 };
-
-/** Path segments that only say "source" or "tests", dropped so `src/a/b.ts` lines up with `tests/a/b.test.ts`. */
-const LAYOUT_SEGMENTS = new Set(['src', 'lib', 'main', 'test', 'tests', '__tests__', 'spec', 'specs']);
 
 /** Where a name appears at the head, and which files name it. */
 interface NameHits {
@@ -102,17 +99,10 @@ async function grepName(root: string, name: string, signal: AbortSignal): Promis
 	return { matches, files: [...new Set(matches.map((match) => match.file))], partial: rows.length > MAX_MATCH_LINES };
 }
 
-/** The folder and stem with layout segments dropped: `forge/gh` for both `src/forge/gh.ts` and `tests/forge/gh.test.ts`. */
-function layoutKey(path: string): string {
-	const folders = path.split('/').slice(0, -1);
-
-	return [...folders.filter((segment) => !LAYOUT_SEGMENTS.has(segment)), testStem(path)].join('/');
-}
-
 /** Test files that follow a path convention for `file`: same folder layout and stem, else the same stem anywhere. */
 function conventionTests(file: string, testFiles: string[]): string[] {
-	const key = layoutKey(file);
-	const mirrored = testFiles.filter((test) => test !== file && layoutKey(test) === key);
+	const key = testSourceKey(file);
+	const mirrored = testFiles.filter((test) => test !== file && testSourceKey(test) === key);
 
 	if (mirrored.length) return mirrored;
 

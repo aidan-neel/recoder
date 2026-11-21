@@ -30,6 +30,7 @@ export async function finalizeReview(reviewId: string, finished: AdaptiveReviewR
 						coverage: result.coverage,
 						coverageGaps: result.coverageGaps,
 						outcome: result.outcome,
+						...(result.diffGuide && { diffGuide: result.diffGuide }),
 						failure: result.failure,
 						recommendedChecks: result.recommendedChecks,
 						candidateCount: result.funnel?.raised ?? result.findings.length
@@ -60,6 +61,7 @@ export async function finalizeReview(reviewId: string, finished: AdaptiveReviewR
 			unconfirmed: result.outcome === 'complete' ? result.unconfirmed : [],
 			funnel: result.funnel,
 			context: result.context,
+			...(result.diffGuide && { diffGuide: result.diffGuide }),
 			...(result.obligations ? { obligations: result.obligations } : {}),
 			...(result.questions ? { questions: result.questions } : {})
 		});

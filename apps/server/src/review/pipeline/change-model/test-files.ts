@@ -21,3 +21,11 @@ export function testStem(path: string): string {
 		.replace(/^test_/, '')
 		.replace(/Tests?$/, '');
 }
+
+/** Source/test layouts ignore structural folders and test suffixes, but retain feature directories. */
+export function testSourceKey(path: string): string {
+	const structural = new Set(['src', 'lib', 'main', 'test', 'tests', '__tests__', 'spec', 'specs']);
+	const folders = path.split('/').slice(0, -1);
+
+	return [...folders.filter((segment) => !structural.has(segment)), testStem(path)].join('/');
+}

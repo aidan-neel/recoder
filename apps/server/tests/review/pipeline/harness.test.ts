@@ -74,7 +74,7 @@ test('a resumed review reruns only unfinished reviewers and keeps the finished o
 
 	const resumed = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, resume: saved });
 
-	expect(second.filter((kind) => kind !== 'verifier')).toEqual(['reviewer-2']);
+	expect(second.filter((kind) => kind !== 'verifier')).toEqual(['diff-guide', 'reviewer-2']);
 	expect(resumed.assignments.map((record) => record.id)).toEqual(TWO_REVIEWERS);
 	expect(resumed.assignments.every((record) => record.status === 'done')).toBe(true);
 	expect(reported(resumed)).toEqual([['correctness', 'possible miss']]);
@@ -95,7 +95,7 @@ test('consolidation makes no model call, so the same reviewer and verifier answe
 		expect(result.outcome).toBe('complete');
 		expect(calls.filter((kind) => kind === 'other')).toEqual([]);
 
-		expect(calls.filter((kind) => kind !== 'verifier' && kind !== 'intent')).toEqual(['reviewer-1']);
+		expect(calls.filter((kind) => kind !== 'verifier' && kind !== 'intent')).toEqual(['diff-guide', 'reviewer-1']);
 
 		runs.push(result.findings.map((item) => `${item.category}:${item.title}:${item.fingerprint}`));
 	}

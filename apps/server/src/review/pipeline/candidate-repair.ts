@@ -117,6 +117,7 @@ function toReviewerFinding(candidate: CandidateFinding): ReviewerFinding {
 		line: candidate.line ?? null,
 		endLine: candidate.endLine ?? null,
 		severity: TO_REVIEWER_SEVERITY[candidate.severity],
+		moveReason: candidate.move?.reason,
 		category: candidate.category as FindingCategory,
 		body: candidate.message.startsWith(prefix) ? candidate.message.slice(prefix.length) : candidate.message,
 		side: candidate.side,
