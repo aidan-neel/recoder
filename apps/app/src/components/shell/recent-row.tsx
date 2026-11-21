@@ -155,13 +155,17 @@ export function ThreadRow({
 		</div>
 	);
 
-	if (actions.length === 0) return row;
+	const contextActions: RowAction[] = onSettle
+		? [{ id: 'settle', label: 'Settle', icon: CheckIcon, onSelect: onSettle }, ...actions]
+		: actions;
+
+	if (contextActions.length === 0) return row;
 
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger>{row}</ContextMenuTrigger>
 			<ContextMenuContent className="w-[200px]">
-				<ActionItems actions={actions} parts={CONTEXT_PARTS} />
+				<ActionItems actions={contextActions} parts={CONTEXT_PARTS} />
 			</ContextMenuContent>
 		</ContextMenu>
 	);

@@ -1,7 +1,7 @@
 'use client';
 
 import type { UpdateStatus } from '@recoder/shared';
-import { Button, Card, Markdown, SkeletonBox } from '@recoder/ui';
+import { Button, Card, GitHubMarkdown, SkeletonBox } from '@recoder/ui';
 
 import type { UpdateLine } from '@/lib/update/update-line';
 import { useLater } from '@/lib/update/use-later';
@@ -133,7 +133,7 @@ function UpdateNews({ line }: { line: AvailableLine }) {
 				<div className="update-news-part">
 					<h3 className="update-part-title">What’s new</h3>
 					{line.notes ? (
-						<Markdown className="update-notes">{line.notes}</Markdown>
+						<GitHubMarkdown className="update-notes">{line.notes}</GitHubMarkdown>
 					) : (
 						<UpdateCommits commits={line.commits} />
 					)}

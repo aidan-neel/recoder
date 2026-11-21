@@ -31,8 +31,8 @@ function markOf(entry: SettledRow) {
 }
 
 /**
- * Reviews of pull requests that were merged or closed, and the chats and
- * reviews settled by hand or after three quiet hours, folded away at the
+ * Reviews of pull requests that were merged or closed, reviews settled by hand,
+ * and chats settled by hand or after three quiet hours, folded away at the
  * bottom of the sidebar: one line each, the oldest news kept a click off. It
  * shows only when there is one, and starts folded on every load.
  */
@@ -71,17 +71,17 @@ function SettledRows({ reviews, hidden, onShowAll }: SettledRowsProps) {
 	const chatCache = useChatCache();
 	const reviewActions = useReviewActions();
 	const chatActions = useChatActions();
-	const mark = useSettleMarks((state) => state.mark);
+	const unsettle = useSettleMarks((state) => state.unsettle);
+	const clear = useSettleMarks((state) => state.clear);
 	const now = useNow(AGE_TICK);
 
-	/** The row's menu, led by Unsettle unless its pull request ended, which no mark undoes. */
+	/** The row's menu, always led by Unsettle so any settled thread can be brought back. */
 	function actionsFor(entry: SettledRow): RowAction[] {
 		const id = entry.kind === 'review' ? entry.row.reviewId : entry.row.chatId;
 		const base = entry.kind === 'review' ? reviewActions(entry.row) : chatActions(entry.row);
+		const restore = entry.kind === 'review' && entry.outcome === null ? () => clear(id) : () => unsettle(id);
 
-		if (entry.outcome) return base;
-
-		return [{ id: 'unsettle', label: 'Unsettle', icon: ArrowUUpLeftIcon, onSelect: () => mark(id, false) }, ...base];
+		return [{ id: 'unsettle', label: 'Unsettle', icon: ArrowUUpLeftIcon, onSelect: restore }, ...base];
 	}
 
 	return (

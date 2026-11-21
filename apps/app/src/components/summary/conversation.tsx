@@ -11,7 +11,7 @@ import { ChatComposer } from '@/components/ask/chat-composer';
 import { Age } from '@/components/common/age';
 import { Avatar } from '@/components/common/avatar';
 
-import { SummaryProse } from './prose';
+import { ForgeProse } from './prose';
 
 const VERDICTS: Record<NonNullable<PullComment['verdict']>, { label: string; tone: PillTone }> = {
 	approved: { label: 'Approved', tone: 'ok' },
@@ -35,7 +35,7 @@ function Entry({ entry }: { entry: PullComment }) {
 			</div>
 			{entry.body ? (
 				<div className="timeline-body">
-					<SummaryProse>{entry.body}</SummaryProse>
+					<ForgeProse>{entry.body}</ForgeProse>
 				</div>
 			) : null}
 		</article>
@@ -76,8 +76,8 @@ function Timeline({ view, waiting }: ConversationProps) {
 /**
  * The pull request's conversation on its forge as a quiet timeline, oldest
  * first, with a field at its end that comments on the pull request. Its text
- * is other people's: it renders as markdown with no raw HTML. A forge with no
- * conversation shows nothing.
+ * is other people's: it renders as GitHub Markdown with sanitized HTML. A
+ * forge with no conversation shows nothing.
  */
 export function Conversation({ view, waiting }: ConversationProps) {
 	if (view.phase === 'off') return null;

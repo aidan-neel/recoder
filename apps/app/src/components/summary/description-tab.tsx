@@ -1,6 +1,6 @@
 'use client';
 
-import type { PullDescription, PullDescriptionState } from '@recoder/shared';
+import type { PullDescription, PullDescriptionState, PullPage } from '@recoder/shared';
 import { Button, Skeleton, StatusNotice } from '@recoder/ui';
 import { useMemo, useState, type ReactNode } from 'react';
 
@@ -55,6 +55,19 @@ interface UndescribedProps {
 	conversation: ReactNode;
 }
 
+/** The forge origin (`https://github.com`, a self-hosted GitLab host) from the pull request's URL, or null locally. */
+function forgeOriginOf(page: PullPage | null): string | null {
+	if (!page || page.provider === 'local' || !page.pull.url) return null;
+
+	try {
+		const parsed = new URL(page.pull.url);
+
+		return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.origin : null;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * The Description tab: what the change does as a model wrote it, then the change in groups to read in order, each
  * with its files and findings, and the pull request's conversation; every open finding and the notes stand beside it.
@@ -62,10 +75,12 @@ interface UndescribedProps {
  * request's files and commits as badges, so text that could gain one waits for the diff or the commits.
  */
 export function DescriptionTab({ onOpenGuide, onOpenFile, onOpenFinding, onOpenReview }: DescriptionTabProps) {
+	const page = usePullPageView().page;
 	const view = usePullDescriptionView();
 	const conversationView = usePullConversationView();
 	const { sources, awaits } = useProseSources();
-	const refs = useMemo(() => ({ sources, openFile: onOpenFile }), [sources, onOpenFile]);
+	const forgeOrigin = forgeOriginOf(page);
+	const refs = useMemo(() => ({ sources, openFile: onOpenFile, forgeOrigin }), [sources, onOpenFile, forgeOrigin]);
 	const state = view.state.phase === 'ready' ? view.state.value : null;
 	const phase = describedPhase(view, state);
 	const ready = state?.status === 'ready' ? state.description : null;

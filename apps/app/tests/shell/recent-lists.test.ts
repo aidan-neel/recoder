@@ -3,7 +3,7 @@ import { REVIEW_CANCELLED, type RepoChatSummary } from '@recoder/shared';
 
 import { recentChats } from '../../src/lib/shell/recent-chats';
 import { recentReviews } from '../../src/lib/shell/recent-reviews';
-import { AUTO_SETTLE_MS, isSettled, sidebarLists } from '../../src/lib/shell/settle';
+import { AUTO_SETTLE_MS, isChatSettled, isReviewSettled, sidebarLists } from '../../src/lib/shell/settle';
 import { review, tracked } from '../fixtures';
 
 const REPOS = [tracked('r1', 'acme/api')];
@@ -92,27 +92,64 @@ describe('settling a sidebar row', () => {
 	const CHANGED = '2026-03-01T12:00:00Z';
 	const changed = Date.parse(CHANGED);
 
-	test('a row settles on its own after three quiet hours', () => {
-		expect(isSettled('a', CHANGED, {}, changed + AUTO_SETTLE_MS - 1)).toBe(false);
-		expect(isSettled('a', CHANGED, {}, changed + AUTO_SETTLE_MS)).toBe(true);
+	test('an open pull request review never auto-settles on a timer', () => {
+		const openReview = review({ id: 'open-old', prNumber: 1, pullState: 'open', updatedAt: CHANGED });
+
+		const rows = sidebarLists(
+			{ ...recentReviews([openReview], REPOS, ''), chats: [] },
+			{},
+			changed + AUTO_SETTLE_MS * 100
+		);
+
+		expect(rows.recent.map((row) => row.reviewId)).toEqual(['open-old']);
+		expect(rows.settled).toEqual([]);
 	});
 
-	test('a running review never settles on its own', () => {
-		expect(isSettled('a', CHANGED, {}, changed + AUTO_SETTLE_MS * 10, true)).toBe(false);
-	});
-
-	test('a row settled by hand comes back once it changes again', () => {
+	test('an open review settled by hand comes back once it changes again', () => {
 		const marks = { a: { settled: true, at: changed + 1000 } };
 
-		expect(isSettled('a', CHANGED, marks, changed + 2000)).toBe(true);
-		expect(isSettled('a', '2026-03-01T12:00:05Z', marks, changed + 6000)).toBe(false);
+		expect(isReviewSettled('a', CHANGED, false, marks)).toBe(true);
+		expect(isReviewSettled('a', '2026-03-01T12:00:05Z', false, marks)).toBe(false);
 	});
 
-	test('an unsettled row rests three hours from the moment it was brought back', () => {
-		const back = changed + AUTO_SETTLE_MS * 2;
-		const marks = { a: { settled: false, at: back } };
+	test('a merged or closed review settles by default and returns to Reviews when unsettled', () => {
+		const merged = review({ id: 'done', prNumber: 9, pullState: 'merged', updatedAt: CHANGED });
+		const unsettledAt = changed + 60_000;
+		const marks = { done: { settled: false, at: unsettledAt } };
 
-		expect(isSettled('a', CHANGED, marks, back + AUTO_SETTLE_MS - 1)).toBe(false);
-		expect(isSettled('a', CHANGED, marks, back + AUTO_SETTLE_MS)).toBe(true);
+		const settledByDefault = sidebarLists({ ...recentReviews([merged], REPOS, ''), chats: [] }, {}, unsettledAt);
+		const broughtBack = sidebarLists({ ...recentReviews([merged], REPOS, ''), chats: [] }, marks, unsettledAt);
+
+		expect(settledByDefault.recent).toEqual([]);
+		expect(settledByDefault.settled.map((entry) => entry.kind === 'review' && entry.row.reviewId)).toEqual(['done']);
+		expect(broughtBack.recent.map((row) => row.reviewId)).toEqual(['done']);
+		expect(broughtBack.settled).toEqual([]);
+	});
+
+	test('unsettling an older ended review brings it into the visible recent list ahead of the limit', () => {
+		const active = Array.from({ length: 8 }, (_, index) =>
+			review({ id: `open-${index}`, prNumber: index, updatedAt: `2026-03-${String(index + 10).padStart(2, '0')}` })
+		);
+
+		const oldMerged = review({ id: 'old-merged', prNumber: 99, pullState: 'merged', updatedAt: '2026-01-01' });
+		const now = Date.parse('2026-03-20T00:00:00Z');
+		const marks = { 'old-merged': { settled: false, at: now } };
+
+		const rows = sidebarLists({ ...recentReviews([...active, oldMerged], REPOS, ''), chats: [] }, marks, now);
+
+		expect(rows.recent[0]?.reviewId).toBe('old-merged');
+		expect(rows.recent).toHaveLength(8);
+		expect(rows.settled).toEqual([]);
+	});
+
+	test('a chat settles on its own after three quiet hours and rests again when unsettled', () => {
+		expect(isChatSettled('c', CHANGED, {}, changed + AUTO_SETTLE_MS - 1)).toBe(false);
+		expect(isChatSettled('c', CHANGED, {}, changed + AUTO_SETTLE_MS)).toBe(true);
+
+		const back = changed + AUTO_SETTLE_MS * 2;
+		const marks = { c: { settled: false, at: back } };
+
+		expect(isChatSettled('c', CHANGED, marks, back + AUTO_SETTLE_MS - 1)).toBe(false);
+		expect(isChatSettled('c', CHANGED, marks, back + AUTO_SETTLE_MS)).toBe(true);
 	});
 });

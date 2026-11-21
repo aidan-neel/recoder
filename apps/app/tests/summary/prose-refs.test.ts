@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { PullCommit } from '@recoder/shared';
 
-import { mayNameCommit, readProseRef, type ProseSources } from '../../src/lib/summary/prose-refs';
+import { mayNameCommit, mayNameFile, readProseRef, type ProseSources } from '../../src/lib/summary/prose-refs';
 
 function commit(sha: string): PullCommit {
 	return {
@@ -86,7 +86,16 @@ describe('readProseRef', () => {
 describe('mayNameCommit', () => {
 	test('only inline code shaped like a hash can name a commit', () => {
 		expect(mayNameCommit('Reverts `9f3c1a7` for now.')).toBe(true);
+		expect(mayNameCommit('Up to <code>9f3c1a7</code> now.')).toBe(true);
 		expect(mayNameCommit('Reverts 9f3c1a7 and sets `capacity`.')).toBe(false);
 		expect(mayNameCommit('Sets `capacity` in `lease.ts`.')).toBe(false);
+	});
+});
+
+describe('mayNameFile', () => {
+	test('detects both backtick and HTML code spans', () => {
+		expect(mayNameFile('Updated `lease.ts`.')).toBe(true);
+		expect(mayNameFile('Updated <code>lease.ts</code>.')).toBe(true);
+		expect(mayNameFile('Plain prose without code.')).toBe(false);
 	});
 });

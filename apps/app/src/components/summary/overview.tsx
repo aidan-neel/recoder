@@ -11,7 +11,7 @@ import { LOADING_SUMMARY } from '@/lib/summary/loading-summary';
 
 import { Age } from '@/components/common/age';
 
-import { SummaryProse } from './prose';
+import { ForgeProse, SummaryProse } from './prose';
 
 interface OverviewProps {
 	summary: SummaryView;
@@ -94,7 +94,7 @@ export function AuthorDescription({ text, by }: { text: string; by: string | nul
 		<div className="summary-description">
 			<p className="summary-description-label">{by ? `Description · ${author(by).name}` : 'Description'}</p>
 			<ClampedText lines={3}>
-				<SummaryProse>{text}</SummaryProse>
+				<ForgeProse>{text}</ForgeProse>
 			</ClampedText>
 		</div>
 	);

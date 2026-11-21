@@ -1,0 +1,245 @@
+/* kit: GitHub / forge Markdown HTML elements (details, pictures, images, alerts, dl, kbd, alignment). */
+
+/* ───────── Images & theme-aware pictures ───────── */
+[data-ui='markdown'] :where(img) {
+	display: inline-block;
+	max-width: 100%;
+	height: auto;
+	vertical-align: middle;
+}
+[data-ui='markdown'] :where(img[data-align='top']) {
+	vertical-align: top;
+}
+[data-ui='markdown'] :where(img[data-align='bottom']) {
+	vertical-align: bottom;
+}
+[data-ui='markdown'] :where(img[data-align='left']) {
+	float: left;
+	margin: 0 12px 8px 0;
+}
+[data-ui='markdown'] :where(img[data-align='right']) {
+	float: right;
+	margin: 0 0 8px 12px;
+}
+[data-ui='markdown'] :where([data-ui='markdown-picture']) {
+	display: inline-flex;
+	align-items: center;
+	vertical-align: middle;
+}
+[data-ui='markdown'] a[data-mention] {
+	color: var(--text-primary);
+	font-weight: 500;
+	text-decoration: none;
+}
+[data-ui='markdown'] a[data-mention]:hover {
+	text-decoration: underline;
+	text-decoration-color: currentColor;
+}
+[data-ui='markdown'] :where(a):has(> img, > [data-ui='markdown-picture']) {
+	text-decoration: none;
+}
+:root.dark [data-ui='markdown'] [data-theme-only='light'],
+:root:not(.dark) [data-ui='markdown'] [data-theme-only='dark'] {
+	display: none;
+}
+
+/* ───────── Collapsible details/summary ───────── */
+[data-ui='markdown'] [data-markdown-details] {
+	margin: 0.6em 0;
+}
+[data-ui='markdown'] [data-markdown-details] [data-markdown-details] {
+	margin: 0.4em 0;
+}
+[data-ui='markdown'] [data-markdown-summary] {
+	--disclosure-chevron-size: 12px;
+
+	display: inline-flex;
+	max-width: 100%;
+	align-items: center;
+	gap: 6px;
+	margin-left: -6px;
+	padding: 3px 6px;
+	border: 0;
+	border-radius: var(--radius-control);
+	background: none;
+	color: var(--text-primary);
+	cursor: pointer;
+	font: inherit;
+	text-align: left;
+	transition:
+		background-color var(--dur-hover) var(--ease-hover),
+		color var(--dur-hover) var(--ease-hover);
+}
+[data-ui='markdown'] [data-markdown-summary]:hover {
+	background-color: rgb(var(--wash-rgb) / 0.05);
+}
+[data-ui='markdown'] [data-markdown-summary]:focus-visible {
+	box-shadow: var(--focus-ring);
+	outline: none;
+}
+[data-ui='markdown'] [data-markdown-summary] > [data-ui='disclosure-chevron'] {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	transition:
+		rotate var(--dur-toggle) var(--ease-menu),
+		color var(--dur-hover) var(--ease-hover);
+}
+[data-ui='markdown'] [data-markdown-summary]:hover > [data-ui='disclosure-chevron'] {
+	color: var(--text-muted);
+}
+[data-ui='markdown'] [data-markdown-summary][data-state='open'] > [data-ui='disclosure-chevron'] {
+	rotate: 90deg;
+}
+[data-ui='markdown'] [data-ui='markdown-summary-label'] {
+	min-width: 0;
+}
+[data-ui='markdown'] [data-ui='markdown-details-body'] {
+	margin: 4px 0 0 3px;
+	padding: 4px 0 2px 14px;
+	border-left: 1px solid var(--line-card);
+}
+[data-ui='markdown'] [data-ui='markdown-details-body'] > :first-child {
+	margin-top: 0;
+}
+[data-ui='markdown'] [data-ui='markdown-details-body'] > :last-child {
+	margin-bottom: 0;
+}
+/* Bots like CodeRabbit wrap <details> bodies in <dl><dd><br> for GitHub indentation; avoid double-indenting it. */
+[data-ui='markdown'] [data-ui='markdown-details-body'] > dl {
+	margin: 0;
+}
+[data-ui='markdown'] [data-ui='markdown-details-body'] > dl > dd {
+	margin: 0;
+}
+[data-ui='markdown'] [data-ui='markdown-details-body'] > br:first-child,
+[data-ui='markdown'] [data-ui='markdown-details-body'] > dl > dd > br:first-child {
+	display: none;
+}
+[data-ui='markdown'] [data-ui='markdown-details-body'] > dl > dd > :first-child,
+[data-ui='markdown'] [data-ui='markdown-details-body'] > dl > dd > br:first-child + * {
+	margin-top: 0;
+}
+[data-ui='markdown'] [data-ui='markdown-details-body'] > dl > dd > :last-child {
+	margin-bottom: 0;
+}
+
+/* Headings that wrapped block HTML (such as <h6><details>) lift to a div and keep their quieter scale. */
+[data-ui='markdown'] [data-heading-level='6'] {
+	margin: 0.8em 0 0.4em;
+	font-size: 0.92em;
+}
+[data-ui='markdown'] [data-heading-level='6'] > [data-markdown-details] > [data-markdown-summary] {
+	color: var(--text-muted);
+}
+[data-ui='markdown'] [data-heading-level='6'] [data-ui='markdown-details-body'] {
+	color: var(--text-secondary);
+}
+
+/* ───────── Definition lists, inline phrasing and alignment ───────── */
+[data-ui='markdown'] :where(dl) {
+	margin: 0.6em 0;
+}
+[data-ui='markdown'] :where(dt) {
+	margin-top: 0.5em;
+	font-weight: 500;
+}
+[data-ui='markdown'] :where(dd) {
+	margin: 0.2em 0 0 1.1em;
+}
+[data-ui='markdown'] :where(s, strike) {
+	text-decoration: line-through;
+	text-decoration-color: var(--text-faint);
+}
+[data-ui='markdown'] :where(ins) {
+	text-decoration: underline;
+	text-decoration-color: var(--success);
+	text-underline-offset: 2px;
+}
+[data-ui='markdown'] :where(mark) {
+	padding: 0 3px;
+	border-radius: 2px;
+	background: var(--sev-medium-tint);
+	color: inherit;
+}
+[data-ui='markdown'] :where(kbd) {
+	display: inline-block;
+	padding: 1px 5px;
+	border: 1px solid var(--line-control);
+	border-radius: var(--radius-chip);
+	background: var(--bg-raised);
+	color: var(--text-primary);
+	font-family: var(--font-code);
+	font-size: 0.82em;
+	line-height: 1.4;
+}
+[data-ui='markdown'] :where(sup, sub) {
+	position: relative;
+	font-size: 0.78em;
+	line-height: 0;
+	vertical-align: baseline;
+}
+[data-ui='markdown'] :where(sup) {
+	top: -0.35em;
+}
+[data-ui='markdown'] :where(sub) {
+	bottom: -0.25em;
+}
+[data-ui='markdown'] :where(small) {
+	font-size: 0.88em;
+}
+[data-ui='markdown'] :where(div, p, h1, h2, h3, h4, h5, h6, th, td)[align='center'] {
+	text-align: center;
+}
+[data-ui='markdown'] :where(div, p, h1, h2, h3, h4, h5, h6, th, td)[align='right'] {
+	text-align: right;
+}
+
+/* ───────── GitHub alert callouts ([!NOTE], [!TIP], [!IMPORTANT], [!WARNING], [!CAUTION]) ───────── */
+[data-ui='markdown'] :where(blockquote[data-alert]) {
+	--alert-ink: var(--sev-low);
+
+	border-left-color: var(--alert-ink);
+	color: var(--text-secondary);
+}
+[data-ui='markdown'] :where(blockquote[data-alert='tip']) {
+	--alert-ink: var(--success);
+}
+[data-ui='markdown'] :where(blockquote[data-alert='important']) {
+	--alert-ink: var(--sent);
+}
+[data-ui='markdown'] :where(blockquote[data-alert='warning']) {
+	--alert-ink: var(--sev-medium);
+}
+[data-ui='markdown'] :where(blockquote[data-alert='caution']) {
+	--alert-ink: var(--danger);
+}
+[data-ui='markdown'] [data-ui='markdown-alert-title'] {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0 0 0.25em;
+	color: var(--alert-ink);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 1.4;
+}
+[data-ui='markdown'] [data-ui='markdown-alert-title'] + :where(p) {
+	margin-top: 0;
+}
+[data-ui='markdown'] [data-ui='markdown-alert-title'] svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+[data-ui='markdown'] :where(blockquote[data-alert]) > :last-child {
+	margin-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	[data-ui='markdown'] [data-markdown-summary],
+	[data-ui='markdown'] [data-markdown-summary] > [data-ui='disclosure-chevron'] {
+		transition: none;
+	}
+}
