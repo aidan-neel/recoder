@@ -42,6 +42,7 @@ import { recordBaseline } from './verify-baseline.js';
 import { VerifyQueue } from './verify-queue.js';
 import { needsVerifierFallback } from '../verify/full-fallback.js';
 import { compactVerifierOn, compactVerifierSource, type VerifierSpec } from '../verify/compact.js';
+import { dependencyApiSource, dependencyGroundingOn } from '../verify/dependency-api.js';
 
 interface VerifyContext {
 	evidence: EvidenceStore;
@@ -338,13 +339,18 @@ async function runVerifier(
 	let retrievals = 0;
 
 	try {
+		const grounded =
+			exec && !mutation && dependencyGroundingOn()
+				? await dependencyApiSource(candidate, ctx.workspace, user, ctx.signal)
+				: user;
+
 		const result = await runJsonAgent({
 			toolOpBudget,
 			stage: 'verifier',
 			label: `verify ${candidate.candidateId}`,
 			agentId,
 			system,
-			user: compact ? await compactVerifierSource(candidate, ctx.evidence, user, ctx.signal) : user,
+			user: compact ? await compactVerifierSource(candidate, ctx.evidence, grounded, ctx.signal) : grounded,
 			exec,
 			checkFinal: exec
 				? (value, state) => verifierPushBack(value, state, ctx.evidence, agentId, mutation)
