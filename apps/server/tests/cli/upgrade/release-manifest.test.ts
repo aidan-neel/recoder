@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
 	buildReleaseManifest,
+	parsePlatforms,
 	RELEASE_SCHEMA_VERSION,
 	type ReleaseManifestInput
 } from '../../../src/cli/upgrade/release-manifest';
 import { parseReleaseTag } from '../../../src/cli/upgrade/release-tag';
+import { DATA_VERSION, OLDEST_DATA_VERSION } from '../../../src/storage/data-version';
 
 const INDEX = `sha256:${'a'.repeat(64)}`;
 const AMD64 = `sha256:${'b'.repeat(64)}`;
@@ -29,8 +31,8 @@ describe('buildReleaseManifest', () => {
 			image: 'ghcr.io/aidan-neel/recoder',
 			indexDigest: INDEX,
 			platforms: { 'linux/amd64': AMD64, 'linux/arm64': ARM64 },
-			dataVersion: 1,
-			minDataVersion: 0,
+			dataVersion: DATA_VERSION,
+			minDataVersion: OLDEST_DATA_VERSION,
 			minVersion: '0.1.0',
 			notes: '## What changed'
 		});
@@ -55,5 +57,24 @@ describe('buildReleaseManifest', () => {
 
 	test('an image build that answered no platform digests is refused', () => {
 		expect(() => buildReleaseManifest({ ...input, platforms: {} })).toThrow('no platform digests');
+	});
+});
+
+describe('parsePlatforms', () => {
+	test('the empty RELEASE_PLATFORMS the workflow can hand over names the variable', () => {
+		expect(() => parsePlatforms('')).toThrow('RELEASE_PLATFORMS is empty');
+	});
+
+	test('malformed or non-object RELEASE_PLATFORMS names the variable', () => {
+		expect(() => parsePlatforms('{"linux/amd64"')).toThrow('RELEASE_PLATFORMS is not');
+		expect(() => parsePlatforms('["linux/amd64"]')).toThrow('RELEASE_PLATFORMS is not');
+		expect(() => parsePlatforms('null')).toThrow('RELEASE_PLATFORMS is not');
+	});
+
+	test("the digests step's JSON object parses as-is", () => {
+		expect(parsePlatforms(JSON.stringify({ 'linux/amd64': AMD64, 'linux/arm64': ARM64 }))).toEqual({
+			'linux/amd64': AMD64,
+			'linux/arm64': ARM64
+		});
 	});
 });

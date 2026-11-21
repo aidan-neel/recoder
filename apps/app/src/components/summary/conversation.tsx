@@ -1,7 +1,7 @@
 'use client';
 
 import type { PullComment } from '@recoder/shared';
-import { Pill, Skeleton, type PillTone } from '@recoder/ui';
+import { FileChip, Pill, Skeleton, type PillTone } from '@recoder/ui';
 
 import type { PullConversationView } from '@/lib/pull/types';
 import { author } from '@/lib/shell/format';
@@ -11,7 +11,7 @@ import { ChatComposer } from '@/components/ask/chat-composer';
 import { Age } from '@/components/common/age';
 import { Avatar } from '@/components/common/avatar';
 
-import { SummaryProse } from './prose';
+import { ForgeProse } from './prose';
 
 const VERDICTS: Record<NonNullable<PullComment['verdict']>, { label: string; tone: PillTone }> = {
 	approved: { label: 'Approved', tone: 'ok' },
@@ -19,20 +19,10 @@ const VERDICTS: Record<NonNullable<PullComment['verdict']>, { label: string; ton
 	commented: { label: 'Reviewed', tone: 'neutral' }
 };
 
-/** Where an inline comment sits: `lease.ts:20`. */
-function place(entry: PullComment): string | null {
-	if (!entry.path) return null;
-
-	const file = entry.path.split('/').pop() ?? entry.path;
-
-	return entry.line ? `${file}:${entry.line}` : file;
-}
-
 /** One entry of the timeline: who, what kind, where, when, then what they wrote. */
 function Entry({ entry }: { entry: PullComment }) {
 	const by = author(entry.author.login);
 	const verdict = entry.verdict ? VERDICTS[entry.verdict] : null;
-	const where = place(entry);
 
 	return (
 		<article className="timeline-entry" aria-label={`${by.name} wrote`}>
@@ -40,16 +30,12 @@ function Entry({ entry }: { entry: PullComment }) {
 			<div className="timeline-head">
 				<span className="timeline-author">{entry.byRecoder ? 'Recoder' : by.name}</span>
 				{verdict ? <Pill tone={verdict.tone}>{verdict.label}</Pill> : null}
-				{where ? (
-					<Pill face="code" title={entry.path}>
-						{where}
-					</Pill>
-				) : null}
+				{entry.path ? <FileChip path={entry.path} line={entry.line} framed /> : null}
 				<Age at={entry.createdAt} className="timeline-age" />
 			</div>
 			{entry.body ? (
 				<div className="timeline-body">
-					<SummaryProse>{entry.body}</SummaryProse>
+					<ForgeProse>{entry.body}</ForgeProse>
 				</div>
 			) : null}
 		</article>
@@ -90,8 +76,8 @@ function Timeline({ view, waiting }: ConversationProps) {
 /**
  * The pull request's conversation on its forge as a quiet timeline, oldest
  * first, with a field at its end that comments on the pull request. Its text
- * is other people's: it renders as markdown with no raw HTML. A forge with no
- * conversation shows nothing.
+ * is other people's: it renders as GitHub Markdown with sanitized HTML. A
+ * forge with no conversation shows nothing.
  */
 export function Conversation({ view, waiting }: ConversationProps) {
 	if (view.phase === 'off') return null;

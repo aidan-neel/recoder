@@ -144,13 +144,18 @@ export function mergeMethods(repo: Repo): Promise<PullMergeMethod[]> {
  * before this call. When the pull request moved on, the newer diff is
  * answered but not kept under the older head.
  */
-export async function pullDiff(repo: Repo, n: number, headSha: string): Promise<PullDiff> {
+export async function pullDiff(
+	repo: Repo,
+	n: number,
+	headSha: string,
+	options?: { includeHunkless?: boolean }
+): Promise<PullDiff> {
 	const key = `${viewKey(repo, n)}${headSha}`;
 	const diff = await diffCache.get(key, () => diffAtSteadyHead(repo, n, headSha));
 
 	if (diff.headSha !== headSha) diffCache.delete(key);
 
-	return diff;
+	return options?.includeHunkless ? diff : { ...diff, files: diff.files.filter((file) => file.hunks.length > 0) };
 }
 
 /**
@@ -167,10 +172,10 @@ async function diffAtSteadyHead(repo: Repo, n: number, headBefore: string): Prom
 
 	for (let attempt = 1; attempt <= DIFF_ATTEMPTS; attempt++) {
 		const fetched = await fetchPull(repo, n);
-		const head = await pullHead(repo, n);
+		const head = await pullForge(repo).head(n);
 
 		if (fetched.pr.headSha === expected && head === expected) {
-			return { headSha: expected, files: parseUnifiedDiff(fetched.diff) };
+			return { headSha: expected, files: parseUnifiedDiff(fetched.diff, { includeHunkless: true }) };
 		}
 
 		expected = head;

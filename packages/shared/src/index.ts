@@ -23,6 +23,7 @@ export * from './format';
 export * from './theme';
 export * from './providers';
 export * from './pulls';
+export * from './pull-description';
 export * from './agents';
 export * from './agent-clis';
 export * from './provider-limits';

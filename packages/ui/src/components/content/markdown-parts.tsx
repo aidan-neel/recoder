@@ -92,11 +92,13 @@ function inlineCodePart(Custom: InlineCodeComponent): NonNullable<Components['co
 	};
 }
 
+type MarkdownLinkProps = ComponentProps<'a'> & { 'data-mention'?: string };
+
 /**
  * A link. Web links open in a new tab. react-markdown empties an unsafe URL
  * (`javascript:` and the like), and an empty one renders as plain text.
  */
-function Link({ href, title, children }: ComponentProps<'a'>) {
+function Link({ href, title, children, 'data-mention': mention }: MarkdownLinkProps) {
 	if (!href) return <span data-unsafe-url="">{children}</span>;
 
 	const external = /^https?:\/\//i.test(href);
@@ -105,6 +107,7 @@ function Link({ href, title, children }: ComponentProps<'a'>) {
 		<a
 			href={href}
 			title={title}
+			data-mention={mention}
 			target={external ? '_blank' : undefined}
 			rel={external ? 'noopener noreferrer' : undefined}
 		>
@@ -177,26 +180,31 @@ export interface LinkOverride {
 	component: ComponentType<{ href: string; children: ReactNode }>;
 }
 
-const OVERRIDE_PARTS = new WeakMap<LinkOverride['component'], Map<string, Components>>();
+const OVERRIDE_PARTS = new WeakMap<Components, WeakMap<LinkOverride['component'], Map<string, Components>>>();
 
 /**
- * The parts with `override`'s links drawn by its component. One table per override, kept, because rendered
+ * `base` with `override`'s links drawn by its component. One table per tuple, kept, because rendered
  * text is cached by its table's identity.
  */
-export function partsWithLinkOverride({ prefix, component: Custom }: LinkOverride): Components {
-	const byPrefix = OVERRIDE_PARTS.get(Custom) ?? new Map<string, Components>();
+export function partsWithLinkOverride(
+	{ prefix, component: Custom }: LinkOverride,
+	base: Components = MARKDOWN_PARTS
+): Components {
+	const byComponent = OVERRIDE_PARTS.get(base) ?? new WeakMap<LinkOverride['component'], Map<string, Components>>();
+	const byPrefix = byComponent.get(Custom) ?? new Map<string, Components>();
 	const kept = byPrefix.get(prefix);
 
 	if (kept) return kept;
 
 	const parts: Components = {
-		...MARKDOWN_PARTS,
+		...base,
 		a: (props: ComponentProps<'a'>) =>
 			props.href?.startsWith(prefix) ? <Custom href={props.href}>{props.children}</Custom> : <Link {...props} />
 	};
 
 	byPrefix.set(prefix, parts);
-	OVERRIDE_PARTS.set(Custom, byPrefix);
+	byComponent.set(Custom, byPrefix);
+	OVERRIDE_PARTS.set(base, byComponent);
 
 	return parts;
 }

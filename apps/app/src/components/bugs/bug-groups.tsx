@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Pill, StatusGlyph } from '@recoder/ui';
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, FileChip, Pill, StatusGlyph } from '@recoder/ui';
 import { CaretRightIcon } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
@@ -51,15 +51,6 @@ function BugLine({ bug, detail, children }: BugLineProps) {
 	);
 }
 
-/** Where a bug is, as a badge; the full path on hover. */
-function WherePill({ bug }: { bug: BugView }) {
-	return (
-		<Pill face="code" title={bug.file}>
-			{bug.where}
-		</Pill>
-	);
-}
-
 /** Shows why a write did not go through. */
 function refused(error: unknown): void {
 	errorToast(error instanceof Error && error.message ? error.message : 'That did not go through.');
@@ -71,7 +62,7 @@ function DecisionFacts({ bug }: { bug: BugView }) {
 
 	return (
 		<span className="bug-line-facts">
-			<WherePill bug={bug} />
+			<FileChip path={bug.file} line={bug.line} framed />
 			<Pill tone={accepted ? 'ok' : 'neutral'}>{accepted ? 'Accepted' : 'Dismissed'}</Pill>
 		</span>
 	);
@@ -139,7 +130,7 @@ export function BugGroups({ view, clean }: { view: BugsView; clean: boolean }) {
 							bug={bug}
 							detail={
 								<span className="bug-line-facts" title={`${bug.category} is often dismissed here`}>
-									<WherePill bug={bug} />
+									<FileChip path={bug.file} line={bug.line} framed />
 									<Pill>{bug.category}</Pill>
 								</span>
 							}

@@ -68,9 +68,9 @@ export interface ShellView {
 	openPulls: number | null;
 	/** The tracked repositories, by name. */
 	repos: SidebarRepo[];
-	/** The newest review of each open pull request that is not settled, newest first; at most eight. */
+	/** The newest unsettled reviews (open pull requests and any brought back by hand), newest first; at most eight. */
 	recent: RecentReview[];
-	/** Reviews of merged or closed pull requests, and the reviews and chats settled by hand or by rest, newest first. */
+	/** Reviews of merged or closed pull requests, manually settled reviews, and settled chats, newest first. */
 	settled: SettledRow[];
 	/** The chats most recently active that are not settled, newest first. */
 	chats: RecentChat[];

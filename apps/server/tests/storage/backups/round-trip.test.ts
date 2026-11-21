@@ -20,7 +20,7 @@ function openExample(): Database {
 	const database = new Database(join(data, SQLITE_SNAPSHOT));
 
 	database.run('PRAGMA journal_mode = WAL');
-	migrateSqlite(database, [(connection) => connection.run('CREATE TABLE example (value TEXT)')]);
+	migrateSqlite(database, [(connection) => connection.run('CREATE TABLE example (value TEXT)'), () => {}]);
 
 	return database;
 }

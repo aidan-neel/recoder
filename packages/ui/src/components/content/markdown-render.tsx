@@ -1,5 +1,5 @@
 import { createElement, type ReactElement, type ReactNode, type Ref } from 'react';
-import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown';
+import ReactMarkdown, { type Components, type ExtraProps, type Options } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { cn } from '../../lib/cn';
@@ -148,8 +148,13 @@ function plainTree(paragraphs: string[], parts: Components): ReactElement {
  * `tests/content/markdown-render.test.tsx` holds the shortcut to the
  * parser's markup.
  */
-function markdownTree(source: string, streaming: boolean, parts: Components): ReactElement {
-	const render = () => ReactMarkdown({ children: source, remarkPlugins: REMARK, components: parts });
+function markdownTree(
+	source: string,
+	streaming: boolean,
+	parts: Components,
+	rehypePlugins?: Options['rehypePlugins']
+): ReactElement {
+	const render = () => ReactMarkdown({ children: source, remarkPlugins: REMARK, rehypePlugins, components: parts });
 
 	if (streaming) return render();
 
@@ -211,8 +216,9 @@ export function MarkdownProse({
 	linkOverride,
 	inlineCode,
 	parts = clientParts(linkOverride, inlineCode),
+	rehypePlugins,
 	ref
-}: MarkdownProps & { parts?: Components; ref?: Ref<HTMLDivElement> }) {
+}: MarkdownProps & { parts?: Components; rehypePlugins?: Options['rehypePlugins']; ref?: Ref<HTMLDivElement> }) {
 	return (
 		<div
 			ref={ref}
@@ -222,7 +228,7 @@ export function MarkdownProse({
 			aria-busy={streaming || undefined}
 			className={cn('min-w-0 [overflow-wrap:break-word]', VOICE[variant], className)}
 		>
-			{markdownTree(children, streaming, parts)}
+			{markdownTree(children, streaming, parts, rehypePlugins)}
 		</div>
 	);
 }

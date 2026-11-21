@@ -1,6 +1,6 @@
 'use client';
 
-import { CaretRightIcon, FileIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react';
+import { CaretRightIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react';
 import {
 	useEffect,
 	useRef,
@@ -13,6 +13,7 @@ import {
 
 import { cn } from '../../lib/cn';
 import { Spinner } from '../spinner';
+import { FileIcon } from './file-icon';
 import { HoverList } from './hover-list';
 import { treeKeyAction, type TreeRow } from './tree-keys';
 
@@ -74,7 +75,7 @@ function TreeItem({ row, selected, tabbable, end, onPress }: TreeItemProps) {
 			onClick={onPress}
 		>
 			{folder ? <CaretRightIcon aria-hidden data-ui="tree-chevron" /> : <span data-ui="tree-gap" aria-hidden />}
-			{folder ? <FolderMark aria-hidden /> : <FileIcon aria-hidden />}
+			{folder ? <FolderMark aria-hidden /> : <FileIcon path={row.label} />}
 			<span data-ui="tree-label">{row.label}</span>
 			{row.loading ? <Spinner size={12} /> : null}
 			{end ? <span data-ui="tree-end">{end}</span> : null}

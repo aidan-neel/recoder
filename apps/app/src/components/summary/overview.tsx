@@ -11,7 +11,7 @@ import { LOADING_SUMMARY } from '@/lib/summary/loading-summary';
 
 import { Age } from '@/components/common/age';
 
-import { SummaryProse } from './prose';
+import { ForgeProse, SummaryProse } from './prose';
 
 interface OverviewProps {
 	summary: SummaryView;
@@ -45,7 +45,7 @@ export function Overview({ summary, run, bugs, by, loading }: OverviewProps) {
 						{loading ? <LoadingFacts /> : <OverviewFacts run={run} bugs={bugs} />}
 					</>
 				) : null}
-				{shown.description ? <Description text={shown.description} by={by} /> : null}
+				{shown.description ? <AuthorDescription text={shown.description} by={by} /> : null}
 			</section>
 		</Skeleton>
 	);
@@ -89,12 +89,12 @@ function OverviewFacts({ run, bugs }: Pick<OverviewProps, 'run' | 'bugs'>) {
 }
 
 /** The author's description as a quote under the lede: three lines, the rest behind Show more. */
-function Description({ text, by }: { text: string; by: string | null }) {
+export function AuthorDescription({ text, by }: { text: string; by: string | null }) {
 	return (
 		<div className="summary-description">
 			<p className="summary-description-label">{by ? `Description · ${author(by).name}` : 'Description'}</p>
 			<ClampedText lines={3}>
-				<SummaryProse>{text}</SummaryProse>
+				<ForgeProse>{text}</ForgeProse>
 			</ClampedText>
 		</div>
 	);

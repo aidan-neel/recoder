@@ -91,8 +91,10 @@ A \`v*\` tag builds the CLI binaries for four platforms, the server image and th
 
 The checklist for a release:
 
-1. \`main\` is green: CI runs the whole verify suite on it.
-2. Tag \`v0.3.0\` and push the tag. Everything above happens by itself.
-3. First release only: make [the image package](https://github.com/aidan-neel/recoder/pkgs/container/recoder) and [the updater's](https://github.com/aidan-neel/recoder/pkgs/container/recoder-updater) public on ghcr.io, or installs cannot pull them.
-4. The first release also waits on the setup lock for the settings routes (issue AID-31, being fixed in RECO-25): until those routes refuse a locked browser, a public server would serve its settings pages to anyone who reaches it.`
+1. The versions on \`main\` are the number you are about to tag: the root and server \`package.json\`, the server's fallback in \`apps/server/src/version.ts\`, and the chart's \`appVersion\`, which is the image tag the chart deploys by default (\`v0.3.0\`).
+2. \`main\` is green: CI runs the whole verify suite on it.
+3. Tag \`v0.3.0\` and push the tag. Everything above happens by itself.
+4. First release only: make [the image package](https://github.com/aidan-neel/recoder/pkgs/container/recoder) and [the updater's](https://github.com/aidan-neel/recoder/pkgs/container/recoder-updater) public on ghcr.io, or installs cannot pull them.
+
+Every route refuses an unclaimed browser until setup finishes, so the first public server is safe to expose.`
 };

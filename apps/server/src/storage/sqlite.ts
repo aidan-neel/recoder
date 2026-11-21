@@ -22,7 +22,7 @@ export function sqlite(): Database {
 
 	try {
 		database.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
-		migrateSqlite(database, [initializeSqliteSchema]);
+		migrateSqlite(database, [initializeSqliteSchema, addPullDescriptions]);
 		database.run('PRAGMA journal_mode = WAL');
 		database.run('PRAGMA secure_delete = ON');
 		refreshReviewListShape(database);
@@ -62,6 +62,10 @@ function initializeSqliteSchema(database: Database): void {
 	prepareReviewList(database);
 	database.run("CREATE INDEX IF NOT EXISTS model_calls_at ON model_calls (substr(json_extract(value, '$.at'), 1, 10))");
 	database.run('CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)');
+}
+
+function addPullDescriptions(database: Database): void {
+	database.run('CREATE TABLE IF NOT EXISTS pull_descriptions (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 }
 
 export async function closeSqlite(): Promise<void> {

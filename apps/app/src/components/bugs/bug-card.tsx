@@ -1,6 +1,6 @@
 'use client';
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@recoder/ui';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger, FileChip } from '@recoder/ui';
 import { CaretDownIcon } from '@phosphor-icons/react';
 import { memo, useRef, useState, type KeyboardEvent } from 'react';
 
@@ -20,7 +20,7 @@ interface BugCardProps {
 	view: BugsView;
 	open: boolean;
 	onToggle: (id: string) => void;
-	/** Under its line in the diff, or in the Review tab's list, where it also shows the proof. */
+	/** Under its line in the diff, or in the Review tab's list. */
 	place: 'diff' | 'review';
 	/** On the Changes tab: the Review tab's address, for the menu's "Open in Review". */
 	reviewHref?: string;
@@ -65,10 +65,10 @@ function keepHeadInView(card: HTMLElement, head: HTMLElement): void {
 /**
  * One finding, the same card under its line on the Changes tab and in the Review tab's list. Its header is one line,
  * open or shut: its severity, title, category, place and caret, and the whole line opens and shuts the card, with the
- * caret and the title in the same spot either way. Open, the card rises and unfolds under the header: what is wrong,
- * how it was shown (with the proof on the Review tab), the suggested fix and what to do with it; a stale one keeps the
- * case and drops the actions. On the Review tab an open card's header stays in view while its body scrolls, and
- * Escape inside the card shuts it. It re-renders only when its own bug or state changes.
+ * caret and the title in the same spot either way. Open, the card rises and unfolds under the header: the full
+ * explanation, how it was shown, the suggested fix and what to do with it; a stale one keeps the case and drops the
+ * actions. On the Review tab an open card's header stays in view while its body scrolls, and Escape inside the card
+ * shuts it. It re-renders only when its own bug or state changes.
  */
 export const BugCard = memo(function BugCard({ bug, view, open, onToggle, place, reviewHref, stale }: BugCardProps) {
 	const card = useRef<HTMLElement>(null);
@@ -114,13 +114,11 @@ export const BugCard = memo(function BugCard({ bug, view, open, onToggle, place,
 					</span>
 					{category ? <span className="bug-category">{category}</span> : null}
 					<span className="bug-title">{bug.title}</span>
-					<span className="bug-where" title={bug.file}>
-						{bug.where}
-					</span>
+					<FileChip path={bug.file} line={bug.line} className="bug-where" />
 					<CaretDownIcon aria-hidden className="bug-caret" />
 				</CollapsibleTrigger>
 				<CollapsibleContent className="bug-body">
-					<BugEvidence bug={bug} full={place === 'review'} />
+					<BugEvidence bug={bug} />
 					{stale ? null : (
 						<BugActions
 							bug={bug}

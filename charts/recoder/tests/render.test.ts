@@ -1,9 +1,12 @@
 import { expect, test } from 'bun:test';
 import { YAML } from 'bun';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const chart = resolve(import.meta.dir, '..');
 const fixture = resolve(import.meta.dir, 'values.yaml');
+const appVersion = (YAML.parse(readFileSync(resolve(chart, 'Chart.yaml'), 'utf8')) as { appVersion: string })
+	.appVersion;
 
 function render(...args: string[]) {
 	return Bun.spawnSync(['helm', 'template', 'test', chart, '-f', fixture, ...args]);
@@ -64,7 +67,7 @@ test("the published image is the default, and an empty tag means the chart's app
 	expect(
 		serverOf(manifests('--set', 'server.encryptionKey.existingSecret=keys', '--set', 'server.image.tag=')).spec.template
 			.spec.containers[0].image
-	).toBe('ghcr.io/aidan-neel/recoder:0.2.1');
+	).toBe(`ghcr.io/aidan-neel/recoder:${appVersion}`);
 
 	expect(
 		serverOf(
@@ -77,7 +80,7 @@ test("the published image is the default, and an empty tag means the chart's app
 				'server.image.tag='
 			)
 		).spec.template.spec.containers[0].image
-	).toBe('registry.example.org/recoder:0.2.1');
+	).toBe(`registry.example.org/recoder:${appVersion}`);
 });
 
 test('existing storage and secrets are referenced without creating replacements', () => {

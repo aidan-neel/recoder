@@ -1,7 +1,7 @@
 'use client';
 
 import type { FileDiff } from '@recoder/shared';
-import { Button, Checkbox, FileIcon, Pill } from '@recoder/ui';
+import { Button, Checkbox, DiffStat, FileChip, Pill } from '@recoder/ui';
 import { CaretRightIcon } from '@phosphor-icons/react';
 import { memo, useId, useRef, useState } from 'react';
 
@@ -11,8 +11,6 @@ import type { DiffLayout } from '@/lib/changes/diff-view';
 import type { ChangesFold, ChangesTarget } from '@/lib/changes/types';
 import { useNear } from '@/lib/changes/use-near';
 import { findingsLabel, plural } from '@/lib/shell/format';
-
-import { DiffStat } from '@/components/common/diff-stat';
 
 import { FileDiffBody } from './file-diff';
 
@@ -47,18 +45,6 @@ function lineCount(file: FileDiff): number {
 /** About how tall the mounted diff will be. */
 function placeholderHeight(file: FileDiff): number {
 	return Math.min(PLACEHOLDER_MAX, lineCount(file) * LINE_HEIGHT);
-}
-
-/** The file's name in ink, then its folder, quiet, which gives way first when the header is narrow. */
-function FilePath({ path }: { path: string }) {
-	const cut = path.lastIndexOf('/');
-
-	return (
-		<span className="file-path" title={path}>
-			<strong>{path.slice(cut + 1)}</strong>
-			{cut > 0 ? <span className="file-dir">{path.slice(0, cut)}</span> : null}
-		</span>
-	);
 }
 
 /**
@@ -112,8 +98,7 @@ export const FileCard = memo(function FileCard({
 					onClick={() => setOpen(!open)}
 				>
 					<CaretRightIcon aria-hidden className="file-caret" />
-					<FileIcon path={file.path} className="file-icon" />
-					<FilePath path={file.path} />
+					<FileChip path={file.path} className="file-name" />
 				</button>
 				<div className="file-head-end">
 					{bugs.length > 0 ? (

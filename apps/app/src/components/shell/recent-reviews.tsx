@@ -81,7 +81,7 @@ export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 	const pathname = usePathname();
 	const sessions = useSessionCache();
 	const actionsFor = useReviewActions();
-	const settle = useSettleMarks((state) => state.mark);
+	const settle = useSettleMarks((state) => state.settle);
 	const now = useNow(AGE_TICK);
 	const isActive = (review: RecentReview) => pathname === review.href.split('?')[0];
 	const shownRow = reviews.find(isActive);
@@ -123,7 +123,7 @@ export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 							unread={!loading && unread(review.reviewId, review.updatedAt, isBusy(review))}
 							actions={actionsFor(review)}
 							onIntent={() => sessions.warm(review.repoId, review.number)}
-							onSettle={() => settle(review.reviewId, true)}
+							onSettle={() => settle(review.reviewId)}
 						/>
 					))}
 				</div>

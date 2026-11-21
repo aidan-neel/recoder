@@ -29,21 +29,24 @@ export function pullsHref(base: string): string {
 	return base || '/';
 }
 
-/** A pull request's page, on `tab` when it is not the default Changes tab. */
+/** A pull request's page, on `tab` when one is given; without one it lands where the page decides. */
 export function pullHref(base: string, repoId: string, number: number, tab?: PullTab): string {
 	const path = `${base}/pulls/${encodeURIComponent(repoId)}/${number}`;
 
-	return tab && tab !== 'changes' ? `${path}?tab=${tab}` : path;
+	return tab ? `${path}?tab=${tab}` : path;
 }
 
-/** Old names of tabs that still open them: the Review tab was the Bugs tab. */
-const PULL_TAB_ALIASES: ReadonlyMap<string, PullTab> = new Map([['bugs', 'review']]);
+/** Old names of tabs that still open them: the Review tab was the Bugs tab, and the Description tab the Summary tab. */
+const PULL_TAB_ALIASES: ReadonlyMap<string, PullTab> = new Map([
+	['bugs', 'review'],
+	['summary', 'description']
+]);
 
-/** The tab a pull request address names (`?tab=review`); Changes when it names none or one the page does not have. */
-export function pullTabOf(value: string | null): PullTab {
+/** The tab a pull request address names (`?tab=review`); null when it names none or one the page does not have. */
+export function pullTabOf(value: string | null): PullTab | null {
 	const tab = PULL_TABS.find((candidate) => candidate === value);
 
-	return tab ?? PULL_TAB_ALIASES.get(value ?? '') ?? 'changes';
+	return tab ?? PULL_TAB_ALIASES.get(value ?? '') ?? null;
 }
 
 /** The tracked repositories, with a way to add more. */
