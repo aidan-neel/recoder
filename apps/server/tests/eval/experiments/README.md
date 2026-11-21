@@ -11,6 +11,7 @@ python3 -m unittest discover -s apps/server/tests/eval/experiments -v
 # One-time construction; refuses to overwrite a frozen dataset or control forge:
 python3 apps/server/tests/eval/experiments/iteration5_freeze.py
 VERIFIER_AB_START_PAUSED=1 python3 apps/server/tests/eval/experiments/iteration5_benchmark.py
+python3 apps/server/tests/eval/experiments/iteration5_summary.py /home/ubuntu/eval-work/metrics/<completed-artifacts>
 ```
 
 The freeze includes all verified, published SWE-2 cases outside dev-v0 at its
@@ -30,3 +31,7 @@ Precision bounds include all published findings, with duplicates penalized and
 unresolved findings explicitly unknown. An empty control label is not an automatic
 false-positive verdict. Keep any post-run source/contract adjudications in an
 overlay under the experiment artifacts, separate from immutable ground truth.
+The summary reports raw and post-audit precision separately; overlays require
+source/contract evidence and cannot overwrite planted or duplicate matches.
+Rerunning it regenerates the Results section; keep narrative audit evidence in
+a separate artifact before appending it to the final report.
