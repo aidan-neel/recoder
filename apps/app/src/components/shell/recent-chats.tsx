@@ -29,7 +29,7 @@ export function RecentChats({ chats }: { chats: RecentChat[] }) {
 	const pathname = usePathname();
 	const chatCache = useChatCache();
 	const actionsFor = useChatActions();
-	const settle = useSettleMarks((state) => state.mark);
+	const settle = useSettleMarks((state) => state.settle);
 	const now = useNow(AGE_TICK);
 	const shownRow = chats.find((chat) => pathname === chat.href);
 	const unread = useUnread(shownRow && { id: shownRow.chatId, updatedAt: shownRow.updatedAt, busy: false });
@@ -77,7 +77,7 @@ export function RecentChats({ chats }: { chats: RecentChat[] }) {
 							unread={fresh}
 							actions={actionsFor(chat)}
 							onIntent={() => chatCache.warm(chat.chatId)}
-							onSettle={() => settle(chat.chatId, true)}
+							onSettle={() => settle(chat.chatId)}
 						/>
 					);
 				})}
