@@ -28,10 +28,10 @@ def prepare_comparison(sources, state, directory):
     return directory
 
 
-def promotion_decision(samples, candidate_arm, improve=False):
+def promotion_decision(samples, candidate_arm, improve=False, baseline_samples=3):
     baseline = [s for s in samples if s['arm'] == 'F']
     candidate = [s for s in samples if s['arm'] == candidate_arm]
-    assert len(baseline) == 3 and len(candidate) == 2
+    assert len(baseline) == baseline_samples and len(candidate) == 2
     published = lambda group: sum(s['recall']['published'] for s in group)
     false = lambda group: sum(s['controls']['classes'].get('false', 0) for s in group)
     losses = [sum(d['verified'] and not d['published'] for d in s['by_defect'].values()) for s in candidate]

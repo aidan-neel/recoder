@@ -7,22 +7,34 @@ function numbered(steps: string[]): string {
 	return steps.map((step, index) => `${index + 1}. ${step}`).join('\n');
 }
 
+function discoveryTransitionsOn(): boolean {
+	return process.env.RECODER_DISCOVERY_TRANSITIONS === '1';
+}
+
 const CORRECTNESS: Lens = {
 	id: 'correctness',
 	title: 'Correctness',
 	categories: ['correctness', 'error-handling', 'tests', 'intent-mismatch'],
-	procedure: numbered([
-		'State what the symbol must do, from its name, signature, callers, tests and the change intent.',
-		'Walk every branch with empty, null, zero, boundary and maximum inputs. A wrong result, crash or lost value is correctness.',
-		'Follow every call that can fail (I/O, parsing, network, awaits, model calls). A failure that is unhandled, swallowed, reported wrongly, or skips cleanup is error-handling.',
-		'For each changed expression, name the contract it must keep, then try the value that breaks it: rounding or truncation that drops a fraction or resets a counter, a default that treats 0 or an empty string as missing (|| where ?? is meant), < against <=, off-by-one slices and indexes, an empty or missing header, field or element, and the first, last and only item. Report the input and the wrong result.',
-		'A guard, validation or type check the change removed or narrowed (Array.isArray, a null or empty test, a length cap, a required-field check) is correctness unless the same check still runs earlier. Message text the change edited must still name the true cause.',
-		'Compare with the removed or replaced lines. A guarantee the old code gave that nothing gives now is correctness.',
-		'Check each caller listed in the context against the new behavior: return values, nulls, thrown errors, ordering. A caller that now breaks is correctness.',
-		'Check the acceptance criteria, stated constraints (such as "backwards compatible" or "no behavior change") and non-goals in the change intent. One the code does not meet, or a non-goal it does anyway, is intent-mismatch; cite the claim id in violatedContract.',
-		'Check the tests in this unit or listed for the symbol. A test that cannot fail, asserts the wrong thing, or misses the changed branch is tests.',
-		'For each test the change adds or edits, state what its title promises, then break that promise in the code under test with one small edit and run the test. If it still passes, the test is weak (tests): cite the assertion that should be stricter, such as a bound where the title implies an exact value, or a step the title needs that the test never takes (concurrent calls, a repeat request that should hit the cache).'
-	])
+	get procedure() {
+		const transitions = discoveryTransitionsOn();
+
+		return numbered([
+			'State what the symbol must do, from its name, signature, callers, tests and the change intent.',
+			transitions
+				? 'Trace success, rejection, cancellation and panic through each changed operation. Check cleanup and the error observed by its caller.'
+				: 'Walk every branch with empty, null, zero, boundary and maximum inputs. A wrong result, crash or lost value is correctness.',
+			transitions
+				? 'Pair relevant options and states: paused with shutdown, waiting or active with cancellation, repeated calls with changed options. Give a concrete sequence and wrong result.'
+				: 'Follow every call that can fail (I/O, parsing, network, awaits, model calls). A failure that is unhandled, swallowed, reported wrongly, or skips cleanup is error-handling.',
+			'For each changed expression, name the contract it must keep, then try the value that breaks it: rounding or truncation that drops a fraction or resets a counter, a default that treats 0 or an empty string as missing (|| where ?? is meant), < against <=, off-by-one slices and indexes, an empty or missing header, field or element, and the first, last and only item. Report the input and the wrong result.',
+			'A guard, validation or type check the change removed or narrowed (Array.isArray, a null or empty test, a length cap, a required-field check) is correctness unless the same check still runs earlier. Message text the change edited must still name the true cause.',
+			'Compare with the removed or replaced lines. A guarantee the old code gave that nothing gives now is correctness.',
+			'Check each caller listed in the context against the new behavior: return values, nulls, thrown errors, ordering. A caller that now breaks is correctness.',
+			'Check the acceptance criteria, stated constraints (such as "backwards compatible" or "no behavior change") and non-goals in the change intent. One the code does not meet, or a non-goal it does anyway, is intent-mismatch; cite the claim id in violatedContract.',
+			'Check the tests in this unit or listed for the symbol. A test that cannot fail, asserts the wrong thing, or misses the changed branch is tests.',
+			'For each test the change adds or edits, state what its title promises, then break that promise in the code under test with one small edit and run the test. If it still passes, the test is weak (tests): cite the assertion that should be stricter, such as a bound where the title implies an exact value, or a step the title needs that the test never takes (concurrent calls, a repeat request that should hit the cache).'
+		]);
+	}
 };
 
 const SECURITY: Lens = {
@@ -44,14 +56,22 @@ const CONCURRENCY: Lens = {
 	id: 'concurrency',
 	title: 'Concurrency and data',
 	categories: ['concurrency', 'data-persistence'],
-	procedure: numbered([
-		'List the shared state the symbol reads or writes (module variables, caches, maps, files, database rows) and what else touches it.',
-		'Look for an await or callback between a check and the use that relies on it, and for two overlapping calls that interleave badly. Either is concurrency.',
-		'Promises that are not awaited, abort signals not passed on, timers or listeners not cleared, and unbounded parallel work are concurrency.',
-		'Retries or re-entry that repeat a side effect (a write, a charge, a message) are concurrency.',
-		'Writes that are not atomic, can be left half-done by a crash, or lose data on restart are data-persistence.',
-		'A change to a saved format, schema or key without a version, migration, or a way to read what older runs saved is data-persistence.'
-	])
+	get procedure() {
+		const transitions = discoveryTransitionsOn();
+
+		return numbered([
+			transitions
+				? 'List tasks, tokens, keys, timers and listeners owned by each state. Follow both race outcomes; check the losing work is settled and released.'
+				: 'List the shared state the symbol reads or writes (module variables, caches, maps, files, database rows) and what else touches it.',
+			transitions
+				? 'At each await, callback or notification, interleave another operation. Check idle/drain conditions after scheduling, and rejection handling after cancellation.'
+				: 'Look for an await or callback between a check and the use that relies on it, and for two overlapping calls that interleave badly. Either is concurrency.',
+			'Promises that are not awaited, abort signals not passed on, timers or listeners not cleared, and unbounded parallel work are concurrency.',
+			'Retries or re-entry that repeat a side effect (a write, a charge, a message) are concurrency.',
+			'Writes that are not atomic, can be left half-done by a crash, or lose data on restart are data-persistence.',
+			'A change to a saved format, schema or key without a version, migration, or a way to read what older runs saved is data-persistence.'
+		]);
+	}
 };
 
 const API_CONTRACT: Lens = {
