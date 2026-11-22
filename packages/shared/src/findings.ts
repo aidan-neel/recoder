@@ -1,3 +1,4 @@
+import type { DiffMove } from './diff-moves';
 import type { ReasoningEffort } from './models';
 
 /** Legacy storage and UI compatibility, lowest first. */
@@ -396,6 +397,8 @@ export interface Finding {
 	/** The enclosing function, method or class, as the change model names it (`ReviewRun.createRun`). */
 	symbol?: string;
 	claim?: FindingClaim;
+	/** Set when the finding sits in moved code: the move and why the move itself changes behavior. */
+	move?: { relation: DiffMove; reason: string };
 	/** A checked fix, on quality findings. */
 	patch?: FindingPatch;
 	/** What feedback on it counts toward, and whether that feedback quieted it. Older saved reviews omit it. */

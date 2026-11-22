@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { EvidenceStore } from '../../../src/evidence/evidence';
 import { buildInventory, type ReviewInventory } from '../../../src/review/pipeline/inventory';
-import { validateCandidate, type CandidateContext } from '../../../src/review/pipeline/consolidate';
+import { toFinding, validateCandidate, type CandidateContext } from '../../../src/review/pipeline/consolidate';
 import { parseReviewerOutput } from '../../../src/review/pipeline/reviewer';
 import { addedLines } from '../../../src/review/pipeline/detectors/changed-lines';
 import { CoverageLedger } from '../../../src/review/pipeline/coverage';
@@ -131,4 +131,11 @@ test('repairing a category preserves the explanation that makes a moved-code def
 
 	expect(repair.result).toBe('revalidated');
 	expect(candidate).toMatchObject({ valid: true, move: { reason: raw.moveReason } });
+});
+
+test('the API finding keeps the reason a moved-code defect is new', () => {
+	const raw = reportedMove({ moveReason: 'The destination supplies a different lexical binding.' });
+	const finding = toFinding(validateCandidate(raw, META, context()));
+
+	expect(finding).toMatchObject({ move: { reason: raw.moveReason, relation: { exact: true } } });
 });

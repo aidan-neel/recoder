@@ -4,7 +4,6 @@ import {
 	findingSeverity,
 	type ClaimStep,
 	type DropStage,
-	type DiffMove,
 	type FixEdit,
 	type Finding,
 	type FindingSeverity,
@@ -45,7 +44,6 @@ const toBackendSeverity: Record<string, FindingSeverity> = {
 const INTENT_CLAIM_ID = /\b[ACGN]\d+\b/g;
 
 export interface CandidateFinding extends Finding {
-	move?: { relation: DiffMove; reason: string };
 	candidateId: string;
 	valid: boolean;
 	dropReason?: string;
@@ -481,7 +479,6 @@ export function toFinding(candidate: CandidateFinding): Finding {
 		fix: _fix,
 		examples: _examples,
 		repair: _repair,
-		move: _move,
 		ruleCheck,
 		...finding
 	} = candidate;
