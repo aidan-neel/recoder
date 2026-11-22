@@ -2,19 +2,21 @@
 
 import type { FileDiff } from '@recoder/shared';
 import { Button, Skeleton, StatusNotice } from '@recoder/ui';
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import type { BugView } from '@/lib/bugs/types';
 import { useShowFyi } from '@/lib/bugs/show-fyi';
 import { useBugsView } from '@/lib/bugs/use-bugs';
 import { useDiffView } from '@/lib/changes/diff-view';
+import { hunkBugs, hunkLines, hunkWhere, type Chapter } from '@/lib/changes/chapters';
 import { LOADING_DIFF } from '@/lib/changes/loading-diff';
 import { moveSpans, type MoveSpan } from '@/lib/changes/moves';
 import { placeHash, readPlace } from '@/lib/changes/places';
-import type { ChangesTarget, GuidePart } from '@/lib/changes/types';
-import { useChangesNav, useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
+import type { CardPart, ChangesTarget, GuidePart } from '@/lib/changes/types';
+import { useChangesNav, useChapters, useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
 import { useCurrentFile } from '@/lib/changes/use-current-file';
+import { usePinnedHunk } from '@/lib/changes/use-pinned-hunk';
 import { useSideOpen } from '@/lib/changes/side-open';
 import { withoutWhitespace } from '@/lib/changes/whitespace';
 import { usePullDiffView, useSession, useSessionData } from '@/lib/pull/pull-session';
@@ -24,6 +26,7 @@ import { pullHref } from '@/lib/shell/routes';
 import { useAfterPaint } from '@/lib/shell/use-after-paint';
 import { useKeys } from '@/lib/shell/use-keys';
 
+import { ChapterSection } from './chapters';
 import type { ChangesMode } from './changes-tools';
 import { FileCard } from './file-card';
 import { FileSidebar } from './file-sidebar';
@@ -34,6 +37,9 @@ const NO_BUGS: BugView[] = [];
 
 /** No moved blocks, shared for the same reason. */
 const NO_SPANS: MoveSpan[] = [];
+
+/** How near the top the diff may be scrolled and still count as not yet read, in px: switching order stays there. */
+const TOP_SLACK = 40;
 
 /** How many frames a jump waits for its line or finding to be drawn before it settles for the file. */
 const REVEAL_FRAMES = 60;
@@ -51,6 +57,48 @@ function bugsByFile(bugs: BugView[]): Map<string, BugView[]> {
 	for (const bug of bugs) byFile.set(bug.file, [...(byFile.get(bug.file) ?? []), bug]);
 
 	return byFile;
+}
+
+/** What one guide hunk's card shows: its file cut down to that hunk, the findings on it, and how it is named. */
+interface HunkCard {
+	file: FileDiff;
+	bugs: BugView[];
+	part: CardPart;
+}
+
+/** Each guide hunk's card by the hunk's id, built once per guide, diff and set of findings. */
+function hunkCards(chapters: Chapter[], files: FileDiff[], byFile: Map<string, BugView[]>): Map<string, HunkCard> {
+	const byPath = new Map(files.map((file) => [file.path, file]));
+
+	return new Map(
+		chapters.flatMap((chapter) =>
+			chapter.hunks.flatMap((hunk): [string, HunkCard][] => {
+				const file = byPath.get(hunk.path);
+				const shown = hunk.index === null ? undefined : file?.hunks[hunk.index];
+
+				if (!file || (hunk.index !== null && !shown)) return [];
+
+				const part: CardPart = {
+					id: hunk.id,
+					lines: shown ? hunkLines(shown) : null,
+					where: hunkWhere(hunk, file),
+					explanation: hunk.explanation,
+					moved: hunk.moved
+				};
+
+				return [
+					[
+						hunk.id,
+						{
+							file: { ...file, hunks: shown ? [shown] : [] },
+							bugs: hunkBugs(byFile.get(file.path) ?? NO_BUGS, file, hunk),
+							part
+						}
+					]
+				];
+			})
+		)
+	);
 }
 
 /** The files in `order`, leaving out a path the diff does not hold. */
@@ -183,12 +231,53 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 	const ordered = useMemo(() => inOrder(files ?? [], tree.order), [files, tree.order]);
 	const spans = useMemo(() => moveSpans(files ?? []), [files]);
 	const parts = useMemo(() => partsWithRest(guide, tree.order), [guide, tree.order]);
+	const chapters = useChapters();
 	const bugsHref = pullHref(base, repoId, number, 'review');
-	const guided = mode === 'guide' && guide.length > 0;
-	const current = useCurrentFile(scroller, guided ? parts : ordered);
+	const chaptered = mode === 'guide' && chapters.length > 0;
+	const guided = mode === 'guide' && !chaptered && guide.length > 0;
 
-	/** Goes to the file `by` places from the one being read. */
+	const reading = useCurrentFile(
+		scroller,
+		chaptered ? chapters : guided ? parts : ordered,
+		chaptered ? 'hunk' : 'file'
+	);
+
+	const hunkIds = useMemo(() => chapters.flatMap((chapter) => chapter.hunks.map((hunk) => hunk.id)), [chapters]);
+
+	const hunkPaths = useMemo(
+		() => new Map(chapters.flatMap((chapter) => chapter.hunks.map((hunk) => [hunk.id, hunk.path]))),
+		[chapters]
+	);
+
+	const cards = useMemo(
+		() => (chaptered && files ? hunkCards(chapters, files, byFile) : null),
+		[chaptered, chapters, files, byFile]
+	);
+
+	const current = chaptered ? (hunkPaths.get(reading ?? '') ?? null) : reading;
+	const lastPath = useRef<string | null>(null);
+	const switched = useRef(chaptered);
+
+	usePinnedHunk(scroller, chapters, chaptered);
+
+	/** Brings a guide hunk's card to the top of the diff and moves the focus to its header. */
+	const openHunk = useCallback((id: string) => {
+		const card = scroller.current?.querySelector<HTMLElement>(`[data-hunk="${CSS.escape(id)}"]`);
+
+		card?.scrollIntoView({ block: 'start' });
+		card?.querySelector<HTMLElement>('.file-toggle')?.focus({ preventScroll: true });
+	}, []);
+
+	/** Goes to the file `by` places from the one being read; in the guide, to the hunk `by` places on. */
 	function step(by: 1 | -1): void {
+		if (chaptered) {
+			const next = hunkIds[Math.min(hunkIds.length - 1, Math.max(0, (reading ? hunkIds.indexOf(reading) : -1) + by))];
+
+			if (next) openHunk(next);
+
+			return;
+		}
+
 		const at = current ? tree.order.indexOf(current) : -1;
 		const next = tree.order[Math.min(tree.order.length - 1, Math.max(0, at + by))];
 
@@ -197,7 +286,11 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 
 	/** Opens or shuts the file being read, as its header's toggle does; focus inside the file moves to the toggle so it is not lost. */
 	function toggleCurrent(): false | void {
-		const card = current ? scroller.current?.querySelector<HTMLElement>(`[data-file="${CSS.escape(current)}"]`) : null;
+		const selector = chaptered
+			? `[data-hunk="${CSS.escape(reading ?? '')}"]`
+			: `[data-file="${CSS.escape(current ?? '')}"]`;
+
+		const card = current ? scroller.current?.querySelector<HTMLElement>(selector) : null;
 		const toggle = card?.querySelector<HTMLElement>('.file-toggle');
 
 		if (!card || !toggle) return false;
@@ -209,7 +302,23 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 
 	useEffect(() => {
 		session.state.setState({ changesCurrent: current });
+		lastPath.current = current;
 	}, [session, current]);
+
+	useLayoutEffect(() => {
+		const host = scroller.current;
+		const path = lastPath.current;
+
+		if (switched.current === chaptered) return;
+
+		switched.current = chaptered;
+
+		if (!host || !path || host.scrollTop < TOP_SLACK) return;
+
+		const selector = chaptered ? '[data-hunk][data-file="$"]' : '[data-file="$"]';
+
+		host.querySelector(selector.replace('$', CSS.escape(path)))?.scrollIntoView({ block: 'start' });
+	}, [chaptered]);
 
 	useEffect(() => {
 		const open = bugs.open;
@@ -280,6 +389,29 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 		);
 	}
 
+	/** One guide hunk's card: its file cut down to the hunk, under a header that names its lines. */
+	function hunkCard(hunk: Chapter['hunks'][number]) {
+		const shown = cards?.get(hunk.id);
+
+		if (!shown) return null;
+
+		return (
+			<FileCard
+				key={hunk.id}
+				file={shown.file}
+				layout={layout}
+				viewed={viewed.isViewed(hunk.path)}
+				onToggleViewed={viewed.toggle}
+				bugs={shown.bugs}
+				bugsHref={bugsHref}
+				target={target?.path === hunk.path ? target : null}
+				fold={fold}
+				spans={spans.get(hunk.path) ?? NO_SPANS}
+				part={shown.part}
+			/>
+		);
+	}
+
 	/** The cards of a guide part, in the part's own order. */
 	function partCards(part: GuidePart) {
 		return inOrder(files ?? [], part.paths).map(card);
@@ -287,10 +419,16 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 
 	return (
 		<div className="changes" data-layout={layout}>
-			{sideOpen ? <FileSidebar current={current} onOpen={(path) => nav.goTo(path)} /> : null}
+			{sideOpen ? (
+				<FileSidebar
+					current={current}
+					onOpen={(path) => nav.goTo(path)}
+					outline={chaptered ? { chapters, current: reading, onOpen: openHunk } : null}
+				/>
+			) : null}
 			<div ref={scroller} className="changes-main">
 				<div className="changes-stack">
-					{mode === 'guide' && guide.length === 0 ? (
+					{mode === 'guide' && !chaptered && guide.length === 0 ? (
 						<div className="strip" data-tone="neutral" role="status">
 							<span className="strip-text">
 								{run.phase === 'passed'
@@ -315,13 +453,21 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 							<StatusNotice title="This pull request changes no files." />
 						</div>
 					) : null}
+					{chaptered && cards
+						? chapters.map((chapter) => (
+								<ChapterSection key={chapter.id} chapter={chapter}>
+									{chapter.hunks.map(hunkCard)}
+								</ChapterSection>
+							))
+						: null}
 					{guided
 						? parts.map((part, index) => (
 								<GuidePartSection key={part.id} part={part} position={index + 1}>
 									{partCards(part)}
 								</GuidePartSection>
 							))
-						: ordered.map(card)}
+						: null}
+					{chaptered || guided ? null : ordered.map(card)}
 				</div>
 			</div>
 		</div>

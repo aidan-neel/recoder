@@ -285,8 +285,12 @@ ${marked('-', CLIENT_KEY_BODY)}
 			` import { Hono } from 'hono';
  import { health } from './routes/health';
  import { projects } from './routes/projects';
-+import { rateLimit } from './rate-limit/middleware';
-
++import { rateLimit } from './rate-limit/middleware';`
+		),
+		hunk(
+			4,
+			5,
+			`
  export const app = new Hono();
 
  app.route('/health', health);

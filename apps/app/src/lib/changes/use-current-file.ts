@@ -2,25 +2,30 @@
 
 import { useEffect, useState, type RefObject } from 'react';
 
+import { readOnScroll } from './read-on-scroll';
+
 /** The least a file's card must reach under the top of the scroller to count as the one being read. */
 const READING_LINE = 72;
 
 /** The share of the scroller's height the reading line sits at, when that is lower than `READING_LINE`. */
 const READING_SHARE = 1 / 3;
 
-/**
- * The path of the last card whose top is above the reading line; the first card's when none is yet. The line sits
- * a third of the way down, so a file that fills most of the view is the one being read even while the last line of
- * the file before it is still leaving at the top.
- */
-function fileAtReadingLine(host: HTMLElement): string | null {
-	const line = host.getBoundingClientRect().top + Math.max(READING_LINE, host.clientHeight * READING_SHARE);
-	let current: string | null = null;
+/** What a card names: its file's path (`data-file`), or a guide hunk's id (`data-hunk`). */
+type Reading = 'file' | 'hunk';
 
-	for (const card of host.querySelectorAll<HTMLElement>('[data-file]')) {
+/**
+ * The last card whose top is above the reading line; the first card when none is yet. The line sits a third of the
+ * way down, so a file that fills most of the view is the one being read even while the last line of the file before
+ * it is still leaving at the top.
+ */
+export function cardAtReadingLine(host: HTMLElement, attribute: Reading): HTMLElement | null {
+	const line = host.getBoundingClientRect().top + Math.max(READING_LINE, host.clientHeight * READING_SHARE);
+	let current: HTMLElement | null = null;
+
+	for (const card of host.querySelectorAll<HTMLElement>(`[data-${attribute}]`)) {
 		if (current !== null && card.getBoundingClientRect().top > line) break;
 
-		current = card.dataset.file ?? null;
+		current = card;
 	}
 
 	return current;
@@ -30,9 +35,13 @@ function fileAtReadingLine(host: HTMLElement): string | null {
  * The file being read in a scroller of file cards (`[data-file="<path>"]`):
  * the last one whose top passed the reading line. It reads the layout once a
  * frame while the scroller moves, and again when `revision` changes (the
- * cards were replaced).
+ * cards were replaced). With `attribute` set to `hunk`, it is the id of the guide's hunk card being read.
  */
-export function useCurrentFile(scroller: RefObject<HTMLElement | null>, revision: unknown): string | null {
+export function useCurrentFile(
+	scroller: RefObject<HTMLElement | null>,
+	revision: unknown,
+	attribute: Reading = 'file'
+): string | null {
 	const [current, setCurrent] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -40,25 +49,8 @@ export function useCurrentFile(scroller: RefObject<HTMLElement | null>, revision
 
 		if (!host) return;
 
-		let frame = 0;
-
-		function read(): void {
-			frame = 0;
-			if (host) setCurrent(fileAtReadingLine(host));
-		}
-
-		function onScroll(): void {
-			if (!frame) frame = requestAnimationFrame(read);
-		}
-
-		read();
-		host.addEventListener('scroll', onScroll, { passive: true });
-
-		return () => {
-			host.removeEventListener('scroll', onScroll);
-			cancelAnimationFrame(frame);
-		};
-	}, [scroller, revision]);
+		return readOnScroll(host, () => setCurrent(cardAtReadingLine(host, attribute)?.dataset[attribute] ?? null));
+	}, [scroller, revision, attribute]);
 
 	return current;
 }
