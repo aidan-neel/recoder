@@ -2,7 +2,7 @@ import {
 	categoryLabel,
 	EVIDENCE_LABELS,
 	evidenceClass,
-	findingTone,
+	findingTier,
 	splitCategoryTag,
 	type BaseComparisonResult,
 	type Finding,
@@ -12,7 +12,8 @@ import {
 } from '@recoder/shared';
 
 import type { Vote } from '../pull/session-state';
-import type { BugProof, BugTone, BugView } from './types';
+import { TIER_LABELS, TIER_TONES } from './tiers';
+import type { BugProof, BugView } from './types';
 
 /** How the proving command ended on the base branch, by what the comparison found. */
 const BASE_SENTENCE: Record<BaseComparisonResult, string> = {
@@ -24,8 +25,6 @@ const BASE_SENTENCE: Record<BaseComparisonResult, string> = {
 	unstable: 'Ends differently from run to run on the base branch.'
 };
 
-const SEVERITY: Record<BugTone, string> = { high: 'High', medium: 'Medium', low: 'Low' };
-
 /** The comparison with the base branch as one sentence; null when the run was not compared. */
 export function baseSentence(baseline: VerificationBaseline | undefined): string | null {
 	if (!baseline) return null;
@@ -33,13 +32,6 @@ export function baseSentence(baseline: VerificationBaseline | undefined): string
 	if ('unavailable' in baseline) return baseline.unavailable;
 
 	return baseline.differs ? 'Ends differently on the base branch.' : 'Ends the same way on the base branch.';
-}
-
-/** The finding's tone: an error is high, a warning medium, the rest low. */
-function toneOf(finding: Finding): BugTone {
-	const tone = findingTone(finding.severity);
-
-	return tone === 'question' ? 'low' : tone;
 }
 
 /** The run behind a reproduced finding. Older reviews keep only the command, and the reason as its output. */
@@ -83,7 +75,7 @@ function firstSentence(text: string): string {
 export function bugView(finding: Finding, review: Pick<Review, 'findingComments'>, vote: Vote | null): BugView {
 	const { tag, body } = splitCategoryTag(finding.message);
 	const evidence = evidenceClass(finding);
-	const tone = toneOf(finding);
+	const tier = findingTier(finding);
 	const line = finding.line ?? null;
 	const posted = review.findingComments?.[finding.id];
 
@@ -91,8 +83,9 @@ export function bugView(finding: Finding, review: Pick<Review, 'findingComments'
 		id: finding.id,
 		kind: finding.kind === 'quality' && finding.patch ? 'suggestion' : 'bug',
 		title: finding.title ?? firstSentence(body),
-		tone,
-		severity: SEVERITY[tone],
+		tier,
+		tone: TIER_TONES[tier],
+		tierLabel: TIER_LABELS[tier],
 		category: categoryLabel(finding.category ?? tag ?? 'correctness'),
 		file: finding.file,
 		line,
@@ -114,6 +107,7 @@ export function bugView(finding: Finding, review: Pick<Review, 'findingComments'
 		history: finding.history?.state ?? null,
 		decision: finding.decision ?? null,
 		posted: posted ? { url: posted.url } : null,
-		vote
+		vote,
+		moveReason: finding.moveReason ?? null
 	};
 }

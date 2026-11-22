@@ -57,7 +57,7 @@ export function fixPrompt(bug: BugView, pull: Pick<PullRequest, 'number' | 'titl
 	return [
 		head,
 		'',
-		`[${bug.severity}] ${location(bug)}: ${bug.title}`,
+		`[${bug.tierLabel}] ${location(bug)}: ${bug.title}`,
 		'',
 		bug.explanation,
 		...paragraph(evidenceLines(bug)),

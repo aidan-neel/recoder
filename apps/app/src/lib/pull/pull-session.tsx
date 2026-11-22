@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useStore } from 'zustand';
 
 import { useListStore, useSessionCache } from '../api/client';
+import { foundTotal } from '../bugs/tiers';
 import { openCounts, shortRepoName } from '../pulls/pull-rows';
 import { landingTab } from './landing-tab';
 import { chosenMethod, mergeBlock } from './merge';
@@ -68,9 +69,7 @@ function loadable<Value>(load: Load<Value>, retry: () => void): Loadable<Value> 
 function openBugCount(review: ReviewListItem | null): number | null {
 	if (review?.status !== 'passed') return null;
 
-	const counts = openCounts(review);
-
-	return counts.bugs + counts.suggestions;
+	return foundTotal(openCounts(review));
 }
 
 /** The review whose findings the page counts: the one read in full when it is the page's newest, else the page's. */

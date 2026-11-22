@@ -1,14 +1,17 @@
 'use client';
 
 import type { DiffHunk, FileDiff } from '@recoder/shared';
-import { CodeLines, langForPath, type CodeLine } from '@recoder/ui';
+import { Button, CodeLines, FileChip, langForPath, type CodeLine } from '@recoder/ui';
+import { ArrowBendDownRightIcon } from '@phosphor-icons/react';
 import { memo, useMemo, useState } from 'react';
 
 import type { BugView } from '@/lib/bugs/types';
 import { useBugsView } from '@/lib/bugs/use-bugs';
 import type { DiffLayout } from '@/lib/changes/diff-view';
+import { isMovedLine, spansIn, type MoveSpan } from '@/lib/changes/moves';
 import { hiddenBefore } from '@/lib/changes/places';
 import type { ChangesTarget } from '@/lib/changes/types';
+import { useChangesNav } from '@/lib/changes/use-changes';
 import { plural } from '@/lib/shell/format';
 
 import { BugCard } from '@/components/bugs/bug-card';
@@ -21,6 +24,8 @@ interface FileDiffBodyProps {
 	bugsHref: string;
 	/** An ask to bring a line or a finding of this file into view. */
 	target: ChangesTarget | null;
+	/** Blocks the change moved into or out of this file. */
+	spans: readonly MoveSpan[];
 }
 
 /** The new-side line a bug's note sits under: the end of its range. */
@@ -35,13 +40,55 @@ function covers(bug: BugView, lineNo: number | null): boolean {
 	return lineNo >= bug.line && lineNo <= (bug.endLine ?? bug.line);
 }
 
-/** The hunk's lines for the kit, with the lines a bug points at flagged and the line a link names marked. */
-function codeLines(hunk: DiffHunk, bugs: BugView[], marked: number | null): CodeLine[] {
+/** True when the line is the one a link names, on the side it names. */
+function isMarked(line: DiffHunk['lines'][number], target: ChangesTarget | null): boolean {
+	if (!target || target.findingId || target.line === null) return false;
+	if (target.side === 'old') return line.type === 'del' && line.oldNo === target.line;
+
+	return line.type !== 'del' && line.newNo === target.line;
+}
+
+/**
+ * The hunk's lines for the kit: the lines a bug or warning points at flagged (an FYI note flags none), the line a
+ * link names marked, and code moved without a change drawn as old code.
+ */
+function codeLines(
+	hunk: DiffHunk,
+	bugs: BugView[],
+	target: ChangesTarget | null,
+	spans: readonly MoveSpan[]
+): CodeLine[] {
 	return hunk.lines.map((line) => ({
 		...line,
-		flagged: line.type !== 'del' && bugs.some((bug) => covers(bug, line.newNo)),
-		marked: marked !== null && line.type !== 'del' && line.newNo === marked
+		flagged: line.type !== 'del' && bugs.some((bug) => bug.tier !== 'fyi' && covers(bug, line.newNo)),
+		marked: isMarked(line, target),
+		moved: isMovedLine(line, spans)
 	}));
+}
+
+/** A moved or copied block's place on its other side, and a way there when the diff shows that file. */
+function MoveNote({ span }: { span: MoveSpan }) {
+	const nav = useChangesNav();
+	const verb = span.direction === 'to' ? 'Moved to' : span.kind === 'copied' ? 'Copied from' : 'Moved from';
+
+	return (
+		<div className="move-note" data-exact={span.exact || undefined}>
+			<ArrowBendDownRightIcon aria-hidden className="move-note-icon" />
+			<span>{verb}</span>
+			<FileChip path={span.other.path} line={span.other.line} framed />
+			<span className="meta">{span.exact ? 'unchanged' : 'with a small change'}</span>
+			{span.other.inDiff ? (
+				<Button
+					variant="ghost"
+					size="sm"
+					className="move-note-go"
+					onClick={() => nav.goTo(span.other.path, span.other.line, null, span.direction === 'from' ? 'old' : 'new')}
+				>
+					{span.direction === 'from' ? 'Go to original' : 'Go to new place'}
+				</Button>
+			) : null}
+		</div>
+	);
 }
 
 /** True when some line of the file's diff carries the bug's note. */
@@ -91,12 +138,16 @@ interface HunkProps {
 	/** True for a new file, whose old side has no lines to number. */
 	fresh: boolean;
 	target: ChangesTarget | null;
+	spans: readonly MoveSpan[];
 }
 
-/** One hunk under a row that counts the unchanged lines left out above it, with each bug's note under its line. */
-function Hunk({ hunk, layout, lang, bugs, bugsHref, hidden, fresh, target }: HunkProps) {
-	const marked = target?.findingId ? null : (target?.line ?? null);
-	const lines = useMemo(() => codeLines(hunk, bugs, marked), [hunk, bugs, marked]);
+/**
+ * One hunk under a row that counts the unchanged lines left out above it, then a line for each block in it that the
+ * change moved or copied, with each bug's note under its line.
+ */
+function Hunk({ hunk, layout, lang, bugs, bugsHref, hidden, fresh, target, spans }: HunkProps) {
+	const here = useMemo(() => spansIn(hunk, spans), [hunk, spans]);
+	const lines = useMemo(() => codeLines(hunk, bugs, target, here), [hunk, bugs, target, here]);
 
 	/** The notes of the bugs that end on this line. */
 	function notes(index: number) {
@@ -115,6 +166,9 @@ function Hunk({ hunk, layout, lang, bugs, bugsHref, hidden, fresh, target }: Hun
 					<span>{plural(hidden, 'unchanged line')}</span>
 				</div>
 			) : null}
+			{here.map((span) => (
+				<MoveNote key={`${span.direction}:${span.start}`} span={span} />
+			))}
 			<CodeLines
 				lines={lines}
 				lang={lang}
@@ -131,7 +185,14 @@ function Hunk({ hunk, layout, lang, bugs, bugsHref, hidden, fresh, target }: Hun
  * side only, so it stays unified. A bug whose line the diff does not show is listed above the first hunk. It
  * re-renders only when its own file, bugs or ask change.
  */
-export const FileDiffBody = memo(function FileDiffBody({ file, layout, bugs, bugsHref, target }: FileDiffBodyProps) {
+export const FileDiffBody = memo(function FileDiffBody({
+	file,
+	layout,
+	bugs,
+	bugsHref,
+	target,
+	spans
+}: FileDiffBodyProps) {
 	const lang = langForPath(file.path);
 	const loose = bugs.filter((bug) => !anchored(file, bug));
 	const hidden = hiddenBefore(file);
@@ -139,7 +200,13 @@ export const FileDiffBody = memo(function FileDiffBody({ file, layout, bugs, bug
 	const removed = file.hunks.every((hunk) => hunk.lines.every((line) => line.type === 'del'));
 
 	if (file.hunks.length === 0) {
-		return <div className="file-quiet">No lines to show. The file was renamed, or it is binary.</div>;
+		return (
+			<div className="file-quiet">
+				{file.status === 'renamed' || file.status === 'copied'
+					? `No lines changed. The file was ${file.status} as it was.`
+					: 'No lines to show. The file is binary or empty.'}
+			</div>
+		);
 	}
 
 	return (
@@ -162,6 +229,7 @@ export const FileDiffBody = memo(function FileDiffBody({ file, layout, bugs, bug
 					hidden={hidden[index]}
 					fresh={fresh}
 					target={target}
+					spans={spans}
 				/>
 			))}
 		</>

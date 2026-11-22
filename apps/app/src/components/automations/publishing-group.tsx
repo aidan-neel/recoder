@@ -18,8 +18,8 @@ const POST = 'Post results';
 
 /** What the commit check does at each threshold. */
 const CHECK_DETAIL: Record<CheckThreshold, string> = {
-	error: 'The check fails when a verified finding is high severity',
-	warning: 'The check fails when a verified finding is medium or high',
+	error: 'The check fails when a verified finding is a bug',
+	warning: 'The check fails when a verified finding is a bug or a warning',
 	info: 'The check fails when any finding is verified',
 	off: 'Recoder sets no check on the commit'
 };

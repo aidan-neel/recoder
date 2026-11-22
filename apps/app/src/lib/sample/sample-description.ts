@@ -45,7 +45,7 @@ const SAMPLE_DESCRIPTION: PullDescription = {
 	],
 	notes: [
 		'Buckets live in each process, so with three replicas a tenant can reach 300 requests a minute.',
-		'Requests without `x-tenant-id` all share one bucket; the review reports this as a high bug.'
+		'Requests without `x-tenant-id` all share one bucket; the review reports this as a bug.'
 	],
 	createdAt: sampleTime('2026-10-13T09:02:00.000Z')
 };

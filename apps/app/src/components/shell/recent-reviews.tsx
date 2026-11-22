@@ -23,6 +23,7 @@ const GLYPHS: Record<RecentReview['state'], GlyphKind> = {
 	queued: 'idle',
 	running: 'spinner',
 	bugs: 'high',
+	warnings: 'medium',
 	clean: 'ok',
 	failed: 'failed',
 	cancelled: 'cancelled'
@@ -33,6 +34,7 @@ const TONES: Record<RecentReview['state'], PillTone> = {
 	queued: 'question',
 	running: 'question',
 	bugs: 'high',
+	warnings: 'medium',
 	clean: 'ok',
 	failed: 'danger',
 	cancelled: 'question'

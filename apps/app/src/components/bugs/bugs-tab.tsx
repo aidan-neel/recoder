@@ -5,6 +5,7 @@ import { ClockIcon, GitCommitIcon } from '@phosphor-icons/react';
 import { useEffect, useState } from 'react';
 
 import type { BugsView } from '@/lib/bugs/types';
+import { useShowFyi } from '@/lib/bugs/show-fyi';
 import { useBugsView } from '@/lib/bugs/use-bugs';
 import { shortSha } from '@/lib/files/ref-label';
 import { usePullPageView } from '@/lib/pull/pull-session';
@@ -113,6 +114,28 @@ function PreviousFindings({ view, open, onToggle }: PreviousFindingsProps) {
 }
 
 /**
+ * The review's FYI notes under the open findings: commentary on the change, set apart under their own heading and
+ * never counted as bugs. The Review tab's FYI button hides them.
+ */
+function FyiNotes({ view, open, onToggle }: PreviousFindingsProps) {
+	if (view.fyi.length === 0) return null;
+
+	return (
+		<section className="bugs-fyi" aria-labelledby="bugs-fyi-title">
+			<div className="bugs-fyi-head">
+				<h2 id="bugs-fyi-title" className="section-label">
+					FYI
+				</h2>
+				<span className="meta tabular">{view.fyi.length}</span>
+			</div>
+			{view.fyi.map((bug) => (
+				<BugCard key={bug.id} bug={bug} view={view} open={open.has(bug.id)} onToggle={onToggle} place="review" />
+			))}
+		</section>
+	);
+}
+
+/**
  * The Review tab: the open findings of the newest review as cards, the first
  * one open, then what else the review reports. While a review is queued,
  * runs or is paused, its steps show as rows above the last review's findings,
@@ -130,6 +153,7 @@ export function BugsTab() {
 	const arriving = usePullPageView().phase === 'loading' || reviewArriving;
 	const settled = run.phase === 'passed' && !run.outdated;
 	const clean = view.phase === 'ready' && view.open.length === 0 && settled;
+	const fyiShown = useShowFyi((state) => state.shown);
 
 	useKeys({ j: () => stepBug(1), k: () => stepBug(-1) });
 
@@ -162,6 +186,7 @@ export function BugsTab() {
 							<BugCard key={bug.id} bug={bug} view={view} open={open.has(bug.id)} onToggle={toggle} place="review" />
 						))
 					: null}
+				{view.phase === 'ready' && fyiShown ? <FyiNotes view={view} open={open} onToggle={toggle} /> : null}
 				{view.phase === 'ready' ? <BugGroups view={view} clean={clean} /> : null}
 			</div>
 		</div>

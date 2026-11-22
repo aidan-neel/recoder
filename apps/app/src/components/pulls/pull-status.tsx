@@ -3,7 +3,8 @@
 import { Button, Pill, Spinner, type ButtonStatus, type PillTone } from '@recoder/ui';
 import { ProhibitIcon } from '@phosphor-icons/react';
 
-import { findingsLabel, plural } from '@/lib/shell/format';
+import { foundLabel, foundTone } from '@/lib/bugs/tiers';
+import { plural } from '@/lib/shell/format';
 import type { PullRowStatus } from '@/lib/pulls/types';
 
 import { Age } from '@/components/common/age';
@@ -21,8 +22,8 @@ function statusFace(status: PullRowStatus): StatusFace | null {
 			return { tone: 'low', label: 'Reviewing' };
 		case 'bugs':
 			return {
-				tone: status.bugs > 0 ? 'high' : 'medium',
-				label: findingsLabel(status.bugs, status.suggestions)
+				tone: foundTone(status),
+				label: foundLabel(status)
 			};
 		case 'review-failed':
 			return { tone: 'danger', label: 'Review failed' };

@@ -15,6 +15,11 @@ const FUNNEL: ReviewFunnel = {
 
 const UNPROVEN: Finding = { id: 'u1', file: 'src/a.ts', line: 3, severity: 'warning', message: 'Might double count.' };
 
+/** The ids of `items` in id order, so a list is compared by what it holds, not by how it sorts. */
+function ids(items: { id: string }[]): string[] {
+	return items.map((item) => item.id).sort();
+}
+
 function review(change: Partial<Review> = {}): Review {
 	return { ...SAMPLE_REVIEW, unconfirmed: [UNPROVEN], funnel: FUNNEL, ...change };
 }
@@ -23,7 +28,8 @@ describe('bugLists', () => {
 	test('open questions, unproven claims and checks that never ran are listed apart and never count as findings', () => {
 		const lists = bugLists(review(), {});
 
-		expect(lists.open.map((bug) => bug.id)).toEqual(SAMPLE_REVIEW.findings.map((finding) => finding.id));
+		expect(ids(lists.open)).toEqual(ids(SAMPLE_REVIEW.findings.filter((finding) => finding.tier !== 'fyi')));
+		expect(ids(lists.fyi)).toEqual(ids(SAMPLE_REVIEW.findings.filter((finding) => finding.tier === 'fyi')));
 		expect(lists.open.some((bug) => bug.id === 'u1')).toBe(false);
 
 		expect(lists.unresolved.map((item) => [item.id, item.kind])).toEqual([
@@ -69,7 +75,7 @@ describe('bugLists', () => {
 		const quieted: Finding = { ...second, topic: { id: 't1', label: 'Naming', quieted: true } };
 		const lists = bugLists(review({ findings: [decided, quieted, ...rest] }), {});
 
-		expect(lists.open.map((bug) => bug.id)).toEqual(rest.map((finding) => finding.id));
+		expect(ids(lists.open)).toEqual(ids(rest.filter((finding) => finding.tier !== 'fyi')));
 		expect(lists.decided.map((bug) => bug.id)).toEqual([first.id]);
 		expect(lists.quieted.map((bug) => bug.id)).toEqual([second.id]);
 	});

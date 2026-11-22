@@ -423,6 +423,10 @@
 	--finding-mark: var(--sev-medium);
 	--finding-ink: var(--sev-medium);
 }
+.finding-link[data-tier='fyi'] {
+	--finding-mark: var(--text-faint);
+	--finding-ink: var(--text-muted);
+}
 .finding-link-button {
 	display: grid;
 	width: calc(100% + 16px);

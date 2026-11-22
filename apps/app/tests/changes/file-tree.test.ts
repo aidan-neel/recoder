@@ -15,7 +15,10 @@ const FILES = [
 	file('apps/server/src/agents/run.ts')
 ];
 
-const MARKS: FileMarks = { isViewed: (path) => path === 'README.md', bugs: new Map([['apps/server/src/index.ts', 2]]) };
+const MARKS: FileMarks = {
+	isViewed: (path) => path === 'README.md',
+	found: new Map([['apps/server/src/index.ts', { bugs: 2, warnings: 0, suggestions: 0 }]])
+};
 
 describe('treeOrder', () => {
 	test('reads the files in tree order: folders first, each by path, then files by name', () => {
@@ -70,13 +73,13 @@ describe('fileGroups', () => {
 
 		expect(entries.find((entry) => entry.path === 'README.md')).toMatchObject({
 			viewed: true,
-			bugs: 0,
+			found: null,
 			change: 'modified'
 		});
 
 		expect(entries.find((entry) => entry.path === 'apps/server/src/index.ts')).toMatchObject({
 			viewed: false,
-			bugs: 2
+			found: { bugs: 2, warnings: 0, suggestions: 0 }
 		});
 	});
 });

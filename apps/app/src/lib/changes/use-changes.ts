@@ -5,9 +5,10 @@ import type { TreeRow } from '@recoder/ui';
 import { useCallback, useMemo } from 'react';
 
 import { useSession, useSessionData } from '../pull/pull-session';
+import type { FoundCounts } from '../bugs/tiers';
 import { loaded } from '../pull/session-state';
 import { fileGroups, sideRows, treeOrder } from './file-tree';
-import { guideParts, openBugsByFile, openSuggestionsByFile } from './guide';
+import { guideParts, openBugsByFile } from './guide';
 import type { ChangesNav, FileTreeView, GuidePart, ViewedFilesView } from './types';
 import { isViewedAt, toggleViewed, viewedKey, writeViewed } from './viewed-files';
 
@@ -18,7 +19,7 @@ function useDiffFiles(): FileDiff[] {
 }
 
 /** Open findings per file of the followed review; rebuilt only when the review changes. */
-function useBugsByFile(): ReadonlyMap<string, number> {
+function useBugsByFile(): ReadonlyMap<string, FoundCounts> {
 	const review = useSessionData((data) => data.review);
 
 	return useMemo(() => openBugsByFile(review?.status === 'passed' ? review.findings : []), [review]);
@@ -66,7 +67,7 @@ export function useFileTree(): FileTreeView {
 	const viewed = useViewedFiles();
 	const bugs = useBugsByFile();
 	const isViewed = viewed.isViewed;
-	const groups = useMemo(() => fileGroups(files, { isViewed, bugs }), [files, isViewed, bugs]);
+	const groups = useMemo(() => fileGroups(files, { isViewed, found: bugs }), [files, isViewed, bugs]);
 	const order = useMemo(() => treeOrder(files), [files]);
 
 	return useMemo(() => ({ groups, order }), [groups, order]);
@@ -97,16 +98,11 @@ export function useSideRows(query: string): { rows: TreeRow[]; toggleFolder: (pa
 /** The review plan's parts in plan order; empty until the review planned. */
 export function useGuide(): GuidePart[] {
 	const assignments = useSessionData((data) => data.progress?.assignments);
-	const bugs = useBugsByFile();
 	const review = useSessionData((data) => data.review);
 
 	return useMemo(
-		() =>
-			guideParts(assignments, {
-				bugs,
-				suggestions: openSuggestionsByFile(review?.status === 'passed' ? review.findings : [])
-			}),
-		[assignments, bugs, review]
+		() => guideParts(assignments, review?.status === 'passed' ? review.findings : []),
+		[assignments, review]
 	);
 }
 
@@ -116,8 +112,8 @@ export function useChangesNav(): ChangesNav {
 
 	return useMemo(
 		() => ({
-			goTo: (path, line = null, findingId = null) =>
-				session.state.setState({ changesTarget: { path, line, findingId, done: false } }),
+			goTo: (path, line = null, findingId = null, side = 'new') =>
+				session.state.setState({ changesTarget: { path, line, side, findingId, done: false } }),
 			foldAll: (open) => session.state.setState({ changesFold: { open } })
 		}),
 		[session]

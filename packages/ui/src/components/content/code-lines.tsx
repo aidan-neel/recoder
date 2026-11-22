@@ -17,6 +17,8 @@ export interface CodeLine {
 	flagged?: boolean;
 	/** The line a link points at: tinted in the accent until another line is. */
 	marked?: boolean;
+	/** Code the change moved without changing it: drawn a step quieter, so it reads as old code, not new. */
+	moved?: boolean;
 }
 
 interface CodeLinesProps {
@@ -87,7 +89,9 @@ function Row({ line, html, showOldNumbers, onClick }: RowProps) {
 			data-type={line.type}
 			data-flagged={line.flagged || undefined}
 			data-marked={line.marked || undefined}
+			data-moved={line.moved || undefined}
 			data-new-line={line.newNo ?? undefined}
+			data-old-line={line.type === 'del' ? (line.oldNo ?? undefined) : undefined}
 			data-clickable={onClick ? '' : undefined}
 			onClick={onClick}
 		>
@@ -122,8 +126,10 @@ function Half({ line, html, side }: HalfProps) {
 			data-side={side}
 			data-type={line.type}
 			data-flagged={(side === 'new' && line.flagged) || undefined}
-			data-marked={(side === 'new' && line.marked) || undefined}
+			data-marked={(line.type === 'del' ? side === 'old' : side === 'new') && line.marked ? true : undefined}
+			data-moved={(ours && line.moved) || undefined}
 			data-new-line={side === 'new' ? (line.newNo ?? undefined) : undefined}
+			data-old-line={side === 'old' && line.type === 'del' ? (line.oldNo ?? undefined) : undefined}
 		>
 			<span data-ui="code-line-number" aria-hidden="true">
 				{(side === 'old' ? line.oldNo : line.newNo) ?? ''}

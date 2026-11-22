@@ -56,6 +56,7 @@ const GLYPHS: Partial<Record<NonNullable<TabName['review']>, GlyphKind>> = {
 	queued: 'idle',
 	running: 'spinner',
 	bugs: 'high',
+	warnings: 'medium',
 	failed: 'failed'
 };
 

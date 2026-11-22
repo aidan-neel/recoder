@@ -4,6 +4,7 @@ import { Input, Keycap, SkeletonRows, Tree } from '@recoder/ui';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { useMemo, useState, type KeyboardEvent } from 'react';
 
+import { foundLabel, foundTone } from '@/lib/bugs/tiers';
 import { useFileTree, useSideRows } from '@/lib/changes/use-changes';
 import type { FileChange, FileEntry } from '@/lib/changes/types';
 import { usePullDiffView } from '@/lib/pull/pull-session';
@@ -29,7 +30,9 @@ function TreeEnd({ entry }: { entry: FileEntry }) {
 
 	return (
 		<span className="tree-end">
-			{entry.bugs > 0 ? <span className="tree-bug" role="img" aria-label={`${entry.bugs} open findings`} /> : null}
+			{entry.found ? (
+				<span className="tree-bug" data-tone={foundTone(entry.found)} role="img" aria-label={foundLabel(entry.found)} />
+			) : null}
 			<span className="tree-change" data-change={entry.change} title={label}>
 				<span aria-hidden>{letter}</span>
 				<span className="sr-only">{label}</span>

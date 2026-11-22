@@ -14,6 +14,8 @@ import { useAction } from '@/lib/shell/use-action';
 import { Age } from '@/components/common/age';
 import { CancelReviewButton } from '@/components/common/cancel-review';
 
+import { FyiToggle } from './fyi-toggle';
+
 interface BugsToolsProps {
 	view: BugsView;
 	run: RunView;
@@ -161,6 +163,7 @@ export function BugsTools({ view, run }: BugsToolsProps) {
 	return (
 		<>
 			<ReviewFacts view={view} />
+			<FyiToggle count={view.fyi.length} />
 			<PostReview view={view} />
 		</>
 	);

@@ -22,6 +22,8 @@ import { useChangesNav, useFileTree, useGuide, useViewedFiles } from '@/lib/chan
 import { useSessionData } from '@/lib/pull/pull-session';
 import { useKeys } from '@/lib/shell/use-keys';
 
+import { FyiToggle } from '@/components/bugs/fyi-toggle';
+
 import { FilesMenu } from './files-menu';
 import { partsWithRest } from './guide';
 
@@ -128,7 +130,7 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 			{findings.length > 0 ? (
 				<div className="changes-findings" role="group" aria-label="Findings in the diff">
 					<span className="changes-findings-label">
-						<StatusGlyph kind={(findings[at] ?? findings[0]).tone} label={(findings[at] ?? findings[0]).severity} />
+						<StatusGlyph kind={(findings[at] ?? findings[0]).tone} label={(findings[at] ?? findings[0]).tierLabel} />
 						Findings
 						<span className="meta tabular">{at === -1 ? findings.length : `${at + 1}/${findings.length}`}</span>
 					</span>
@@ -144,6 +146,7 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 					</Tooltip>
 				</div>
 			) : null}
+			<FyiToggle count={bugs.fyi.length} />
 			{viewed.total > 0 ? (
 				<span className="changes-viewed">
 					<span className="meta tabular">

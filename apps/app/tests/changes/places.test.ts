@@ -5,14 +5,14 @@ import { hiddenBefore, placeHash, readPlace } from '../../src/lib/changes/places
 
 describe('readPlace', () => {
 	test('reads a file, a file and line, and a finding', () => {
-		expect(readPlace('#file=src%2Fa.ts')).toEqual({ kind: 'file', path: 'src/a.ts', line: null });
-		expect(readPlace('#file=src/a.ts&line=42')).toEqual({ kind: 'file', path: 'src/a.ts', line: 42 });
+		expect(readPlace('#file=src%2Fa.ts')).toEqual({ kind: 'file', path: 'src/a.ts', line: null, side: 'new' });
+		expect(readPlace('#file=src/a.ts&line=42')).toEqual({ kind: 'file', path: 'src/a.ts', line: 42, side: 'new' });
 		expect(readPlace('#finding=f1')).toEqual({ kind: 'finding', id: 'f1' });
 	});
 
 	test('a line that is not a positive whole number names no line', () => {
 		for (const line of ['0', '-3', '4.5', 'x', '99999999']) {
-			expect(readPlace(`#file=a.ts&line=${line}`)).toEqual({ kind: 'file', path: 'a.ts', line: null });
+			expect(readPlace(`#file=a.ts&line=${line}`)).toEqual({ kind: 'file', path: 'a.ts', line: null, side: 'new' });
 		}
 	});
 
@@ -22,8 +22,15 @@ describe('readPlace', () => {
 	});
 
 	test('reads back the hash it writes, for a path with spaces and an ampersand', () => {
-		const place = { kind: 'file', path: 'docs/a & b.md', line: 3 } as const;
+		const place = { kind: 'file', path: 'docs/a & b.md', line: 3, side: 'new' } as const;
 
+		expect(readPlace(placeHash(place))).toEqual(place);
+	});
+
+	test('a removed line, where moved code came from, reads back on the old side', () => {
+		const place = { kind: 'file', path: 'src/webhook/deliver.ts', line: 40, side: 'old' } as const;
+
+		expect(placeHash(place)).toBe('#file=src%2Fwebhook%2Fdeliver.ts&old=40');
 		expect(readPlace(placeHash(place))).toEqual(place);
 	});
 });
