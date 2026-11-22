@@ -234,7 +234,7 @@ function marked(mark: '+' | '-', text: string): string {
 }
 
 /** `clientKey` moved, unchanged, from the projects route to its own module, for the limiter to share. */
-const CLIENT_KEY_MOVE: DiffMove = {
+export const CLIENT_KEY_MOVE: DiffMove = {
 	fromPath: 'src/routes/projects.ts',
 	fromLines: { start: 30, end: 37 },
 	toPath: 'src/http/client-key.ts',

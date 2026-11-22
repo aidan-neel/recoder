@@ -369,8 +369,6 @@ export interface Finding {
 	severity: FindingSeverity;
 	/** Omitted only by legacy stored records and clients; server responses populate it on read. */
 	tier?: FindingTier;
-	/** Why code the change moved fails where it now sits; present only on a finding on exactly moved lines. */
-	moveReason?: string;
 	message: string;
 	suggestion?: string;
 	/** Reviewer role that produced this finding (e.g. `security`). */

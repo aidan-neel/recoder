@@ -9,6 +9,7 @@ import type {
 } from '@recoder/shared';
 
 import { sampleTime } from './sample-clock';
+import { CLIENT_KEY_MOVE } from './sample-diff';
 
 const AT = sampleTime('2026-10-13T09:12:00.000Z');
 
@@ -135,8 +136,11 @@ const FINDINGS: Finding[] = [
 		symbol: 'clientKey',
 		message:
 			'The limiter keys anonymous callers by the first `x-forwarded-for` address, which the caller writes. Rotating the header gives a client a fresh bucket on every request.',
-		moveReason:
-			'In routes/projects.ts this ran only behind the proxy check, so the header came from the load balancer. Moved here, the rate limiter calls it for every request, before that check.'
+		move: {
+			relation: CLIENT_KEY_MOVE,
+			reason:
+				'In routes/projects.ts this ran only behind the proxy check, so the header came from the load balancer. Moved here, the rate limiter calls it for every request, before that check.'
+		}
 	},
 	{
 		id: 'sample-f5',

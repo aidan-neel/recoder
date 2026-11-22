@@ -108,6 +108,6 @@ export function bugView(finding: Finding, review: Pick<Review, 'findingComments'
 		decision: finding.decision ?? null,
 		posted: posted ? { url: posted.url } : null,
 		vote,
-		moveReason: finding.moveReason ?? null
+		moveReason: finding.move?.reason ?? null
 	};
 }
