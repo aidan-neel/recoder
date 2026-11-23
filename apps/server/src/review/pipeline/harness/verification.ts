@@ -366,7 +366,7 @@ async function runVerifier(
 					taskId,
 					label,
 					state === 'queued' ? 'waiting' : 'running',
-					state === 'retrieval' ? (exec ? 'Running code' : 'Reading code') : state === 'queued' ? detail : 'Thinking',
+					state === 'retrieval' ? (exec ? 'Running code' : 'Reading code') : state === 'running' ? 'Thinking' : detail,
 					{ ...meta, elapsedMs }
 				);
 			},

@@ -1,6 +1,7 @@
 import type { UsageDay, UsageDays, UsageModel, UsagePerson, UsageReport, UsageTotals } from '@recoder/shared';
 
 import type { UsageApi } from '../api/usage';
+import { sumFailedByKind } from '../usage/usage-model';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -13,7 +14,21 @@ const OUTPUT_SHARE = 0.004;
 const TOKENS_PER_CALL = 6000;
 const FAILED_CALL_SHARE = 0.02;
 
-/** About how many tokens one session processes. */
+/** How the sample's failed calls split by kind of error. */
+const FAILED_KIND_SHARES: [string, number][] = [
+	['rate-limit', 0.6],
+	['timeout', 0.25],
+	['provider', 0.15]
+];
+
+/** `failed` calls split by kind; rounding leaves the rest to the first kind. */
+function failedKinds(failed: number): Record<string, number> {
+	const rest = FAILED_KIND_SHARES.slice(1).map(([kind, share]): [string, number] => [kind, Math.floor(failed * share)]);
+	const first: [string, number] = [FAILED_KIND_SHARES[0][0], failed - rest.reduce((sum, [, count]) => sum + count, 0)];
+
+	return Object.fromEntries([first, ...rest].filter(([, count]) => count > 0));
+}
+
 const TOKENS_PER_SESSION = 38_000_000;
 
 interface SampleModel {
@@ -176,6 +191,7 @@ function tally(
 	| 'costUsd'
 	| 'calls'
 	| 'failedCalls'
+	| 'failedByKind'
 	| 'medianDurationMs'
 > {
 	const output = Math.round(tokens * OUTPUT_SHARE);
@@ -191,6 +207,7 @@ function tally(
 		costUsd: model.pricePerMillion === null ? null : (tokens / 1e6) * model.pricePerMillion,
 		calls,
 		failedCalls: Math.round(calls * FAILED_CALL_SHARE),
+		failedByKind: failedKinds(Math.round(calls * FAILED_CALL_SHARE)),
 		medianDurationMs: model.medianDurationMs
 	};
 }
@@ -212,6 +229,7 @@ function sumTotals(groups: readonly UsageTotals[]): UsageTotals {
 		costComplete: groups.every((group) => group.costComplete),
 		calls: groups.reduce((sum, group) => sum + group.calls, 0),
 		failedCalls: groups.reduce((sum, group) => sum + group.failedCalls, 0),
+		failedByKind: sumFailedByKind(groups),
 		medianDurationMs:
 			timedCalls === 0
 				? null
@@ -300,6 +318,7 @@ function kindTotals(totals: UsageTotals, share: number, duration: number): Usage
 		costComplete: totals.costComplete,
 		calls: scale(totals.calls),
 		failedCalls: scale(totals.failedCalls),
+		failedByKind: failedKinds(scale(totals.failedCalls)),
 		medianDurationMs: totals.medianDurationMs === null ? null : Math.round(totals.medianDurationMs * duration)
 	};
 }

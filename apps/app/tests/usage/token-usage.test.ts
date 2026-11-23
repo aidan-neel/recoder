@@ -66,11 +66,47 @@ test('a passed sample review splits token types, models and pipeline stages plus
 
 	expect(summary).not.toBeNull();
 	expect(summary?.budgetLabel).toBe('Medium budget');
-	expect(summary?.callsLabel).toBe('5 calls');
+	expect(summary?.callsLabel).toBe('7 calls · 1 failed');
 	expect(summary?.segments.map((segment) => segment.label)).toEqual(['Input', 'Cache read', 'Cache write', 'Output']);
 	expect(summary?.models.map((row) => row.model)).toEqual(['Grok 4.6', 'GPT 6 Luna', 'GPT 5.4']);
 	expect(summary?.breakdown.map((row) => row.label)).toEqual(['Reviewer', 'Subagent', 'Verifier', 'Follow-ups']);
-	expect(summary?.notes).toEqual([]);
+	expect(summary?.notes).toEqual(['Totals are partial: 2 of 7 calls reported no token counts.']);
+});
+
+test('failed calls and verifier sessions show as diagnostics, and a model with no counts reads as unknown', () => {
+	const calls: TokenCall[] = [
+		{ id: 'c1', model: 'grok-4.6', provider: 'grok', scope: 'pipeline', status: 'failed', usage: emptyTokenUsage() }
+	];
+
+	const summary = summarizeTokenUsage(
+		{
+			...makeMetrics(calls),
+			failures: [{ id: 'c1', model: 'grok-4.6', provider: 'grok', stage: 'verifier', errorKind: 'rate-limit' }],
+			verifierSessions: [
+				{
+					id: 's1',
+					model: 'grok-4.6',
+					opBudget: 40,
+					ops: 40,
+					refusals: 1,
+					prompts: 3,
+					internalTurns: null,
+					exhausted: true
+				}
+			]
+		},
+		'review'
+	);
+
+	expect(summary?.totalLabel).toBe('unknown');
+
+	expect(summary?.failures).toEqual([
+		{ id: 'c1', model: 'Grok 4.6', stage: 'Verifier', kind: 'Rate limited', error: null }
+	]);
+
+	expect(summary?.sessions).toEqual([
+		{ id: 's1', model: 'Grok 4.6', counts: '40 of 40 ops · 1 refusal · 3 prompts', exhausted: true }
+	]);
 });
 
 test('a repository chat suppresses review-only budget and pipelineTracked notes', () => {
@@ -143,6 +179,6 @@ test('untracked reviews and partial token reporting explain what is left out', (
 
 	expect(summary?.notes).toEqual([
 		'Recording started with a follow-up, so the original review isn’t counted.',
-		'Token counts were reported for 1 of 2 calls.'
+		'Totals are partial: 1 of 2 calls reported no token counts.'
 	]);
 });

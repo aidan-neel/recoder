@@ -4,6 +4,9 @@ import type { RetrievalAction, ToolResult } from '../../../evidence/types.js';
 import type { ModelConfig } from '../../../models/models.js';
 import type { ModelBudget } from './budget.js';
 
+/** Where an agent run stands. `throttled`: the provider asked it to wait, and the detail says how long and which retry follows. */
+type ProgressState = 'queued' | 'running' | 'retrieval' | 'throttled';
+
 export interface JsonAgentOptions<T> {
 	label: string;
 	/** The kind of agent, recorded on each of its model calls so a review's tokens split by stage. */
@@ -63,7 +66,7 @@ export interface JsonAgentOptions<T> {
 	 * offered the tool and a `delegate` request fails.
 	 */
 	delegate?: (action: RetrievalAction) => Promise<ToolResult>;
-	onProgress?: (state: 'queued' | 'running' | 'retrieval', elapsedMs: number, detail: string) => void;
+	onProgress?: (state: ProgressState, elapsedMs: number, detail: string) => void;
 	onLog?: (message: string) => void;
 	/** Accumulated provider reasoning for a turn, upserted by `id`. */
 	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status' | 'outputRate'>) => void;

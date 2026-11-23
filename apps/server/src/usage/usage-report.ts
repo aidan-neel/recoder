@@ -40,6 +40,8 @@ interface CallUsage {
 	model: string;
 	provider: ModelProvider;
 	failed: boolean;
+	/** A failed call's error kind. */
+	errorKind?: string;
 	/** How long the call took, when the row recorded it. */
 	durationMs?: number;
 	input: number;
@@ -109,6 +111,7 @@ function callUsage(row: ModelCallRow, priceOf: PriceLookup): CallUsage[] {
 			model: row.model,
 			provider: row.provider,
 			failed: row.outcome === 'failed',
+			...(row.outcome === 'failed' && { errorKind: row.errorKind ?? 'error' }),
 			...(row.durationMs !== undefined && { durationMs: row.durationMs }),
 			input,
 			cacheRead,
@@ -137,6 +140,15 @@ function medianDurationMs(calls: readonly CallUsage[]): number | null {
 	return medianOf(calls.flatMap((call) => (call.durationMs === undefined ? [] : [call.durationMs])));
 }
 
+/** How many of a group's calls failed with each kind of error. */
+function failedByKind(calls: readonly CallUsage[]): Record<string, number> {
+	const kinds: Record<string, number> = {};
+
+	for (const call of calls) if (call.errorKind) kinds[call.errorKind] = (kinds[call.errorKind] ?? 0) + 1;
+
+	return kinds;
+}
+
 /** The totals of a group of calls. */
 function totalsOf(calls: readonly CallUsage[]): UsageTotals {
 	const sum = (pick: (call: CallUsage) => number) => calls.reduce((total, call) => total + pick(call), 0);
@@ -156,6 +168,7 @@ function totalsOf(calls: readonly CallUsage[]): UsageTotals {
 		sessions: new Set(calls.flatMap((call) => (call.sessionId === null ? [] : [call.sessionId]))).size,
 		calls: calls.length,
 		failedCalls: calls.filter((call) => call.failed).length,
+		failedByKind: failedByKind(calls),
 		medianDurationMs: medianDurationMs(calls)
 	};
 }

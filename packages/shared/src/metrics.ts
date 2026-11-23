@@ -65,10 +65,24 @@ export interface TokenCall {
 	status: 'pending' | 'completed' | 'failed';
 	/** A failed call's provider error, with keys, tokens, auth headers and home paths removed; absent on other calls. */
 	error?: string;
+	/** A failed call's one-word error kind (`rate-limit`, `timeout`…); absent on other calls and older rows. */
+	errorKind?: string;
 	usage: TokenUsage;
 	verifierSession?: VerifierSessionUsage;
 	/** What paid for a Claude Code call, as the CLI reports it: `none` is the signed-in subscription, not a key. */
 	apiKeySource?: string;
+}
+
+/** A call that failed, as a review's usage lists it among its diagnostics. Cancelled calls are not here. */
+export interface FailedTokenCall {
+	id: string;
+	model: string;
+	provider: ModelProvider;
+	stage?: TokenStage;
+	/** `rate-limit`, `capacity`, `timeout`, `deadline`, `provider`, `request` or `error`. */
+	errorKind: string;
+	/** The provider's error, with secrets removed. */
+	error?: string;
 }
 
 export interface TokenAggregate {
@@ -102,6 +116,10 @@ export interface ReviewMetrics {
 	queueDelay?: QueueDelay;
 	/** The review worker (`RECODER_INSTANCE_ID`) that ran the latest pipeline run; absent without shared storage. */
 	worker?: string;
+	/** Every failed call, oldest first; absent on servers older than this list. */
+	failures?: FailedTokenCall[];
+	/** Each verifier session's latest counters, with the model it ran on; absent when none ran. */
+	verifierSessions?: (VerifierSessionUsage & { model: string })[];
 }
 
 export function emptyTokenUsage(): TokenUsage {

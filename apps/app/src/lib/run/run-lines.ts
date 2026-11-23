@@ -9,6 +9,7 @@ export type RunClaimState =
 	| 'reproducing'
 	| 'tracing'
 	| 'checking'
+	| 'throttled'
 	| 'reproduced'
 	| 'traced'
 	| 'confirmed'
@@ -25,6 +26,7 @@ const CLAIM_STATES: Record<RunClaimState, { word: string; mark: RunMark }> = {
 	reproducing: { word: 'Reproducing', mark: 'working' },
 	tracing: { word: 'Tracing', mark: 'working' },
 	checking: { word: 'Checking', mark: 'working' },
+	throttled: { word: 'Rate-limited', mark: 'working' },
 	reproduced: { word: 'Reproduced', mark: 'found' },
 	traced: { word: 'Traced', mark: 'found' },
 	confirmed: { word: 'Confirmed', mark: 'found' },
@@ -38,11 +40,18 @@ const CLAIM_STATES: Record<RunClaimState, { word: string; mark: RunMark }> = {
 };
 
 /**
+ * A run the provider throttled, as the agent loop words it (`review/pipeline/agent-loop/step-relay.ts`):
+ * `Rate-limited, retrying in 6s (attempt 1 of 3)`. The whole message is the line's word, so a wait reads as one.
+ */
+const THROTTLED = /^Rate-limited\b/;
+
+/**
  * A running verifier's message, as the pipeline words it
  * (`review/pipeline/harness/verification.ts`): a verifier that runs code
  * reproduces, one that reads traces. Its turns in between say `Thinking`.
  */
 const AT_WORK: [RegExp, RunClaimState][] = [
+	[THROTTLED, 'throttled'],
 	[/^(Reproducing|Running code)/, 'reproducing'],
 	[/^(Tracing|Reading code)/, 'tracing']
 ];
@@ -132,7 +141,17 @@ export function verificationTasks(progress: ReviewProgress): ReviewTask[] {
  */
 export function claimLines(progress: ReviewProgress): { lines: RunLine[]; rest: string | null; found: number } {
 	const all = verificationTasks(progress)
-		.map((task) => ({ id: task.id, title: claimTitle(task), at: task.updatedAt, ...CLAIM_STATES[claimState(task)] }))
+		.map((task) => {
+			const state = claimState(task);
+
+			return {
+				id: task.id,
+				title: claimTitle(task),
+				at: task.updatedAt,
+				...CLAIM_STATES[state],
+				...(state === 'throttled' && { word: task.message })
+			};
+		})
 		.sort(newestSettledFirst);
 
 	const shown = all.filter((line) => line.mark !== 'waiting').slice(0, LISTED);
@@ -151,7 +170,11 @@ function partLine(part: ReviewAssignment): RunLine {
 
 	switch (part.status) {
 		case 'running':
-			return { ...line, mark: 'working', word: 'Reviewing' };
+			return {
+				...line,
+				mark: 'working',
+				word: part.currentOperation && THROTTLED.test(part.currentOperation) ? part.currentOperation : 'Reviewing'
+			};
 		case 'done':
 			return { ...line, mark: 'settled', word: part.candidateCount ? plural(part.candidateCount, 'claim') : 'Done' };
 		case 'error':

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { emptyReviewProgress, type ReviewTask } from '@recoder/shared';
+import { emptyReviewProgress, type ReviewProgress, type ReviewTask } from '@recoder/shared';
 
-import { claimLines, claimState } from '../../src/lib/run/run-lines';
+import { claimLines, claimState, partLines } from '../../src/lib/run/run-lines';
 
 function claim(
 	id: string,
@@ -36,6 +36,17 @@ describe('claimState', () => {
 		expect(claimState({ status: 'done', message: 'Something new' })).toBe('checked');
 		expect(claimState({ status: 'partial', message: 'Could not verify' })).toBe('unsettled');
 		expect(claimState({ status: 'waiting', message: 'Waiting for a model' })).toBe('waiting');
+	});
+});
+
+describe('a throttled run', () => {
+	test('a claim or a part waiting out a throttle says how long and which retry follows', () => {
+		const wait = 'Rate-limited, retrying in 6s (attempt 1 of 3)';
+		const { lines } = claimLines(progressOf([claim('slow', 'running', wait)]));
+		const part = { id: 'p1', title: 'Limiter', status: 'running' as const, currentOperation: wait };
+
+		expect(lines).toEqual([{ id: 'slow', title: 'Claim slow', mark: 'working', word: wait }]);
+		expect(partLines({ ...progressOf([]), assignments: [part] as ReviewProgress['assignments'] })[0].word).toBe(wait);
 	});
 });
 

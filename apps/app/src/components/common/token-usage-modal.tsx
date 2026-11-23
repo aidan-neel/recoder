@@ -11,6 +11,7 @@ import {
 	ModalBody,
 	ModalContent,
 	ModalTitle,
+	Pill,
 	SkeletonBox,
 	StackedBar,
 	StatusNotice
@@ -143,6 +144,48 @@ function TokenUsageEmpty({ kind }: { kind: TokenUsageKind }) {
 	);
 }
 
+/**
+ * What the totals don't tell, kept quiet under them: each failed call with its kind of error and the provider's
+ * words, and each verifier session's counters, with a note when it ran out of its op budget.
+ */
+function Diagnostics({ summary }: { summary: TokenUsageSummary }) {
+	return (
+		<section className="token-usage-section" aria-label="Diagnostics">
+			<h3 className="section-label">Diagnostics</h3>
+			<ul className="token-usage-diagnostics">
+				{summary.failures.map((row) => (
+					<li key={row.id} className="token-usage-diagnostic">
+						<div className="token-usage-diagnostic-top">
+							<span className="token-usage-diagnostic-title">Failed call</span>
+							<span className="meta">{row.stage ? `${row.model} · ${row.stage}` : row.model}</span>
+							<Pill className="token-usage-diagnostic-kind">{row.kind}</Pill>
+						</div>
+						{row.error ? (
+							<p className="meta token-usage-diagnostic-detail" title={row.error}>
+								{row.error}
+							</p>
+						) : null}
+					</li>
+				))}
+				{summary.sessions.map((row) => (
+					<li key={row.id} className="token-usage-diagnostic">
+						<div className="token-usage-diagnostic-top">
+							<span className="token-usage-diagnostic-title">Verifier session</span>
+							<span className="meta">{row.model}</span>
+							{row.exhausted ? (
+								<Pill tone="medium" className="token-usage-diagnostic-kind">
+									Ran out of budget
+								</Pill>
+							) : null}
+						</div>
+						<p className="meta token-usage-diagnostic-detail">{row.counts}</p>
+					</li>
+				))}
+			</ul>
+		</section>
+	);
+}
+
 /** Populated token usage summary: headline total, token-kind split, models and review stages. */
 function TokenUsageView({ summary }: { summary: TokenUsageSummary }) {
 	return (
@@ -206,6 +249,8 @@ function TokenUsageView({ summary }: { summary: TokenUsageSummary }) {
 					</ul>
 				</section>
 			) : null}
+
+			{summary.failures.length > 0 || summary.sessions.length > 0 ? <Diagnostics summary={summary} /> : null}
 
 			{summary.notes.length > 0 ? (
 				<div className="token-usage-notes">

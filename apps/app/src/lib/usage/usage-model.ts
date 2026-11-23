@@ -67,6 +67,17 @@ export function failureRate(totals: Pick<UsageTotals, 'calls' | 'failedCalls'>):
 	return totals.calls === 0 ? null : totals.failedCalls / totals.calls;
 }
 
+/** Adds up groups' failed calls by kind of error. */
+export function sumFailedByKind(groups: readonly Pick<UsageTotals, 'failedByKind'>[]): Record<string, number> {
+	const sum: Record<string, number> = {};
+
+	for (const group of groups) {
+		for (const [kind, count] of Object.entries(group.failedByKind)) sum[kind] = (sum[kind] ?? 0) + count;
+	}
+
+	return sum;
+}
+
 /** True when the report has no tokens at all in its window. */
 export function isEmpty(report: UsageReport): boolean {
 	return report.totals.tokens === 0;

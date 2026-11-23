@@ -1,6 +1,7 @@
 import {
 	agentCli,
 	prettyModelName,
+	type FailedTokenCall,
 	type ReviewMetrics,
 	type TokenAggregate,
 	type TokenBudget,
@@ -11,6 +12,7 @@ import { formatCompact, formatShare, type BarSegment } from '@recoder/ui';
 
 import { plural } from '../shell/format';
 import { formatWhole, rankColor } from '../usage/report-shared';
+import { errorKindLabel } from './error-kinds';
 
 export type TokenUsageKind = 'review' | 'chat';
 
@@ -34,6 +36,24 @@ interface TokenBreakdownRow {
 	calls: string;
 }
 
+/** A failed call among a review's diagnostics: the model, the stage that made it, what kind of error, and the error. */
+interface TokenFailureRow {
+	id: string;
+	model: string;
+	stage: string | null;
+	kind: string;
+	error: string | null;
+}
+
+/** One verifier session's counters: `12 of 40 ops · 1 refusal · 3 prompts · 18 internal turns`. */
+interface VerifierSessionRow {
+	id: string;
+	model: string;
+	counts: string;
+	/** True when the session spent its whole op budget before it answered. */
+	exhausted: boolean;
+}
+
 export interface TokenUsageSummary {
 	totalTokens: number | null;
 	totalLabel: string;
@@ -43,7 +63,12 @@ export interface TokenUsageSummary {
 	models: TokenModelRow[];
 	breakdown: TokenBreakdownRow[];
 	notes: string[];
+	failures: TokenFailureRow[];
+	sessions: VerifierSessionRow[];
 }
+
+/** Tokens no call reported are not zero; they are not known. */
+const UNKNOWN = 'unknown';
 
 const STAGE_LABELS: Record<TokenStage, string> = {
 	reviewer: 'Reviewer',
@@ -75,6 +100,11 @@ function knownTokens(usage: TokenUsage): number | null {
 	return null;
 }
 
+/** Settled calls that reported no token count; a running call has not reported yet. */
+function unknownCalls(aggregate: Pick<TokenAggregate, 'calls' | 'pendingCalls' | 'reportedCalls'>): number {
+	return Math.max(0, aggregate.calls - aggregate.pendingCalls - aggregate.reportedCalls.totalTokens);
+}
+
 /** "5 calls", with running and failed counts appended when present. */
 function formatCallSummary(aggregate: Pick<TokenAggregate, 'calls' | 'pendingCalls' | 'failedCalls'>): string {
 	const parts = [plural(aggregate.calls, 'call')];
@@ -102,6 +132,10 @@ function formatModelDetail(aggregate: TokenAggregate): string {
 	}
 
 	parts.push(formatCallSummary(aggregate));
+
+	const unknown = unknownCalls(aggregate);
+
+	if (unknown > 0 && unknown < aggregate.calls) parts.push(`${unknown} unknown`);
 
 	return parts.join(' · ');
 }
@@ -132,7 +166,7 @@ function toBreakdownRow(id: string, label: string, aggregate: TokenAggregate, to
 	return {
 		id,
 		label,
-		tokens: tokens === null ? '—' : formatWhole(tokens),
+		tokens: tokens === null ? UNKNOWN : formatWhole(tokens),
 		share,
 		calls: formatCallSummary(aggregate)
 	};
@@ -176,16 +210,36 @@ function buildNotes(metrics: ReviewMetrics, kind: TokenUsageKind): string[] {
 		notes.push('Recording started with a follow-up, so the original review isn’t counted.');
 	}
 
-	const reported = metrics.total.reportedCalls.totalTokens;
+	const unknown = unknownCalls(metrics.total);
 	const calls = metrics.total.calls;
 
-	if (calls > 0 && reported === 0) {
+	if (unknown > 0 && unknown === calls) {
 		notes.push('This model adapter did not report token counts for its calls.');
-	} else if (calls > 0 && reported < calls) {
-		notes.push(`Token counts were reported for ${reported} of ${calls} calls.`);
+	} else if (unknown > 0) {
+		notes.push(`Totals are partial: ${unknown} of ${plural(calls, 'call')} reported no token counts.`);
 	}
 
 	return notes;
+}
+
+function failureRow(failure: FailedTokenCall): TokenFailureRow {
+	return {
+		id: failure.id,
+		model: prettyModelName(failure.model),
+		stage: failure.stage ? STAGE_LABELS[failure.stage] : null,
+		kind: errorKindLabel(failure.errorKind),
+		error: failure.error ?? null
+	};
+}
+
+/** `12 of 40 ops · 1 refusal · 3 prompts · 18 internal turns`; turns the CLI did not report are left out. */
+function sessionCounts(session: NonNullable<ReviewMetrics['verifierSessions']>[number]): string {
+	const ops =
+		session.opBudget === null ? plural(session.ops, 'op') : `${session.ops} of ${plural(session.opBudget, 'op')}`;
+
+	const turns = session.internalTurns === null ? [] : [plural(session.internalTurns, 'internal turn')];
+
+	return [ops, plural(session.refusals, 'refusal'), plural(session.prompts, 'prompt'), ...turns].join(' · ');
 }
 
 /** Turns server `ReviewMetrics` into the display summary for a review or chat modal; null when empty. */
@@ -208,7 +262,7 @@ export function summarizeTokenUsage(metrics: ReviewMetrics | null, kind: TokenUs
 			provider: entry.provider,
 			providerName: agentCli(entry.provider)?.name ?? 'Endpoint',
 			color: rankColor(index, sortedModels.length),
-			tokens: tokens === null ? '—' : formatWhole(tokens),
+			tokens: tokens === null ? UNKNOWN : formatWhole(tokens),
 			share,
 			shareLabel: share !== null && sortedModels.length > 1 ? formatShare(share) : null,
 			detail: formatModelDetail(entry)
@@ -217,12 +271,19 @@ export function summarizeTokenUsage(metrics: ReviewMetrics | null, kind: TokenUs
 
 	return {
 		totalTokens,
-		totalLabel: totalTokens === null ? '—' : formatWhole(totalTokens),
+		totalLabel: totalTokens === null ? UNKNOWN : formatWhole(totalTokens),
 		callsLabel: formatCallSummary(metrics.total),
 		budgetLabel: kind === 'review' && metrics.tokenBudget ? BUDGET_LABELS[metrics.tokenBudget] : null,
 		segments: buildSegments(metrics.total.usage),
 		models,
 		breakdown: kind === 'review' ? buildReviewBreakdown(metrics, totalTokens) : [],
-		notes: buildNotes(metrics, kind)
+		notes: buildNotes(metrics, kind),
+		failures: (metrics.failures ?? []).map(failureRow),
+		sessions: (metrics.verifierSessions ?? []).map((session) => ({
+			id: session.id,
+			model: prettyModelName(session.model),
+			counts: sessionCounts(session),
+			exhausted: session.exhausted
+		}))
 	};
 }

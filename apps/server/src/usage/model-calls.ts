@@ -1,4 +1,4 @@
-import type { ModelCallOutcome, ModelCallRow } from '@recoder/shared';
+import { storedErrorKind, storedOutcome, type ModelCallRow } from '@recoder/shared';
 import { db, modelCalls, reviewMetrics } from '../store';
 import type { RunTokenCall, StoredMetrics } from '../models/metrics';
 
@@ -26,30 +26,8 @@ async function ownerOf(metricsId: string, reviewStarters: Map<string, string | u
 	return { kind: 'other', ownerId: null, person: null };
 }
 
-function outcomeOf(call: RunTokenCall): ModelCallOutcome {
-	if (call.status === 'completed') return 'ok';
-
-	if (call.status === 'failed' && !(call.error && /cancelled|aborted/i.test(call.error))) return 'failed';
-
-	return 'cancelled';
-}
-
-const LLM_STATUS = /^LLM (\d+):/;
-
-/** A live call carries its own error kind; for a stored one the message's `LLM <status>:` shape is the best hint left. */
-function storedErrorKind(error: string | undefined): string {
-	const status = Number(LLM_STATUS.exec(error ?? '')?.[1]);
-
-	if (status === 429 || status === 529) return 'rate-limit';
-	if (status >= 500) return 'provider';
-	if (status >= 400) return 'request';
-	if (error && /timed out|timeout/i.test(error)) return 'timeout';
-
-	return 'error';
-}
-
 function rowOf(call: RunTokenCall, metrics: StoredMetrics, owner: CallOwner): ModelCallRow {
-	const outcome = outcomeOf(call);
+	const outcome = storedOutcome(call);
 	const worker = call.run !== undefined ? metrics.runs?.[call.run]?.worker : undefined;
 
 	return {
@@ -63,7 +41,7 @@ function rowOf(call: RunTokenCall, metrics: StoredMetrics, owner: CallOwner): Mo
 		model: call.model,
 		usage: call.usage,
 		outcome,
-		...(outcome === 'failed' && { errorKind: storedErrorKind(call.error) }),
+		...(outcome === 'failed' && { errorKind: storedErrorKind(call) }),
 		...(worker && { worker })
 	};
 }
