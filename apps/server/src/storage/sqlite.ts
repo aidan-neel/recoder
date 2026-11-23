@@ -4,6 +4,7 @@ import { serverDataDir } from '../util/data-dir';
 import type { Collection, Table } from './collection';
 import { prepareReviewList, refreshReviewListShape } from './review-list-schema';
 import { migrateSqlite } from './sqlite-migrations';
+import { initializeSqliteMessages } from './message-schema';
 
 let handle: Database | null = null;
 
@@ -22,7 +23,7 @@ export function sqlite(): Database {
 
 	try {
 		database.run(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
-		migrateSqlite(database, [initializeSqliteSchema, addPullDescriptions]);
+		migrateSqlite(database, [initializeSqliteSchema, addPullDescriptions, initializeSqliteMessages]);
 		database.run('PRAGMA journal_mode = WAL');
 		database.run('PRAGMA secure_delete = ON');
 		refreshReviewListShape(database);

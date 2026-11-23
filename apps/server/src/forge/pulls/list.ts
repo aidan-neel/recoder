@@ -36,7 +36,7 @@ export async function listOpenPulls(
 
 	await forEachBounded(repos, REPO_CONCURRENCY, async (repo) => {
 		try {
-			const { entries, nextCursor, total } = await withDeadline(loadPulls(repo), REPO_TIMEOUT_MS);
+			const { entries, nextCursor, total } = await withPullListDeadline(loadPulls(repo));
 
 			for (const entry of entries) {
 				items.push({ repoId: repo.id, ...entry, review: reviewOf(repo.id, entry.pull.number) });
@@ -77,12 +77,15 @@ async function forEachBounded<T>(items: T[], limit: number, work: (item: T) => P
 	await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
-/** `promise`, or an `unavailable` GhError once `ms` pass first. The slow call itself keeps its own time limit. */
-async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+/** Keep one slow repository from blocking the rest of a pull list. Each forge request also has its own timeout. */
+export async function withPullListDeadline<T>(promise: Promise<T>): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 
 	const deadline = new Promise<never>((_resolve, reject) => {
-		timer = setTimeout(() => reject(new GhError('unavailable', `The forge took longer than ${ms} ms.`)), ms);
+		timer = setTimeout(
+			() => reject(new GhError('unavailable', `The forge took longer than ${REPO_TIMEOUT_MS} ms.`)),
+			REPO_TIMEOUT_MS
+		);
 	});
 
 	try {

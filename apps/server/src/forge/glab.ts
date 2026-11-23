@@ -6,14 +6,14 @@ import {
 	apiMergeRows,
 	apiProjects,
 	apiUser,
+	enrichMergeRows,
 	firstRows,
 	gitlabGet,
-	gitlabPeople,
 	gitlabRequest,
-	MERGE_STATS_PARALLEL,
-	useGitlabApi
+	parseGitlabPullRow,
+	useGitlabApi,
+	type MergeRow
 } from './gitlab-api.js';
-import { mapLimit } from '../util/map-limit.js';
 import { parseSlug } from './providers.js';
 
 /** A failed `glab` run's logs as an auth, not-found or unknown GhError. */
@@ -81,13 +81,6 @@ function glab(args: string[], env?: Record<string, string>): Promise<string> {
 /** One MR's `glab mr view` JSON. */
 async function viewMerge(slug: string, iid: number, env?: Record<string, string>): Promise<Record<string, unknown>> {
 	return extractJson(await glab(['mr', 'view', String(iid), '-R', slug, '-F', 'json'], env)) as Record<string, unknown>;
-}
-
-/** The MR author's username, or `unknown`. */
-function mergeAuthor(row: Record<string, unknown>): string {
-	return typeof row.author === 'object' && row.author !== null
-		? String((row.author as Record<string, unknown>).username ?? 'unknown')
-		: 'unknown';
 }
 
 export interface FetchedMerge {
@@ -183,32 +176,15 @@ export async function fetchMergeRequest(
 		glab(['mr', 'diff', String(iid), '-R', slug, '--raw'], opts?.env)
 	]);
 
-	const author = mergeAuthor(view);
-
 	return {
 		pr: {
-			number: Number(view.iid ?? iid),
-			title: String(view.title ?? ''),
-			url: String(view.web_url ?? ''),
-			author,
-			base: String(view.target_branch ?? ''),
-			headRef: String(view.source_branch ?? ''),
-			headSha: String(view.sha ?? 'unknown'),
+			...parseGitlabPullRow(view, iid),
 			additions: Number(view.additions ?? 0),
-			deletions: Number(view.deletions ?? 0),
-			changedFiles: Number(view.changes_count ?? 0),
-			createdAt: typeof view.created_at === 'string' ? view.created_at : '',
-			body: typeof view.description === 'string' ? view.description : ''
+			deletions: Number(view.deletions ?? 0)
 		},
 		diff,
 		row: view
 	};
-}
-
-/** A merge request with the JSON row GitLab sent for it, so a caller can read the fields `PullRequest` leaves out. */
-export interface MergeRow {
-	pr: PullRequest;
-	row: Record<string, unknown>;
 }
 
 /** Open MRs for a repo, newest first, with diff stats. Throws GhError. */
@@ -244,37 +220,12 @@ export async function listMergeRows(
 		opts?.page
 	);
 
-	const merges = rows.flatMap((item) => {
-		const author = mergeAuthor(item);
+	return enrichMergeRows(rows, async (pr) => {
+		const view = await viewMerge(slug, pr.number, opts?.env);
 
-		const pr: PullRequest = {
-			number: Number(item.iid ?? 0),
-			title: String(item.title ?? ''),
-			url: String(item.web_url ?? ''),
-			author,
-			base: String(item.target_branch ?? ''),
-			headRef: String(item.source_branch ?? ''),
-			headSha: typeof item.sha === 'string' ? item.sha : 'unknown',
-			additions: 0,
-			deletions: 0,
-			changedFiles: 0,
-			createdAt: typeof item.created_at === 'string' ? item.created_at : '',
-			assignees: gitlabPeople(item.assignees)
-		};
-
-		return pr.number > 0 ? [{ pr, row: item }] : [];
+		pr.additions = Number(view.additions ?? 0);
+		pr.deletions = Number(view.deletions ?? 0);
+		pr.changedFiles = Number(view.changes_count ?? 0);
+		if (typeof view.sha === 'string') pr.headSha = view.sha;
 	});
-
-	await mapLimit(merges, MERGE_STATS_PARALLEL, async ({ pr }) => {
-		try {
-			const view = await viewMerge(slug, pr.number, opts?.env);
-
-			pr.additions = Number(view.additions ?? 0);
-			pr.deletions = Number(view.deletions ?? 0);
-			pr.changedFiles = Number(view.changes_count ?? 0);
-			if (typeof view.sha === 'string') pr.headSha = view.sha;
-		} catch {}
-	});
-
-	return merges;
 }

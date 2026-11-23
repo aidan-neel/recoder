@@ -173,7 +173,7 @@ function diffStats(entries: DiffEntry[]): { additions: number; deletions: number
 }
 
 /** GitLab user rows (`assignees`, `reviewers`) carry their own avatar URLs. */
-export function gitlabPeople(value: unknown): PrPerson[] {
+function gitlabPeople(value: unknown): PrPerson[] {
 	if (!Array.isArray(value)) return [];
 
 	return value.flatMap((row) => {
@@ -191,17 +191,15 @@ export function gitlabPeople(value: unknown): PrPerson[] {
 	});
 }
 
-function toPull(row: Record<string, unknown>): PullRequest {
-	const author =
-		typeof row.author === 'object' && row.author !== null
-			? String((row.author as Record<string, unknown>).username ?? 'unknown')
-			: 'unknown';
+export function parseGitlabPullRow(row: Record<string, unknown>, fallbackNumber = 0): PullRequest {
+	const author = isJsonObject(row.author) ? row.author : {};
 
 	return {
-		number: Number(row.iid ?? 0),
+		number: Number(row.iid ?? fallbackNumber),
 		title: String(row.title ?? ''),
 		url: String(row.web_url ?? ''),
-		author,
+		author: String(author.username ?? 'unknown'),
+		...(typeof author.avatar_url === 'string' && { authorAvatarUrl: author.avatar_url }),
 		base: String(row.target_branch ?? ''),
 		headRef: String(row.source_branch ?? ''),
 		headSha: typeof row.sha === 'string' ? row.sha : 'unknown',
@@ -224,7 +222,7 @@ export async function apiMergeRequest(
 		mergeDiffs(repoUrl, iid, env)
 	]);
 
-	const pr = { ...toPull(row), ...diffStats(entries) };
+	const pr = { ...parseGitlabPullRow(row), ...diffStats(entries) };
 
 	if (!pr.changedFiles) pr.changedFiles = entries.length;
 
@@ -249,6 +247,27 @@ const GITLAB_PAGE_MAX = 100;
  * and a list of a hundred must not send a hundred at the same moment.
  */
 export const MERGE_STATS_PARALLEL = 8;
+
+export interface MergeRow {
+	pr: PullRequest;
+	row: Record<string, unknown>;
+}
+
+/** Fill in the line counts missing from list rows without letting one failed detail hide the list. */
+export async function enrichMergeRows(
+	rows: Record<string, unknown>[],
+	loadStats: (pull: PullRequest) => Promise<void>
+): Promise<MergeRow[]> {
+	const merges = rows.map((row) => ({ pr: parseGitlabPullRow(row), row })).filter(({ pr }) => pr.number > 0);
+
+	await mapLimit(merges, MERGE_STATS_PARALLEL, async ({ pr }) => {
+		try {
+			await loadStats(pr);
+		} catch {}
+	});
+
+	return merges;
+}
 
 /**
  * The first `limit` objects of a paged GitLab list from page `firstPage`, a
@@ -281,7 +300,7 @@ export async function apiMergeRows(
 	env: Record<string, string>,
 	limit = 20,
 	firstPage = 1
-): Promise<{ pr: PullRequest; row: Record<string, unknown> }[]> {
+): Promise<MergeRow[]> {
 	const rows = await firstRows(
 		limit,
 		(perPage, page) =>
@@ -292,16 +311,10 @@ export async function apiMergeRows(
 		firstPage
 	);
 
-	const merges = rows.map((row) => ({ pr: toPull(row), row })).filter(({ pr }) => pr.number > 0);
+	return enrichMergeRows(rows, async (pr) => {
+		const entries = await mergeDiffs(repoUrl, pr.number, env);
 
-	await mapLimit(merges, MERGE_STATS_PARALLEL, async ({ pr }) => {
-		try {
-			const entries = await mergeDiffs(repoUrl, pr.number, env);
-
-			Object.assign(pr, diffStats(entries));
-			pr.changedFiles = entries.length;
-		} catch {}
+		Object.assign(pr, diffStats(entries));
+		pr.changedFiles = entries.length;
 	});
-
-	return merges;
 }

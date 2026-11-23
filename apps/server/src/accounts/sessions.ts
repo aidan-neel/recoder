@@ -54,6 +54,15 @@ export interface FoundSession {
 	refreshed: boolean;
 }
 
+/** Revalidates a stream without extending a cookie that has already been sent. */
+export async function sessionStillActive(token: string, accountId: string): Promise<boolean> {
+	if (!TOKEN_SHAPE.test(token)) return false;
+
+	const session = await sessions.get(hashToken(token));
+
+	return session?.accountId === accountId && session.expiresAt > Date.now();
+}
+
 /**
  * The session a cookie's token names, or undefined when the token is malformed, unknown or expired. Expired
  * sessions are deleted as they are found, and a live one is refreshed once a day of use.

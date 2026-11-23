@@ -23,6 +23,7 @@ import { enqueueActor, enqueueCommand } from '../review/runtime/inbox';
 import { assertReadableDataVersion } from './data-version';
 import { sqliteDataVersion } from './sqlite-migrations';
 import { localSettings } from './local-settings';
+import { importLocalMessages, messageTables } from './import-local-messages';
 
 const MAX_DATABASE_BYTES = 1024 * 1024 * 1024;
 const MAX_SETTING_BYTES = 4 * 1024 * 1024;
@@ -40,7 +41,8 @@ const collections = [
 	'repo_chats',
 	'images',
 	'review_images',
-	'pull_descriptions'
+	'pull_descriptions',
+	'accounts'
 ] as const;
 
 const recordSchema = z.object({ id: z.string().min(1).max(200) }).passthrough();
@@ -161,7 +163,8 @@ async function requireEmptyDestination(transaction: TransactionSQL): Promise<voi
 		'review_actor_leases',
 		'review_actor_commands',
 		'recoder_review_events',
-		'recoder_publications'
+		'recoder_publications',
+		...messageTables
 	];
 
 	for (const table of tables) {
@@ -290,7 +293,13 @@ async function importRecords(transaction: TransactionSQL, database: Database): P
 		}
 	}
 
-	return imported;
+	return (
+		imported +
+		(await importLocalMessages(transaction, database, tables, {
+			rows: MAX_RECORDS - imported,
+			rowBytes: MAX_RECORD_BYTES
+		}))
+	);
 }
 
 export async function importLocalData(

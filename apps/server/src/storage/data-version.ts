@@ -1,5 +1,5 @@
 /** The schema this release writes, and the oldest schema it can migrate in place. */
-export const DATA_VERSION = 2;
+export const DATA_VERSION = 3;
 
 /** The oldest data version this release can open: 0 is data the releases before the ledger wrote. */
 export const OLDEST_DATA_VERSION = 0;
