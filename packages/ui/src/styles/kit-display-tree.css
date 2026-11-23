@@ -29,6 +29,9 @@
 		line-height: 18px;
 		text-align: left;
 		outline: none;
+		/* A row out of view skips layout and paint, so a tree of hundreds costs the rows on screen. */
+		content-visibility: auto;
+		contain-intrinsic-size: auto 28px;
 		transition:
 			color var(--dur-hover) var(--ease-hover),
 			box-shadow var(--dur-hover) var(--ease-hover);
