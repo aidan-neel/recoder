@@ -13,12 +13,13 @@ const fetched = new Map<string, number>();
 const running = new Map<string, Promise<string | null>>();
 
 /**
- * A bare copy of the repo that every review checkout of it borrows objects
- * from (`git clone --reference`), so the history is downloaded once. It is
- * created beside its final place and renamed in, and refreshed at most once a
- * minute. Automatic garbage collection is off: a collection could drop objects
- * a running checkout still reads. Null when the copy cannot be made or is
- * shallow, which git refuses as a reference, and the
+ * A bare, blobless copy (`--filter=blob:none`) of the repo that every review
+ * checkout of it borrows commits and trees from (`git clone --reference`), so
+ * the bulk of the history is downloaded once and each checkout reads blobs
+ * lazily from the forge. It is created beside its final place and renamed in,
+ * and refreshed at most once a minute. Automatic garbage collection is off: a
+ * collection could drop objects a running checkout still reads. Null when the
+ * copy cannot be made or is shallow, which git refuses as a reference, and the
  * caller clones on its own.
  */
 export function ensureSharedClone(opts: {
@@ -52,7 +53,12 @@ async function refresh(path: string, opts: { workDir: string; cloneUrl: string; 
 			await mkdir(join(opts.workDir, 'shared', 'git'), { recursive: true });
 
 			try {
-				await opts.run(opts.workDir, ['clone', '--bare', '--', opts.cloneUrl, building], 'shared clone');
+				await opts.run(
+					opts.workDir,
+					['clone', '--bare', '--filter=blob:none', '--', opts.cloneUrl, building],
+					'shared clone'
+				);
+
 				await opts.run(building, ['config', 'gc.auto', '0'], 'shared config');
 				await opts.run(building, ['config', 'maintenance.auto', 'false'], 'shared config');
 
