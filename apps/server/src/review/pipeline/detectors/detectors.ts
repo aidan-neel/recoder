@@ -10,7 +10,7 @@ import { complexityResults, deadCodeResults } from './symbols.js';
 import type { DetectorId, DetectorResult } from './types.js';
 import { addedSubclasses, weakInNewTests } from './new-tests.js';
 import { readTestFiles, type TestFileVersions } from './test-files.js';
-import { typeHintResults } from './type-hints.js';
+import { typeHintProjects } from './type-hint-projects.js';
 import { weakenedInFile } from './weakened-tests.js';
 
 const MAX_RESULTS = 40;
@@ -119,12 +119,21 @@ export function runDiagnostics(run: ReviewRun): DetectorResult[] {
  * Hints from the compiler's types on the added lines, read from the installed
  * checkout. Empty without a checkout.
  */
-export function runTypeHints(run: ReviewRun): DetectorResult[] {
+export async function runTypeHints(run: ReviewRun, closed: () => boolean): Promise<DetectorResult[]> {
 	const revision = run.input.revision;
 
 	if (!revision) return [];
 
-	return finish(run, typeHintResults(revision.checkoutPath, addedLines(run.inventory)));
+	const added = addedLines(run.inventory);
+	const projects = typeHintProjects(revision.checkoutPath, added);
+
+	if (!projects.size) return [];
+
+	const { typeHintResults } = await import('./type-hints.js');
+
+	if (closed() || run.controller.signal.aborted) return [];
+
+	return finish(run, typeHintResults(revision.checkoutPath, added, projects));
 }
 
 /**

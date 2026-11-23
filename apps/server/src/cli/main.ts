@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
-import { parseInvocation, type Invocation } from './args/command.js';
+import type { Invocation } from './args/command.js';
 import { splitAudience } from './audience.js';
 import { EXIT, type ExitCode } from './exit.js';
-import { reportFailure } from './failure.js';
 import { writeStdout } from './output/streams.js';
 import { runProgram } from './program.js';
 import { processTerminal, type Terminal } from './terminal/terminal.js';
@@ -16,8 +15,14 @@ async function runCli(argv: string[]): Promise<ExitCode> {
 	const terminal = processTerminal(audience);
 
 	try {
+		if (command[0] === '--version' || command[0] === '-v') return await print(VERSION);
+
+		const { parseInvocation } = await import('./args/command.js');
+
 		return await execute(parseInvocation(command, { workingDirectory: process.cwd(), audience }), terminal);
 	} catch (error) {
+		const { reportFailure } = await import('./failure.js');
+
 		return reportFailure(error, command, terminal);
 	}
 }
@@ -27,8 +32,6 @@ async function execute(invocation: Invocation, terminal: Terminal): Promise<Exit
 	switch (invocation.command) {
 		case 'help':
 			return print((await import('./args/help.js')).renderHelp(invocation.topic, terminal.out));
-		case 'version':
-			return print(VERSION);
 		case 'doctor':
 			return (await import('./doctor/doctor-command.js')).runDoctorCommand(terminal);
 		case 'init':
