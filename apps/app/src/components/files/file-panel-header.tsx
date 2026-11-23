@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, CopyButton, FileChip, Tooltip } from '@recoder/ui';
-import { ArrowUpRightIcon, CaretRightIcon, SidebarSimpleIcon, XIcon } from '@phosphor-icons/react';
+import { Button, CopyButton, FileChip, Icon, Tooltip } from '@recoder/ui';
 import { Fragment } from 'react';
 
 interface FilePanelHeaderProps {
@@ -43,7 +42,7 @@ export function FilePanelHeader({
 					aria-expanded={treeOpen}
 					onClick={onToggleTree}
 				>
-					<SidebarSimpleIcon />
+					<Icon name="dock_to_right" />
 				</Button>
 			</Tooltip>
 			<nav aria-label="File path" className="file-crumbs">
@@ -52,7 +51,7 @@ export function FilePanelHeader({
 						<Button variant="ghost" className="file-crumb" onClick={() => onRevealFolder(folder.path)}>
 							{folder.name}
 						</Button>
-						<CaretRightIcon aria-hidden />
+						<Icon name="chevron_right" />
 					</Fragment>
 				))}
 				<span className="file-crumb-current" aria-current="page">
@@ -65,14 +64,14 @@ export function FilePanelHeader({
 					<Tooltip content={`Open on ${forgeName}`}>
 						<Button asChild variant="ghost" size="icon">
 							<a href={forgeUrl} target="_blank" rel="noreferrer" aria-label={`Open on ${forgeName}`}>
-								<ArrowUpRightIcon />
+								<Icon name="arrow_outward" />
 							</a>
 						</Button>
 					</Tooltip>
 				) : null}
 				<Tooltip content="Close" shortcut="Esc">
 					<Button variant="ghost" size="icon" aria-label="Close file" onClick={onClose}>
-						<XIcon />
+						<Icon name="close" />
 					</Button>
 				</Tooltip>
 			</div>

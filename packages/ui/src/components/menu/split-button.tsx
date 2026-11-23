@@ -1,6 +1,6 @@
 'use client';
 
-import { CaretDownIcon } from '@phosphor-icons/react';
+import { Icon } from '../icon';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
@@ -61,7 +61,7 @@ export function SplitButton({
 						disabled={disabled || status === 'pending'}
 						className={cn('rounded-s-none', HALF_FOCUS, variant === 'primary' ? SEAM : '-ms-px')}
 					>
-						<CaretDownIcon className="size-3 opacity-60" />
+						<Icon name="expand_more" className="size-3 opacity-60" />
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className={menuClassName}>

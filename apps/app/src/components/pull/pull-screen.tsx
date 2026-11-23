@@ -1,8 +1,7 @@
 'use client';
 
 import type { PullPage } from '@recoder/shared';
-import { Button, Skeleton } from '@recoder/ui';
-import { ArrowUpRightIcon } from '@phosphor-icons/react';
+import { Button, Icon, Skeleton } from '@recoder/ui';
 import { useCallback, useState, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -30,7 +29,6 @@ import { BugsTools } from '@/components/bugs/bugs-tools';
 import { ChangesTab } from '@/components/changes/changes-tab';
 import { ChangesTools, type ChangesMode } from '@/components/changes/changes-tools';
 import { CommitsTab } from '@/components/commits/commits-tab';
-import { CancelReviewHost } from '@/components/common/cancel-review';
 import { Crumbs } from '@/components/common/crumbs';
 import { Page } from '@/components/common/page';
 import { TokenUsageButton } from '@/components/common/token-usage-modal';
@@ -59,7 +57,7 @@ function ReviewTabTools() {
 }
 
 /**
- * The page's one Review button, then the menu and the merge button. The merge button is the page's primary only
+ * The page's one review control, then the menu and the merge button. The merge button is the page's primary only
  * once nothing is left to do first: with a review to run, findings to read or a review running it steps back to an
  * outline, so the one primary button in view is the next step.
  */
@@ -165,56 +163,54 @@ function PullFrame({ repoId, number, tab: named }: PullOnTabProps) {
 	};
 
 	return (
-		<CancelReviewHost>
-			<Page
-				start={
-					<Crumbs
-						parts={[
-							{ label: 'Pull requests', href: pullsHref(base) },
-							{ label: view.repoName, href: repoHref(base, repoId) },
-							{ label: `#${number}` }
-						]}
-					/>
-				}
-				end={
-					<>
-						{view.reviewId ? <TokenUsageButton kind="review" id={view.reviewId} /> : null}
-						{forge && page ? (
-							<Button asChild variant="ghost" className="pull-forge-link">
-								<a href={page.pull.url} target="_blank" rel="noreferrer">
-									Open on {forge}
-									<ArrowUpRightIcon aria-hidden className="size-3.5" />
-								</a>
-							</Button>
-						) : null}
-					</>
-				}
-			>
-				{view.phase === 'not-found' || view.phase === 'failed' ? (
-					<div className="page-notice">
-						<PullNotice view={view} />
+		<Page
+			start={
+				<Crumbs
+					parts={[
+						{ label: 'Pull requests', href: pullsHref(base) },
+						{ label: view.repoName, href: repoHref(base, repoId) },
+						{ label: `#${number}` }
+					]}
+				/>
+			}
+			end={
+				<>
+					{view.reviewId ? <TokenUsageButton kind="review" id={view.reviewId} /> : null}
+					{forge && page ? (
+						<Button asChild variant="ghost" className="pull-forge-link">
+							<a href={page.pull.url} target="_blank" rel="noreferrer">
+								Open on {forge}
+								<Icon name="arrow_outward" className="size-3.5" />
+							</a>
+						</Button>
+					) : null}
+				</>
+			}
+		>
+			{view.phase === 'not-found' || view.phase === 'failed' ? (
+				<div className="page-notice">
+					<PullNotice view={view} />
+				</div>
+			) : null}
+			{page || view.phase === 'loading' ? (
+				<>
+					<Skeleton id="pull-head" loading={!page} className="pull-head-frame">
+						{page ? (
+							<PullHeader page={page} actions={<PullActions page={page} />} merge={<PullMergeFacts page={page} />}>
+								<PullChecksList />
+							</PullHeader>
+						) : (
+							<LoadingHeader />
+						)}
+					</Skeleton>
+					<div className="page-column pull-tabs-row">
+						<PullTabs repoId={repoId} number={number} tab={tab} counts={view.counts} />
+						<div className="pull-tools">{tools[tab]}</div>
 					</div>
-				) : null}
-				{page || view.phase === 'loading' ? (
-					<>
-						<Skeleton id="pull-head" loading={!page} className="pull-head-frame">
-							{page ? (
-								<PullHeader page={page} actions={<PullActions page={page} />} merge={<PullMergeFacts page={page} />}>
-									<PullChecksList />
-								</PullHeader>
-							) : (
-								<LoadingHeader />
-							)}
-						</Skeleton>
-						<div className="page-column pull-tabs-row">
-							<PullTabs repoId={repoId} number={number} tab={tab} counts={view.counts} />
-							<div className="pull-tools">{tools[tab]}</div>
-						</div>
-						<div className="pull-body">{bodies[tab]}</div>
-					</>
-				) : null}
-			</Page>
-		</CancelReviewHost>
+					<div className="pull-body">{bodies[tab]}</div>
+				</>
+			) : null}
+		</Page>
 	);
 }
 

@@ -1,7 +1,16 @@
 'use client';
 
-import { Button, Card, DURATION, EASE_OUT, RowButton, SkeletonBox, StatusNotice, useMotionVariants } from '@recoder/ui';
-import { PlusIcon } from '@phosphor-icons/react';
+import {
+	Button,
+	Card,
+	DURATION,
+	EASE_OUT,
+	Icon,
+	RowButton,
+	SkeletonBox,
+	StatusNotice,
+	useMotionVariants
+} from '@recoder/ui';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
 
 import type { FleetScope } from '@/lib/repo/fleet';
@@ -52,7 +61,7 @@ function ConnectTile({ onConnect }: { onConnect: () => void }) {
 	return (
 		<div className="fleet-connect">
 			<span className="fleet-connect-mark" aria-hidden>
-				<PlusIcon />
+				<Icon name="add" />
 			</span>
 			<RowButton cover className="fleet-connect-name" onClick={onConnect}>
 				Connect a repository
@@ -151,7 +160,7 @@ export function ReposScreen() {
 						/>
 					) : null}
 					<Button variant="primary" className="fleet-add" onClick={() => view.setAdding(true)}>
-						<PlusIcon aria-hidden />
+						<Icon name="add" />
 						Add repository
 					</Button>
 				</>

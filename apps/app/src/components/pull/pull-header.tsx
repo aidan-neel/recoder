@@ -1,12 +1,10 @@
 import type { PullPage, PullState } from '@recoder/shared';
-import { Collapsible, Pill, type PillTone } from '@recoder/ui';
-import { GitBranchIcon } from '@phosphor-icons/react';
+import { Collapsible, Pill, type PillTone, Icon } from '@recoder/ui';
 import type { ReactNode } from 'react';
-
-import { author } from '@/lib/shell/format';
 
 import { Avatar } from '@/components/common/avatar';
 import { PullMark, type PullMarkState } from '@/components/common/pull-mark';
+import { AuthorLink } from '@/components/people/author-link';
 
 interface StateFace {
 	mark: PullMarkState;
@@ -45,7 +43,6 @@ interface PullHeaderProps {
  */
 export function PullHeader({ page, actions, merge, children }: PullHeaderProps) {
 	const face = faceOf(page);
-	const by = author(page.pull.author);
 	const { base, headRef } = page.pull;
 
 	return (
@@ -60,8 +57,10 @@ export function PullHeader({ page, actions, merge, children }: PullHeaderProps) 
 						<Pill tone={face.tone} icon={<PullMark state={face.mark} />}>
 							{face.label}
 						</Pill>
-						<Pill icon={<Avatar name={by.name} className="pill-avatar" />}>{by.name}</Pill>
-						<Pill face="code" icon={<GitBranchIcon aria-hidden />} title={`${headRef} into ${base}`}>
+						<Pill icon={<Avatar name={page.pull.author} src={page.pull.authorAvatarUrl} className="pill-avatar" />}>
+							<AuthorLink login={page.pull.author} repoId={page.repoId} />
+						</Pill>
+						<Pill face="code" icon={<Icon name="fork_right" />} title={`${headRef} into ${base}`}>
 							{base} ← {headRef}
 						</Pill>
 						{merge}

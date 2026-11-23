@@ -1,7 +1,7 @@
 import type { Repo, RepoOverview } from '@recoder/shared';
 
 import { forgeLabel } from '../connections/forges';
-import { highBugs } from '../pulls/high-bugs';
+import { openBugs } from '../pulls/open-bugs';
 import type { PullRow, PullRowStatus } from '../pulls/types';
 import type { RowEntry } from '../pulls/use-rows';
 import { formatReportDay } from '../usage/report-shared';
@@ -33,7 +33,7 @@ const monthDay = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeri
 
 /** The rows most urgent first, at most five; rows equally urgent keep their order, newest activity first. */
 export function byUrgency(entries: readonly RowEntry[]): PullRow[] {
-	const rank = (entry: RowEntry) => (highBugs(entry) > 0 ? 0 : URGENCY[entry.row.status.kind]);
+	const rank = (entry: RowEntry) => (openBugs(entry) > 0 ? 0 : URGENCY[entry.row.status.kind]);
 
 	return [...entries]
 		.sort((a, b) => rank(a) - rank(b))
@@ -79,8 +79,8 @@ function openCountOf(entries: readonly RowEntry[], more: boolean, total: number 
 
 /** The five figures: open pull requests and bugs from the list, the rest from the overview. */
 function figuresOf(entries: readonly RowEntry[], openCount: string, overview: RepoOverview): RepoFigure[] {
-	const bugs = entries.reduce((sum, { row }) => sum + (row.status.kind === 'bugs' ? row.status.bugs : 0), 0);
-	const high = entries.reduce((sum, entry) => sum + highBugs(entry), 0);
+	const bugs = entries.reduce((sum, entry) => sum + openBugs(entry), 0);
+	const warnings = entries.reduce((sum, { row }) => sum + (row.status.kind === 'bugs' ? row.status.warnings : 0), 0);
 	const { raised, accepted } = overview.findings;
 
 	return [
@@ -91,7 +91,13 @@ function figuresOf(entries: readonly RowEntry[], openCount: string, overview: Re
 			detail: null,
 			tone: null
 		},
-		{ id: 'bugs', label: 'Open bugs', value: String(bugs), detail: high > 0 ? `${high} high` : null, tone: 'high' },
+		{
+			id: 'bugs',
+			label: 'Open bugs',
+			value: String(bugs),
+			detail: warnings > 0 ? plural(warnings, 'warning') : null,
+			tone: 'medium'
+		},
 		{
 			id: 'merged',
 			label: `Merged, ${overview.days} days`,

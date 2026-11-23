@@ -7,13 +7,14 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 	HoverList,
+	Icon,
 	RowButton,
 	ScrollArea,
 	SkeletonBox,
 	StatusGlyph,
-	type GlyphKind
+	type GlyphKind,
+	type IconName
 } from '@recoder/ui';
-import { ArrowUpRightIcon, CaretDownIcon, CheckCircleIcon, CircleDashedIcon, XCircleIcon } from '@phosphor-icons/react';
 
 import type { PullChecksView } from '@/lib/pull/types';
 import { plural } from '@/lib/shell/format';
@@ -49,7 +50,7 @@ function summarize({ outcome, tally }: PullChecksView): Summary {
 	return { tone: 'ok', text: `${plural(tally.passed, 'check')} passed` };
 }
 
-const SUMMARY_ICONS = { ok: CheckCircleIcon, bad: XCircleIcon, wait: CircleDashedIcon };
+const SUMMARY_ICONS: Record<Summary['tone'], IconName> = { ok: 'check_circle', bad: 'cancel', wait: 'pending' };
 
 /**
  * The head commit's checks as one fact in the header. When they loaded, it is
@@ -62,21 +63,21 @@ export function ChecksToggle({ view }: { view: PullChecksView }) {
 	if (view.phase === 'failed') {
 		return (
 			<span className="merge-fact" data-tone="wait" title={view.error ?? undefined}>
-				<CircleDashedIcon aria-hidden />
+				<Icon name="pending" />
 				The checks did not load
 			</span>
 		);
 	}
 
 	const summary = summarize(view);
-	const Icon = SUMMARY_ICONS[summary.tone];
+	const icon = SUMMARY_ICONS[summary.tone];
 
 	return (
 		<CollapsibleTrigger asChild>
 			<Button variant="quiet" className="merge-fact checks-toggle" data-tone={summary.tone}>
-				<Icon aria-hidden />
+				<Icon name={icon} />
 				{summary.text}
-				<CaretDownIcon aria-hidden className="checks-chevron" />
+				<Icon name="expand_more" className="checks-chevron" />
 			</Button>
 		</CollapsibleTrigger>
 	);
@@ -104,7 +105,7 @@ function CheckRow({ check }: { check: PrCheck }) {
 		<RowButton asChild data-check className="check-row">
 			<a href={check.url} target="_blank" rel="noreferrer" title={check.name}>
 				{body}
-				<ArrowUpRightIcon aria-hidden className="check-row-link" />
+				<Icon name="arrow_outward" className="check-row-link" />
 			</a>
 		</RowButton>
 	);
@@ -128,7 +129,7 @@ function SkippedChecks({ checks }: { checks: PrCheck[] }) {
 			<CollapsibleTrigger asChild>
 				<Button variant="quiet" className="checks-skipped-toggle">
 					{checks.length} skipped
-					<CaretDownIcon aria-hidden className="checks-chevron" />
+					<Icon name="expand_more" className="checks-chevron" />
 				</Button>
 			</CollapsibleTrigger>
 			<CollapsibleContent>

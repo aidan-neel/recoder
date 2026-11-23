@@ -1,7 +1,8 @@
-import { ForgeMark, Pill } from '@recoder/ui';
-import { CalendarDotsIcon, GitBranchIcon } from '@phosphor-icons/react';
+import { ForgeMark, Icon, Pill } from '@recoder/ui';
 
 import type { RepoFacts, RepoFigure } from '@/lib/repo/types';
+
+import { Figures } from '@/components/common/figures';
 
 /** The repository's name under its forge's mark, over its facts as badges, auto review's among them. */
 function RepoTitle({ repo }: { repo: RepoFacts }) {
@@ -15,36 +16,15 @@ function RepoTitle({ repo }: { repo: RepoFacts }) {
 				</span>
 			</h1>
 			<div className="repo-facts">
-				<Pill face="code" icon={<GitBranchIcon aria-hidden />} title="Default branch">
+				<Pill face="code" icon={<Icon name="fork_right" />} title="Default branch">
 					{repo.defaultBranch}
 				</Pill>
-				<Pill icon={<CalendarDotsIcon aria-hidden />}>{repo.tracked}</Pill>
+				<Pill icon={<Icon name="calendar_month" />}>{repo.tracked}</Pill>
 				<Pill tone={repo.autoReview ? 'ok' : 'neutral'} icon={<span aria-hidden className="pill-dot" />}>
 					{repo.autoReview ? 'Auto review on' : 'Auto review off'}
 				</Pill>
 			</div>
 		</header>
-	);
-}
-
-/** Five figures in a row split by hairlines: a label over the number, a quieter fact beside it. */
-function Figures({ figures }: { figures: RepoFigure[] }) {
-	return (
-		<dl className="repo-figures">
-			{figures.map((figure) => (
-				<div key={figure.id} className="repo-figure">
-					<dt>{figure.label}</dt>
-					<dd>
-						<span className="repo-figure-value">{figure.value}</span>
-						{figure.detail ? (
-							<span className="repo-figure-detail" data-tone={figure.tone ?? undefined}>
-								{figure.detail}
-							</span>
-						) : null}
-					</dd>
-				</div>
-			))}
-		</dl>
 	);
 }
 

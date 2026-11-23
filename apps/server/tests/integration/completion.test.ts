@@ -35,6 +35,35 @@ await closeStorage();
 	expect(JSON.parse(output)).toEqual({ status: 'passed', finalize: 'done', terminal: true });
 });
 
+test.skipIf(!url)(
+	'candidate updates are present in both the Postgres event log and the reconnect snapshot',
+	async () => {
+		if (!url) return;
+
+		const output = await runCorrectnessProcess(
+			url,
+			setup +
+				`
+const {reportReviewCandidate,flushReviewEvents}=await import('./apps/server/src/review/session/events.ts');
+const candidate={id:'c1',title:'Missing guard',path:'src/a.ts',tier:'warning',raisedAt:'2026-11-23T13:00:00Z',state:'raised'};
+reportReviewCandidate('completed',candidate);
+reportReviewCandidate('completed',{...candidate,state:'verifying',verifierId:'verifier-1'});
+await flushReviewEvents('completed');
+const {candidates,sequence}=await reviewProgress.get('completed');
+const events=await sharedEvents.after('completed',0);
+console.log(JSON.stringify({candidates,sequence,states:events.map(event=>event.data.candidate.state)}));
+await closeStorage();
+`
+		);
+
+		expect(JSON.parse(output)).toEqual({
+			candidates: [expect.objectContaining({ id: 'c1', state: 'verifying', verifierId: 'verifier-1' })],
+			sequence: 2,
+			states: ['raised', 'verifying']
+		});
+	}
+);
+
 test.skipIf(!url)('a terminal event write failure rolls back the completed result and progress', async () => {
 	if (!url) return;
 

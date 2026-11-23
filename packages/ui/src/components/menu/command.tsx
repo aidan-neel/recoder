@@ -1,10 +1,10 @@
 'use client';
 
+import { Icon, type IconName } from '../icon';
 import { Command, useCommandState } from 'cmdk';
-import { MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Dialog } from 'radix-ui';
-import type { ComponentProps, ComponentType, KeyboardEvent, ReactNode } from 'react';
+import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
 import { modalMotion, scrimMotion } from '../../motion/presets';
@@ -154,7 +154,7 @@ export function CommandInput({
 			data-ui="command-input"
 			className={cn('flex h-11 shrink-0 items-center gap-2.5 border-b border-line-card px-3', className)}
 		>
-			{leading ?? <MagnifyingGlassIcon aria-hidden className="size-4 shrink-0 text-fg-muted" />}
+			{leading ?? <Icon name="search" className="size-4 shrink-0 text-fg-muted" />}
 			<Command.Input
 				placeholder={placeholder}
 				value={value}
@@ -192,7 +192,7 @@ interface CommandItemProps {
 	/** More words the search matches. */
 	keywords?: string[];
 	onSelect?: (value: string) => void;
-	icon?: ComponentType<{ className?: string }>;
+	icon?: IconName;
 	/** The icon's color (a CSS color, usually a token: `var(--sev-high)`). */
 	iconTone?: string;
 	/** Sits where the icon goes when the row leads with something richer (a status glyph). */
@@ -227,7 +227,7 @@ export function CommandItem({
 	value,
 	keywords,
 	onSelect,
-	icon: Icon,
+	icon,
 	iconTone,
 	leading,
 	description,
@@ -253,9 +253,9 @@ export function CommandItem({
 			)}
 		>
 			{leading ? <span data-ui="command-item-leading">{leading}</span> : null}
-			{Icon && !leading ? (
+			{icon && !leading ? (
 				<span data-ui="command-item-icon" style={{ color: iconTone }}>
-					<Icon />
+					<Icon name={icon} />
 				</span>
 			) : null}
 			<ItemLabel description={description}>{children}</ItemLabel>

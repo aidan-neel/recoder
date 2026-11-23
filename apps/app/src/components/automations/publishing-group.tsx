@@ -1,8 +1,7 @@
 'use client';
 
 import type { CheckThreshold } from '@recoder/shared';
-import { Button, Input, Select } from '@recoder/ui';
-import { XIcon } from '@phosphor-icons/react';
+import { Button, Icon, Input, Select } from '@recoder/ui';
 
 import { useAutoReviewSwitch } from '@/lib/settings/use-auto-review-switch';
 import { useCheckThreshold } from '@/lib/settings/use-check-threshold';
@@ -18,8 +17,8 @@ const POST = 'Post results';
 
 /** What the commit check does at each threshold. */
 const CHECK_DETAIL: Record<CheckThreshold, string> = {
-	error: 'The check fails when a verified finding is high severity',
-	warning: 'The check fails when a verified finding is medium or high',
+	error: 'The check fails when a verified finding is a bug',
+	warning: 'The check fails when a verified finding is a bug or a warning',
 	info: 'The check fails when any finding is verified',
 	off: 'Recoder sets no check on the commit'
 };
@@ -89,7 +88,7 @@ function IgnoredGlobs({ view }: { view: IgnoredPathsView }) {
 				<li key={path} className="automations-glob">
 					<span className="mono">{path}</span>
 					<Button variant="ghost" size="icon" aria-label={`Stop ignoring ${path}`} onClick={() => view.remove(path)}>
-						<XIcon />
+						<Icon name="close" />
 					</Button>
 				</li>
 			))}

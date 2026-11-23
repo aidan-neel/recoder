@@ -1,6 +1,9 @@
+import type { PersonRef } from '@recoder/shared';
+
 import { PULL_TABS, type PullTab } from '../pull/types';
 import { serverViewOf, type ServerView } from '../server/server-views';
 import { SETTINGS_SECTIONS, sectionLabel, type SettingsSection } from '../settings/sections';
+import { displayName } from '../people/refs';
 
 /**
  * Page addresses. Each takes the client's `base` (`''` live, `'/sample'` for
@@ -95,6 +98,8 @@ export type Route =
 	| { screen: 'repo'; repoId: string }
 	| { screen: 'pull'; repoId: string; number: number }
 	| { screen: 'chat'; chatId: string }
+	| { screen: 'person'; person: PersonRef }
+	| { screen: 'messages'; conversationId: string }
 	| { screen: 'review'; reviewId: string }
 	| { screen: 'settings'; section: SettingsSection; view: ServerView | null };
 
@@ -129,6 +134,16 @@ function screenOf(parts: string[], live: boolean): Route | null {
 			return PULL_NUMBER.test(second) ? { screen: 'pull', repoId: first, number: Number(second) } : null;
 		case 'chats/2':
 			return { screen: 'chat', chatId: first };
+		case 'people/3':
+			return first === 'github' || first === 'gitlab'
+				? { screen: 'person', person: { provider: first, host: null, login: second } }
+				: null;
+		case 'people/4':
+			return first === 'gitlab'
+				? { screen: 'person', person: { provider: first, host: second, login: parts[3] } }
+				: null;
+		case 'messages/2':
+			return { screen: 'messages', conversationId: first };
 		case 'review/2':
 			return live ? { screen: 'review', reviewId: first } : null;
 		case 'automations/1':
@@ -181,6 +196,10 @@ export function titleOf(route: Route): string {
 			return `#${route.number}`;
 		case 'chat':
 			return 'Chat';
+		case 'person':
+			return displayName(route.person);
+		case 'messages':
+			return 'Messages';
 		case 'review':
 			return 'Review';
 		case 'automations':

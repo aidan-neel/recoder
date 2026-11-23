@@ -1,14 +1,17 @@
 'use client';
 
-import { Input, Keycap, SkeletonRows, Tree } from '@recoder/ui';
-import { MagnifyingGlassIcon } from '@phosphor-icons/react';
+import { Icon, Input, Keycap, SkeletonRows, Tree } from '@recoder/ui';
 import { useMemo, useState, type KeyboardEvent } from 'react';
 
+import { foundLabel, foundTone } from '@/lib/bugs/tiers';
 import { useFileTree, useSideRows } from '@/lib/changes/use-changes';
 import type { FileChange, FileEntry } from '@/lib/changes/types';
+import type { Chapter } from '@/lib/changes/chapters';
 import { usePullDiffView } from '@/lib/pull/pull-session';
 
 import { PanelResizer } from '@/components/common/panel-resizer';
+
+import { ChapterOutline, outlineMatches } from './chapters';
 
 /** How many rows of bars stand in while the diff loads. */
 const LOADING_ROWS = 8;
@@ -29,7 +32,9 @@ function TreeEnd({ entry }: { entry: FileEntry }) {
 
 	return (
 		<span className="tree-end">
-			{entry.bugs > 0 ? <span className="tree-bug" role="img" aria-label={`${entry.bugs} open findings`} /> : null}
+			{entry.found ? (
+				<span className="tree-bug" data-tone={foundTone(entry.found)} role="img" aria-label={foundLabel(entry.found)} />
+			) : null}
 			<span className="tree-change" data-change={entry.change} title={label}>
 				<span aria-hidden>{letter}</span>
 				<span className="sr-only">{label}</span>
@@ -38,10 +43,19 @@ function TreeEnd({ entry }: { entry: FileEntry }) {
 	);
 }
 
+/** The guide's outline in place of the tree, when the diff reads in the guide's order. */
+interface Outline {
+	chapters: Chapter[];
+	/** The id of the hunk being read. */
+	current: string | null;
+	onOpen: (hunkId: string) => void;
+}
+
 interface FileSidebarProps {
 	/** The file in view, marked as the diff scrolls. */
 	current: string | null;
 	onOpen: (path: string) => void;
+	outline: Outline | null;
 }
 
 /**
@@ -50,7 +64,7 @@ interface FileSidebarProps {
  * pressing a file brings it to the top. In the filter, Enter opens the first match, the down arrow moves into the
  * tree and Escape clears it. Bars stand in while the diff loads, and a diff with no files has no sidebar.
  */
-export function FileSidebar({ current, onOpen }: FileSidebarProps) {
+export function FileSidebar({ current, onOpen, outline }: FileSidebarProps) {
 	const diff = usePullDiffView();
 	const tree = useFileTree();
 	const [query, setQuery] = useState('');
@@ -65,13 +79,17 @@ export function FileSidebar({ current, onOpen }: FileSidebarProps) {
 	function onFilterKey(event: KeyboardEvent<HTMLInputElement>): void {
 		const host = event.currentTarget.closest('.changes-side');
 
-		if (event.key === 'Enter') {
+		if (event.key === 'Enter' && outline) {
+			const first = outlineMatches(outline.chapters, query)[0]?.hunks[0];
+
+			if (first) outline.onOpen(first.id);
+		} else if (event.key === 'Enter') {
 			const first = rows.find((row) => row.kind === 'file');
 
 			if (first) onOpen(first.id);
 		} else if (event.key === 'ArrowDown') {
 			event.preventDefault();
-			host?.querySelector<HTMLElement>('[role="treeitem"][tabindex="0"]')?.focus();
+			host?.querySelector<HTMLElement>(outline ? '[data-outline-row]' : '[role="treeitem"][tabindex="0"]')?.focus();
 		} else if (event.key === 'Escape') {
 			if (query) setQuery('');
 			else event.currentTarget.blur();
@@ -81,7 +99,7 @@ export function FileSidebar({ current, onOpen }: FileSidebarProps) {
 	if (diff.phase === 'failed' || (diff.phase === 'ready' && tree.order.length === 0)) return null;
 
 	return (
-		<aside className="changes-side" aria-label="Changed files">
+		<aside className="changes-side" aria-label={outline ? 'Chapters' : 'Changed files'}>
 			<div className="changes-filter">
 				<Input
 					aria-label="Filter the changed files"
@@ -90,14 +108,17 @@ export function FileSidebar({ current, onOpen }: FileSidebarProps) {
 					value={query}
 					onChange={(event) => setQuery(event.target.value)}
 					onKeyDown={onFilterKey}
-					leading={<MagnifyingGlassIcon aria-hidden />}
+					leading={<Icon name="search" />}
 					trailing={query ? null : <Keycap k="t" />}
 				/>
 			</div>
 			{diff.phase !== 'ready' ? (
 				<SkeletonRows count={LOADING_ROWS} height={ROW_HEIGHT} lines={1} className="changes-tree" />
 			) : null}
-			{diff.phase === 'ready' && rows.length > 0 ? (
+			{diff.phase === 'ready' && outline ? (
+				<ChapterOutline chapters={outline.chapters} query={query} current={outline.current} onOpen={outline.onOpen} />
+			) : null}
+			{diff.phase === 'ready' && !outline && rows.length > 0 ? (
 				<Tree
 					aria-label="Changed files"
 					className="changes-tree"
@@ -112,7 +133,9 @@ export function FileSidebar({ current, onOpen }: FileSidebarProps) {
 					}}
 				/>
 			) : null}
-			{diff.phase === 'ready' && rows.length === 0 ? <p className="changes-filter-empty">No file matches.</p> : null}
+			{diff.phase === 'ready' && !outline && rows.length === 0 ? (
+				<p className="changes-filter-empty">No file matches.</p>
+			) : null}
 			<PanelResizer panel="changes" label="Resize the file sidebar" />
 		</aside>
 	);

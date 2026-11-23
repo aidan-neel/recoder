@@ -1,8 +1,7 @@
 'use client';
 
 import { formatContextWindow, type VllmModel, type VllmServer } from '@recoder/shared';
-import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Pill, StatusGlyph } from '@recoder/ui';
-import { CaretDownIcon } from '@phosphor-icons/react';
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, Pill, StatusGlyph } from '@recoder/ui';
 
 import { useVllmModels } from '@/lib/settings/use-vllm-models';
 import { syncLine } from '@/lib/settings/vllm-text';
@@ -53,7 +52,7 @@ function ServedModels({ models }: { models: VllmModel[] }) {
 					</CollapsibleContent>
 					<CollapsibleTrigger asChild>
 						<Button variant="ghost" className="server-more">
-							<CaretDownIcon aria-hidden />
+							<Icon name="expand_more" />
 							{view.moreLabel}
 						</Button>
 					</CollapsibleTrigger>

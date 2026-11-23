@@ -110,6 +110,17 @@
 		white-space: nowrap;
 	}
 }
+/* With FYI notes to toggle, the viewed count keeps only its meter until the row has room. */
+@container (max-width: 1239px) {
+	.pull-tabs-row:has(.fyi-toggle) .changes-viewed .meta {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+}
 /* Shorter still, the tools take a line of their own under the tabs. */
 @container (max-width: 979px) {
 	.pull-tabs-row:has(.changes-whitespace) {
@@ -190,6 +201,12 @@
 	flex-shrink: 0;
 	border-radius: 999px;
 	background: var(--sev-high-icon);
+}
+.tree-bug[data-tone='medium'] {
+	background: var(--sev-medium-solid);
+}
+.tree-bug[data-tone='low'] {
+	background: var(--sev-low-solid);
 }
 
 /*
@@ -280,6 +297,23 @@
 .file-card[data-viewed] .file-name {
 	color: var(--text-faint);
 }
+/* A renamed or copied file: its old path, quiet, then an arrow to the new one. */
+.file-rename {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+}
+.file-old-name {
+	color: var(--text-muted);
+	font-weight: 400;
+}
+.file-rename-arrow {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
 .file-head-end {
 	display: flex;
 	flex-shrink: 0;
@@ -312,6 +346,30 @@
 }
 .hunk:has([data-numbers='both']) > .hunk-gap {
 	padding-left: 106px;
+}
+/* A block the change moved or copied: where it was or went, level with the code, over its quieter lines. */
+.move-note {
+	display: flex;
+	min-height: 32px;
+	align-items: center;
+	gap: 8px;
+	padding: 2px 8px 2px 40px;
+	border-bottom: 1px dashed var(--line-control);
+	background: var(--fill-moved);
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+}
+.hunk:has([data-numbers='both']) > .move-note {
+	padding-left: 84px;
+}
+.move-note-icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.move-note-go {
+	margin-left: auto;
 }
 .hunk:first-child > .hunk-gap {
 	border-top: 0;

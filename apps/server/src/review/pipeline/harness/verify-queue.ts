@@ -6,16 +6,21 @@ import { isNotRun, type CandidateFinding } from '../consolidate.js';
 import { sameIssue } from '../consolidate-merge.js';
 import { isMutationFinding } from '../verify/runs.js';
 import { verifierSessionFixes } from '../verify/session-policy.js';
+import { CandidateProgress } from './candidate-progress.js';
 import { publishBudget, saveCheckpoint, syncWorkspaceDeadline, type ReviewRun } from './context.js';
 
-/** One attempt at settling a candidate; false when the verifier gave no verdict. */
-type VerifyAttempt = (candidate: CandidateFinding, attempt: number) => Promise<boolean>;
+/** One attempt's task message; no verdict means the queue can retry. */
+type VerifyAttempt = (
+	candidate: CandidateFinding,
+	attempt: number,
+	verifierId: string
+) => Promise<{ message: string; retry?: true }>;
 
 /** A rejected candidate's one repair; true when it passed validation again and is to be verified. */
 type RepairAttempt = (candidate: CandidateFinding) => Promise<boolean>;
 
 /** Gives `follower` the verdict a verifier proved for `leader`, which claims the same issue. */
-type ShareVerdict = (follower: CandidateFinding, leader: CandidateFinding) => void;
+type ShareVerdict = (follower: CandidateFinding, leader: CandidateFinding, verifierId?: string) => string;
 
 interface QueuedAttempt {
 	candidate: CandidateFinding;
@@ -57,9 +62,13 @@ function compareRank(a: QueuedAttempt, b: QueuedAttempt): number {
  * is always the best waiting one, bugs before quality and most severe first.
  */
 export class VerifyQueue {
+	readonly progress: CandidateProgress;
+
 	private readonly waiting: QueuedAttempt[] = [];
 
-	private running = 0;
+	private readonly freeLanes = new Set(
+		Array.from({ length: REVIEW_POLICY.maxConcurrentVerifications }, (_, index) => `verifier-${index + 1}`)
+	);
 
 	private accepted = 0;
 
@@ -85,7 +94,13 @@ export class VerifyQueue {
 		private readonly verify: VerifyAttempt,
 		private readonly repair?: RepairAttempt,
 		private readonly share?: ShareVerdict
-	) {}
+	) {
+		this.progress = new CandidateProgress(run.events?.onCandidate, run.input?.candidateProgress);
+	}
+
+	private get running(): number {
+		return REVIEW_POLICY.maxConcurrentVerifications - this.freeLanes.size;
+	}
 
 	/** Whether any verifier or repair is running or waiting. */
 	get busy(): boolean {
@@ -108,21 +123,31 @@ export class VerifyQueue {
 	 * issue as one already being verified waits for that verdict instead.
 	 */
 	add(candidate: CandidateFinding): void {
-		if (findingTier(candidate) === 'fyi') return;
+		this.progress.raise(candidate);
 
-		if (!candidate.valid && this.repair) {
+		const fyi = findingTier(candidate) === 'fyi';
+
+		if (!candidate.valid && this.repair && !fyi) {
 			this.startRepair(this.repair, candidate);
 
 			return;
 		}
 
-		if (!candidate.valid || candidate.verification || this.follow(candidate)) return;
+		if (!candidate.valid || candidate.verification || fyi) {
+			this.progress.settle(candidate);
+
+			return;
+		}
+
+		if (this.follow(candidate)) return;
 
 		if (!this.takeSlot(candidate)) {
 			candidate.verification = {
 				status: 'unverified',
 				reason: `Not run: this review already verified ${REVIEW_POLICY.maxVerifications} findings.`
 			};
+
+			this.progress.settle(candidate);
 
 			return;
 		}
@@ -169,7 +194,7 @@ export class VerifyQueue {
 
 		if (!leader) return false;
 
-		if (proved(leader)) this.share!(candidate, leader);
+		if (proved(leader)) this.shareProof(candidate, leader);
 		else this.followers.get(leader)!.push(candidate);
 
 		return true;
@@ -188,9 +213,16 @@ export class VerifyQueue {
 
 		for (const follower of waiting) {
 			if (proved(leader) && (!verifierSessionFixes() || sameIssue(leader, follower, this.run.inventory)))
-				this.share!(follower, leader);
+				this.shareProof(follower, leader);
 			else this.add(follower);
 		}
+	}
+
+	private shareProof(follower: CandidateFinding, leader: CandidateFinding): void {
+		const verifierId = this.progress.laneOf(leader);
+		const message = this.share!(follower, leader, verifierId);
+
+		this.progress.settle(follower, message, verifierId);
 	}
 
 	/**
@@ -220,6 +252,7 @@ export class VerifyQueue {
 			reason: 'Not run: findings that can be published were verified first.'
 		};
 
+		this.progress.settle(displaced);
 		this.release(displaced);
 
 		return true;
@@ -270,32 +303,41 @@ export class VerifyQueue {
 
 	/** Starts waiting attempts while there is a free verifier. */
 	private launch(): void {
-		while (this.running < REVIEW_POLICY.maxConcurrentVerifications && this.waiting.length) {
+		while (this.freeLanes.size && this.waiting.length) {
 			const next = this.waiting.reduce((best, item) => (compareRank(item, best) < 0 ? item : best));
+			const verifierId = this.freeLanes.values().next().value!;
 
 			this.waiting.splice(this.waiting.indexOf(next), 1);
-			this.running++;
+			this.freeLanes.delete(verifierId);
 
-			this.attempt(next)
+			this.attempt(next, verifierId)
 				.catch((error: unknown) => this.stop(error))
-				.finally(() => this.finished());
+				.finally(() => this.finished(verifierId));
 		}
 	}
 
-	private async attempt({ candidate, attempt }: QueuedAttempt): Promise<void> {
+	private async attempt({ candidate, attempt }: QueuedAttempt, verifierId: string): Promise<void> {
 		const { run } = this;
 
 		if (this.failure || run.controller.signal.aborted || !canLaunchInvestigation(run.deadlineAt, run.budget)) {
-			if (attempt === 1) candidate.verification = { status: 'unverified', reason: NOT_RUN };
+			if (attempt === 1) {
+				candidate.verification = { status: 'unverified', reason: NOT_RUN };
+				if (!this.failure && !run.controller.signal.aborted) this.progress.settle(candidate);
+			}
+
 			this.release(candidate);
 
 			return;
 		}
 
-		const settled = await this.verify(candidate, attempt);
+		this.progress.verify(candidate, verifierId);
+
+		const { message, retry } = await this.verify(candidate, attempt, verifierId);
 
 		if (isNotRun(candidate)) this.handBack(candidate);
-		if (!settled && attempt < VERIFIER_ATTEMPTS) this.waiting.push({ candidate, attempt: attempt + 1 });
+		this.progress.settle(candidate, message);
+
+		if (retry && attempt < VERIFIER_ATTEMPTS) this.waiting.push({ candidate, attempt: attempt + 1 });
 		else this.release(candidate);
 
 		saveCheckpoint(run);
@@ -307,8 +349,12 @@ export class VerifyQueue {
 		repair(candidate)
 			.then((valid) => {
 				if (valid && !this.failure) this.add(candidate);
+				else if (!valid) this.progress.settle(candidate);
 			})
-			.catch((error: unknown) => this.stop(error))
+			.catch((error: unknown) => {
+				if (!candidate.valid) this.progress.settle(candidate);
+				this.stop(error);
+			})
 			.finally(() => {
 				this.repairing--;
 				this.settleIdle();
@@ -320,8 +366,8 @@ export class VerifyQueue {
 		this.failure ??= { error };
 	}
 
-	private finished(): void {
-		this.running--;
+	private finished(verifierId: string): void {
+		this.freeLanes.add(verifierId);
 		this.launch();
 		this.settleIdle();
 	}

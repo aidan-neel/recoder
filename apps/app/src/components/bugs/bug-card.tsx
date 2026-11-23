@@ -1,7 +1,6 @@
 'use client';
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger, FileChip } from '@recoder/ui';
-import { CaretDownIcon } from '@phosphor-icons/react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger, FileChip, Icon } from '@recoder/ui';
 import { memo, useRef, useState, type KeyboardEvent } from 'react';
 
 import { useAskView } from '@/lib/ask/use-ask';
@@ -102,6 +101,7 @@ export const BugCard = memo(function BugCard({ bug, view, open, onToggle, place,
 				className="bug-item"
 				data-place={place}
 				data-tone={bug.kind === 'suggestion' ? 'low' : bug.tone}
+				data-tier={bug.tier}
 				data-open={open || undefined}
 				data-stale={stale || undefined}
 				data-bug={bug.id}
@@ -110,12 +110,12 @@ export const BugCard = memo(function BugCard({ bug, view, open, onToggle, place,
 				<CollapsibleTrigger ref={head} className="bug-head" data-finding={bug.id}>
 					<span className="bug-severity">
 						<span aria-hidden className="bug-mark" />
-						{bug.kind === 'suggestion' ? 'Suggestion' : bug.severity}
+						{bug.kind === 'suggestion' ? 'Suggestion' : bug.tierLabel}
 					</span>
 					{category ? <span className="bug-category">{category}</span> : null}
 					<span className="bug-title">{bug.title}</span>
 					<FileChip path={bug.file} line={bug.line} className="bug-where" />
-					<CaretDownIcon aria-hidden className="bug-caret" />
+					<Icon name="expand_more" className="bug-caret" />
 				</CollapsibleTrigger>
 				<CollapsibleContent className="bug-body">
 					<BugEvidence bug={bug} />

@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, StatusNotice } from '@recoder/ui';
-import { ChatSlashIcon, ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
+import { Button, Icon, StatusNotice } from '@recoder/ui';
 
 import { useApi } from '@/lib/api/client';
 import type { RepoChatView } from '@/lib/chat/types';
@@ -63,7 +62,7 @@ function ChatMissing() {
 			<StatusNotice
 				variant="banner"
 				heading="h1"
-				glyph={<ChatSlashIcon aria-hidden />}
+				glyph={<Icon name="chat_bubble_off" />}
 				title="This chat does not exist."
 				detail="The link may be old or mistyped."
 				actions={
@@ -87,7 +86,7 @@ function ChatFailed({ error, retry }: { error: string | null; retry: () => void 
 				detail={error}
 				actions={
 					<Button onClick={retry}>
-						<ArrowCounterClockwiseIcon aria-hidden />
+						<Icon name="replay" />
 						Try again
 					</Button>
 				}

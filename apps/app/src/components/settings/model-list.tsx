@@ -1,8 +1,7 @@
 'use client';
 
 import { formatContextWindow } from '@recoder/shared';
-import { CommandItem } from '@recoder/ui';
-import { CheckIcon } from '@phosphor-icons/react';
+import { CommandItem, Icon } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import { FOLLOW_LABEL, rowBottom, type ModelRow } from '@/lib/settings/model-rows';
@@ -47,7 +46,7 @@ function Choice({ row, picked, onPick }: ChoiceProps) {
 			onSelect={() => onPick(row.key)}
 			leading={
 				<span className="model-row-mark">
-					{picked ? <CheckIcon aria-hidden /> : null}
+					{picked ? <Icon name="check" /> : null}
 					{picked ? <span className="sr-only">Current pick</span> : null}
 				</span>
 			}

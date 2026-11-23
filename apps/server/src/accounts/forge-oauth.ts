@@ -1,4 +1,4 @@
-import type { SignInForge, SignInMethod } from '@recoder/shared';
+import { isBotLogin, type SignInForge, type SignInMethod } from '@recoder/shared';
 import { z } from 'zod';
 import { oauthClientId, oauthClientSecret } from '../env';
 
@@ -96,7 +96,9 @@ const userSchema = z.object({
 	login: z.string().optional(),
 	username: z.string().optional(),
 	name: z.string().nullish(),
-	avatar_url: z.string().nullish()
+	avatar_url: z.string().nullish(),
+	type: z.string().optional(),
+	bot: z.boolean().optional()
 });
 
 /** How a forge signs people in: a redirect needs the client id and secret, the device flow the id alone, and with no id there is no sign-in. */
@@ -225,6 +227,8 @@ export function parseForgeUser(body: unknown): ForgeUser {
 	const login = parsed.success ? (parsed.data.login ?? parsed.data.username) : undefined;
 
 	if (!parsed.success || !login) throw new ForgeOAuthError('The forge sent an unexpected profile.', 'unexpected');
+	if (parsed.data.type === 'Bot' || parsed.data.bot === true || isBotLogin(login))
+		throw new ForgeOAuthError('Bot accounts cannot sign in.', 'rejected');
 
 	return {
 		remoteId: String(parsed.data.id),

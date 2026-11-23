@@ -17,8 +17,8 @@ import { SidebarSection } from './sidebar-section';
 /**
  * The tracked repositories, each opening its page, on the same lanes as the places above: the forge's mark, the name,
  * and a red dot at the end while one of its open pull requests has an open high-severity bug. The open one sits on the
- * same still fill. With none tracked, the section is left out. Its title folds it away, its + adds a repository and
- * its ⋯ hides it.
+ * same still fill. With none tracked, the section is left out. Its + adds a repository and its ⋯ folds or hides
+ * it.
  */
 export function SidebarRepos({ repos }: { repos: SidebarRepo[] }) {
 	const { base } = useApi();
@@ -59,7 +59,7 @@ function RepoItem({ repo, active }: { repo: SidebarRepo; active: boolean }) {
 			<Link href={repo.href} aria-current={active ? 'page' : undefined} {...intent}>
 				<ForgeMark provider={repo.provider} className="nav-forge" />
 				<span className="nav-label">{repo.name}</span>
-				{repo.highBugs > 0 ? <span className="nav-alert" role="img" aria-label="Has high-severity bugs" /> : null}
+				{repo.openBugs > 0 ? <span className="nav-alert" role="img" aria-label="Has open bugs" /> : null}
 			</Link>
 		</RowButton>
 	);

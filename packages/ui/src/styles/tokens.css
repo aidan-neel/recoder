@@ -307,6 +307,8 @@
 	--diff-add-gutter: rgba(103, 218, 126, 0.12);
 	--diff-del-gutter: rgba(251, 104, 98, 0.12);
 	--diff-focus: rgba(247, 192, 101, 0.07);
+	/* Moved code: a neutral wash in place of green or red, from the theme's own wash so light and dark both work. */
+	--fill-moved: rgb(var(--wash-rgb) / 0.035);
 	--syn-string: var(--syn-plain);
 	/* Comments read as text, so they keep 4.5:1. */
 	--syn-comment: var(--text-subtle);

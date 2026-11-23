@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { ARCHIVE_NAME, extractArchive, SQLITE_SNAPSHOT } from '../../../src/storage/backups/archive';
 import { finishSqliteRestore, restoreBackup } from '../../../src/storage/backups/restore';
 import { createBackup, downloadBackup, findBackup } from '../../../src/storage/backups/store';
+import { initializeSqliteMessages } from '../../../src/storage/message-schema';
 import { migrateSqlite } from '../../../src/storage/sqlite-migrations';
 
 let data: string;
@@ -20,7 +21,12 @@ function openExample(): Database {
 	const database = new Database(join(data, SQLITE_SNAPSHOT));
 
 	database.run('PRAGMA journal_mode = WAL');
-	migrateSqlite(database, [(connection) => connection.run('CREATE TABLE example (value TEXT)'), () => {}]);
+
+	migrateSqlite(database, [
+		(connection) => connection.run('CREATE TABLE example (value TEXT)'),
+		() => {},
+		initializeSqliteMessages
+	]);
 
 	return database;
 }
@@ -38,6 +44,8 @@ test('the restore round trip keeps the committed SQLite WAL contents and saved s
 		using writer = openExample();
 
 		writer.run("INSERT INTO example VALUES ('before backup')");
+		writer.run("INSERT INTO dm_conversations VALUES ('pair', 'one', 'two', 'at', 'at', 1)");
+		writer.run("INSERT INTO dm_messages VALUES ('pair', 1, 'message', 'one', 'client', 'saved message', '[]', 'at')");
 		await writeFile(join(data, 'gitlab-host.json'), '{"host":"before.example"}');
 
 		const backup = await createBackup(data, 'manual');
@@ -56,6 +64,7 @@ test('the restore round trip keeps the committed SQLite WAL contents and saved s
 	using restored = openExample();
 
 	expect(restored.query('SELECT value FROM example').get()).toEqual({ value: 'before backup' });
+	expect(restored.query('SELECT body FROM dm_messages').get()).toEqual({ body: 'saved message' });
 	expect(await Bun.file(join(data, 'gitlab-host.json')).json()).toEqual({ host: 'before.example' });
 	expect(await Bun.file(join(data, 'learned-rules.json')).exists()).toBe(false);
 });

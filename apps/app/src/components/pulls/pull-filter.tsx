@@ -6,9 +6,9 @@ import {
 	DropdownMenuContent,
 	DropdownMenuRadioGroup,
 	DropdownMenuRadioItem,
-	DropdownMenuTrigger
+	DropdownMenuTrigger,
+	Icon
 } from '@recoder/ui';
-import { CaretDownIcon } from '@phosphor-icons/react';
 
 import type { PullFilter } from '@/lib/pulls/types';
 
@@ -42,7 +42,7 @@ export function PullFilterMenu({ filter, counts, onChange }: PullFilterMenuProps
 			<DropdownMenuTrigger>
 				<Button variant="quiet" aria-label={`Showing: ${active.heading}. Change filter`}>
 					{active.heading}
-					<CaretDownIcon aria-hidden className="size-3.5 text-fg-faint" />
+					<Icon name="expand_more" className="size-3.5 text-fg-faint" />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className="w-[220px]">

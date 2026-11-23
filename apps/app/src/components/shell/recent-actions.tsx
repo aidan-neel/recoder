@@ -1,8 +1,7 @@
 'use client';
 
-import { ConfirmDialog } from '@recoder/ui';
-import { ArrowUpRightIcon, ProhibitIcon, LinkSimpleIcon, TrashIcon } from '@phosphor-icons/react';
-import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
+import { ConfirmDialog, type IconName } from '@recoder/ui';
+import { createContext, useContext, type ReactNode } from 'react';
 
 import { copyLink } from '@/lib/shell/copy-link';
 import {
@@ -18,7 +17,7 @@ import type { RecentChat, RecentReview } from '@/lib/shell/types';
 export interface RowAction {
 	id: string;
 	label: string;
-	icon: ComponentType;
+	icon: IconName;
 	destructive?: boolean;
 	/** A hairline goes above it, to set a group apart. */
 	separated?: boolean;
@@ -72,10 +71,10 @@ function pageActions(href: string): RowAction[] {
 		{
 			id: 'open',
 			label: 'Open in new tab',
-			icon: ArrowUpRightIcon,
+			icon: 'arrow_outward',
 			onSelect: () => window.open(href, '_blank', 'noopener')
 		},
-		{ id: 'copy', label: 'Copy link', icon: LinkSimpleIcon, onSelect: () => copyLink(absoluteHref(href)) }
+		{ id: 'copy', label: 'Copy link', icon: 'link', onSelect: () => copyLink(absoluteHref(href)) }
 	];
 }
 
@@ -90,19 +89,19 @@ export function useReviewActions(): (review: RecentReview) => RowAction[] {
 		return [
 			...pageActions(review.href),
 			...(running
-				? [
+				? ([
 						{
 							id: 'cancel',
 							label: 'Cancel review',
-							icon: ProhibitIcon,
+							icon: 'block',
 							onSelect: () => ask({ kind: 'cancel-review', target })
 						}
-					]
+					] as RowAction[])
 				: []),
 			{
 				id: 'delete',
 				label: 'Delete review',
-				icon: TrashIcon,
+				icon: 'delete',
 				destructive: true,
 				separated: true,
 				onSelect: () => ask({ kind: 'delete-review', target })
@@ -120,7 +119,7 @@ export function useChatActions(): (chat: RecentChat) => RowAction[] {
 		{
 			id: 'delete',
 			label: 'Delete chat',
-			icon: TrashIcon,
+			icon: 'delete',
 			destructive: true,
 			separated: true,
 			onSelect: () => ask({ kind: 'delete-chat', target: { id: chat.chatId, href: chat.href } })

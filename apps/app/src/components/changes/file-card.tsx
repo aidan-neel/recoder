@@ -1,18 +1,19 @@
 'use client';
 
 import type { FileDiff } from '@recoder/shared';
-import { Button, Checkbox, DiffStat, FileChip, Pill } from '@recoder/ui';
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { Button, Checkbox, DiffStat, FileChip, Icon, Pill } from '@recoder/ui';
 import { memo, useId, useRef, useState } from 'react';
 
 import { openFound } from '@/lib/bugs/bug-lists';
+import { foundLabel, foundTone, foundTotal } from '@/lib/bugs/tiers';
 import type { BugView } from '@/lib/bugs/types';
 import type { DiffLayout } from '@/lib/changes/diff-view';
-import type { ChangesFold, ChangesTarget } from '@/lib/changes/types';
+import { spansIn, type MoveSpan } from '@/lib/changes/moves';
+import type { CardPart, ChangesFold, ChangesTarget } from '@/lib/changes/types';
 import { useNear } from '@/lib/changes/use-near';
-import { findingsLabel, plural } from '@/lib/shell/format';
+import { plural } from '@/lib/shell/format';
 
-import { FileDiffBody } from './file-diff';
+import { FileDiffBody, MoveNote } from './file-diff';
 
 /** A diff with more lines than this stays shut until asked for, so one generated file never buries the rest. */
 const LARGE_LINES = 800;
@@ -35,6 +36,17 @@ interface FileCardProps {
 	target: ChangesTarget | null;
 	/** The newest collapse all or expand all; the file follows it once. */
 	fold: ChangesFold | null;
+	/** Blocks the change moved into or out of this file. */
+	spans: readonly MoveSpan[];
+	/** Set for a guide hunk's card: `file` then holds that hunk alone. */
+	part?: CardPart;
+}
+
+/** `Renamed`, `Copied, 92% similar`: how the file came to its path, and how much it changed on the way. */
+function renameLabel(file: FileDiff): string {
+	const verb = file.status === 'copied' ? 'Copied' : 'Renamed';
+
+	return file.similarity !== undefined && file.similarity < 100 ? `${verb}, ${file.similarity}% similar` : verb;
 }
 
 /** How many lines the file's diff shows. */
@@ -61,7 +73,9 @@ export const FileCard = memo(function FileCard({
 	bugs,
 	bugsHref,
 	target,
-	fold
+	fold,
+	spans,
+	part
 }: FileCardProps) {
 	const card = useRef<HTMLElement | null>(null);
 	const near = useNear(card);
@@ -69,8 +83,11 @@ export const FileCard = memo(function FileCard({
 	const viewedId = useId();
 	const large = lineCount(file) > LARGE_LINES;
 	const found = openFound(bugs);
-	const [open, setOpen] = useState((!viewed && !large) || target !== null);
+	const [open, setOpen] = useState((!viewed && !large && !part?.moved) || target !== null);
+	const oldPath = file.status === 'renamed' || file.status === 'copied' ? (file.oldPath ?? null) : null;
 	const [seen, setSeen] = useState({ viewed, target, fold });
+	const moveSpans = part ? file.hunks.flatMap((hunk) => spansIn(hunk, spans)) : [];
+	const note = moveSpans.length === 0 ? (part?.note ?? null) : null;
 
 	if (viewed !== seen.viewed || target !== seen.target || fold !== seen.fold) {
 		setSeen({ viewed, target, fold });
@@ -85,9 +102,10 @@ export const FileCard = memo(function FileCard({
 			ref={card}
 			className="file-card"
 			data-file={file.path}
+			data-hunk={part?.id}
 			data-open={open || undefined}
 			data-viewed={viewed || undefined}
-			aria-label={file.path}
+			aria-label={part?.lines ? `${file.path}, ${part.lines}` : file.path}
 		>
 			<header className="file-head">
 				<button
@@ -97,30 +115,67 @@ export const FileCard = memo(function FileCard({
 					aria-controls={bodyId}
 					onClick={() => setOpen(!open)}
 				>
-					<CaretRightIcon aria-hidden className="file-caret" />
+					<Icon name="chevron_right" className="file-caret" />
+					{oldPath ? (
+						<span className="file-rename">
+							<FileChip path={oldPath} className="file-name file-old-name" />
+							<Icon
+								name="arrow_forward"
+								aria-label={file.status === 'copied' ? 'copied to' : 'renamed to'}
+								className="file-rename-arrow"
+							/>
+						</span>
+					) : null}
 					<FileChip path={file.path} className="file-name" />
+					{part?.lines ? <span className="meta file-part-lines">{part.lines}</span> : null}
 				</button>
 				<div className="file-head-end">
-					{bugs.length > 0 ? (
-						<Pill tone={found.bugs > 0 ? 'high' : 'low'}>{findingsLabel(found.bugs, found.suggestions)}</Pill>
-					) : null}
-					<DiffStat additions={file.additions} deletions={file.deletions} />
+					{oldPath && !part?.lines ? <span className="meta">{renameLabel(file)}</span> : null}
+					{part?.where ? <span className="meta file-part-where">{part.where}</span> : null}
+					{foundTotal(found) > 0 ? <Pill tone={foundTone(found)}>{foundLabel(found)}</Pill> : null}
+					{part ? null : <DiffStat additions={file.additions} deletions={file.deletions} />}
 					<label className="file-viewed" htmlFor={viewedId}>
 						<Checkbox id={viewedId} checked={viewed} onCheckedChange={() => onToggleViewed(file.path)} />
 						Viewed
 					</label>
 				</div>
 			</header>
+			{(open && part?.explanation) || note ? (
+				<div className="hunk-why">
+					{open && part?.explanation ? <p>{part.explanation}</p> : null}
+					{note ? <p className="hunk-note">{note}</p> : null}
+				</div>
+			) : null}
 			{open ? (
 				<div id={bodyId} className="file-body">
 					{near ? (
-						<FileDiffBody file={file} layout={layout} bugs={bugs} bugsHref={bugsHref} target={target} />
+						<FileDiffBody
+							file={file}
+							layout={layout}
+							bugs={bugs}
+							bugsHref={bugsHref}
+							target={target}
+							spans={spans}
+							part={part !== undefined}
+						/>
 					) : (
 						<div style={{ height: placeholderHeight(file) }} />
 					)}
 				</div>
 			) : null}
-			{!open && large && !viewed ? (
+			{!open && part?.moved && !viewed ? (
+				<div id={bodyId} className="file-moved">
+					<div className="file-moved-notes">
+						{moveSpans.map((span) => (
+							<MoveNote key={`${span.direction}:${span.start}`} span={span} />
+						))}
+					</div>
+					<Button variant="ghost" size="sm" className="file-moved-show" onClick={() => setOpen(true)}>
+						Show {plural(lineCount(file), 'line')}
+					</Button>
+				</div>
+			) : null}
+			{!open && large && !viewed && !part?.moved ? (
 				<div id={bodyId} className="file-quiet">
 					Large diff: {plural(lineCount(file), 'line')}.
 					<Button variant="outline" size="sm" onClick={() => setOpen(true)}>

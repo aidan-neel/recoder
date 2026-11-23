@@ -17,6 +17,7 @@ import { migratePostgres, postgresDataVersion } from './postgres-migrations';
 import { sqliteDataVersion } from './sqlite-migrations';
 import { serverDataDir } from '../util/data-dir';
 import { finishSqliteRestore } from './backups/restore';
+import { initializePostgresMessages } from './message-schema';
 
 export const postgres = env.RECODER_DATABASE_URL
 	? new SQL(env.RECODER_DATABASE_URL, {
@@ -72,7 +73,8 @@ export async function initializeStorage(): Promise<void> {
 			await reviewCoordinator.initialize();
 			await initializePublication(sql);
 		},
-		pullDescriptionMigration
+		pullDescriptionMigration,
+		initializePostgresMessages
 	]);
 }
 

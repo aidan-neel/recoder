@@ -1,4 +1,4 @@
-import { ShieldCheckIcon } from '@phosphor-icons/react';
+import { Icon } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import type { BugsView } from '@/lib/bugs/types';
@@ -59,7 +59,7 @@ export function CleanNotice({ checked }: { checked: Checked }) {
 	return (
 		<section className="clean-notice" role="status" aria-labelledby="clean-notice-title">
 			<span className="clean-glyph" aria-hidden>
-				<ShieldCheckIcon />
+				<Icon name="verified_user" />
 			</span>
 			<div className="clean-copy">
 				<h2 id="clean-notice-title">No bugs in this change</h2>

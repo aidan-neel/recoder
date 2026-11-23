@@ -1,6 +1,6 @@
 'use client';
 
-import { LinkIcon } from '@phosphor-icons/react';
+import { Icon } from '../icon';
 import { Fragment } from 'react';
 
 import { ForgeMark } from '../display/forge-mark';
@@ -39,7 +39,7 @@ function LinkEmbed({ url }: { url: string }) {
 				{description.forge ? (
 					<ForgeMark provider={description.forge} className="size-3" />
 				) : (
-					<LinkIcon aria-hidden className="size-3" />
+					<Icon name="link" className="size-3" />
 				)}
 				<span data-ui="link-embed-label">{description.label}</span>
 			</a>

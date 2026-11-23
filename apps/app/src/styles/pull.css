@@ -192,6 +192,49 @@
 	line-height: 16px;
 }
 
+/* The review control: every label it can show shares one cell, so it keeps the widest one's width in each state. */
+.review-control-label {
+	display: inline-grid;
+	place-items: center;
+}
+.review-control-label > * {
+	display: inline-flex;
+	grid-area: 1 / 1;
+	align-items: center;
+	gap: 6px;
+}
+.review-control-sizer {
+	visibility: hidden;
+	font-weight: var(--font-weight-medium, 500);
+}
+/* An outlined pair overlaps its halves by a pixel; the label takes it back so both looks are one width. */
+[data-variant='outline'] > [data-ui='button-faces'] .review-control-label {
+	margin-inline-end: 1px;
+}
+.review-control-glyph {
+	width: 14px;
+	height: 14px;
+}
+
+/* A live review's glyph: a spinner at rest, the stop square under the pointer or focus, crossfading in place. */
+.review-stop {
+	display: inline-grid;
+	place-items: center;
+	width: 14px;
+	height: 14px;
+}
+.review-stop > * {
+	grid-area: 1 / 1;
+	transition: opacity var(--dur-hover) var(--ease-hover);
+}
+.review-stop > .review-stop-square,
+[data-ui='button']:is(:hover, :focus-visible) .review-stop > [data-ui='spinner'] {
+	opacity: 0;
+}
+[data-ui='button']:is(:hover, :focus-visible) .review-stop > .review-stop-square {
+	opacity: 1;
+}
+
 /* The checks under the facts: rows fill as many columns as the width holds. A long list scrolls in its box. */
 .checks-list {
 	max-height: 308px;

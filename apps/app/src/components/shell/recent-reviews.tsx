@@ -1,7 +1,6 @@
 'use client';
 
-import { Pill, Skeleton, StatusGlyph, type GlyphKind, type PillTone } from '@recoder/ui';
-import { GitPullRequestIcon } from '@phosphor-icons/react';
+import { Icon, Pill, Skeleton, StatusGlyph, type GlyphKind, type PillTone } from '@recoder/ui';
 
 import { useApi, useSessionCache } from '@/lib/api/client';
 import { shortAge } from '@/lib/shell/age';
@@ -16,13 +15,16 @@ import { useNow } from '@/lib/shell/use-now';
 
 import { useReviewActions } from './recent-actions';
 import { AGE_TICK, ThreadRow } from './recent-row';
+import { usePickableRow } from './row-selection';
 import { SidebarSection } from './sidebar-section';
+import { ThreadItem, ThreadList } from './thread-list';
 
 /** The glyph for each state of a recent review. */
 const GLYPHS: Record<RecentReview['state'], GlyphKind> = {
 	queued: 'idle',
 	running: 'spinner',
 	bugs: 'high',
+	warnings: 'medium',
 	clean: 'ok',
 	failed: 'failed',
 	cancelled: 'cancelled'
@@ -33,13 +35,14 @@ const TONES: Record<RecentReview['state'], PillTone> = {
 	queued: 'question',
 	running: 'question',
 	bugs: 'high',
+	warnings: 'medium',
 	clean: 'ok',
 	failed: 'danger',
 	cancelled: 'question'
 };
 
 /** A review that is still working, so it is neither settled nor unread until its result lands. */
-function isBusy(review: RecentReview): boolean {
+export function isBusy(review: RecentReview): boolean {
 	return review.state === 'running' || review.state === 'queued';
 }
 
@@ -58,7 +61,7 @@ function StatePill({ review }: { review: RecentReview }) {
 function ReviewPlace({ review }: { review: RecentReview }) {
 	return (
 		<>
-			<GitPullRequestIcon aria-hidden />
+			<Icon name="pull_request" />
 			<span className="thread-place-text">
 				{review.repoName} #{review.number}
 			</span>
@@ -73,8 +76,9 @@ interface RecentReviewsProps {
 
 /**
  * The newest review of each open pull request that is not settled, so the
- * last few stay one click away. With none, the section is left out. Its title folds it away, its + starts a new
- * review and its ⋯ hides it. While they load, the skeleton is drawn from stand-in rows.
+ * last few stay one click away. With none, the section is left out. Its + starts a new review and its ⋯ folds
+ * or hides it. Its rows can be picked with Chats' and settled at once. While they load, the skeleton is drawn from
+ * stand-in rows.
  */
 export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 	const { base } = useApi();
@@ -82,6 +86,7 @@ export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 	const sessions = useSessionCache();
 	const actionsFor = useReviewActions();
 	const settle = useSettleMarks((state) => state.settle);
+	const pickable = usePickableRow();
 	const now = useNow(AGE_TICK);
 	const isActive = (review: RecentReview) => pathname === review.href.split('?')[0];
 	const shownRow = reviews.find(isActive);
@@ -108,25 +113,26 @@ export function RecentReviews({ reviews, loading }: RecentReviewsProps) {
 			onHide={() => setShown('reviews', false)}
 		>
 			<Skeleton id="recent-reviews" loading={loading}>
-				<div className="thread-list">
+				<ThreadList key={loading ? 'loading' : 'reviews'}>
 					{shown.map((review) => (
-						<ThreadRow
-							key={review.reviewId}
-							href={review.href}
-							active={isActive(review)}
-							title={review.title}
-							age={shortAge(review.updatedAt, now)}
-							glyph={<StatusGlyph kind={GLYPHS[review.state]} />}
-							place={<ReviewPlace review={review} />}
-							pill={<StatePill review={review} />}
-							status={review.label}
-							unread={!loading && unread(review.reviewId, review.updatedAt, isBusy(review))}
-							actions={actionsFor(review)}
-							onIntent={() => sessions.warm(review.repoId, review.number)}
-							onSettle={() => settle(review.reviewId)}
-						/>
+						<ThreadItem key={review.reviewId}>
+							<ThreadRow
+								href={review.href}
+								active={isActive(review)}
+								title={review.title}
+								age={shortAge(review.updatedAt, now)}
+								glyph={<StatusGlyph kind={GLYPHS[review.state]} />}
+								place={<ReviewPlace review={review} />}
+								pill={<StatePill review={review} />}
+								status={review.label}
+								unread={!loading && unread(review.reviewId, review.updatedAt, isBusy(review))}
+								actions={actionsFor(review)}
+								onIntent={() => sessions.warm(review.repoId, review.number)}
+								{...pickable(review.reviewId, () => settle([review.reviewId]))}
+							/>
+						</ThreadItem>
 					))}
-				</div>
+				</ThreadList>
 			</Skeleton>
 		</SidebarSection>
 	);

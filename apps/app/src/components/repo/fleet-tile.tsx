@@ -8,12 +8,12 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 	ForgeMark,
+	Icon,
 	Pill,
 	RowButton,
 	SkeletonBox,
 	Tooltip
 } from '@recoder/ui';
-import { MinusCircleIcon, DotsThreeIcon } from '@phosphor-icons/react';
 
 import { useApi } from '@/lib/api/client';
 import type { PullRowStatus } from '@/lib/pulls/types';
@@ -54,11 +54,11 @@ function TileMenu({ tile, onStop }: Pick<FleetTileProps, 'tile' | 'onStop'>) {
 			<DropdownMenu>
 				<DropdownMenuTrigger>
 					<Button variant="ghost" size="icon" aria-label={`More for ${tile.name}`}>
-						<DotsThreeIcon />
+						<Icon name="more_horiz" />
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
-					<DropdownMenuItem icon={<MinusCircleIcon />} onSelect={() => onStop(tile)}>
+					<DropdownMenuItem icon={<Icon name="do_not_disturb_on" />} onSelect={() => onStop(tile)}>
 						Stop tracking
 					</DropdownMenuItem>
 				</DropdownMenuContent>
@@ -84,7 +84,7 @@ function BugFact({ tile }: Pick<FleetTileProps, 'tile'>) {
 	if (tile.bugs) {
 		return (
 			<span className="fleet-fact" data-tone={tile.bugs.high ? 'high' : 'plain'}>
-				{plural(tile.bugs.count, tile.bugs.high ? 'high bug' : 'bug')}
+				{plural(tile.bugs.count, tile.bugs.high ? 'bug' : 'warning')}
 			</span>
 		);
 	}
@@ -147,7 +147,8 @@ function Activity({ tile, onRetry }: Pick<FleetTileProps, 'tile' | 'onRetry'>) {
 function NextStatus({ status }: { status: PullRowStatus }) {
 	if (status.kind === 'not-reviewed') return <Pill>No review</Pill>;
 	if (status.kind === 'outdated') return <Pill>New commits</Pill>;
-	if (status.kind === 'bugs' && status.bugs > 0) return <StatusPill status={{ ...status, suggestions: 0 }} />;
+	if (status.kind === 'bugs' && status.bugs > 0)
+		return <StatusPill status={{ ...status, warnings: 0, suggestions: 0 }} />;
 
 	return <StatusPill status={status} />;
 }

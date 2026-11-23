@@ -5,7 +5,7 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useApi, useListStore } from '../api/client';
-import { highBugs } from '../pulls/high-bugs';
+import { openBugs } from '../pulls/open-bugs';
 import { shortRepoName } from '../pulls/pull-rows';
 import { useRowEntries, useWatchList, type RowEntry } from '../pulls/use-rows';
 import { recentChats } from './recent-chats';
@@ -18,15 +18,15 @@ import { useNow } from './use-now';
 /** How often rows are checked for having rested long enough to settle, in ms. */
 const SETTLE_TICK = 60_000;
 
-/** Each repository's open pull requests and the open high-severity bugs across them, by repository id. */
-function repoCounts(entries: readonly RowEntry[]): ReadonlyMap<string, { open: number; highBugs: number }> {
-	const counts = new Map<string, { open: number; highBugs: number }>();
+/** Each repository's open pull requests and the open bugs across them, by repository id. */
+function repoCounts(entries: readonly RowEntry[]): ReadonlyMap<string, { open: number; bugs: number }> {
+	const counts = new Map<string, { open: number; bugs: number }>();
 
 	for (const entry of entries) {
 		const id = entry.listed.item.repoId;
-		const count = counts.get(id) ?? { open: 0, highBugs: 0 };
+		const count = counts.get(id) ?? { open: 0, bugs: 0 };
 
-		counts.set(id, { open: count.open + 1, highBugs: count.highBugs + highBugs(entry) });
+		counts.set(id, { open: count.open + 1, bugs: count.bugs + openBugs(entry) });
 	}
 
 	return counts;
@@ -71,7 +71,7 @@ export function useShell(): ShellView {
 					href: repoHref(base, repo.id),
 					provider: repo.provider,
 					open: counts.get(repo.id)?.open ?? 0,
-					highBugs: counts.get(repo.id)?.highBugs ?? 0
+					openBugs: counts.get(repo.id)?.bugs ?? 0
 				}))
 				.sort(byName),
 		[data.repos, base, counts]

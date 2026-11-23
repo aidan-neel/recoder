@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '../../lib/cn';
+import { Icon } from '../icon';
 import { fileMark } from './file-icons';
 
 /**
@@ -12,11 +13,7 @@ export function FileIcon({ path, className }: { path: string; className?: string
 	const classes = cn('size-3 shrink-0', className);
 	const mark = fileMark(path);
 
-	if (mark.kind === 'glyph') {
-		const Glyph = mark.glyph;
-
-		return <Glyph aria-hidden data-ui="file-icon" className={classes} />;
-	}
+	if (mark.kind === 'glyph') return <Icon name={mark.glyph} data-ui="file-icon" className={classes} />;
 
 	return (
 		<svg

@@ -4,6 +4,7 @@ import type { RemoteRepo } from '@recoder/shared';
 import {
 	Button,
 	ForgeMark,
+	Icon,
 	Pill,
 	ScrollArea,
 	SkeletonRows,
@@ -11,7 +12,6 @@ import {
 	swapMotion,
 	useMotionVariants
 } from '@recoder/ui';
-import { CheckIcon, WarningIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { Forge } from '@/lib/api/connections';
@@ -79,7 +79,7 @@ function RowEnd({ repo, tracked }: RemoteRowView) {
 						animate="animate"
 						exit="exit"
 					>
-						<CheckIcon aria-hidden />
+						<Icon name="check" />
 						Tracked
 					</motion.span>
 				) : (
@@ -110,7 +110,7 @@ function RemoteRow({ repo, tracked }: RemoteRowView) {
 function FailedNote({ note }: { note: RemoteNoteView }) {
 	return (
 		<div className="strip remote-note" role="status">
-			<WarningIcon aria-hidden />
+			<Icon name="warning" />
 			<span className="strip-text">
 				<strong>{forgeLabel(note.forge)}</strong> repositories did not load. {note.error}
 			</span>

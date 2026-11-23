@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, CodeBlock, StatusNotice, type ButtonVariant } from '@recoder/ui';
-import { ArrowClockwiseIcon } from '@phosphor-icons/react';
+import { Button, CodeBlock, Icon, StatusNotice, type ButtonVariant } from '@recoder/ui';
 
 import { pickNotice } from '@/lib/settings/providers/pick-notice';
 import { useCheckAgain } from '@/lib/settings/providers/use-check-again';
@@ -26,7 +25,7 @@ export function CheckAgain({ label, variant = 'outline', className }: CheckAgain
 
 	return (
 		<Button variant={variant} status={check.status} successLabel="Checked" className={className} onClick={check.run}>
-			<ArrowClockwiseIcon aria-hidden />
+			<Icon name="refresh" />
 			{label}
 		</Button>
 	);

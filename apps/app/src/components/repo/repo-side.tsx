@@ -1,7 +1,6 @@
 'use client';
 
-import { ChartTip, HoverList, Meter, RowButton, Tooltip } from '@recoder/ui';
-import { BookOpenIcon, CaretRightIcon, ClockIcon } from '@phosphor-icons/react';
+import { ChartTip, HoverList, Icon, Meter, RowButton, Tooltip } from '@recoder/ui';
 
 import type { HotspotRow, RepoPageData, ReviewChart as ReviewChartView } from '@/lib/repo/types';
 import { plural } from '@/lib/shell/format';
@@ -79,8 +78,8 @@ function Hotspots({ rows, window }: { rows: HotspotRow[]; window: string }) {
 }
 
 const SETUP = [
-	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpenIcon },
-	{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: ClockIcon }
+	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: 'menu_book' },
+	{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: 'schedule' }
 ] as const;
 
 /** Where the repository's reviews are shaped: its guidelines and the automations that start them. */
@@ -88,13 +87,13 @@ function SetUp() {
 	return (
 		<RepoSection title="Set up here">
 			<HoverList as="ul" className="repo-rows" itemSelector="[data-repo-row]" aria-label="Set up here">
-				{SETUP.map(({ id, label, href, icon: Icon }) => (
+				{SETUP.map(({ id, label, href, icon }) => (
 					<li key={id} data-repo-row className="repo-row">
 						<RowButton asChild cover>
 							<Link href={href} className="repo-row-link">
-								<Icon aria-hidden className="repo-setup-icon" />
+								<Icon name={icon} className="repo-setup-icon" />
 								<span className="repo-row-title">{label}</span>
-								<CaretRightIcon aria-hidden className="repo-setup-chevron" />
+								<Icon name="chevron_right" className="repo-setup-chevron" />
 							</Link>
 						</RowButton>
 					</li>

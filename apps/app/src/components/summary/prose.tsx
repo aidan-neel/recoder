@@ -1,8 +1,7 @@
 'use client';
 
 import type { PullCommit } from '@recoder/shared';
-import { FileIcon, GitHubMarkdown, InlineCode, Markdown } from '@recoder/ui';
-import { GitCommitIcon } from '@phosphor-icons/react';
+import { FileIcon, GitHubMarkdown, Icon, InlineCode, Markdown } from '@recoder/ui';
 import { createContext, use } from 'react';
 
 import { shortSha } from '@/lib/files/ref-label';
@@ -25,7 +24,7 @@ export const ProseRefsContext = createContext<ProseRefs | null>(null);
 function CommitChip({ commit }: { commit: PullCommit }) {
 	const mark = (
 		<>
-			<GitCommitIcon aria-hidden />
+			<Icon name="commit" />
 			{shortSha(commit.sha)}
 		</>
 	);

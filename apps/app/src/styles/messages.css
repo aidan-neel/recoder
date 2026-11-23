@@ -1,0 +1,193 @@
+/* ───────── Messages: a conversation with one person, in the chat page's reading column ───────── */
+.dm-column {
+	--page-measure: 720px;
+
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.dm-dock {
+	--page-measure: 720px;
+}
+
+/* Who it is with, over the thread. */
+.dm-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding-bottom: 16px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.dm-head-avatar {
+	width: 36px;
+	height: 36px;
+	font-size: 14px;
+}
+.dm-head-title {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 4px;
+}
+.dm-head-name {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--text-primary);
+	font-size: var(--font-size-title);
+	font-weight: 600;
+}
+
+.dm-thread {
+	display: flex;
+	flex-direction: column;
+}
+.dm-older {
+	align-self: center;
+	margin-bottom: 8px;
+}
+.dm-line[data-run] {
+	margin-top: 14px;
+}
+.dm-line:first-of-type[data-run] {
+	margin-top: 0;
+}
+
+/* A day's divider: its name between two hairlines. */
+.dm-day {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-block: 8px 14px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.dm-day::before,
+.dm-day::after {
+	height: 1px;
+	flex: 1;
+	background: var(--line-subtle);
+	content: '';
+}
+
+/* A run's author: avatar, name and hour on one line; the messages under it start on the name's edge. */
+.dm-author {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 2px;
+}
+.dm-avatar {
+	width: 28px;
+	height: 28px;
+	font-size: 12px;
+}
+.dm-name {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 600;
+}
+.dm-time {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.dm-message {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 2px 0 2px 38px;
+	color: var(--text-secondary);
+	transition: opacity var(--dur-hover) var(--ease-hover);
+}
+.dm-message[data-state='sending'] {
+	opacity: 0.55;
+}
+.dm-attachments {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+.dm-failed {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	color: var(--sev-high);
+	font-size: var(--font-size-label);
+}
+.dm-seen {
+	margin: 4px 0 0;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	text-align: right;
+}
+.dm-closed {
+	padding-block: 8px;
+}
+
+/* An attached pull request: a quiet chip that opens it, with an x while the message is still being written. */
+.pull-chip {
+	display: inline-flex;
+	max-width: 100%;
+	align-items: center;
+	border-radius: var(--radius-row);
+	box-shadow: var(--shadow-edge);
+}
+.pull-chip-link {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 10px;
+	border-radius: inherit;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	outline: none;
+	transition: background-color var(--dur-hover) var(--ease-hover);
+}
+.pull-chip-link:hover {
+	background: var(--bg-hover);
+	color: var(--text-primary);
+}
+.pull-chip-link:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.pull-chip-link > svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+.pull-chip-title {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.pull-chip-ref {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-family: var(--font-mono);
+	font-size: var(--font-size-meta);
+}
+.pull-chip-remove {
+	margin-right: 2px;
+}
+.dm-draft-attachments {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+
+/* The sidebar's Messages: an avatar for a compact row's glyph, and a line while there are none. */
+.thread-avatar {
+	width: 16px;
+	height: 16px;
+	font-size: 9px;
+}
+.recent-empty {
+	margin: 0;
+	padding: 4px 8px 6px;
+	color: var(--text-faint);
+	font-size: var(--font-size-label);
+}

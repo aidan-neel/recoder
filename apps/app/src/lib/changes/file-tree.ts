@@ -1,12 +1,13 @@
 import type { FileDiff } from '@recoder/shared';
 import type { TreeRow } from '@recoder/ui';
 
+import type { FoundCounts } from '../bugs/tiers';
 import type { FileChange, FileEntry, FileGroup } from './types';
 
 /** What each file shows beyond the diff: whether it was viewed and its open findings. */
 export interface FileMarks {
 	isViewed: (path: string) => boolean;
-	bugs: ReadonlyMap<string, number>;
+	found: ReadonlyMap<string, FoundCounts>;
 }
 
 interface Folder {
@@ -16,7 +17,7 @@ interface Folder {
 }
 
 /** How a file changed: every hunk starts from nothing (added), or leaves nothing (deleted). */
-function fileChange(file: FileDiff): FileChange {
+export function fileChange(file: FileDiff): FileChange {
 	if (file.hunks.length === 0) return 'modified';
 	if (file.hunks.every((hunk) => hunk.oldStart === 0 && hunk.oldCount === 0)) return 'added';
 	if (file.hunks.every((hunk) => hunk.newStart === 0 && hunk.newCount === 0)) return 'deleted';
@@ -141,7 +142,7 @@ function entry(file: FileDiff, marks: FileMarks): FileEntry {
 		deletions: file.deletions,
 		change: fileChange(file),
 		viewed: marks.isViewed(file.path),
-		bugs: marks.bugs.get(file.path) ?? 0
+		found: marks.found.get(file.path) ?? null
 	};
 }
 

@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, StatusNotice } from '@recoder/ui';
-import { ArrowCounterClockwiseIcon, MagnifyingGlassMinusIcon } from '@phosphor-icons/react';
+import { Button, Icon, StatusNotice } from '@recoder/ui';
 
 import { Link } from '@/components/common/link';
 import { OfflineNotice } from '@/components/common/offline-notice';
@@ -23,7 +22,7 @@ export function PullNotice({ view }: { view: PullPageView }) {
 		return (
 			<StatusNotice
 				variant="banner"
-				glyph={<MagnifyingGlassMinusIcon aria-hidden />}
+				glyph={<Icon name="search_off" />}
 				title="There is no such pull request."
 				detail="It may be in a repository that is not connected, or the link may be wrong."
 				actions={
@@ -46,7 +45,7 @@ export function PullNotice({ view }: { view: PullPageView }) {
 						<Link href={pullsHref(base)}>Back to pull requests</Link>
 					</Button>
 					<Button onClick={view.refresh}>
-						<ArrowCounterClockwiseIcon aria-hidden />
+						<Icon name="replay" />
 						Try again
 					</Button>
 				</>

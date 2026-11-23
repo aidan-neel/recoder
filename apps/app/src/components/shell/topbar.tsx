@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Tooltip } from '@recoder/ui';
-import { MagnifyingGlassIcon } from '@phosphor-icons/react';
+import { Button, Icon, Tooltip } from '@recoder/ui';
 import { useStore } from 'zustand';
 
 import { useListStore } from '@/lib/api/client';
@@ -29,7 +28,7 @@ export function Topbar() {
 					<AccountMenu account={account} />
 					<Tooltip content="Search" shortcut="mod+k">
 						<Button variant="ghost" size="icon" aria-label="Search" onClick={() => setPaletteOpen(true)}>
-							<MagnifyingGlassIcon />
+							<Icon name="search" />
 						</Button>
 					</Tooltip>
 				</div>

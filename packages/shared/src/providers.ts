@@ -26,6 +26,8 @@ export interface PullRequest {
 	title: string;
 	url: string;
 	author: string;
+	/** The author's forge avatar, when the forge sends one with the pull request. */
+	authorAvatarUrl?: string | null;
 	base: string;
 	headRef: string;
 	headSha: string;

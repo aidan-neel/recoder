@@ -13,8 +13,9 @@ export interface RecentReview {
 	/** Where the repository lives, for the mark beside its name; null while the repositories load. */
 	repoForge: Provider | null;
 	number: number;
-	state: 'queued' | 'running' | 'bugs' | 'clean' | 'failed' | 'cancelled';
-	/** `Reviewing`, `2 bugs`, `1 suggestion`, `No bugs`, `Failed`, `Cancelled`, `Queued`. */
+	/** `bugs`: it left a bug open. `warnings`: only warnings or suggestions. FYI notes never count. */
+	state: 'queued' | 'running' | 'bugs' | 'warnings' | 'clean' | 'failed' | 'cancelled';
+	/** `Reviewing`, `2 bugs`, `1 warning`, `1 suggestion`, `No bugs`, `Failed`, `Cancelled`, `Queued`. */
 	label: string;
 	/** When the review last changed, as an ISO date. */
 	updatedAt: string;
@@ -56,8 +57,8 @@ export interface SidebarRepo {
 	provider: Provider;
 	/** Its open pull requests. */
 	open: number;
-	/** The open high-severity bugs across its open pull requests. */
-	highBugs: number;
+	/** The open bugs across its open pull requests; warnings, suggestions and FYI are left out. */
+	openBugs: number;
 }
 
 /** What the sidebar shows around the pages. */

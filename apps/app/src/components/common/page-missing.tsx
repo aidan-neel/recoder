@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, StatusNotice } from '@recoder/ui';
-import { MagnifyingGlassMinusIcon } from '@phosphor-icons/react';
+import { Button, Icon, StatusNotice } from '@recoder/ui';
 import { Link } from './link';
 
 import { useApi } from '@/lib/api/client';
@@ -22,7 +21,7 @@ export function PageMissing() {
 				<StatusNotice
 					variant="banner"
 					heading="h1"
-					glyph={<MagnifyingGlassMinusIcon aria-hidden />}
+					glyph={<Icon name="search_off" />}
 					title="This page does not exist."
 					detail="The link may be old or mistyped."
 					actions={

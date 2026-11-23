@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Input, swapMotion, useMotionVariants } from '@recoder/ui';
-import { CheckIcon } from '@phosphor-icons/react';
+import { Button, Icon, Input, swapMotion, useMotionVariants } from '@recoder/ui';
 import { AnimatePresence, motion } from 'motion/react';
 import { useId, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react';
 
@@ -157,7 +156,7 @@ export function WaitlistForm() {
 		view = (
 			<div className="waitlist-done">
 				<p ref={focusOn('done')} tabIndex={-1} role="status" className="waitlist-done-text">
-					<CheckIcon aria-hidden />
+					<Icon name="check" />
 					You’re on the list. We’ll email {done} when hosting opens.
 				</p>
 				<Button variant="ghost" size="lg" onClick={changeAddress}>

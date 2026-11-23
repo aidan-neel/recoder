@@ -1,10 +1,11 @@
-import { mkdir, realpath } from 'node:fs/promises';
+import { mkdir, realpath, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runCommand } from '../commands/runner.js';
 import { env } from '../env.js';
 import type { Provider } from '@recoder/shared';
 import type { ReviewRevision } from '../evidence/evidence.js';
 import { processOutput } from '../util/process.js';
+import { RETRY_DELAYS_MS, retryTransientGit, summarizeGitFailure } from './git-network.js';
 import { ensureSharedClone } from './shared-git.js';
 
 export interface Sandbox {
@@ -27,35 +28,63 @@ export function sandboxLocation(repoSlug: string, prNumber: number, reviewId?: s
 }
 
 function gitEnv(overrides?: Record<string, string>, provider?: Provider): Record<string, string> {
+	const forge = credentials(provider, overrides);
+	const entries = forge ? ['', ...forge.helpers].map((helper) => [`credential.${forge.scope}.helper`, helper]) : [];
+
 	return {
 		...overrides,
 		GIT_TERMINAL_PROMPT: '0',
-		...(provider === 'github'
+		...(entries.length
 			? {
-					GIT_CONFIG_COUNT: '2',
-					GIT_CONFIG_KEY_0: 'credential.https://github.com.helper',
-					GIT_CONFIG_VALUE_0: '',
-					GIT_CONFIG_KEY_1: 'credential.https://github.com.helper',
-					GIT_CONFIG_VALUE_1: '!gh auth git-credential'
+					GIT_CONFIG_COUNT: String(entries.length),
+					...Object.fromEntries(
+						entries.flatMap(([key, value], index) => [
+							[`GIT_CONFIG_KEY_${index}`, key],
+							[`GIT_CONFIG_VALUE_${index}`, value]
+						])
+					)
 				}
-			: {}),
-		...(provider === 'gitlab' && overrides?.GITLAB_TOKEN
-			? gitlabCredentials(overrides.GITLAB_HOST || 'gitlab.com')
 			: {})
 	};
 }
 
-/** The connected GitLab token as the git password, read from the env at call time so it never lands in args or URLs. */
-function gitlabCredentials(host: string): Record<string, string> {
-	const scope = `credential.https://${host}.helper`;
+/**
+ * The credential scope and helpers of a forge, the token supplied only through
+ * the environment; null for a local repository. The empty helper clears the
+ * system and global helpers so a host-wide git config cannot answer for the
+ * forge.
+ */
+function credentials(
+	provider: Provider | undefined,
+	overrides?: Record<string, string>
+): { scope: string; helpers: string[] } | null {
+	if (provider === 'github') return { scope: 'https://github.com', helpers: ['!gh auth git-credential'] };
 
-	return {
-		GIT_CONFIG_COUNT: '2',
-		GIT_CONFIG_KEY_0: scope,
-		GIT_CONFIG_VALUE_0: '',
-		GIT_CONFIG_KEY_1: scope,
-		GIT_CONFIG_VALUE_1: '!f() { test "$1" = get && echo username=oauth2 && echo "password=$GITLAB_TOKEN"; }; f'
-	};
+	if (provider === 'gitlab' && overrides?.GITLAB_TOKEN) {
+		return {
+			scope: `https://${overrides.GITLAB_HOST || 'gitlab.com'}`,
+			helpers: ['!f() { test "$1" = get && echo username=oauth2 && echo "password=$GITLAB_TOKEN"; }; f']
+		};
+	}
+
+	return null;
+}
+
+/**
+ * The forge's credential helpers as clone arguments, which writes them into the
+ * checkout's own git config, scoped to this repository's URL alone. A partial
+ * clone reads blobs on demand long after the clone, from commands that run
+ * without the review's environment, so the checkout has to know how to reach
+ * the forge by itself; no other repository can.
+ */
+function credentialConfig(
+	cloneUrl: string,
+	provider: Provider | undefined,
+	overrides?: Record<string, string>
+): string[] {
+	const forge = credentials(provider, overrides);
+
+	return forge ? ['', ...forge.helpers].flatMap((helper) => ['-c', `credential.${cloneUrl}.helper=${helper}`]) : [];
 }
 
 /** How one sandbox git command runs: its credentials and forge, where progress goes, and what stops it. */
@@ -64,14 +93,31 @@ interface GitAccess {
 	provider?: Provider;
 	onProgress?: (message: string) => void;
 	signal?: AbortSignal;
+	/** The waits between retries of a transient network failure; tests pass a shorter policy. */
+	retryDelaysMs?: number[];
 }
+
+/** The git commands that talk to the forge, the only ones a dropped connection can fail. */
+const NETWORK_COMMANDS = new Set(['clone', 'fetch']);
 
 /**
  * Runs git through the command runner. A stop is honoured before each command
  * starts, so a stopped review never begins its next clone or fetch, and it
- * ends the command that is running.
+ * ends the command that is running. Clone and fetch retry a dropped connection
+ * with backoff, a clone from an empty destination, since git refuses to reuse
+ * the partial one a dropped attempt leaves; every other command runs once.
  */
 async function git(cwd: string, args: string[], label: string, access: GitAccess = {}): Promise<string> {
+	const work = () => runGit(cwd, args, label, access);
+
+	if (!NETWORK_COMMANDS.has(args[0] ?? '')) return work();
+
+	return retryTransientGit(work, access.retryDelaysMs ?? RETRY_DELAYS_MS, {
+		cleanUp: args[0] === 'clone' ? () => rm(args.at(-1)!, { recursive: true, force: true }) : undefined
+	});
+}
+
+async function runGit(cwd: string, args: string[], label: string, access: GitAccess): Promise<string> {
 	access.signal?.throwIfAborted();
 
 	let lastReport = 0;
@@ -102,7 +148,7 @@ async function git(cwd: string, args: string[], label: string, access: GitAccess
 	access.signal?.throwIfAborted();
 
 	if (run.status !== 'succeeded') {
-		throw new Error(`git ${args[0]} failed: ${run.logs.slice(-2000)}`);
+		throw new Error(`git ${args[0]} failed: ${summarizeGitFailure(run.logs)}`);
 	}
 
 	return run.logs.trim();
@@ -135,10 +181,18 @@ export async function prepareSandbox(opts: {
 	onProgress?: (message: string) => void;
 	/** Stops the preparation before its next git command. */
 	signal?: AbortSignal;
+	/** The waits between retries of a transient network failure; tests pass a shorter policy. */
+	retryDelaysMs?: number[];
 }): Promise<Sandbox> {
 	const { repoSlug, prNumber, repoUrl, fetchRef, branch, signal } = opts;
 	const { key, path } = sandboxLocation(repoSlug, prNumber, opts.reviewId);
-	const remote: GitAccess = { overrides: opts.env, provider: opts.provider, signal };
+
+	const remote: GitAccess = {
+		overrides: opts.env,
+		provider: opts.provider,
+		signal,
+		retryDelaysMs: opts.retryDelaysMs
+	};
 
 	await mkdir(path, { recursive: true });
 
@@ -146,11 +200,32 @@ export async function prepareSandbox(opts: {
 		opts.onProgress?.('Cloning repository into the review checkout');
 
 		const cloneUrl = cloneUrlOf(repoSlug, repoUrl, opts.provider);
-		const shared = await ensureRepoClone({ repoSlug, repoUrl, provider: opts.provider, env: opts.env, signal });
+
+		const shared = await ensureRepoClone({
+			repoSlug,
+			repoUrl,
+			provider: opts.provider,
+			env: opts.env,
+			signal,
+			retryDelaysMs: opts.retryDelaysMs
+		});
+
+		await clearCloneDestination(path);
 
 		await git(
 			env.RECODER_WORKDIR,
-			['clone', '--progress', '--no-checkout', ...(shared ? ['--reference', shared] : []), '--', cloneUrl, path],
+			[
+				'clone',
+				'--progress',
+				'--no-checkout',
+				'--single-branch',
+				'--filter=blob:none',
+				...credentialConfig(cloneUrl, opts.provider, opts.env),
+				...(shared ? ['--reference', shared] : []),
+				'--',
+				cloneUrl,
+				path
+			],
 			'sandbox clone',
 			{ ...remote, onProgress: opts.onProgress }
 		);
@@ -204,8 +279,15 @@ export function ensureRepoClone(opts: {
 	env?: Record<string, string>;
 	/** Stops the clone or fetch; a stopped one leaves no copy behind. */
 	signal?: AbortSignal;
+	/** The waits between retries of a transient network failure; tests pass a shorter policy. */
+	retryDelaysMs?: number[];
 }): Promise<string | null> {
-	const remote: GitAccess = { overrides: opts.env, provider: opts.provider, signal: opts.signal };
+	const remote: GitAccess = {
+		overrides: opts.env,
+		provider: opts.provider,
+		signal: opts.signal,
+		retryDelaysMs: opts.retryDelaysMs
+	};
 
 	return ensureSharedClone({
 		workDir: env.RECODER_WORKDIR,
@@ -220,6 +302,11 @@ function cloneUrlOf(repoSlug: string, repoUrl: string, provider: Provider | unde
 	return provider === 'github' ? 'https://github.com/' + repoSlug + '.git' : repoUrl;
 }
 
+/** Removes a checkout path a failed clone left half-built, which git refuses to clone over. */
+async function clearCloneDestination(path: string): Promise<void> {
+	await rm(path, { recursive: true, force: true });
+}
+
 /** Fetch the target branch, record immutable SHAs, and compute the merge-base patch. */
 export async function sandboxRevisionDiff(
 	path: string,
@@ -229,7 +316,7 @@ export async function sandboxRevisionDiff(
 ): Promise<{ revision: ReviewRevision; diff: string }> {
 	const revision = await sandboxRevision(path, baseRef, { overrides, provider });
 
-	return { revision, diff: await revisionDiff(revision) };
+	return { revision, diff: await revisionDiff(revision, { env: gitEnv(overrides, provider) }) };
 }
 
 /** Fetch the target branch and record immutable SHAs for the checkout's HEAD against it. */
@@ -248,11 +335,13 @@ export async function sandboxRevision(path: string, baseRef: string, remote: Git
 
 /**
  * The patch from the merge base to the head, in the one format the pipeline
- * reads. `pathspecs` narrow it to some paths; `signal` stops git.
+ * reads. `pathspecs` narrow it to some paths; `signal` stops git. In a partial
+ * clone the diff reads blobs on demand, so `env` carries the forge's
+ * credentials for those fetches.
  */
 export async function revisionDiff(
 	revision: Pick<ReviewRevision, 'checkoutPath' | 'mergeBaseSha' | 'headSha'>,
-	opts: { pathspecs?: string[]; signal?: AbortSignal } = {}
+	opts: { pathspecs?: string[]; signal?: AbortSignal; env?: Record<string, string> } = {}
 ): Promise<string> {
 	const proc = Bun.spawn(
 		[
@@ -277,13 +366,14 @@ export async function revisionDiff(
 			cwd: revision.checkoutPath,
 			stdout: 'pipe',
 			stderr: 'pipe',
-			signal: opts.signal
+			signal: opts.signal,
+			...(opts.env ? { env: { ...process.env, ...opts.env } } : {})
 		}
 	);
 
 	const { stdout: diff, stderr, code } = await processOutput(proc);
 
-	if (code !== 0) throw new Error('Local PR diff failed: ' + stderr.slice(-2000));
+	if (code !== 0) throw new Error('Local PR diff failed: ' + summarizeGitFailure(stderr));
 
 	return diff;
 }

@@ -3,7 +3,8 @@ import type { DiffHunk, FileDiff } from '@recoder/shared';
 import type { BugView } from '../bugs/types';
 
 /** A place an address can name in the Changes tab: a file, a line of it, or a finding. */
-export type ChangesPlace = { kind: 'file'; path: string; line: number | null } | { kind: 'finding'; id: string };
+export type ChangesPlace =
+	{ kind: 'file'; path: string; line: number | null; side: 'old' | 'new' } | { kind: 'finding'; id: string };
 
 /** The last new-side line a hunk shows. */
 function hunkEnd(hunk: DiffHunk): number {
@@ -26,8 +27,9 @@ export function hiddenBefore(file: FileDiff): number[] {
 }
 
 /**
- * The place an address's hash names: `#file=<path>`, `#file=<path>&line=<n>` or `#finding=<id>`. Anything else,
- * a line that is not a positive whole number included, names no line or nothing.
+ * The place an address's hash names: `#file=<path>`, `#file=<path>&line=<n>`, `#file=<path>&old=<n>` (a removed
+ * line) or `#finding=<id>`. Anything else, a line that is not a positive whole number included, names no line or
+ * nothing.
  */
 export function readPlace(hash: string): ChangesPlace | null {
 	const params = new URLSearchParams(hash.replace(/^#/, ''));
@@ -37,9 +39,15 @@ export function readPlace(hash: string): ChangesPlace | null {
 	if (finding) return { kind: 'finding', id: finding };
 	if (!path) return null;
 
-	const line = params.get('line');
+	const old = params.get('old');
+	const line = old ?? params.get('line');
 
-	return { kind: 'file', path, line: line && /^[1-9]\d{0,6}$/.test(line) ? Number(line) : null };
+	return {
+		kind: 'file',
+		path,
+		line: line && /^[1-9]\d{0,6}$/.test(line) ? Number(line) : null,
+		side: old === null ? 'new' : 'old'
+	};
 }
 
 /** The hash that names a place, for an address someone can share. */
@@ -50,7 +58,7 @@ export function placeHash(place: ChangesPlace): string {
 	else {
 		params.set('file', place.path);
 
-		if (place.line !== null) params.set('line', String(place.line));
+		if (place.line !== null) params.set(place.side === 'old' ? 'old' : 'line', String(place.line));
 	}
 
 	return `#${params.toString()}`;

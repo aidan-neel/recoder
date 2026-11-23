@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Tooltip } from '@recoder/ui';
-import { QuestionIcon, MoonIcon, SunIcon } from '@phosphor-icons/react';
+import { Button, Icon, Tooltip } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import { useChrome } from '@/lib/shell/chrome';
@@ -17,13 +16,13 @@ export function SidebarFoot({ model }: { model: ReactNode }) {
 			{model}
 			<Tooltip content="Keyboard shortcuts" shortcut="?">
 				<Button variant="ghost" size="icon" aria-label="Keyboard shortcuts" onClick={() => setShortcutsOpen(true)}>
-					<QuestionIcon />
+					<Icon name="help" />
 				</Button>
 			</Tooltip>
 			<Tooltip content="Switch theme">
 				<Button variant="ghost" size="icon" aria-label="Switch theme" onClick={toggleTheme}>
-					<SunIcon className="hidden dark:block" />
-					<MoonIcon className="dark:hidden" />
+					<Icon name="light_mode" className="hidden dark:block" />
+					<Icon name="dark_mode" className="dark:hidden" />
 				</Button>
 			</Tooltip>
 		</div>

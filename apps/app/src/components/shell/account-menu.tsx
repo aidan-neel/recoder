@@ -7,9 +7,9 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 	ForgeMark,
+	Icon,
 	Pill
 } from '@recoder/ui';
-import { CaretDownIcon, KeyboardIcon, SignOutIcon, PlusIcon, GearIcon } from '@phosphor-icons/react';
 
 import { useAccountMenu, type AccountMenuView } from '@/lib/account/use-account-menu';
 import { forgeLabel } from '@/lib/connections/forges';
@@ -55,7 +55,7 @@ function ForgeRows({ view, onOpen }: { view: AccountMenuView; onOpen: () => void
 				</DropdownMenuItem>
 			))}
 			{view.linkable.map((provider) => (
-				<DropdownMenuItem key={provider} icon={<PlusIcon />} onSelect={() => view.link.begin(provider)}>
+				<DropdownMenuItem key={provider} icon={<Icon name="add" />} onSelect={() => view.link.begin(provider)}>
 					Link {forgeLabel(provider)}
 				</DropdownMenuItem>
 			))}
@@ -80,7 +80,7 @@ export function AccountMenu({ account }: { account: string | null }) {
 					<button type="button" className="account">
 						<Avatar name={view.name} src={view.avatarUrl} shape="square" />
 						<span className="account-name">{view.name}</span>
-						<CaretDownIcon aria-hidden />
+						<Icon name="expand_more" />
 					</button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent className="w-[220px]">
@@ -88,18 +88,18 @@ export function AccountMenu({ account }: { account: string | null }) {
 					{live ? (
 						<>
 							<ForgeRows view={view} onOpen={() => openSettings('connections')} />
-							<DropdownMenuItem icon={<GearIcon />} shortcut="mod+," onSelect={() => openSettings()}>
+							<DropdownMenuItem icon={<Icon name="settings" />} shortcut="mod+," onSelect={() => openSettings()}>
 								Settings
 							</DropdownMenuItem>
 						</>
 					) : null}
-					<DropdownMenuItem icon={<KeyboardIcon />} shortcut="?" onSelect={() => setShortcutsOpen(true)}>
+					<DropdownMenuItem icon={<Icon name="keyboard" />} shortcut="?" onSelect={() => setShortcutsOpen(true)}>
 						Keyboard shortcuts
 					</DropdownMenuItem>
 					{view.canSignOut ? (
 						<>
 							<DropdownMenuSeparator />
-							<DropdownMenuItem icon={<SignOutIcon />} onSelect={view.signOut}>
+							<DropdownMenuItem icon={<Icon name="logout" />} onSelect={view.signOut}>
 								Sign out
 							</DropdownMenuItem>
 						</>

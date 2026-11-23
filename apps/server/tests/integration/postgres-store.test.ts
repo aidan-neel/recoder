@@ -44,8 +44,8 @@ integration('concurrent PostgreSQL startup applies and records the migration onc
 	};
 
 	await Promise.all([
-		migratePostgres(first, [unrestricted, migration]),
-		migratePostgres(second, [unrestricted, migration])
+		migratePostgres(first, [unrestricted, migration, unrestricted]),
+		migratePostgres(second, [unrestricted, migration, unrestricted])
 	]);
 
 	expect(applied).toBe(1);

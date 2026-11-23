@@ -10,7 +10,7 @@ import type { Provider } from '@recoder/shared';
  */
 export type PullRowStatus =
 	| { kind: 'reviewing' }
-	| { kind: 'bugs'; bugs: number; suggestions: number }
+	| { kind: 'bugs'; bugs: number; warnings: number; suggestions: number }
 	| { kind: 'review-failed' }
 	| { kind: 'conflicts' }
 	| { kind: 'checks-failing'; failed: number }

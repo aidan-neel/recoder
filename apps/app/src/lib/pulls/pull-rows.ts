@@ -8,6 +8,7 @@ import {
 } from '@recoder/shared';
 
 import { isOpenFinding } from '../api/reviews';
+import { counted, countFound, foundTotal, type FoundCounts } from '../bugs/tiers';
 import { repoName } from '../shell/format';
 import { pullHref } from '../shell/routes';
 import type { PullFilter, PullRow, PullRowStatus } from './types';
@@ -33,12 +34,9 @@ export function isCancelled(review: Pick<ReviewListItem, 'status' | 'summary'>):
 	return review.status === 'failed' && review.summary === REVIEW_CANCELLED;
 }
 
-/** Open findings by kind: quality findings are suggestions, the rest bugs. */
-export function openCounts(review: Pick<ReviewListItem, 'findings'>): { bugs: number; suggestions: number } {
-	const open = review.findings.filter(isOpenFinding);
-	const suggestions = open.filter((finding) => finding.kind === 'quality').length;
-
-	return { bugs: open.length - suggestions, suggestions };
+/** Open findings by what they are: quality findings are suggestions, the rest bugs or warnings by tier; FYI is left out. */
+export function openCounts(review: Pick<ReviewListItem, 'findings'>): FoundCounts {
+	return countFound(review.findings.filter(isOpenFinding).map(counted));
 }
 
 /** True when a review was asked for and not cancelled: not a draft session, and not a run a person stopped. */
@@ -59,7 +57,7 @@ export function reviewStatus(review: ReviewListItem | null): PullRowStatus | nul
 	if (review.status === 'passed') {
 		const counts = openCounts(review);
 
-		if (counts.bugs + counts.suggestions > 0) return { kind: 'bugs', ...counts };
+		if (foundTotal(counts) > 0) return { kind: 'bugs', ...counts };
 	}
 
 	if (review.status === 'failed' && !isCancelled(review)) return { kind: 'review-failed' };

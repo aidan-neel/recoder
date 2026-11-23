@@ -1,6 +1,6 @@
 'use client';
 
-import { CaretRightIcon, XIcon } from '@phosphor-icons/react';
+import { Icon } from '../icon';
 import { AnimatePresence } from 'motion/react';
 import { Dialog } from 'radix-ui';
 import { createContext, useContext, type ComponentProps, type ReactElement, type ReactNode } from 'react';
@@ -123,7 +123,7 @@ function CloseButton() {
 				data-slot="close"
 				className="absolute text-fg-subtle hover:text-fg"
 			>
-				<XIcon />
+				<Icon name="close" />
 			</Button>
 		</Dialog.Close>
 	);
@@ -145,7 +145,7 @@ export function ModalTitle({ context, className, children, ...props }: ModalTitl
 			{context ? (
 				<>
 					<span className="font-normal text-fg-subtle">{context}</span>
-					<CaretRightIcon aria-hidden className="size-3 shrink-0 text-fg-faint" />
+					<Icon name="chevron_right" className="size-3 shrink-0 text-fg-faint" />
 				</>
 			) : null}
 			{children}

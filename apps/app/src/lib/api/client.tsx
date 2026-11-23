@@ -36,6 +36,8 @@ import { ORCHESTRATOR_ID } from '@recoder/shared';
 import { createContext, useContext, useState, type ReactNode } from 'react';
 
 import { createChatCache, type ChatCache } from '../chat/chat-cache';
+import { createInboxStore, type InboxStore } from '../messages/inbox-store';
+import { createProfileCache, type ProfileCache } from '../people/profile-cache';
 import { createSessionCache, type SessionCache } from '../pull/session-cache';
 import { createOverviewCache, type OverviewCache } from '../repo/overview-cache';
 import { createListStore, type ListStore } from '../pulls/list-store';
@@ -47,6 +49,8 @@ import { filesApi } from './files';
 import { EventStream, type StreamHandlers } from './event-stream';
 import { seg } from './http';
 import { membersApi, type MembersApi } from './members';
+import { messagesApi, type MessagesApi } from './messages';
+import { peopleApi, type PeopleApi } from './people';
 import { pullsApi, type PullListQuery } from './pulls';
 import { reposApi } from './repos';
 import { reviewsApi, type DecisionInput } from './reviews';
@@ -66,6 +70,10 @@ export interface ApiClient {
 	auth: AuthApi;
 	/** The people the admin lets in. */
 	members: MembersApi;
+	/** People on this server's forges, and their profiles. */
+	people: PeopleApi;
+	/** Direct messages between people on this server. */
+	messages: MessagesApi;
 	/** What each person and model has used, for the admin. */
 	usage: UsageApi;
 	/** Pull request, review and finding telemetry, for the admin. */
@@ -169,6 +177,8 @@ export const liveApi: ApiClient = {
 	base: '',
 	auth: accountsApi,
 	members: membersApi,
+	people: peopleApi,
+	messages: messagesApi(followStream),
 	usage: usageApi,
 	telemetry: telemetryApi,
 	update: updateApi,
@@ -230,6 +240,10 @@ interface ApiContext {
 	chats: ChatCache;
 	/** Repository overviews kept from earlier visits; hovering a repository's link reads it ahead of the click. */
 	overviews: OverviewCache;
+	/** People's profiles kept from earlier reads; an author's card and their profile page share them. */
+	profiles: ProfileCache;
+	/** The signed-in person's conversations, live while the shell follows them. */
+	inbox: InboxStore;
 }
 
 const Context = createContext<ApiContext | null>(null);
@@ -247,7 +261,9 @@ export function ApiProvider({ client, children }: { client: ApiClient; children:
 			list,
 			sessions: createSessionCache(client, list),
 			chats: createChatCache(client),
-			overviews: createOverviewCache(client)
+			overviews: createOverviewCache(client),
+			profiles: createProfileCache(client),
+			inbox: createInboxStore(client)
 		};
 	});
 
@@ -280,6 +296,16 @@ export function useSessionCache(): SessionCache {
 /** The chats the screens under the provider have read. */
 export function useChatCache(): ChatCache {
 	return useApiContext().chats;
+}
+
+/** The profiles the screens under the provider have read. */
+export function useProfileCache(): ProfileCache {
+	return useApiContext().profiles;
+}
+
+/** The signed-in person's conversations. */
+export function useInboxStore(): InboxStore {
+	return useApiContext().inbox;
 }
 
 /** The repository overviews the screens under the provider have read. */

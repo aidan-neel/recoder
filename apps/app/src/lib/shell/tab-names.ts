@@ -4,7 +4,8 @@ import { useMemo } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useApi, useListStore } from '../api/client';
+import { useApi, useInboxStore, useListStore } from '../api/client';
+import { displayName, messageHref, personHref } from '../people/refs';
 import { shortRepoName } from '../pulls/pull-rows';
 import { useRowEntries } from '../pulls/use-rows';
 import { recentChats } from './recent-chats';
@@ -21,13 +22,15 @@ export interface TabName {
 
 /**
  * The names the app already holds for its pages, by path: each open pull request's title, each reviewed pull
- * request's title and its review's state, each chat's title and each repository's name. A tab whose page is none of
+ * request's title and its review's state, each chat's title, each repository's name, and the person of each
+ * conversation and their profile. A tab whose page is none of
  * these is named for its screen.
  */
 export function useTabNames(): ReadonlyMap<string, TabName> {
 	const { base } = useApi();
 	const { state } = useListStore();
 	const entries = useRowEntries();
+	const conversations = useStore(useInboxStore().state, (current) => current.conversations);
 
 	const data = useStore(
 		state,
@@ -50,6 +53,13 @@ export function useTabNames(): ReadonlyMap<string, TabName> {
 		for (const review of [...reviews.ended, ...reviews.open])
 			names.set(pathOf(review.href), { label: review.title, review: review.state });
 
+		for (const conversation of conversations) {
+			const label = displayName(conversation.with);
+
+			names.set(pathOf(messageHref(base, conversation.id)), { label, review: null });
+			names.set(pathOf(personHref(base, conversation.with)), { label, review: null });
+		}
+
 		return names;
-	}, [entries, data, base]);
+	}, [entries, data, base, conversations]);
 }

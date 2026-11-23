@@ -20,12 +20,12 @@ export interface RepoFacts {
 
 /** One figure in the row under the header: a label over a number, with a quieter fact beside the number. */
 export interface RepoFigure {
-	id: 'open' | 'bugs' | 'merged' | 'accepted' | 'typical';
+	id: string;
 	label: string;
 	value: string;
 	detail: string | null;
-	/** `high` colours the fact as a high-severity bug does. */
-	tone: 'high' | null;
+	/** `high` colours the fact as a bug does, `medium` as a warning does. */
+	tone: 'high' | 'medium' | null;
 }
 
 /** One day's bar in the reviews chart. */

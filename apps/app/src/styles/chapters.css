@@ -1,0 +1,165 @@
+/* The guide's chapters in the diff, and their outline in the file sidebar. */
+
+/* A chapter: its number and title over why its hunks belong together, then its hunk cards. */
+.chapter + .chapter {
+	margin-top: 20px;
+}
+.chapter-head {
+	display: flex;
+	align-items: baseline;
+	gap: 12px;
+	padding: 14px 4px 4px;
+}
+.chapter:first-child .chapter-head {
+	padding-top: 2px;
+}
+.chapter-number {
+	width: 20px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+}
+.chapter-text {
+	min-width: 0;
+	flex: 1;
+}
+.chapter-title {
+	color: var(--text-primary);
+	font-size: var(--font-size-title);
+	font-weight: 500;
+}
+.chapter-why {
+	max-width: 72ch;
+	margin-top: 4px;
+	color: var(--text-muted);
+	font-size: var(--font-size-body);
+	line-height: 21px;
+}
+
+/* A hunk card names its lines beside the file, and where the file's other hunks read. */
+.file-part-lines {
+	margin-left: 4px;
+	white-space: nowrap;
+}
+.file-part-where {
+	white-space: nowrap;
+}
+/* Why the hunk is here, between its header and its lines, behind an accent rule. */
+.hunk-why {
+	position: relative;
+	margin: 0;
+	padding: 9px 14px 9px 26px;
+	border-bottom: 1px solid var(--line-card);
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	line-height: 19px;
+}
+.hunk-why > p {
+	margin: 0;
+}
+.hunk-note {
+	color: var(--text-muted);
+}
+.hunk-why::before {
+	position: absolute;
+	top: 9px;
+	bottom: 9px;
+	left: 14px;
+	width: 2px;
+	border-radius: 1px;
+	background: var(--accent);
+	content: '';
+}
+/* A hunk that only moves code stays shut on its move note, with a way to show its lines. */
+.file-moved {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-right: 8px;
+	border-top: 1px dashed var(--line-control);
+	background: var(--fill-moved);
+}
+.file-moved-notes {
+	min-width: 0;
+	flex: 1;
+}
+.file-moved .move-note {
+	padding-left: 12px;
+	border-bottom: 0;
+	background: none;
+}
+.file-moved-show {
+	flex-shrink: 0;
+}
+
+/* The outline: a count and the guide's state, then each chapter with its hunks under it. */
+.chapter-outline {
+	min-height: 0;
+	flex: 1;
+	overflow-y: auto;
+	padding: 8px calc(var(--page-gutter) - 8px) 24px;
+}
+.chapter-outline-head {
+	display: flex;
+	height: 28px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding-inline: 8px;
+}
+.chapter-outline-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+}
+.chapter-list {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 4px;
+}
+.chapter-row,
+.chapter-hunk-row {
+	position: relative;
+	width: 100%;
+	min-height: 28px;
+	align-items: center;
+	gap: 10px;
+	padding: 4px 8px;
+	border-radius: var(--radius-row);
+	text-align: left;
+}
+.chapter-row {
+	align-items: baseline;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	line-height: 19px;
+}
+.chapter-row[data-current] {
+	color: var(--text-primary);
+}
+.chapter-row .chapter-number {
+	width: 16px;
+}
+.chapter-row-title {
+	min-width: 0;
+	flex: 1;
+}
+.chapter-hunks {
+	display: flex;
+	flex-direction: column;
+}
+.chapter-hunk-row {
+	min-height: 24px;
+	padding-left: 34px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+}
+.chapter-hunk-row[aria-current] {
+	color: var(--text-primary);
+}

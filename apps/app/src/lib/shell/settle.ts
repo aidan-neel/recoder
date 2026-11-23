@@ -109,8 +109,8 @@ export function sidebarLists({ open, ended, chats }: ListInput, marks: SettleMar
 
 interface SettleState {
 	marks: SettleMarks;
-	/** Moves a row down to Settled. */
-	settle: (id: string) => void;
+	/** Moves rows down to Settled at once; the returned function puts back the marks they had before. */
+	settle: (ids: readonly string[]) => () => void;
 	/** Brings a settled row back to its live list (keeps an explicit override for ended reviews and chats). */
 	unsettle: (id: string) => void;
 	/** Removes a manual settle mark on an open review so it still auto-settles once its pull request ends. */
@@ -126,10 +126,23 @@ function saveMarks(marks: SettleMarks, set: (next: Partial<SettleState>) => void
 /** The rows a person settled or brought back, kept in this browser. */
 export const useSettleMarks = create<SettleState>((set, get) => ({
 	marks: typeof window === 'undefined' ? {} : readMarks(Date.now()),
-	settle(id) {
+	settle(ids) {
 		const now = Date.now();
+		const marks = fresh(get().marks, now);
+		const before = ids.map((id) => [id, marks[id]] as const);
 
-		saveMarks({ ...fresh(get().marks, now), [id]: { settled: true, at: now } }, set);
+		saveMarks({ ...marks, ...Object.fromEntries(ids.map((id) => [id, { settled: true, at: now }])) }, set);
+
+		return () => {
+			const next = fresh(get().marks, Date.now());
+
+			for (const [id, mark] of before) {
+				if (mark) next[id] = mark;
+				else delete next[id];
+			}
+
+			saveMarks(next, set);
+		};
 	},
 	unsettle(id) {
 		const now = Date.now();

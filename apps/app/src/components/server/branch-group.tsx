@@ -9,10 +9,10 @@ import {
 	CommandItem,
 	CommandList,
 	ConfirmDialog,
+	Icon,
 	SkeletonBox,
 	type CommandHint
 } from '@recoder/ui';
-import { CheckIcon, CaretDownIcon, GitBranchIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -83,9 +83,9 @@ function BranchPicker({ current, busy }: { current: string | undefined; busy: bo
 				title={label}
 				onClick={show}
 			>
-				<GitBranchIcon aria-hidden />
+				<Icon name="fork_right" />
 				<span className="branch-trigger-name">{label}</span>
-				<CaretDownIcon aria-hidden className="branch-trigger-chevron" />
+				<Icon name="expand_more" className="branch-trigger-chevron" />
 			</Button>
 			<CommandDialog open={open} onOpenChange={setOpen} label="Branch" className="branch-dialog" defaultValue={current}>
 				<CommandInput placeholder="Search branches" />
@@ -146,7 +146,7 @@ function BranchRows({
 					key={branch}
 					value={branch}
 					onSelect={() => onPick(branch)}
-					leading={<GitBranchIcon aria-hidden />}
+					leading={<Icon name="fork_right" />}
 					detail={branch === current ? <RunningMark /> : null}
 					className="branch-row"
 				>
@@ -162,7 +162,7 @@ function BranchRows({
 function RunningMark() {
 	return (
 		<>
-			<CheckIcon aria-hidden className="branch-row-check" />
+			<Icon name="check" className="branch-row-check" />
 			<span className="sr-only">Running</span>
 		</>
 	);

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
+import type { ReviewAssignment } from '@recoder/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -58,6 +59,33 @@ const ALL_RECORDS = [...REVIEWER_RECORDS, ...[1, 2, 3].map((index) => [`subagent
 /** Each assignment of a finished review as id, role and status. */
 const recordsOf = (result: Awaited<ReturnType<typeof runAdaptiveReview>>) =>
 	result.assignments.map((record) => [record.id, record.role, record.status]);
+
+test('a requested subagent assignment carries its reviewer id and exact question', async () => {
+	useTwoModels();
+	stubSubagents();
+
+	const created = new Map<string, ReviewAssignment>();
+
+	await runAdaptiveReview(
+		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 2 },
+		{
+			onAssignment: (assignment) => {
+				if (assignment.role === 'subagent' && !created.has(assignment.id)) created.set(assignment.id, assignment);
+			}
+		}
+	);
+
+	expect([...created.values()]).toEqual([
+		expect.objectContaining({
+			id: 'subagent-1',
+			status: 'queued',
+			askedBy: 'reviewer-1',
+			question: 'Is Callers of parse handled?',
+			reason: expect.stringContaining('Why: Needs a look across the repo.')
+		}),
+		expect.objectContaining({ id: 'subagent-2', askedBy: 'reviewer-2', question: 'Is Test isolation handled?' })
+	]);
+});
 
 /**
  * Both reviewers ask for two subagents, most important first; every subagent

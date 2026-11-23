@@ -1,30 +1,22 @@
 'use client';
 
 import { REVIEW_SPEED_PLANS } from '@recoder/shared';
-import { Button, Pill, Tooltip } from '@recoder/ui';
-import { ArrowUpRightIcon, ClockIcon, GitCommitIcon, TimerIcon, LightningIcon } from '@phosphor-icons/react';
+import { Button, Icon, Pill, Tooltip } from '@recoder/ui';
 
 import type { BugsView } from '@/lib/bugs/types';
 import { shortSha } from '@/lib/files/ref-label';
 import { isLive } from '@/lib/run/run-phase';
 import type { RunView } from '@/lib/run/types';
-import { errorToast } from '@/lib/shell/notify';
+import { rejectWithToast } from '@/lib/shell/notify';
 import { useAction } from '@/lib/shell/use-action';
 
 import { Age } from '@/components/common/age';
-import { CancelReviewButton } from '@/components/common/cancel-review';
+
+import { FyiToggle } from './fyi-toggle';
 
 interface BugsToolsProps {
 	view: BugsView;
 	run: RunView;
-}
-
-/** Shows why an action did not go through, and keeps the rejection so the button shows it failed. */
-function report(fallback: string): (error: unknown) => never {
-	return (error) => {
-		errorToast(error instanceof Error && error.message ? error.message : fallback);
-		throw error;
-	};
 }
 
 /** Where the posted review is on the pull request; plain words when the forge gave no link. */
@@ -35,7 +27,7 @@ function PostedReview({ url }: { url: string | null }) {
 		<Button asChild variant="ghost">
 			<a href={url} target="_blank" rel="noreferrer">
 				See the review
-				<ArrowUpRightIcon aria-hidden className="size-3.5" />
+				<Icon name="arrow_outward" className="size-3.5" />
 			</a>
 		</Button>
 	);
@@ -60,7 +52,7 @@ function PostReview({ view }: { view: BugsView }) {
 		<Button
 			variant="outline"
 			status={view.postingAll || posted?.state === 'posting' ? 'pending' : posting.status}
-			onClick={() => posting.run(() => view.postAll().catch(report('The review was not posted.')))}
+			onClick={() => posting.run(() => view.postAll().catch(rejectWithToast('The review was not posted.')))}
 		>
 			{failed ? 'Post again' : 'Post review'}
 		</Button>
@@ -72,7 +64,7 @@ function PostReview({ view }: { view: BugsView }) {
 /** The commit a review read, shortened as every forge shortens it; the full hash on hover. */
 function CommitPill({ sha }: { sha: string }) {
 	return (
-		<Pill face="code" icon={<GitCommitIcon aria-hidden />} title={sha}>
+		<Pill face="code" icon={<Icon name="commit" />} title={sha}>
 			{shortSha(sha)}
 		</Pill>
 	);
@@ -85,7 +77,7 @@ function SparkPill() {
 	return (
 		<Tooltip content={spark.description}>
 			<span tabIndex={0} className="flex">
-				<Pill icon={<LightningIcon aria-hidden />}>{spark.label}</Pill>
+				<Pill icon={<Icon name="bolt" />}>{spark.label}</Pill>
 			</span>
 		</Tooltip>
 	);
@@ -100,67 +92,44 @@ function ReviewFacts({ view }: { view: BugsView }) {
 		<span className="review-facts" aria-label="This review">
 			{view.headSha ? <CommitPill sha={view.headSha} /> : null}
 			{view.reviewedAt ? (
-				<Pill icon={<ClockIcon aria-hidden />}>
+				<Pill icon={<Icon name="schedule" />}>
 					<Age at={view.reviewedAt} form="long" />
 				</Pill>
 			) : null}
 			{view.modelLabel ? <Pill>{view.modelLabel}</Pill> : null}
 			{view.speed === 'spark' ? <SparkPill /> : null}
-			{view.duration ? <Pill icon={<TimerIcon aria-hidden />}>{view.duration}</Pill> : null}
+			{view.duration ? <Pill icon={<Icon name="timer" />}>{view.duration}</Pill> : null}
 		</span>
 	);
 }
 
 /**
- * A review in progress, in the tab row: the commit it reads and its model as
- * badges, then Pause (Resume once paused) and Cancel. The tab already shows
- * how long it has run.
+ * A review in progress, in the tab row: the commit it reads and its model as badges, and a note while the live
+ * connection is down. The tab shows how long it has run; pausing and cancelling it is the header's review control.
  */
-function RunTools({ run }: { run: RunView }) {
-	const control = useAction();
-	const paused = run.phase === 'paused';
-
+function RunFacts({ run }: { run: RunView }) {
 	return (
-		<>
-			<span className="review-facts" aria-label="This review">
-				{run.connection === 'reconnecting' ? <span className="meta">Reconnecting…</span> : null}
-				{run.headSha ? <CommitPill sha={run.headSha} /> : null}
-				{run.modelLabel ? <Pill>{run.modelLabel}</Pill> : null}
-			</span>
-			{paused ? (
-				<Button
-					variant="primary"
-					status={control.status}
-					onClick={() => control.run(() => run.resume().catch(report('The review did not resume.')))}
-				>
-					Resume
-				</Button>
-			) : run.phase === 'running' ? (
-				<Button
-					variant="ghost"
-					status={control.status}
-					onClick={() => control.run(() => run.pause().catch(report('The review did not pause.')))}
-				>
-					Pause
-				</Button>
-			) : null}
-			<CancelReviewButton variant="outline" />
-		</>
+		<span className="review-facts" aria-label="This review">
+			{run.connection === 'reconnecting' ? <span className="meta">Reconnecting…</span> : null}
+			{run.headSha ? <CommitPill sha={run.headSha} /> : null}
+			{run.modelLabel ? <Pill>{run.modelLabel}</Pill> : null}
+		</span>
 	);
 }
 
 /**
  * The Review tab's tools in the tab row: the facts of the review being shown and posting it on the pull request.
- * Reviewing again is the header's Review button. While a review is queued, runs or is paused, its own tools take
- * their place.
+ * Starting, pausing and cancelling a review is the header's review control. While a review is queued, runs or is
+ * paused, its facts take their place.
  */
 export function BugsTools({ view, run }: BugsToolsProps) {
-	if (isLive(run.phase)) return <RunTools run={run} />;
+	if (isLive(run.phase)) return <RunFacts run={run} />;
 	if (view.phase !== 'ready') return null;
 
 	return (
 		<>
 			<ReviewFacts view={view} />
+			<FyiToggle count={view.fyi.length} />
 			<PostReview view={view} />
 		</>
 	);

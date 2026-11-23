@@ -79,7 +79,12 @@ export async function runAdaptiveReview(
 	try {
 		return await withReviewAgentSlots(() => runStages(run));
 	} catch (err) {
-		return { ...stoppedReview(run, err), ...(run.diffGuide && { diffGuide: run.diffGuide }) };
+		const wasAborted = run.controller.signal.aborted;
+
+		run.controller.abort();
+		await run.verifying?.drain().catch(() => undefined);
+
+		return { ...stoppedReview(run, err, wasAborted), ...(run.diffGuide && { diffGuide: run.diffGuide }) };
 	} finally {
 		await run.diffGuideJob?.stop();
 		clearInterval(timeout);

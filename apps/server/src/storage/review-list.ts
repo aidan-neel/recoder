@@ -26,6 +26,17 @@ export function reviewCollection() {
 
 				return next && withFindingTiers(next);
 			}),
+		startedBy: async (accountId: string): Promise<Set<string>> => {
+			const rows = postgres
+				? await postgres<{ id: string }[]>`
+					SELECT id FROM recoder_records WHERE collection = 'reviews' AND value->>'startedBy' = ${accountId}
+				`
+				: sqlite()
+						.query<{ id: string }, [string]>("SELECT id FROM reviews WHERE json_extract(value, '$.startedBy') = ?")
+						.all(accountId);
+
+			return new Set(rows.map(({ id }) => id));
+		},
 		summaries: async (): Promise<ReviewListItem[]> => {
 			if (postgres) return (await records.list()).map(reviewListItem);
 

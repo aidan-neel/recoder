@@ -1,6 +1,7 @@
 import {
 	emptyReviewProgress,
 	REVIEW_CANCELLED,
+	type DiffGuide,
 	type Finding,
 	type Review,
 	type ReviewAssignment,
@@ -43,6 +44,8 @@ export interface RunScript {
 	/** The changed files the reviewers' plan splits into parts. */
 	paths: string[];
 	claims: SampleClaim[];
+	/** The reading guide: the seed it lays down while reading, then the refined one that replaces it. */
+	guide: { seed: DiffGuide; refined: DiffGuide };
 	ending: RunEnding;
 }
 
@@ -238,6 +241,7 @@ const READ_STEPS: Step[] = [
 			run.progress.stage = 'reviewing';
 			run.progress.planVersion = 1;
 			run.progress.assignments = plan(run.paths);
+			run.progress.diffGuide = run.guide.seed;
 			setParts(run, 'running');
 		}
 	},
@@ -252,6 +256,7 @@ const READ_STEPS: Step[] = [
 		wait: 2500,
 		apply: (run) => {
 			run.progress.candidateCount = run.claims.length;
+			run.progress.diffGuide = run.guide.refined;
 			setParts(run, 'done');
 			note(run, 'bun test tests/rate-limit · exit 1');
 		}
@@ -289,7 +294,14 @@ const WRITE_STEPS: Step[] = [
 			});
 
 			run.progress.outcome = 'complete';
-			run.review = { ...run.review, status: 'passed', findings: run.ending.findings, summary: run.ending.summary };
+
+			run.review = {
+				...run.review,
+				status: 'passed',
+				findings: run.ending.findings,
+				summary: run.ending.summary,
+				diffGuide: run.progress.diffGuide
+			};
 		}
 	}
 ];

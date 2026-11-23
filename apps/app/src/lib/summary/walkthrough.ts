@@ -1,3 +1,4 @@
+import type { FoundCounts } from '../bugs/tiers';
 import type { GuidePart } from '../changes/types';
 
 /** One step of the walkthrough: a part of the change to read, with the files and open bugs in it. */
@@ -8,8 +9,8 @@ export interface WalkthroughStep {
 	/** The line under the title: why the part matters, or the names of the area's files. */
 	note: string;
 	paths: string[];
-	/** Open findings in the step's files. */
-	bugs: number;
+	/** Open findings in the step's files, FYI notes left out. */
+	found: FoundCounts;
 }
 
 /** How a lens plan titles a part: `<area> · <lens>`. */
@@ -59,7 +60,7 @@ function toStep(group: GuidePart[]): WalkthroughStep {
 	const [first] = group;
 
 	if (group.length === 1) {
-		return { id: first.id, title: namedRoot(first.title), note: first.reason, paths: first.paths, bugs: first.bugs };
+		return { id: first.id, title: namedRoot(first.title), note: first.reason, paths: first.paths, found: first.found };
 	}
 
 	return {
@@ -67,7 +68,7 @@ function toStep(group: GuidePart[]): WalkthroughStep {
 		title: namedRoot(splitLens(first.title)?.area ?? first.title),
 		note: fileNames(first.paths),
 		paths: first.paths,
-		bugs: first.bugs
+		found: first.found
 	};
 }
 

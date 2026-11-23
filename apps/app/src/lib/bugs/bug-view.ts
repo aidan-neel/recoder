@@ -2,17 +2,19 @@ import {
 	categoryLabel,
 	EVIDENCE_LABELS,
 	evidenceClass,
-	findingTone,
+	findingTier,
 	splitCategoryTag,
 	type BaseComparisonResult,
 	type Finding,
+	type MoveRange,
 	type FindingVerification,
 	type Review,
 	type VerificationBaseline
 } from '@recoder/shared';
 
 import type { Vote } from '../pull/session-state';
-import type { BugProof, BugTone, BugView } from './types';
+import { TIER_LABELS, TIER_TONES } from './tiers';
+import type { BugMove, BugMoveSide, BugProof, BugView } from './types';
 
 /** How the proving command ended on the base branch, by what the comparison found. */
 const BASE_SENTENCE: Record<BaseComparisonResult, string> = {
@@ -24,8 +26,6 @@ const BASE_SENTENCE: Record<BaseComparisonResult, string> = {
 	unstable: 'Ends differently from run to run on the base branch.'
 };
 
-const SEVERITY: Record<BugTone, string> = { high: 'High', medium: 'Medium', low: 'Low' };
-
 /** The comparison with the base branch as one sentence; null when the run was not compared. */
 export function baseSentence(baseline: VerificationBaseline | undefined): string | null {
 	if (!baseline) return null;
@@ -33,13 +33,6 @@ export function baseSentence(baseline: VerificationBaseline | undefined): string
 	if ('unavailable' in baseline) return baseline.unavailable;
 
 	return baseline.differs ? 'Ends differently on the base branch.' : 'Ends the same way on the base branch.';
-}
-
-/** The finding's tone: an error is high, a warning medium, the rest low. */
-function toneOf(finding: Finding): BugTone {
-	const tone = findingTone(finding.severity);
-
-	return tone === 'question' ? 'low' : tone;
 }
 
 /** The run behind a reproduced finding. Older reviews keep only the command, and the reason as its output. */
@@ -67,6 +60,31 @@ function proofOf(verification: FindingVerification | undefined): BugProof | null
 	};
 }
 
+/** One side of a move as a file chip names it; a whole file has no lines. */
+function moveSide(path: string, range: MoveRange): BugMoveSide {
+	if (range.end === null) return { path, lines: null, line: null };
+
+	return {
+		path,
+		lines: range.end === range.start ? String(range.start) : `${range.start}-${range.end}`,
+		line: range.start
+	};
+}
+
+function moveOf(finding: Finding): BugMove | null {
+	if (!finding.move) return null;
+
+	const { relation, reason } = finding.move;
+
+	return {
+		kind: relation.kind === 'renamed-file' ? 'renamed' : relation.kind,
+		from: moveSide(relation.fromPath, relation.fromLines),
+		to: moveSide(relation.toPath, relation.toLines),
+		exact: relation.exact,
+		reason
+	};
+}
+
 function fixOf(finding: Finding): BugView['fix'] {
 	if (finding.patch) return { diff: finding.patch.diff, checks: finding.patch.checks };
 	if (finding.suggestion) return { text: finding.suggestion };
@@ -83,7 +101,7 @@ function firstSentence(text: string): string {
 export function bugView(finding: Finding, review: Pick<Review, 'findingComments'>, vote: Vote | null): BugView {
 	const { tag, body } = splitCategoryTag(finding.message);
 	const evidence = evidenceClass(finding);
-	const tone = toneOf(finding);
+	const tier = findingTier(finding);
 	const line = finding.line ?? null;
 	const posted = review.findingComments?.[finding.id];
 
@@ -91,8 +109,9 @@ export function bugView(finding: Finding, review: Pick<Review, 'findingComments'
 		id: finding.id,
 		kind: finding.kind === 'quality' && finding.patch ? 'suggestion' : 'bug',
 		title: finding.title ?? firstSentence(body),
-		tone,
-		severity: SEVERITY[tone],
+		tier,
+		tone: TIER_TONES[tier],
+		tierLabel: TIER_LABELS[tier],
 		category: categoryLabel(finding.category ?? tag ?? 'correctness'),
 		file: finding.file,
 		line,
@@ -114,6 +133,7 @@ export function bugView(finding: Finding, review: Pick<Review, 'findingComments'
 		history: finding.history?.state ?? null,
 		decision: finding.decision ?? null,
 		posted: posted ? { url: posted.url } : null,
-		vote
+		vote,
+		move: moveOf(finding)
 	};
 }

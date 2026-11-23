@@ -1,9 +1,11 @@
 import {
+	applyProgressMessage,
 	emptyReviewProgress,
 	PROGRESS_SNAPSHOT_KEYS,
 	type CoverageGap,
 	type CoverageSummary,
 	type ReviewAssignment,
+	type ReviewCandidate,
 	type ReviewChatMessage,
 	type ReviewProgress,
 	type ReviewReasoningEntry,
@@ -14,7 +16,7 @@ import { db, reviewProgress } from '../../store';
 import { progressWrites } from '../../storage/persistence-queue';
 import { sharedEvents } from '../../storage/backend';
 import type { StoredReviewEvent } from '../../storage/postgres-events';
-import { settleTasks } from './task-state';
+import { NOT_STARTED, settleTasks, STILL_RUNNING } from './task-state';
 
 type ReviewEventType =
 	| 'step'
@@ -22,6 +24,7 @@ type ReviewEventType =
 	| 'done'
 	| 'error'
 	| 'finding'
+	| 'candidate'
 	| 'task'
 	| 'plan'
 	| 'coverage'
@@ -194,6 +197,8 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 }
 
 function reduceSnapshot(snapshot: ReviewProgress, message: StoredReviewEvent): ReviewProgress {
+	if (message.type === 'candidate') return applyProgressMessage(snapshot, message);
+
 	snapshot.sequence = message.sequence;
 	snapshot.updatedAt = message.at;
 	applyEvent(snapshot, message, message);
@@ -323,8 +328,12 @@ export function reportReviewTask(reviewId: string, task: Omit<ReviewTask, 'updat
 	emitReviewEvent(reviewId, { type: 'task', message: task.message, data: { task } });
 }
 
+export function reportReviewCandidate(reviewId: string, candidate: ReviewCandidate): void {
+	emitReviewEvent(reviewId, { type: 'candidate', message: '', data: { candidate } });
+}
+
 /**
- * Closes every task the review left active as its run ends (see
+ * Closes every task and candidate the review left active as its run ends (see
  * `settleTasks`): `failure` for a failed or cancelled run, null for a
  * complete one. Each goes out as a task event, so open pages see it too.
  */
@@ -332,8 +341,53 @@ export async function settleReviewTasks(reviewId: string, failure: string | null
 	await flushReviewEvents(reviewId);
 
 	const snapshot = await reviewProgress.get(reviewId);
+	const tasks = { ...snapshot?.tasks };
 
-	for (const task of settleTasks(Object.values(snapshot?.tasks ?? {}), failure)) reportReviewTask(reviewId, task);
+	for (const task of settleTasks(Object.values(tasks), failure)) {
+		tasks[task.id] = task;
+		reportReviewTask(reviewId, task);
+	}
+
+	for (const candidate of snapshot?.candidates ?? []) {
+		if (candidate.state !== 'raised' && candidate.state !== 'verifying') continue;
+
+		const task = tasks[`verify:${candidate.id}`];
+
+		reportReviewCandidate(reviewId, interruptedCandidate(candidate, task, failure));
+	}
+}
+
+function interruptedCandidate(candidate: ReviewCandidate, task?: ReviewTask, failure?: string | null): ReviewCandidate {
+	return {
+		...candidate,
+		state: 'unproven',
+		message: task?.message ?? failure ?? (candidate.state === 'verifying' ? STILL_RUNNING : NOT_STARTED),
+		settledAt: new Date().toISOString()
+	};
+}
+
+/** Frees lanes left by a stopped executor and keeps earlier verdicts and timestamps for the checkpointed candidates. */
+export async function restoreCandidateProgress(
+	reviewId: string,
+	retained: ReadonlySet<string>
+): Promise<ReviewCandidate[] | undefined> {
+	await flushReviewEvents(reviewId);
+
+	const snapshot = await reviewProgress.get(reviewId);
+
+	return snapshot?.candidates?.map((candidate) => {
+		if (candidate.state !== 'raised' && candidate.state !== 'verifying') return candidate;
+		if (retained.has(candidate.id) && candidate.state === 'raised') return candidate;
+
+		const previous = snapshot.tasks[`verify:${candidate.id}`];
+		const [task] = previous ? settleTasks([previous], null) : [];
+		const settled = interruptedCandidate(candidate, task ?? previous);
+
+		if (task) reportReviewTask(reviewId, task);
+		reportReviewCandidate(reviewId, settled);
+
+		return settled;
+	});
 }
 
 export function reportReviewPlan(

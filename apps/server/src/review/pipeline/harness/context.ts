@@ -219,7 +219,13 @@ export function createRun(given: AdaptiveReviewInput, events?: HarnessEvents): R
 		subagents: restoreSubagentState(resume?.subagents),
 		questions: restoreQuestions(resume?.questions),
 		obligations: obligationsOn() ? restoreObligationState(resume?.obligations) : null,
-		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
+		nextCandidate:
+			1 +
+			Math.max(
+				0,
+				...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0),
+				...(input.candidateProgress ?? []).map((c) => Number(c.id.slice(1)) || 0)
+			),
 		received,
 		repairs: resume?.repairs ?? 0,
 		setupNotes: '',

@@ -21,7 +21,7 @@ function recordingQueue(repair?: (candidate: CandidateFinding) => Promise<boolea
 	const record = async (candidate: CandidateFinding) => {
 		verified.push(candidate.candidateId);
 
-		return true;
+		return { message: 'Traced through the code' };
 	};
 
 	return { queue: new VerifyQueue(runOf(), record, repair), verified };

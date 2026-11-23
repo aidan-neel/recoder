@@ -24,6 +24,14 @@ const GROUPS: Group[] = [
 		]
 	},
 	{
+		title: 'Sidebar',
+		rows: [
+			[['shift+ArrowDown', 'shift+ArrowUp'], 'Select the next or previous row too'],
+			[['e'], 'Settle the selected rows'],
+			[['Escape'], 'Clear the selection']
+		]
+	},
+	{
 		title: 'Tabs',
 		rows: [
 			[['alt+t'], 'New tab'],

@@ -25,6 +25,14 @@
 .thread-row[data-active] {
 	background: var(--bg-hover);
 }
+/* Picked for one action on them all: the accent's tint, apart from the open row's grey and the pointer's wash. */
+.thread-row[data-selected] {
+	background: var(--accent-tint);
+}
+/* A row folding away or back in keeps its ink inside its own height; the gutter's unread dot still shows. */
+.thread-item {
+	clip-path: inset(0 -12px);
+}
 .thread-glyph {
 	display: none;
 	width: 16px;
@@ -72,7 +80,7 @@
 	white-space: nowrap;
 	transition: color var(--dur-hover) var(--ease-hover);
 }
-.thread-row:is(:hover, [data-active], [data-unread]) .thread-title {
+.thread-row:is(:hover, [data-active], [data-unread], [data-selected]) .thread-title {
 	color: var(--text-primary);
 }
 .thread-row[data-unread] .thread-title {

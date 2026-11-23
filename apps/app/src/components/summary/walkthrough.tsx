@@ -1,19 +1,15 @@
 'use client';
 
-import { Button, Pill } from '@recoder/ui';
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { Button, Icon, Pill } from '@recoder/ui';
 import { useMemo } from 'react';
 
-import type { BugView } from '@/lib/bugs/types';
+import { foundLabel, foundTone, foundTotal } from '@/lib/bugs/tiers';
 import type { GuidePart } from '@/lib/changes/types';
 import { plural } from '@/lib/shell/format';
-import { worstTone } from '@/lib/summary/bug-tones';
 import { walkthroughSteps, type WalkthroughStep } from '@/lib/summary/walkthrough';
 
 interface WalkthroughProps {
 	parts: GuidePart[];
-	/** The review's open findings, to tint each step's bug badge by its worst severity. */
-	open: readonly BugView[];
 	/** Opens the Changes tab in the guide's reading order. */
 	onOpenGuide: () => void;
 }
@@ -23,7 +19,7 @@ interface WalkthroughProps {
  * title over one line of why, with its open bugs as a badge and its size.
  * Nothing renders until the review has planned.
  */
-export function Walkthrough({ parts, open, onOpenGuide }: WalkthroughProps) {
+export function Walkthrough({ parts, onOpenGuide }: WalkthroughProps) {
 	const steps = useMemo(() => walkthroughSteps(parts), [parts]);
 
 	if (steps.length === 0) return null;
@@ -37,12 +33,12 @@ export function Walkthrough({ parts, open, onOpenGuide }: WalkthroughProps) {
 				</h2>
 				<Button variant="ghost" onClick={onOpenGuide}>
 					Open in Changes
-					<CaretRightIcon aria-hidden />
+					<Icon name="chevron_right" />
 				</Button>
 			</div>
 			<ol className="walkthrough">
 				{steps.map((step, index) => (
-					<Step key={step.id} step={step} place={index + 1} open={open} />
+					<Step key={step.id} step={step} place={index + 1} />
 				))}
 			</ol>
 		</section>
@@ -50,7 +46,7 @@ export function Walkthrough({ parts, open, onOpenGuide }: WalkthroughProps) {
 }
 
 /** One step: its place, its title and note, each cut to one line with the whole on hover, then its facts. */
-function Step({ step, place, open }: { step: WalkthroughStep; place: number; open: readonly BugView[] }) {
+function Step({ step, place }: { step: WalkthroughStep; place: number }) {
 	return (
 		<li className="walkthrough-step">
 			<span className="walkthrough-place">{place}</span>
@@ -65,7 +61,7 @@ function Step({ step, place, open }: { step: WalkthroughStep; place: number; ope
 				) : null}
 			</div>
 			<div className="walkthrough-facts">
-				{step.bugs > 0 ? <Pill tone={worstTone(step.paths, open) ?? 'neutral'}>{plural(step.bugs, 'bug')}</Pill> : null}
+				{foundTotal(step.found) > 0 ? <Pill tone={foundTone(step.found)}>{foundLabel(step.found)}</Pill> : null}
 				<span className="walkthrough-size">{plural(step.paths.length, 'file')}</span>
 			</div>
 		</li>

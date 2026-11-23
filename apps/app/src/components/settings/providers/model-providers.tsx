@@ -1,8 +1,7 @@
 'use client';
 
 import type { AgentProvider, AgentStatus } from '@recoder/shared';
-import { Button, Switch } from '@recoder/ui';
-import { PlusIcon } from '@phosphor-icons/react';
+import { Button, Icon, Switch } from '@recoder/ui';
 
 import { connectedProviders } from '@/lib/settings/providers/provider-entries';
 import type { ProviderSwitches } from '@/lib/settings/providers/use-provider-switches';
@@ -38,7 +37,7 @@ export function ModelProviders({ manager, canConnect, switches, onConnect, onDis
 			title="Model providers"
 			aside={
 				<Button variant="ghost" data-provider-control="connect" disabled={!canConnect} onClick={() => onConnect()}>
-					<PlusIcon aria-hidden />
+					<Icon name="add" />
 					Connect
 				</Button>
 			}
