@@ -25,6 +25,7 @@ import { createSampleUsage } from './sample-usage';
 import { createSampleRepoChats } from './sample-repo-chat';
 import { sampleRepoOverview } from './sample-repo-overview';
 import { createSampleSkills } from './sample-skills';
+import { castFiles } from './sample-cast';
 import { sampleClaims } from './sample-claims';
 import { sampleDescription, sampleRedescribe } from './sample-description';
 import { sampleCommits } from './sample-pulls';
@@ -36,7 +37,7 @@ import { createSampleWorld, type SampleWorld } from './sample-world';
 /** What a scripted review of `review` reads, the claims it checks, and what it finds: the sample review's findings and summary. */
 function sampleScript(world: SampleWorld, review: Review): RunScript {
 	return {
-		paths: world.diff(review.repoId, review.prNumber).map((file) => file.path),
+		files: castFiles(world.diff(review.repoId, review.prNumber)),
 		claims: sampleClaims(review, SAMPLE_REVIEW.findings),
 		guide: { seed: SAMPLE_SEED_GUIDE, refined: SAMPLE_GUIDE },
 		ending: { findings: structuredClone(SAMPLE_REVIEW.findings), summary: SAMPLE_REVIEW.summary ?? '' }

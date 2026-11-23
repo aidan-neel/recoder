@@ -244,6 +244,66 @@ export const CLIENT_KEY_MOVE: DiffMove = {
 	match: 'exact'
 };
 
+const TOKEN_AREAS = [
+	'account',
+	'admin',
+	'alerts',
+	'auth',
+	'billing',
+	'calendar',
+	'charts',
+	'chat',
+	'checkout',
+	'comments',
+	'dashboard',
+	'editor',
+	'files',
+	'forms',
+	'inbox',
+	'invites',
+	'layout',
+	'media',
+	'menus',
+	'modals',
+	'navigation',
+	'notifications',
+	'onboarding',
+	'profile',
+	'projects',
+	'reports',
+	'search',
+	'settings',
+	'tables',
+	'teams'
+];
+
+const TOKEN_PARTS = ['Header', 'Panel', 'List', 'Row', 'Card', 'Empty', 'Toolbar', 'Dialog', 'Badge', 'Footer'];
+
+/** The dark mode tokens pull request, the sample's large one: thirty folders of components, 300 files. */
+export const TOKENS_PULL = 93;
+
+/** Each component of the tokens pull request with its hard-coded colours swapped for tokens. */
+export const TOKEN_DIFFS: FileDiff[] = TOKEN_AREAS.flatMap((area) =>
+	TOKEN_PARTS.map((part, index) =>
+		file(
+			`src/components/${area}/${part}.tsx`,
+			hunk(8 + index, 8 + index, " const style = {\n-\tbackground: '#ffffff',\n+\tbackground: 'var(--bg-panel)',\n };"),
+			...(index % 3 === 0
+				? [
+						hunk(
+							30 + index,
+							30 + index,
+							" <span\n-\tstyle={{ color: '#111111' }}\n+\tstyle={{ color: 'var(--text-primary)' }}\n />"
+						)
+					]
+				: [])
+		)
+	)
+);
+
+/** The files every sample pull request but the main one changes: the start of the main diff. */
+export const SMALL_DIFF = 3;
+
 /** The sample pull request's files, in the order a forge lists them. */
 export const SAMPLE_DIFFS: FileDiff[] = [
 	added('src/rate-limit/limiter.ts', LIMITER),

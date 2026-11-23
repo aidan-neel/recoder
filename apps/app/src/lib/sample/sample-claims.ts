@@ -1,6 +1,16 @@
-import type { Finding, Review, ReviewAssignment, ReviewProgress, ReviewTask } from '@recoder/shared';
+import {
+	findingTier,
+	type Finding,
+	type Review,
+	type ReviewAssignment,
+	type ReviewCandidate,
+	type ReviewProgress,
+	type ReviewTask,
+	type ReviewToolCall
+} from '@recoder/shared';
 
-import type { SampleClaim } from './sample-run';
+import { castFiles, type SampleClaim } from './sample-cast';
+import { SAMPLE_DIFFS, SMALL_DIFF } from './sample-diff';
 
 /** The pull request whose review is already running when the sample loads. */
 const EXPORTS_PULL = 216;
@@ -53,8 +63,14 @@ export function sampleClaims(review: Review, findings: Finding[]): SampleClaim[]
 	if (review.prNumber === EXPORTS_PULL) return EXPORT_CLAIMS;
 
 	return [
-		...findings.map((finding) => ({ title: finding.title ?? finding.file, proven: true })),
-		...CLEARED_CLAIMS.map((title) => ({ title, proven: false }))
+		...findings.map((finding) => ({
+			title: finding.title ?? finding.file,
+			proven: true,
+			path: finding.file,
+			line: finding.line,
+			tier: findingTier(finding)
+		})),
+		...CLEARED_CLAIMS.map((title, index) => ({ title, proven: false, drop: index === 0 ? 'location' : undefined }))
 	];
 }
 
@@ -84,9 +100,33 @@ function task(
 	return { ...fields, startedAt: at(start), updatedAt: at(end) };
 }
 
+/** The verification lane claim `index` went to: the two at work hold the first two lanes. */
+function laneOf(index: number): string {
+	return `verifier-${index <= 2 && index > 0 ? index : (index % 3) + 1}`;
+}
+
+/** The reviewer that raised claim `index`: the parts take the claims in order, each its own count. */
+function raiserOf(index: number): string {
+	let left = index;
+
+	for (const [at, part] of PARTS.entries()) {
+		if (left < part.claims) return `part-${at + 1}`;
+
+		left -= part.claims;
+	}
+
+	return 'part-1';
+}
+
 /** The verification of claim `index`: settled, at work, or queued, as the pipeline words each. */
 function verification(claim: SampleClaim, index: number, at: (s: number) => string): ReviewTask {
-	const fields = { id: `verify:${index}`, label: `Verify: ${claim.title}`, kind: 'verification' as const };
+	const fields = {
+		id: `verify:${index}`,
+		label: `Verify: ${claim.title}`,
+		kind: 'verification' as const,
+		candidateId: String(index),
+		...(index <= LAST_SETTLED && { verifierId: laneOf(index) })
+	};
 
 	if (index === 1) return task(268, 296, { ...fields, status: 'running', message: 'Running code' }, at);
 	if (index === 2) return task(274, 298, { ...fields, status: 'running', message: 'Reading code' }, at);
@@ -99,6 +139,86 @@ function verification(claim: SampleClaim, index: number, at: (s: number) => stri
 	return task(end - 30, end, { ...fields, status: 'done', message }, at);
 }
 
+/** A done call of the running review, timed in seconds after it started. */
+function doneCall(
+	id: string,
+	owner: string,
+	command: string,
+	input: ReviewToolCall['input'],
+	start: number,
+	at: (s: number) => string
+): ReviewToolCall {
+	return {
+		id,
+		assignmentId: owner,
+		command,
+		status: 'done',
+		exitCode: 0,
+		startedAt: at(start),
+		finishedAt: at(start + 4),
+		input
+	};
+}
+
+/** Claim `index` as a candidate on the stream: raised by its reviewer, then where its verification stands. */
+function exportCandidate(claim: SampleClaim, index: number, path: string, at: (s: number) => string): ReviewCandidate {
+	const raised = { id: String(index), title: claim.title, path, line: 10 + index, raisedBy: raiserOf(index) };
+
+	const base = {
+		...raised,
+		tier: claim.proven ? ('bug' as const) : ('warning' as const),
+		raisedAt: at(62 + index * 2)
+	};
+
+	if (index > LAST_SETTLED) return { ...base, state: 'raised' };
+	if (index === 1 || index === 2) return { ...base, state: 'verifying', verifierId: laneOf(index) };
+
+	const end = 140 + index * 11;
+
+	return {
+		...base,
+		state: claim.proven ? 'proven' : 'unproven',
+		verifierId: laneOf(index),
+		message: claim.proven ? 'Verified by a run' : 'Disproved; dropped',
+		settledAt: at(end)
+	};
+}
+
+/** The calls the review made so far: every hunk read, and each settled or working verifier's read and run. */
+function exportCalls(paths: string[], assignments: ReviewAssignment[], at: (s: number) => string): ReviewToolCall[] {
+	const reads = assignments.flatMap((part, index) =>
+		part.scope.flatMap((scope) =>
+			scope.hunkIds.map((hunk) =>
+				doneCall(
+					`${part.id}:${hunk}`,
+					part.id,
+					`readDiff ${scope.path} ${hunk}`,
+					{ action: 'readDiff', path: scope.path, hunkIds: [hunk] },
+					64 + index * 3,
+					at
+				)
+			)
+		)
+	);
+
+	const checks = EXPORT_CLAIMS.slice(0, LAST_SETTLED + 1).flatMap((claim, index) => {
+		const path = paths[index % paths.length];
+		const end = 140 + index * 11;
+		const owner = `verify:${index}`;
+		const read = doneCall(`${owner}:1`, owner, `read ${path}`, { action: 'readFile', path }, end - 25, at);
+
+		if (index === 1) return [read];
+		if (index === 2)
+			return [{ ...read, status: 'running' as const, exitCode: null, finishedAt: undefined, startedAt: at(274) }];
+
+		const command = `bun test -t "${claim.title}"`;
+
+		return [read, doneCall(`${owner}:2`, owner, `$ ${command}`, { action: 'run', command, path }, end - 12, at)];
+	});
+
+	return [...reads, ...checks];
+}
+
 /**
  * The usage exports review as the sample loads it, five minutes in: the
  * change read against the repository's guidelines, four reviewers' 31
@@ -109,13 +229,16 @@ export function exportsProgress(review: Review): ReviewProgress {
 	const start = Date.parse(review.startedAt ?? review.createdAt);
 	const at = (seconds: number) => new Date(start + seconds * 1000).toISOString();
 
+	const files = castFiles(SAMPLE_DIFFS.slice(0, SMALL_DIFF));
+	const paths = files.map((file) => file.path);
+
 	const assignments: ReviewAssignment[] = PARTS.map((part, index) => ({
 		id: `part-${index + 1}`,
 		role: 'reviewer',
 		title: part.title,
 		reason: 'These files change together, so they read best side by side.',
 		status: 'done',
-		scope: [],
+		scope: [files[index % files.length]].map((file) => ({ path: file.path, hunkIds: file.hunks })),
 		candidateCount: part.claims,
 		startedAt: at(60),
 		completedAt: at(partEnd(index))
@@ -171,8 +294,10 @@ export function exportsProgress(review: Review): ReviewProgress {
 		tasks: Object.fromEntries(tasks.map((item) => [item.id, item])),
 		activity: [],
 		toolCalls: [
+			...exportCalls(paths, assignments, at),
 			{
 				id: 'tool-s3-test',
+				assignmentId: 'verify:1',
 				command: `$ ${command}`,
 				status: 'running',
 				exitCode: null,
@@ -184,6 +309,7 @@ export function exportsProgress(review: Review): ReviewProgress {
 		updatedAt: at(298),
 		planVersion: 1,
 		assignments,
+		candidates: EXPORT_CLAIMS.map((claim, index) => exportCandidate(claim, index, paths[index % paths.length], at)),
 		candidateCount: EXPORT_CLAIMS.length,
 		stage: 'verify',
 		guidelines: {

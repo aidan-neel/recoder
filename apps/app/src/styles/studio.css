@@ -1,0 +1,654 @@
+/* Studio: the review as an office on the Review tab, under the run's steps. */
+
+.studio {
+	margin-top: 4px;
+	margin-bottom: 24px;
+}
+
+.studio-floor {
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+	align-items: start;
+	gap: 12px;
+}
+
+.studio-main,
+.studio-side {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	min-width: 0;
+}
+
+.studio[data-ended] .studio-floor {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.studio[data-ended] .studio-side {
+	display: none;
+}
+
+/* Rooms and desks */
+
+.studio-rooms {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.studio-rooms > .studio-room {
+	flex: var(--grow, 1) 1 220px;
+}
+
+.studio-room,
+.studio-facility {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+	padding: 10px 12px 12px;
+}
+
+.studio-room-head,
+.studio-facility-head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-size: var(--font-size-label);
+}
+
+.studio-room-name,
+.studio-facility-name {
+	overflow: hidden;
+	color: var(--text-primary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.studio-room-name {
+	font-family: var(--font-code);
+	font-size: 12px;
+}
+
+.studio-room-head .meta,
+.studio-facility-head .meta {
+	margin-left: auto;
+	white-space: nowrap;
+}
+
+.studio-room-check {
+	flex-shrink: 0;
+	color: var(--ok);
+}
+
+.studio-desks {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+	gap: 6px;
+}
+
+.studio-desks[data-small] {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.studio-desk {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	min-width: 0;
+	height: 56px;
+	padding: 7px 8px;
+	border-radius: var(--radius-chip);
+	background: var(--bg-raised-2);
+	box-shadow: var(--shadow-edge);
+}
+
+.studio-desk[data-small] {
+	width: 14px;
+	height: 14px;
+	padding: 0;
+	border-radius: 3px;
+}
+
+.studio-desk-name {
+	overflow: hidden;
+	font-family: var(--font-code);
+	font-size: 11px;
+	color: var(--text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.studio-desk-meter {
+	position: absolute;
+	inset: auto 0 0;
+	height: 2px;
+	border-radius: 0 0 var(--radius-chip) var(--radius-chip);
+	background: var(--accent);
+	transform: scaleX(var(--share));
+	transform-origin: left;
+	transition: transform var(--dur-toggle) var(--ease-out);
+}
+
+.studio-desk[data-small] .studio-desk-meter {
+	inset: 0;
+	height: auto;
+	border-radius: inherit;
+	opacity: 0.55;
+	transform-origin: bottom;
+	transform: scaleY(var(--share));
+}
+
+.studio-desk[data-done] .studio-desk-meter {
+	background: var(--ok);
+}
+
+.studio-desks-rest {
+	align-self: center;
+}
+
+.studio-more .studio-room-name {
+	font-family: var(--font-ui);
+}
+
+.studio-room-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+/* Facilities */
+
+.studio-facility[data-settled] {
+	padding-bottom: 10px;
+}
+
+.studio-bench {
+	transition: height var(--dur-toggle) var(--ease-out);
+}
+
+.studio-tray,
+.studio-table,
+.studio-questions {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.studio-tray-row,
+.studio-table > li {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.studio-tray-title,
+.studio-table-title,
+.studio-ledger-title {
+	overflow: hidden;
+	font-size: 12.5px;
+	color: var(--text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.studio-tray-row[data-state='dropped'] .studio-tray-title,
+.studio-tray-row[data-state='unproven'] .studio-tray-title,
+.studio-tray-row[data-state='merged'] .studio-tray-title {
+	color: var(--text-faint);
+}
+
+.studio-tray-scroll {
+	max-height: 240px;
+}
+
+.studio-tray-rest {
+	margin: 0;
+}
+
+.studio-questions > li {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+}
+
+.studio-question {
+	overflow: hidden;
+	margin-left: 4px;
+	font-size: 12.5px;
+	color: var(--text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.studio-arrow {
+	flex-shrink: 0;
+	color: var(--text-ghost);
+}
+
+.studio-commons[data-ended] {
+	gap: 10px;
+}
+
+.studio-table {
+	gap: 12px;
+}
+
+.studio-table > li {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	column-gap: 12px;
+	row-gap: 6px;
+}
+
+.studio-table-title {
+	font-size: 13.5px;
+	color: var(--text-primary);
+}
+
+.studio-table-where {
+	font-family: var(--font-code);
+	white-space: nowrap;
+}
+
+.studio-table .studio-chain {
+	grid-column: 1 / -1;
+}
+
+.studio-table-end {
+	display: flex;
+	justify-content: flex-end;
+}
+
+/* History chains */
+
+.studio-chain {
+	display: flex;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.studio-chain > li {
+	display: flex;
+	gap: 0;
+	flex-shrink: 0;
+	align-items: center;
+}
+
+.studio-chain-arrow {
+	flex-shrink: 0;
+	margin-right: 4px;
+	color: var(--text-ghost);
+}
+
+.studio-badge {
+	display: inline-flex;
+}
+
+.studio-badge[data-bare] [data-ui='pill-text']:empty {
+	display: none;
+}
+
+.studio-badge-count {
+	margin-left: 3px;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+.studio-chip {
+	width: auto;
+	padding: 0;
+	border-radius: var(--radius-chip);
+}
+
+.studio-chip [data-ui='pill'] {
+	background: color-mix(in oklab, var(--hue) 18%, transparent);
+	color: var(--text-primary);
+	font-family: var(--font-code);
+}
+
+.studio-chip[data-selected] [data-ui='pill'] {
+	box-shadow: inset 0 0 0 1px var(--hue);
+}
+
+/* Characters */
+
+.studio-cast {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+
+.studio-agent {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: auto;
+	padding: 0;
+	border-radius: var(--radius-chip);
+	pointer-events: auto;
+	transition: transform 900ms cubic-bezier(0.45, 0, 0.2, 1);
+}
+
+.studio-tag {
+	position: absolute;
+	right: -6px;
+	bottom: -2px;
+	padding: 0 3px;
+	border-radius: 4px;
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-edge);
+	font-family: var(--font-code);
+	font-size: 9px;
+	line-height: 12px;
+	color: var(--text-secondary);
+}
+
+.studio-agent.is-selected .studio-bot {
+	filter: drop-shadow(0 0 3px color-mix(in oklab, var(--hue) 70%, transparent));
+}
+
+.studio-say {
+	position: absolute;
+	bottom: calc(100% + 4px);
+	left: -4px;
+	display: none;
+	max-width: 240px;
+	overflow: hidden;
+	padding: 3px 8px;
+	border-radius: var(--radius-chip);
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-menu);
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	color: var(--text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.studio-agent:hover .studio-say,
+.studio-agent:focus-visible .studio-say {
+	display: block;
+}
+
+.studio-bot {
+	position: relative;
+	display: inline-block;
+	flex-shrink: 0;
+}
+
+.studio-bot-face,
+.studio-bot-visor {
+	fill: var(--hue);
+}
+
+.studio-bot-body {
+	fill: var(--hue);
+	opacity: 0.55;
+}
+
+.studio-bot-eyes rect {
+	fill: color-mix(in oklab, var(--hue) 15%, black);
+	transform-box: fill-box;
+	transform-origin: center;
+	animation: studio-blink 4.6s infinite;
+}
+
+.studio-bot-visor {
+	fill: color-mix(in oklab, var(--hue) 15%, black);
+	opacity: 0.35;
+}
+
+.studio-bot-happy path {
+	stroke: color-mix(in oklab, var(--hue) 15%, black);
+	stroke-width: 1.6;
+	stroke-linecap: round;
+}
+
+.studio-bot-whole,
+.studio-bot-head {
+	transform-box: fill-box;
+	transform-origin: 50% 100%;
+}
+
+.studio-bot[data-verb='queued'] .studio-bot-whole,
+.studio-bot[data-verb='idle'] .studio-bot-whole {
+	animation: studio-bob 3.2s ease-in-out infinite;
+}
+
+.studio-bot[data-verb='reading'] .studio-bot-eyes {
+	animation: studio-scan 1.4s ease-in-out infinite;
+}
+
+.studio-bot[data-verb='searching'] .studio-bot-head {
+	animation: studio-tilt 1.1s ease-in-out infinite;
+}
+
+.studio-bot[data-verb='running'] .studio-bot-whole {
+	animation: studio-busy 0.32s steps(2) infinite;
+}
+
+.studio-bot[data-verb='waiting'] .studio-bot-eyes rect {
+	animation: none;
+	transform: scaleY(0.25);
+}
+
+.studio-bot[data-verb='failed'] {
+	opacity: 0.5;
+}
+
+.studio-bot[data-verb='done'] .studio-bot-whole {
+	animation: studio-hop 0.5s var(--ease-out) 1;
+}
+
+.studio-agent[data-walking] .studio-bot-whole {
+	animation: studio-walk 0.28s ease-in-out infinite;
+}
+
+.studio-bot-dots {
+	position: absolute;
+	top: -6px;
+	left: 70%;
+	display: flex;
+	gap: 2px;
+}
+
+.studio-bot-dots i {
+	width: 3px;
+	height: 3px;
+	border-radius: 2px;
+	background: var(--text-muted);
+	animation: studio-dot 1s ease-in-out infinite;
+}
+
+.studio-bot-dots i:nth-child(2) {
+	animation-delay: 0.15s;
+}
+
+.studio-bot-dots i:nth-child(3) {
+	animation-delay: 0.3s;
+}
+
+/* Ledger */
+
+.studio-ledger-panel {
+	width: 360px;
+}
+
+.studio-ledger {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.studio-ledger-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.studio-ledger-who {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.studio-ledger-name {
+	overflow: hidden;
+	font-size: 13.5px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.studio-ledger-question {
+	margin: 0;
+	font-size: 12.5px;
+	color: var(--text-secondary);
+}
+
+.studio-ledger-now {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	min-width: 0;
+}
+
+.studio-ledger-calls,
+.studio-ledger-candidates {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.studio-ledger-calls > li {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	min-width: 0;
+}
+
+.studio-ledger-calls code {
+	overflow: hidden;
+	font-family: var(--font-code);
+	font-size: 11px;
+	color: var(--text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.studio-ledger-calls .meta {
+	flex-shrink: 0;
+}
+
+.studio-ledger-candidates > li {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+@keyframes studio-blink {
+	0%,
+	94%,
+	100% {
+		transform: scaleY(1);
+	}
+	97% {
+		transform: scaleY(0.1);
+	}
+}
+
+@keyframes studio-bob {
+	50% {
+		transform: translateY(-1.5px);
+	}
+}
+
+@keyframes studio-scan {
+	0%,
+	100% {
+		transform: translateX(-1.2px);
+	}
+	50% {
+		transform: translateX(1.2px);
+	}
+}
+
+@keyframes studio-tilt {
+	0%,
+	100% {
+		transform: rotate(-5deg);
+	}
+	50% {
+		transform: rotate(5deg);
+	}
+}
+
+@keyframes studio-busy {
+	50% {
+		transform: translateY(-1px);
+	}
+}
+
+@keyframes studio-walk {
+	0%,
+	100% {
+		transform: translateY(0) rotate(-3deg);
+	}
+	50% {
+		transform: translateY(-2.5px) rotate(3deg);
+	}
+}
+
+@keyframes studio-hop {
+	40% {
+		transform: translateY(-5px);
+	}
+}
+
+@keyframes studio-dot {
+	0%,
+	100% {
+		opacity: 0.25;
+		transform: translateY(0);
+	}
+	50% {
+		opacity: 1;
+		transform: translateY(-2px);
+	}
+}
+
+/* Narrow: the facilities go under the rooms. */
+
+@media (max-width: 980px) {
+	.studio-floor {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+/* Reduced motion: characters stand still and move without walking. */
+
+@media (prefers-reduced-motion: reduce) {
+	.studio *,
+	.studio *::before,
+	.studio *::after {
+		animation: none !important;
+		transition: none !important;
+	}
+}

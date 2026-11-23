@@ -15,6 +15,7 @@ import { useReviewArriving } from '@/lib/summary/use-review-arriving';
 
 import { Age } from '@/components/common/age';
 import { RunBanner } from '@/components/pull/run-banner';
+import { ReviewStudio, useStudioShown } from '@/components/studio/review-studio';
 
 import { BugCard } from './bug-card';
 import { BugGroups } from './bug-groups';
@@ -137,7 +138,7 @@ function FyiNotes({ view, open, onToggle }: PreviousFindingsProps) {
 /**
  * The Review tab: the open findings of the newest review as cards, the first
  * one open, then what else the review reports. While a review is queued,
- * runs or is paused, its steps show as rows above the last review's findings,
+ * runs or is paused, its steps show as rows with Studio under them, above the last review's findings,
  * which stay to read until the new one lands; a review that failed,
  * is out of date or is not there yet says so in a banner with its next step.
  * `j` and `k` step through the cards; Enter opens the one focus rests on.
@@ -153,18 +154,16 @@ export function BugsTab() {
 	const settled = run.phase === 'passed' && !run.outdated;
 	const clean = view.phase === 'ready' && view.open.length === 0 && settled;
 	const fyiShown = useShowFyi((state) => state.shown);
+	const studio = useStudioShown(run);
 
 	useKeys({ j: () => stepBug(1), k: () => stepBug(-1) });
 
 	return (
 		<div className="reading">
 			<div className="page-column reading-column">
-				{isLive(run.phase) ? (
-					<>
-						<RunSteps run={run} />
-						<PreviousFindings view={view} open={open} onToggle={toggle} />
-					</>
-				) : null}
+				{isLive(run.phase) ? <RunSteps run={run} lines={false} /> : null}
+				{studio.shown ? <ReviewStudio run={run} ended={studio.ended} /> : null}
+				{isLive(run.phase) ? <PreviousFindings view={view} open={open} onToggle={toggle} /> : null}
 				{!isLive(run.phase) && !arriving ? (
 					<RunBanner run={run} bugs={view.phase === 'ready' ? view.open.length : null} />
 				) : null}
