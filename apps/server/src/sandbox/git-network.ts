@@ -17,7 +17,7 @@ const TRANSIENT =
 
 /** A failure no retry can fix: the forge refused the credentials or the repository is not there. */
 const PERMANENT =
-	/Authentication failed|could not read Username|Permission denied|invalid credentials|Repository not found|terminal prompts disabled/i;
+	/Authentication failed|could not read Username|Permission denied|invalid credentials|Repository not found|terminal prompts disabled|HTTP 40[134]/i;
 
 /** How a known failure reads to a person, matched against the command's whole output. */
 const CAUSES: [RegExp, string][] = [
@@ -76,15 +76,19 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 /**
  * Runs one git network command, retrying after each delay in `delays` when it
- * fails on a dropped connection. git resumes a fetch from the objects it
- * already received; a clone starts over. The last failure is rethrown, telling
- * how many times the command ran.
+ * fails on a dropped connection, cleaning up what the failed attempt left
+ * behind before each retry. git resumes a fetch from the objects it already
+ * received; a clone starts over from an empty destination, because git refuses
+ * to clone into the partial one a dropped attempt leaves. The last failure is
+ * rethrown, telling how many times the command ran.
  */
 export async function retryTransientGit(
 	work: () => Promise<string>,
 	delays: number[],
-	wait: (ms: number) => Promise<void> = sleep
+	between: { wait?: (ms: number) => Promise<void>; cleanUp?: () => Promise<void> } = {}
 ): Promise<string> {
+	const wait = between.wait ?? sleep;
+
 	for (let attempt = 0; ; attempt++) {
 		try {
 			return await work();
@@ -94,9 +98,10 @@ export async function retryTransientGit(
 			if (attempt >= delays.length || !isTransientGitFailure(message)) {
 				if (!attempt) throw error;
 
-				throw new Error(`${message} Tried ${attempt + 1} times.`, { cause: error });
+				throw new Error(`${message}. Tried ${attempt + 1} times.`, { cause: error });
 			}
 
+			await between.cleanUp?.();
 			await wait(delays[attempt]!);
 		}
 	}

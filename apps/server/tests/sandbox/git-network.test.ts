@@ -59,8 +59,10 @@ test('a transient failure retries with backoff and succeeds', async () => {
 	const outcome = await retryTransientGit(
 		async () => (++runs < 3 ? Promise.reject(new Error('git clone failed: fatal: early EOF')) : 'ok'),
 		[5, 10],
-		async (ms) => {
-			waits.push(ms);
+		{
+			wait: async (ms) => {
+				waits.push(ms);
+			}
 		}
 	);
 
@@ -74,9 +76,31 @@ test('a refusal is not retried', async () => {
 
 	const failing = () => (++runs, Promise.reject(new Error('git clone failed: Authentication failed')));
 
-	await expect(retryTransientGit(failing, [5, 10], async () => {})).rejects.toThrow('Authentication failed');
+	await expect(retryTransientGit(failing, [5, 10], { wait: async () => {} })).rejects.toThrow('Authentication failed');
 
 	expect(runs).toBe(1);
+});
+
+test('a refused HTTP status is not a network drop', () => {
+	expect(isTransientGitFailure('error: RPC failed; HTTP 403 curl 22 The requested URL returned an error')).toBe(false);
+});
+
+test("the failed attempt's leftovers are cleaned before the retry", async () => {
+	const cleaned: number[] = [];
+	let runs = 0;
+
+	const outcome = await retryTransientGit(
+		async () => (++runs < 2 ? Promise.reject(new Error('git clone failed: fatal: early EOF')) : 'ok'),
+		[0],
+		{
+			cleanUp: async () => {
+				cleaned.push(runs);
+			}
+		}
+	);
+
+	expect(outcome).toBe('ok');
+	expect(cleaned).toEqual([1]);
 });
 
 test('the retries are bounded and the last failure says how many times the command ran', async () => {
@@ -84,8 +108,8 @@ test('the retries are bounded and the last failure says how many times the comma
 
 	const failing = () => (++runs, Promise.reject(new Error('git fetch failed: fatal: early EOF')));
 
-	await expect(retryTransientGit(failing, RETRY_DELAYS_MS, async () => {})).rejects.toThrow(
-		`git fetch failed: fatal: early EOF Tried ${RETRY_DELAYS_MS.length + 1} times.`
+	await expect(retryTransientGit(failing, RETRY_DELAYS_MS, { wait: async () => {} })).rejects.toThrow(
+		`git fetch failed: fatal: early EOF. Tried ${RETRY_DELAYS_MS.length + 1} times.`
 	);
 
 	expect(runs).toBe(RETRY_DELAYS_MS.length + 1);

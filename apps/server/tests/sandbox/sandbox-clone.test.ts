@@ -16,7 +16,7 @@ const originalWorkDir = env.RECODER_WORKDIR;
  * the real git, so the checkouts it prepares are genuine.
  */
 const FAKE_GIT = `#!/usr/bin/env bun
-const { appendFileSync, existsSync, writeFileSync } = require('node:fs');
+const { appendFileSync, existsSync, mkdirSync, writeFileSync } = require('node:fs');
 
 const args = process.argv.slice(2);
 
@@ -27,6 +27,10 @@ if (args[0] === 'clone' && process.env.FAKE_GIT_FAIL !== 'none') {
 
 	if (process.env.FAKE_GIT_FAIL === 'transient' && !existsSync(marker)) {
 		writeFileSync(marker, '');
+		const left = args.at(-1) + '/.git/objects';
+
+		mkdirSync(left, { recursive: true });
+		writeFileSync(left + '/partial.pack', 'half a pack');
 		process.stderr.write('Receiving objects: 36% (243804/668773), 509.13 MiB | 3.50 MiB/s\\r\\n');
 		process.stderr.write('error: RPC failed; curl 56 Recv failure: Connection reset by peer\\r\\n');
 		process.stderr.write('fatal: early EOF\\r\\n');
@@ -140,6 +144,7 @@ test('the clones fetch no blobs and no other branches, and the checkout can read
 
 	expect(recorded[0]).toContain('--bare');
 	expect(recorded[1]).toContain('--single-branch');
-	expect(recorded[1]).toContain('-c credential.https://github.com.helper=!gh auth git-credential');
+	expect(recorded[1]).toContain('-c credential.https://github.com/test/local.git.helper=!gh auth git-credential');
+	expect(recorded[1]).not.toContain('credential.https://github.com.helper=');
 	expect(existsSync(join(checkout.path, '.git', 'shallow'))).toBe(false);
 });
