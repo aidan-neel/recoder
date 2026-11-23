@@ -51,6 +51,7 @@ export class StepRelay<T> {
 	private reasoning: Streaming | null = null;
 	private message: Streaming | null = null;
 	private stepMessageId: string | null = null;
+	private throttled = false;
 
 	constructor(
 		private readonly opts: JsonAgentOptions<T>,
@@ -64,6 +65,7 @@ export class StepRelay<T> {
 	readonly onEvent = (event: AgentEvent): void => {
 		if (event.type === 'prompt-start') this.usage.promptStarted(event);
 		else if (event.type === 'internal-turns') this.internalTurns = event.total;
+		else if (event.type === 'throttled') this.waitedOut(event);
 		else if (event.type === 'step-start') this.stepStarted(event.step);
 		else if (event.type === 'usage') this.stepFinished(event.usage, event.step);
 		else if (event.type === 'reasoning') this.reasoned(event.delta);
@@ -84,8 +86,26 @@ export class StepRelay<T> {
 		return this.stepMessageId ?? `message_${this.base}_final`;
 	}
 
+	/** A throttle shows as the run's progress until the next step starts, so a run that waits does not look stuck. */
+	private waitedOut(event: Extract<AgentEvent, { type: 'throttled' }>): void {
+		const seconds = Math.ceil(event.retryInMs / 1000);
+
+		this.throttled = true;
+
+		this.opts.onProgress?.(
+			'throttled',
+			0,
+			`Rate-limited, retrying in ${seconds}s (attempt ${event.attempt} of ${event.attempts})`
+		);
+	}
+
 	private stepStarted(step?: string): void {
 		const { opts } = this;
+
+		if (this.throttled) {
+			this.throttled = false;
+			opts.onProgress?.('running', 0, `Running ${opts.label}`);
+		}
 
 		this.settle();
 		this.steps++;

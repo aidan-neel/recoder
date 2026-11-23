@@ -49,8 +49,24 @@ export function devinRetryDelay(output: string, retry = 0, requireHint = false):
 	return hint === undefined ? 5_000 * 2 ** retry : Math.max(1_000, hint + 1_000 + Math.random() * 1_000);
 }
 
-/** At most three retries inside the original deadline; partial work requires a session continuation callback. */
-export async function withDevinRetries<T>(signal: AbortSignal, attempt: () => Promise<Attempt<T>>): Promise<T> {
+/** A throttle being waited out: how long until the next try, and which retry it is of how many. */
+export interface DevinThrottle {
+	retryInMs: number;
+	attempt: number;
+	attempts: number;
+}
+
+const RETRIES = 3;
+
+/**
+ * At most three retries inside the original deadline; partial work requires a session continuation callback.
+ * `onThrottle` hears each wait before it starts, so a run that is only waiting does not look stuck.
+ */
+export async function withDevinRetries<T>(
+	signal: AbortSignal,
+	attempt: () => Promise<Attempt<T>>,
+	onThrottle?: (throttle: DevinThrottle) => void
+): Promise<T> {
 	for (let retry = 0; ; retry++) {
 		signal.throwIfAborted();
 
@@ -59,14 +75,15 @@ export async function withDevinRetries<T>(signal: AbortSignal, attempt: () => Pr
 
 		if ((result.partial && !result.resume) || delay === null) return result.value;
 
-		if (retry >= 3) {
+		if (retry >= RETRIES) {
 			if (result.resume) await sleep(delay, signal);
 
 			return result.value;
 		}
 
 		result.resume?.();
-		console.warn(`[devin] Request throttled; retry ${retry + 1}/3 in ${delay / 1000}s`);
+		console.warn(`[devin] Request throttled; retry ${retry + 1}/${RETRIES} in ${delay / 1000}s`);
+		onThrottle?.({ retryInMs: delay, attempt: retry + 1, attempts: RETRIES });
 		await sleep(delay, signal);
 	}
 }

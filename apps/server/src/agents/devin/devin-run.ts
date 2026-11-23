@@ -89,54 +89,62 @@ export class DevinRun extends SessionRun<RunFiles> {
 		let usageRead = true;
 
 		try {
-			return await withDevinRetries<AgentReply>(deadline.signal, async () => {
-				answer = '';
+			return await withDevinRetries<AgentReply>(
+				deadline.signal,
+				async () => {
+					answer = '';
 
-				const next = continued
-					? `Continue the interrupted request from your saved session. Do not repeat completed tools or work. Finish your answer.${options.schema ? `\n\n${JSON_MODE_INSTRUCTION}` : ''}`
-					: asked;
+					const next = continued
+						? `Continue the interrupted request from your saved session. Do not repeat completed tools or work. Finish your answer.${options.schema ? `\n\n${JSON_MODE_INSTRUCTION}` : ''}`
+						: asked;
 
-				await writeFile(this.files.prompt, this.session ? next : `${this.options.system}\n\n${this.mcpNotice}${next}`, {
-					mode: 0o600
-				});
+					await writeFile(
+						this.files.prompt,
+						this.session ? next : `${this.options.system}\n\n${this.mcpNotice}${next}`,
+						{
+							mode: 0o600
+						}
+					);
 
-				this.options.onEvent({ type: 'step-start' });
-				await rm(this.files.export, { force: true });
-				usageRead = false;
+					this.options.onEvent({ type: 'step-start' });
+					await rm(this.files.export, { force: true });
+					usageRead = false;
 
-				const exit = await streamCli({
-					argv: [this.host.path, ...this.args()],
-					cwd: this.files.cwd,
-					env: { ...devinEnv(this.host.env), XDG_CONFIG_HOME: this.files.configHome },
-					stdin: null,
-					signal: deadline.signal,
-					maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
-					onOutput: (piece) => {
-						answer += piece;
-						this.options.onEvent({ type: 'text', delta: piece, partId });
-					},
-					running: this.host.running,
-					name: 'Devin'
-				});
+					const exit = await streamCli({
+						argv: [this.host.path, ...this.args()],
+						cwd: this.files.cwd,
+						env: { ...devinEnv(this.host.env), XDG_CONFIG_HOME: this.files.configHome },
+						stdin: null,
+						signal: deadline.signal,
+						maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
+						onOutput: (piece) => {
+							answer += piece;
+							this.options.onEvent({ type: 'text', delta: piece, partId });
+						},
+						running: this.host.running,
+						name: 'Devin'
+					});
 
-				const tokens = await this.exported();
+					const tokens = await this.exported();
 
-				usageRead = true;
+					usageRead = true;
 
-				if (exit.code !== 0)
-					return {
-						value: { text: answer, error: exitError(exit, answer), tokens },
-						errorOutput: exit.stderr.trim() ? exit.stderr : answer,
-						partial: Boolean(answer.trim()) && !/^\s*(?:error\b|HTTP\s*429\b)/i.test(answer),
-						resume: this.session
-							? () => {
-									continued = true;
-								}
-							: undefined
-					};
+					if (exit.code !== 0)
+						return {
+							value: { text: answer, error: exitError(exit, answer), tokens },
+							errorOutput: exit.stderr.trim() ? exit.stderr : answer,
+							partial: Boolean(answer.trim()) && !/^\s*(?:error\b|HTTP\s*429\b)/i.test(answer),
+							resume: this.session
+								? () => {
+										continued = true;
+									}
+								: undefined
+						};
 
-				return { value: { text: answer, tokens } };
-			});
+					return { value: { text: answer, tokens } };
+				},
+				(throttle) => this.options.onEvent({ type: 'throttled', ...throttle })
+			);
 		} catch (error) {
 			const tokens = !usageRead ? await this.exported() : undefined;
 

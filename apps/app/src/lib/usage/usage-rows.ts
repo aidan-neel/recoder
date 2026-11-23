@@ -1,6 +1,7 @@
 import type { UsageKind, UsageModel, UsagePerson, UsageReport, UsageTotals } from '@recoder/shared';
 import { formatCompact, formatShare, type ChartTipRow } from '@recoder/ui';
 
+import { failureKinds } from '../metrics/error-kinds';
 import {
 	BREAKDOWN_PAGE,
 	foldParts,
@@ -20,6 +21,7 @@ import {
 	modelColor,
 	moreModelsLabel,
 	personColor,
+	sumFailedByKind,
 	uncachedInput,
 	type Cost,
 	type UsageScope
@@ -222,6 +224,7 @@ function sumKinds(rows: readonly UsageRow[]): UsageTotals | null {
 		sessions: add((item) => item.sessions),
 		calls: add((item) => item.calls),
 		failedCalls: add((item) => item.failedCalls),
+		failedByKind: sumFailedByKind(all),
 		medianDurationMs: null,
 		costUsd: priced.length === 0 ? null : priced.reduce((sum, item) => sum + (item.costUsd ?? 0), 0),
 		costComplete: all.every((item) => item.costComplete)
@@ -271,7 +274,12 @@ function callDetails(totals: UsageTotals): ChartTipRow[] {
 			label: 'Failed',
 			value: formatWhole(totals.failedCalls),
 			detail: rate === null ? undefined : formatShare(rate)
-		}
+		},
+		...failureKinds(totals.failedByKind).map(({ kind, label, count }) => ({
+			id: `failed:${kind}`,
+			label,
+			value: formatWhole(count)
+		}))
 	];
 
 	if (totals.medianDurationMs === null) return details;

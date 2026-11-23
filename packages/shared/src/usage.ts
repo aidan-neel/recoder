@@ -35,6 +35,8 @@ export interface UsageTotals {
 	calls: number;
 	/** Calls that failed; cancelled calls are not counted here. */
 	failedCalls: number;
+	/** The failed calls by their error kind (`rate-limit`, `timeout`…); kinds with none are left out. */
+	failedByKind: Record<string, number>;
 	/** Median wall-clock duration of the calls that recorded one; null when none did. */
 	medianDurationMs: number | null;
 }

@@ -3,6 +3,7 @@ import { withUsageResources } from './usage-resources';
 import {
 	TOKEN_STAGES,
 	aggregateTokenCalls,
+	callDiagnostics,
 	emptyTokenUsage,
 	type ModelCallOutcome,
 	type ModelCallRow,
@@ -388,6 +389,7 @@ export function trackTokenCall(
 			else {
 				outcome = 'failed';
 				errorKind = errorKindOf(err);
+				call.errorKind = errorKind;
 			}
 
 			save();
@@ -467,6 +469,7 @@ export async function getReviewMetrics(reviewId: string): Promise<ReviewMetrics 
 			scope,
 			...aggregateTokenCalls(stored.calls.filter((call) => call.scope === scope))
 		})),
-		stages: stageAggregates(stored.calls.filter((call) => call.scope === 'pipeline'))
+		stages: stageAggregates(stored.calls.filter((call) => call.scope === 'pipeline')),
+		...callDiagnostics(stored.calls)
 	};
 }

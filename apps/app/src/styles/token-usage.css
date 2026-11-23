@@ -127,6 +127,46 @@
 	white-space: nowrap;
 }
 
+/* Diagnostics: failed calls and verifier sessions, one quiet row each, the detail clamped to two lines. */
+.token-usage-diagnostics {
+	display: flex;
+	flex-direction: column;
+}
+
+.token-usage-diagnostic {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 8px 0;
+	border-top: 1px solid var(--line-subtle);
+}
+
+.token-usage-diagnostic-top {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+}
+
+.token-usage-diagnostic-title {
+	flex-shrink: 0;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+
+.token-usage-diagnostic-kind {
+	margin-left: auto;
+}
+
+.token-usage-diagnostic-detail {
+	display: -webkit-box;
+	overflow: hidden;
+	overflow-wrap: anywhere;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
 .token-usage-notes {
 	display: flex;
 	flex-direction: column;

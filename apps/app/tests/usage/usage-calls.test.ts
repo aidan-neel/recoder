@@ -58,7 +58,11 @@ describe('row tips', () => {
 		const row = { ...railRows(report, usageScope(report, null))[0], kinds: top };
 		const ids = rowTip(row).details.map((detail) => detail.id);
 
-		expect(ids.slice(0, 3)).toEqual(['calls', 'failed-calls', 'median']);
+		const median = ids.indexOf('median');
+
+		expect(ids.slice(0, 2)).toEqual(['calls', 'failed-calls']);
+		expect(ids.slice(2, median).every((id) => id.startsWith('failed:'))).toBe(true);
+		expect(median).toBeGreaterThan(2);
 	});
 
 	test('leaves out the typical time of a folded row, which has no median', () => {

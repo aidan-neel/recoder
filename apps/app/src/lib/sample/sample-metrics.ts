@@ -1,5 +1,7 @@
 import {
 	aggregateTokenCalls,
+	callDiagnostics,
+	emptyTokenUsage,
 	TOKEN_STAGES,
 	type RepoChat,
 	type Review,
@@ -22,6 +24,11 @@ interface CallSeed {
 	cached?: number;
 	cacheWrite?: number;
 	reasoning?: number;
+	/** Set when the provider reported no token counts for the call. */
+	unknown?: boolean;
+	error?: string;
+	errorKind?: string;
+	verifierSession?: TokenCall['verifierSession'];
 }
 
 const SCOPES: readonly TokenScope[] = ['pipeline', 'discussion', 'fix'];
@@ -38,7 +45,9 @@ function makeCall({
 	output,
 	cached = 0,
 	cacheWrite = 0,
-	reasoning = 0
+	reasoning = 0,
+	unknown = false,
+	...diagnostics
 }: CallSeed): TokenCall {
 	return {
 		id,
@@ -47,14 +56,17 @@ function makeCall({
 		scope,
 		stage,
 		status,
-		usage: {
-			inputTokens: input,
-			outputTokens: output,
-			totalTokens: input + output,
-			cachedInputTokens: cached > 0 ? cached : null,
-			cacheWriteInputTokens: cacheWrite > 0 ? cacheWrite : null,
-			reasoningOutputTokens: reasoning > 0 ? reasoning : null
-		}
+		...diagnostics,
+		usage: unknown
+			? emptyTokenUsage()
+			: {
+					inputTokens: input,
+					outputTokens: output,
+					totalTokens: input + output,
+					cachedInputTokens: cached > 0 ? cached : null,
+					cacheWriteInputTokens: cacheWrite > 0 ? cacheWrite : null,
+					reasoningOutputTokens: reasoning > 0 ? reasoning : null
+				}
 	};
 }
 
@@ -91,7 +103,8 @@ function buildMetrics(ownerId: string, startedAt: string, pipelineTracked: boole
 			const matching = pipelineCalls.filter((call) => (call.stage ?? 'other') === stage);
 
 			return matching.length > 0 ? [{ stage, ...aggregateTokenCalls(matching) }] : [];
-		})
+		}),
+		...callDiagnostics(calls)
 	};
 }
 
@@ -182,7 +195,48 @@ export function sampleReviewMetrics(review: Review, messages: readonly ReviewCha
 							stage: 'verifier',
 							input: 27_900,
 							output: 2_310,
-							cached: 22_400
+							cached: 22_400,
+							verifierSession: {
+								id: `${review.id}-vs1`,
+								opBudget: 40,
+								ops: 40,
+								refusals: 1,
+								prompts: 3,
+								internalTurns: 22,
+								exhausted: true
+							}
+						}),
+						makeCall({
+							id: `${review.id}-p5`,
+							model: 'grok-4.6',
+							provider: 'grok',
+							scope: 'pipeline',
+							stage: 'verifier',
+							status: 'failed',
+							unknown: true,
+							input: 0,
+							output: 0,
+							errorKind: 'rate-limit',
+							error: 'LLM 429: Rate limit reached for grok-4.6 on requests per minute. Try again in 6s.'
+						}),
+						makeCall({
+							id: `${review.id}-p6`,
+							model: 'gpt-6-luna',
+							provider: 'codex',
+							scope: 'pipeline',
+							stage: 'verifier',
+							unknown: true,
+							input: 0,
+							output: 0,
+							verifierSession: {
+								id: `${review.id}-vs2`,
+								opBudget: 40,
+								ops: 14,
+								refusals: 0,
+								prompts: 2,
+								internalTurns: null,
+								exhausted: false
+							}
 						})
 					];
 

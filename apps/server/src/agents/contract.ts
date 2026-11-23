@@ -131,6 +131,8 @@ export type AgentEvent =
 	| { type: 'step-start'; step?: string }
 	/** Cumulative internal model turns, when an opaque CLI exports them separately from its prompts. */
 	| { type: 'internal-turns'; total: number | null }
+	/** A short provider throttle the adapter waits out before it tries again, `attempt` of `attempts`. */
+	| { type: 'throttled'; retryInMs: number; attempt: number; attempts: number }
 	| { type: 'text'; delta: string; partId: string }
 	| { type: 'reasoning'; delta: string; partId: string }
 	| { type: 'tool-call'; name: string }

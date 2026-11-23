@@ -24,9 +24,18 @@ function usage(input: number, output: number): TokenUsage {
 }
 
 /** A relay for a review's agent, run inside that review's pipeline so its calls are recorded. */
-async function relay(): Promise<{ reviewId: string; run: <T>(work: (relay: StepRelay<unknown>) => T) => Promise<T> }> {
+async function relay(
+	onProgress?: JsonAgentOptions<unknown>['onProgress']
+): Promise<{ reviewId: string; run: <T>(work: (relay: StepRelay<unknown>) => T) => Promise<T> }> {
 	const review = await db.reviews.set(testReview({ repoId: 'missing-repo' }));
-	const opts = { label: 'reviewer', config: { model: 'vllm/qwen' }, budget: new ModelBudget(), maxTurns: 8 };
+
+	const opts = {
+		label: 'reviewer',
+		config: { model: 'vllm/qwen' },
+		budget: new ModelBudget(),
+		maxTurns: 8,
+		onProgress
+	};
 
 	store.track(review.id);
 
@@ -59,6 +68,22 @@ async function finishUnreported(target: StepRelay<unknown>, tokens: TokenUsage):
 async function calls(reviewId: string): Promise<TokenUsage['totalTokens'][]> {
 	return (await reviewMetrics.get(reviewId))!.calls.map((call) => call.usage.totalTokens);
 }
+
+test('a throttle shows as the run’s progress until the next step starts', async () => {
+	const onProgress = jest.fn();
+	const { run } = await relay(onProgress);
+
+	await run(async (target) => {
+		target.onEvent({ type: 'throttled', retryInMs: 5500, attempt: 1, attempts: 3 });
+		target.onEvent({ type: 'step-start', step: 'msg_1' });
+		target.onEvent({ type: 'step-start', step: 'msg_2' });
+	});
+
+	expect(onProgress.mock.calls).toEqual([
+		['throttled', 0, 'Rate-limited, retrying in 6s (attempt 1 of 3)'],
+		['running', 0, 'Running reviewer']
+	]);
+});
 
 test('a step that ends after the next one has started still gets its own usage', async () => {
 	const { reviewId, run } = await relay();

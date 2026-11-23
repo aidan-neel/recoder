@@ -1,6 +1,7 @@
 import { formatCompact, formatShare, StackedBar } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
+import { failureKinds } from '@/lib/metrics/error-kinds';
 import {
 	failureRate,
 	formatCost,
@@ -65,11 +66,12 @@ export function UsageTotals({ scope }: { scope: UsageScope }) {
 
 /**
  * The scope's model calls: how many, how many failed (with the rate, in the
- * warning color once any did) and the typical time one took.
+ * warning color once any did) and the typical time one took, then the failures by kind of error.
  */
 export function UsageCalls({ scope }: { scope: UsageScope }) {
 	const { totals } = scope;
 	const rate = failureRate(totals);
+	const kinds = failureKinds(totals.failedByKind);
 
 	return (
 		<UsageBlock title="Model calls">
@@ -81,6 +83,11 @@ export function UsageCalls({ scope }: { scope: UsageScope }) {
 				</Figure>
 				<Figure label="Typical time">{formatDuration(totals.medianDurationMs)}</Figure>
 			</dl>
+			{kinds.length > 0 ? (
+				<p className="meta usage-failure-kinds">
+					Failed calls: {kinds.map(({ label, count }) => `${label} ${formatCompact(count)}`).join(' · ')}
+				</p>
+			) : null}
 		</UsageBlock>
 	);
 }

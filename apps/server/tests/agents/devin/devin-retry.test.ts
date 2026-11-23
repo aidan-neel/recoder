@@ -59,6 +59,26 @@ test('honors an absolute Retry-After date and does not retry an hours-long reset
 	expect(attempt).toHaveBeenCalledTimes(1);
 });
 
+test('reports each throttle before waiting it out, so the run can show it is waiting', async () => {
+	const heard: { at: number; retryInMs: number; attempt: number; attempts: number }[] = [];
+	let calls = 0;
+
+	const run = withDevinRetries(
+		new AbortController().signal,
+		async () => ({ value: ++calls, errorOutput: calls < 3 ? 'Reached request rate limit' : undefined }),
+		(throttle) => heard.push({ at: Date.now(), ...throttle })
+	);
+
+	const started = Date.now();
+
+	expect(await settleOnClock(run, 1000, 60_000)).toBe(3);
+
+	expect(heard.map(({ at, ...throttle }) => ({ after: at - started, ...throttle }))).toEqual([
+		{ after: 0, retryInMs: 5000, attempt: 1, attempts: 3 },
+		{ after: 5000, retryInMs: 10000, attempt: 2, attempts: 3 }
+	]);
+});
+
 test('uses bounded exponential backoff without a hint, then returns the final failure', async () => {
 	const calls: number[] = [];
 

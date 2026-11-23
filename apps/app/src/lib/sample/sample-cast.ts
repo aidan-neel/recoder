@@ -300,6 +300,18 @@ export function dropInvalid(run: CastRun): void {
 	}
 }
 
+/** How the agent loop words a provider throttle it waits out (`review/pipeline/agent-loop/step-relay.ts`). */
+const THROTTLE = 'Rate-limited, retrying in 6s (attempt 1 of 3)';
+
+/** True for the second lane's first claim before it runs code: it waits out one throttle, so the sample shows the state. */
+function throttles(run: CastRun, task: ReviewTask): boolean {
+	const laneDone = Object.values(run.progress.tasks).some(
+		(other) => other.kind === 'verification' && other.verifierId === task.verifierId && other.status === 'done'
+	);
+
+	return task.verifierId === 'verifier-2' && task.message !== THROTTLE && !laneDone;
+}
+
 /** One beat of a verification: read the code, then run it, then the verdict. */
 function stepVerification(run: CastRun, task: ReviewTask): void {
 	const found = candidate(run, task.candidateId ?? '');
@@ -320,6 +332,12 @@ function stepVerification(run: CastRun, task: ReviewTask): void {
 			path: found.path,
 			startLine: found.line
 		});
+
+		return;
+	}
+
+	if (calls === 1 && throttles(run, task)) {
+		setTask(run, { ...task, message: THROTTLE });
 
 		return;
 	}
