@@ -30,7 +30,6 @@ export interface InvocationContext {
 /** What the command line was asked to do. `skill` passes its subcommand and flags on; that command reads its own. */
 export type Invocation =
 	| { command: 'help'; topic: HelpTopic }
-	| { command: 'version' }
 	| { command: FlaglessCommand }
 	| ({ command: 'review' } & ReviewRequest)
 	| { command: 'init'; request: InitRequest }
@@ -49,8 +48,6 @@ export function parseInvocation(argv: string[], context: InvocationContext): Inv
 	if (command === undefined || command === 'help' || HELP_FLAGS.includes(command)) {
 		return { command: 'help', topic: helpTopicOf(flags[0]) };
 	}
-
-	if (command === '--version' || command === '-v') return { command: 'version' };
 
 	if (!isCommand(command)) throw unknownCommand(command);
 

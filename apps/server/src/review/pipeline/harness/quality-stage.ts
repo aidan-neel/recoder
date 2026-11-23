@@ -108,7 +108,9 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean, det
 	if (closed() || run.controller.signal.aborted) return;
 
 	try {
-		report(run, runTypeHints(run));
+		const hints = await runTypeHints(run, closed);
+
+		if (!closed() && !run.controller.signal.aborted) report(run, hints);
 	} catch (err) {
 		run.events?.onLog?.(`Type hints skipped: ${errorText(err)}`);
 	}

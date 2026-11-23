@@ -1,28 +1,14 @@
-import { existsSync, realpathSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import ts from 'typescript5';
 import type { AddedLines } from './changed-lines.js';
 import type { DetectorResult } from './types.js';
-
-/** Only the repo's own TypeScript files are analysed. */
-const TS_FILE = /\.(ts|tsx|mts|cts)$/;
+import { insideTypeHintRoot, typeHintProjects } from './type-hint-projects.js';
 
 /** Tsconfigs read per review, so a monorepo cannot turn this into a full build. */
 const MAX_PROJECTS = 3;
 
 /** Source files in a project beyond which the program costs more than the hints are worth. */
 const MAX_PROJECT_FILES = 3000;
-
-/** True when the real path of `path` lies inside `root`, so a symlink in the checkout cannot read the host. */
-function inside(root: string, path: string): boolean {
-	try {
-		const real = relative(realpathSync(root), realpathSync(path));
-
-		return !real.startsWith('..') && !real.startsWith('/');
-	} catch {
-		return false;
-	}
-}
 
 /**
  * Whether the compiler may read `path`: the compiler's own libs, anything the
@@ -35,26 +21,7 @@ function readable(root: string, libDir: string, path: string): boolean {
 	if (lexical.startsWith(`${libDir}/`)) return true;
 	if (lexical.startsWith(`${root}/`) && lexical.includes('/node_modules/')) return true;
 
-	return inside(root, path);
-}
-
-/** The nearest tsconfig above a file, within the checkout. */
-function nearestConfig(root: string, file: string): string | null {
-	let dir = dirname(join(root, file));
-
-	while (dir.startsWith(root)) {
-		const candidate = join(dir, 'tsconfig.json');
-
-		if (existsSync(candidate) && inside(root, candidate)) return candidate;
-
-		const parent = dirname(dir);
-
-		if (parent === dir) break;
-
-		dir = parent;
-	}
-
-	return null;
+	return insideTypeHintRoot(root, path);
 }
 
 /** A compiler host that reads nothing outside the checkout. */
@@ -173,18 +140,12 @@ function hintsInFile(program: ts.Program, file: string, root: string, lines: Map
  * outside it. Every result is `suspected`, so a verifier settles it. Returns
  * nothing when the checkout has no tsconfig or TypeScript cannot load it.
  */
-export function typeHintResults(root: string, added: AddedLines): DetectorResult[] {
+export function typeHintResults(
+	root: string,
+	added: AddedLines,
+	byConfig = typeHintProjects(root, added)
+): DetectorResult[] {
 	const real = resolve(root);
-	const byConfig = new Map<string, string[]>();
-
-	for (const file of added.keys()) {
-		if (!TS_FILE.test(file) || /\.d\.ts$/.test(file)) continue;
-
-		const config = nearestConfig(real, file);
-
-		if (config) byConfig.set(config, [...(byConfig.get(config) ?? []), file]);
-	}
-
 	const results: DetectorResult[] = [];
 
 	for (const [config, files] of [...byConfig].slice(0, MAX_PROJECTS)) {

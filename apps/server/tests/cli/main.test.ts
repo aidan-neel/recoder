@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EXIT } from '../../src/cli/exit';
+import { VERSION } from '../../src/version';
 import { childEnvironment } from './child-env';
 import { runMain } from './run-main';
 
@@ -37,6 +38,12 @@ test('a command prints a view for a person, and one line of JSON with -p', async
 
 test('-p is read wherever it stands on the command line', async () => {
 	expect((await recoder(['-p', 'runs'])).stdout).toBe('[]\n');
+});
+
+test('a top-level version request retains precedence after the audience flags are removed', async () => {
+	const result = await recoder(['-p', '-v', '--help']);
+
+	expect(result).toMatchObject({ exitCode: EXIT.ok, stdout: `${VERSION}\n`, stderr: '' });
 });
 
 test('output that is not a terminal holds no escape codes', async () => {

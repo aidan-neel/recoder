@@ -1,6 +1,5 @@
 import { usageError } from '../exit.js';
 import { isRunId, type RunId } from './run-id.js';
-import { listRunIds } from './run-list.js';
 
 /** The fewest characters of a run id that may stand for it. */
 const MIN_PART_LENGTH = 3;
@@ -42,6 +41,7 @@ export function parseRunReference(value: string | undefined): RunReference {
 export async function resolveRunReference(reference: RunReference): Promise<RunId> {
 	if (reference.kind === 'id') return reference.runId;
 
+	const { listRunIds } = await import('./run-list.js');
 	const runIds = await listRunIds();
 
 	return reference.kind === 'newest' ? newestOf(runIds) : matchOf(runIds, reference.text);
