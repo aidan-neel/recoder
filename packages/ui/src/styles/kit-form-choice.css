@@ -93,6 +93,21 @@
 		stroke-linejoin: round;
 		stroke-width: 3;
 	}
+	[data-ui='checkbox-check'] path {
+		stroke-dasharray: 1 1;
+		stroke-dashoffset: 1;
+		opacity: 0;
+		transition:
+			stroke-dashoffset var(--dur-menu) var(--ease-menu),
+			opacity var(--dur-menu) var(--ease-menu);
+	}
+	[data-ui='checkbox-check'][data-on] path {
+		stroke-dashoffset: 0;
+		opacity: 1;
+		transition:
+			stroke-dashoffset var(--dur-toggle) var(--ease-menu),
+			opacity 0s;
+	}
 
 	/* ───────── Radio cards: the chosen card's ring lifts and its dot fills ───────── */
 	[data-ui='radio-group'] {
