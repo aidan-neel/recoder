@@ -129,8 +129,8 @@
 		font-size: var(--font-size-meta);
 		line-height: 16px;
 	}
-	[data-variant='banner']:not(:has(> [data-ui='status-notice-body'] > [data-ui='status-notice-glyph']))
-		> [data-ui='status-notice-footer'] {
+	/* A banner marks the glyph it holds (`data-glyph`): a `:has()` here re-checked the page's style on every insert. */
+	[data-variant='banner']:not([data-glyph]) > [data-ui='status-notice-footer'] {
 		padding-left: 12px;
 	}
 	[data-ui='status-notice-footer'] svg {
