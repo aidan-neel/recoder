@@ -5,6 +5,7 @@ import { env } from '../env.js';
 import type { Provider } from '@recoder/shared';
 import type { ReviewRevision } from '../evidence/evidence.js';
 import { processOutput } from '../util/process.js';
+import { RETRY_DELAYS_MS, retryTransientGit, summarizeGitFailure } from './git-network.js';
 import { ensureSharedClone } from './shared-git.js';
 
 export interface Sandbox {
@@ -27,35 +28,54 @@ export function sandboxLocation(repoSlug: string, prNumber: number, reviewId?: s
 }
 
 function gitEnv(overrides?: Record<string, string>, provider?: Provider): Record<string, string> {
+	const pairs = credentialPairs(provider, overrides);
+
+	const credentials = Object.fromEntries(
+		pairs.flatMap(([key, value], index) => [
+			[`GIT_CONFIG_KEY_${index}`, key],
+			[`GIT_CONFIG_VALUE_${index}`, value]
+		])
+	);
+
 	return {
 		...overrides,
 		GIT_TERMINAL_PROMPT: '0',
-		...(provider === 'github'
-			? {
-					GIT_CONFIG_COUNT: '2',
-					GIT_CONFIG_KEY_0: 'credential.https://github.com.helper',
-					GIT_CONFIG_VALUE_0: '',
-					GIT_CONFIG_KEY_1: 'credential.https://github.com.helper',
-					GIT_CONFIG_VALUE_1: '!gh auth git-credential'
-				}
-			: {}),
-		...(provider === 'gitlab' && overrides?.GITLAB_TOKEN
-			? gitlabCredentials(overrides.GITLAB_HOST || 'gitlab.com')
-			: {})
+		...(pairs.length ? { GIT_CONFIG_COUNT: String(pairs.length), ...credentials } : {})
 	};
 }
 
-/** The connected GitLab token as the git password, read from the env at call time so it never lands in args or URLs. */
-function gitlabCredentials(host: string): Record<string, string> {
-	const scope = `credential.https://${host}.helper`;
+/**
+ * The credential helpers of a forge as config pairs, the token supplied only
+ * through the environment; empty for a local repository.
+ */
+function credentialPairs(provider: Provider | undefined, overrides?: Record<string, string>): [string, string][] {
+	if (provider === 'github') {
+		return [
+			['credential.https://github.com.helper', ''],
+			['credential.https://github.com.helper', '!gh auth git-credential']
+		];
+	}
 
-	return {
-		GIT_CONFIG_COUNT: '2',
-		GIT_CONFIG_KEY_0: scope,
-		GIT_CONFIG_VALUE_0: '',
-		GIT_CONFIG_KEY_1: scope,
-		GIT_CONFIG_VALUE_1: '!f() { test "$1" = get && echo username=oauth2 && echo "password=$GITLAB_TOKEN"; }; f'
-	};
+	if (provider === 'gitlab' && overrides?.GITLAB_TOKEN) {
+		const scope = `credential.https://${overrides.GITLAB_HOST || 'gitlab.com'}.helper`;
+
+		return [
+			[scope, ''],
+			[scope, '!f() { test "$1" = get && echo username=oauth2 && echo "password=$GITLAB_TOKEN"; }; f']
+		];
+	}
+
+	return [];
+}
+
+/**
+ * The forge's credential helpers as clone arguments, which writes them into the
+ * checkout's own git config. A partial clone reads blobs on demand long after
+ * the clone, from commands that run without the review's environment, so the
+ * checkout has to know how to reach the forge by itself.
+ */
+function credentialConfig(provider: Provider | undefined, overrides?: Record<string, string>): string[] {
+	return credentialPairs(provider, overrides).flatMap(([key, value]) => ['-c', `${key}=${value}`]);
 }
 
 /** How one sandbox git command runs: its credentials and forge, where progress goes, and what stops it. */
@@ -64,14 +84,28 @@ interface GitAccess {
 	provider?: Provider;
 	onProgress?: (message: string) => void;
 	signal?: AbortSignal;
+	/** The waits between retries of a transient network failure; tests pass a shorter policy. */
+	retryDelaysMs?: number[];
 }
+
+/** The git commands that talk to the forge, the only ones a dropped connection can fail. */
+const NETWORK_COMMANDS = new Set(['clone', 'fetch', 'ls-remote']);
 
 /**
  * Runs git through the command runner. A stop is honoured before each command
  * starts, so a stopped review never begins its next clone or fetch, and it
- * ends the command that is running.
+ * ends the command that is running. Clone and fetch retry a dropped
+ * connection with backoff; every other command runs once.
  */
 async function git(cwd: string, args: string[], label: string, access: GitAccess = {}): Promise<string> {
+	const work = () => runGit(cwd, args, label, access);
+
+	return NETWORK_COMMANDS.has(args[0] ?? '')
+		? retryTransientGit(work, access.retryDelaysMs ?? RETRY_DELAYS_MS)
+		: work();
+}
+
+async function runGit(cwd: string, args: string[], label: string, access: GitAccess): Promise<string> {
 	access.signal?.throwIfAborted();
 
 	let lastReport = 0;
@@ -102,7 +136,7 @@ async function git(cwd: string, args: string[], label: string, access: GitAccess
 	access.signal?.throwIfAborted();
 
 	if (run.status !== 'succeeded') {
-		throw new Error(`git ${args[0]} failed: ${run.logs.slice(-2000)}`);
+		throw new Error(`git ${args[0]} failed: ${summarizeGitFailure(run.logs)}`);
 	}
 
 	return run.logs.trim();
@@ -135,10 +169,18 @@ export async function prepareSandbox(opts: {
 	onProgress?: (message: string) => void;
 	/** Stops the preparation before its next git command. */
 	signal?: AbortSignal;
+	/** The waits between retries of a transient network failure; tests pass a shorter policy. */
+	retryDelaysMs?: number[];
 }): Promise<Sandbox> {
 	const { repoSlug, prNumber, repoUrl, fetchRef, branch, signal } = opts;
 	const { key, path } = sandboxLocation(repoSlug, prNumber, opts.reviewId);
-	const remote: GitAccess = { overrides: opts.env, provider: opts.provider, signal };
+
+	const remote: GitAccess = {
+		overrides: opts.env,
+		provider: opts.provider,
+		signal,
+		retryDelaysMs: opts.retryDelaysMs
+	};
 
 	await mkdir(path, { recursive: true });
 
@@ -150,7 +192,18 @@ export async function prepareSandbox(opts: {
 
 		await git(
 			env.RECODER_WORKDIR,
-			['clone', '--progress', '--no-checkout', ...(shared ? ['--reference', shared] : []), '--', cloneUrl, path],
+			[
+				'clone',
+				'--progress',
+				'--no-checkout',
+				'--single-branch',
+				'--filter=blob:none',
+				...credentialConfig(opts.provider, opts.env),
+				...(shared ? ['--reference', shared] : []),
+				'--',
+				cloneUrl,
+				path
+			],
 			'sandbox clone',
 			{ ...remote, onProgress: opts.onProgress }
 		);
