@@ -1,7 +1,5 @@
 'use client';
 
-import { Checkbox as CheckboxPrimitive } from 'radix-ui';
-
 import { cn } from '../../lib/cn';
 import { useFieldControl } from './field-context';
 
@@ -24,24 +22,33 @@ const MARKS = { check: 'M5 12.5 9.5 17 19 7', dash: 'M6 12h12' } as const;
  * A 14px checkbox. Ticked, the box fills with the primary color and the
  * check draws itself in. With `'some'` it fills the same way and draws a
  * dash; a press on it ticks the whole group. Inside a `Field`, the field's
- * label names it.
+ * label names it. A plain button with the checkbox role and Radix's
+ * `data-state`, so a list of a few hundred mounts in one pass, with no
+ * provider and no form input that is added and then dropped.
  */
 export function Checkbox({ checked, onCheckedChange, disabled, id, 'aria-label': label, className }: CheckboxProps) {
 	const field = useFieldControl({ id });
 
 	return (
-		<CheckboxPrimitive.Root
+		<button
+			type="button"
+			role="checkbox"
 			data-ui="checkbox"
-			checked={checked === 'some' ? 'indeterminate' : checked}
-			onCheckedChange={(next) => onCheckedChange(next === true)}
+			data-state={checked === 'some' ? 'indeterminate' : checked ? 'checked' : 'unchecked'}
+			data-disabled={disabled ? '' : undefined}
+			aria-checked={checked === 'some' ? 'mixed' : checked}
 			disabled={disabled}
 			id={field.id}
 			aria-label={label}
 			aria-describedby={field.describedBy}
 			className={cn(className)}
+			onKeyDown={(event) => {
+				if (event.key === 'Enter') event.preventDefault();
+			}}
+			onClick={() => onCheckedChange(checked !== true)}
 		>
 			<CheckboxMark checked={checked} />
-		</CheckboxPrimitive.Root>
+		</button>
 	);
 }
 
