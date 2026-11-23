@@ -16,6 +16,7 @@ import {
 import {
 	BookOpenIcon,
 	ChatCircleIcon,
+	ChatsCircleIcon,
 	ClockIcon,
 	FolderSimpleIcon,
 	GearIcon,
@@ -23,6 +24,7 @@ import {
 	ListBulletsIcon,
 	PlusIcon,
 	QuestionIcon,
+	UserIcon,
 	XIcon,
 	type Icon
 } from '@phosphor-icons/react';
@@ -45,6 +47,8 @@ const ICONS: Record<Route['screen'], Icon> = {
 	repos: FolderSimpleIcon,
 	repo: FolderSimpleIcon,
 	chat: ChatCircleIcon,
+	person: UserIcon,
+	messages: ChatsCircleIcon,
 	automations: ClockIcon,
 	guidelines: BookOpenIcon,
 	settings: GearIcon,

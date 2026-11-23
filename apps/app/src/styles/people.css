@@ -1,0 +1,151 @@
+/* ───────── People: a person's profile, the author link and its card ───────── */
+/* The profile reads like the repository page; only its head differs: their avatar beside their name and facts. */
+.person-head {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+.person-avatar {
+	width: 48px;
+	height: 48px;
+	font-size: 18px;
+}
+.person-avatar[data-shape='square'] {
+	width: 48px;
+	height: 48px;
+	border-radius: var(--radius-card);
+}
+.person-title {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 8px;
+}
+.person-handle {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--text-muted);
+	font-family: var(--font-mono);
+	font-size: var(--font-size-label);
+}
+.person-handle > svg {
+	width: 13px;
+	height: 13px;
+	flex-shrink: 0;
+}
+.person-row-mark {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+
+/*
+ * An author's name in a line of facts: it reads as the text around it and underlines when pointed at. Inside a row
+ * that one link covers, it sits above that link, as the row's status and menu do.
+ */
+.author {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+}
+.author-link {
+	position: relative;
+	z-index: 1;
+	border-radius: var(--radius-chip);
+	color: inherit;
+	outline: none;
+	text-decoration: underline;
+	text-decoration-color: transparent;
+	text-underline-offset: 2px;
+	transition: text-decoration-color var(--dur-hover) var(--ease-hover);
+}
+.author-link:hover,
+.author-link[data-state='open'] {
+	color: var(--text-secondary);
+	text-decoration-color: currentcolor;
+}
+.author-link:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.author-avatar {
+	width: 16px;
+	height: 16px;
+	font-size: 9px;
+}
+.author-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The card: who they are and where they stand, a line of numbers, then what can be done with them. */
+.person-card-surface {
+	width: 340px;
+}
+.person-card {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 14px;
+}
+.person-card-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.person-card-avatar {
+	width: 36px;
+	height: 36px;
+	font-size: 14px;
+}
+.person-card-title {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 4px;
+}
+.person-card-name {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-title);
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.person-card-facts {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.person-card-line {
+	margin: 0;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+}
+.person-card-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.person-card-actions > :last-child {
+	margin-left: auto;
+}
+
+/* The New message picker: each person's handle at the row's end. */
+.new-message-handle {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-family: var(--font-mono);
+}
+.new-message-handle > svg {
+	width: 12px;
+	height: 12px;
+}
+.new-message-skeleton {
+	padding: 4px 8px;
+}
