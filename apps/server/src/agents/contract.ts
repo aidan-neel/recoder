@@ -19,6 +19,8 @@ import type { ChatOptions } from '../models/llm/types';
  * `tools/mcp-host.ts`, which passes each call to Recoder's gate (permitted reads, sandboxed runs).
  */
 export interface AgentAdapter {
+	/** Prompt-only adapters cannot enforce a per-inference tool allowance. */
+	readonly stepGranularity?: 'prompt';
 	/** The adapter id: also the model provider, and the prefix of its model ids (`claude-code:opus`). */
 	readonly id: string;
 	readonly name: string;
@@ -127,6 +129,8 @@ export type ToolRunner = (name: string, args: unknown) => Promise<ToolOutcome>;
 export type AgentEvent =
 	| { type: 'prompt-start'; session: string; turn: number; prefix?: ModelCallRow['prefix'] }
 	| { type: 'step-start'; step?: string }
+	/** Cumulative internal model turns, when an opaque CLI exports them separately from its prompts. */
+	| { type: 'internal-turns'; total: number | null }
 	| { type: 'text'; delta: string; partId: string }
 	| { type: 'reasoning'; delta: string; partId: string }
 	| { type: 'tool-call'; name: string }
@@ -138,6 +142,8 @@ export type AgentEvent =
 
 export interface AgentRunOptions {
 	model: string;
+	/** Pipeline scope for adapter-specific session policies. */
+	stage?: ModelCallRow['stage'];
 	reasoningEffort?: ReasoningEffort;
 	/** The system prompt, in place of the CLI's own. */
 	system: string;

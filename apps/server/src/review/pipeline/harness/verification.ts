@@ -41,6 +41,9 @@ import { diffChanges, type DiffChanges } from './run-outcome.js';
 import { recordBaseline } from './verify-baseline.js';
 import { finishVerifierTask, settledLabel, verifierTask, type VerifierTask } from './verification-task.js';
 import { VerifyQueue } from './verify-queue.js';
+import { needsVerifierFallback } from '../verify/full-fallback.js';
+import { compactVerifierOn, compactVerifierSource, type VerifierSpec } from '../verify/compact.js';
+import { dependencyApiSource, dependencyGroundingOn } from '../verify/dependency-api.js';
 
 interface VerifyContext {
 	evidence: EvidenceStore;
@@ -179,19 +182,8 @@ export function hideUnproven(run: ReviewRun): void {
 	);
 }
 
-/** How one candidate is verified: the prompts, and whether its verifier may run code. */
-interface VerifierSpec {
-	system: string;
-	user: string;
-	exec: boolean;
-	/** A weak-test finding, settled by planting the bug the test should catch. */
-	mutation: boolean;
-	/** The verifier's turn limit, the last of which is its final answer. */
-	turns: number;
-}
-
 /** Bugs are reproduced by running code; quality findings are checked by reading and searching. */
-function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext): VerifierSpec {
+function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext, firstAttempt: boolean): VerifierSpec {
 	if (findingKind(candidate.category) === 'quality') {
 		const rule = ctx.ledger?.rules.find((entry) => entry.id === candidate.ruleId);
 
@@ -206,13 +198,15 @@ function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext): Verifier
 
 	const mutation = isMutationFinding(candidate, true);
 	const turns = verifierTurns(mutation);
+	const compact = firstAttempt && !mutation && compactVerifierOn();
 
 	return {
-		system: verifierSystemPrompt(mutation),
-		user: verifierUserPrompt(candidate, ctx.evidence, ctx.notes(), turns),
+		system: verifierSystemPrompt(mutation, compact),
+		user: verifierUserPrompt(candidate, ctx.evidence, ctx.notes(), turns, compact),
 		exec: true,
 		mutation,
-		turns
+		turns,
+		compact
 	};
 }
 
@@ -272,7 +266,7 @@ async function verifyOne(
 		return { message: finishVerifierTask(ctx.task, row, 'Not run: the code cannot run here') };
 	}
 
-	const spec = verifierSpec(candidate, ctx);
+	const spec = { ...verifierSpec(candidate, ctx, attempt === 1), toolOpBudget: attempt > 1 ? null : undefined };
 
 	delete candidate.publishedBy;
 
@@ -300,10 +294,12 @@ async function verifyOne(
 		const outcome = await runVerifier(candidate, spec, ctx, cfg, { taskId, label, meta, agentId });
 
 		if (typeof outcome !== 'string') {
-			return { message: await settle(candidate, outcome, ctx, cfg, row) };
-		}
+			const message = await settle(candidate, outcome, ctx, cfg, row);
 
-		candidate.verification = stampedVerification({ status: 'unverified', reason: `Not verified: ${outcome}.` }, cfg);
+			if (!needsVerifierFallback(candidate, outcome.budgetExhausted || spec.compact)) return { message };
+		} else {
+			candidate.verification = stampedVerification({ status: 'unverified', reason: `Not verified: ${outcome}.` }, cfg);
+		}
 	} finally {
 		ctx.workspace?.release(agentId);
 	}
@@ -316,6 +312,7 @@ async function verifyOne(
 }
 
 interface VerifierRunOutcome {
+	budgetExhausted?: boolean;
 	value: VerdictOutput;
 	agentId: string;
 	retrievals: number;
@@ -324,7 +321,7 @@ interface VerifierRunOutcome {
 /** One verifier run: its verdict and the agent that gave it, or why it gave none. */
 async function runVerifier(
 	candidate: CandidateFinding,
-	{ system, user, exec, mutation, turns }: VerifierSpec,
+	{ system, user, exec, mutation, turns, toolOpBudget, compact }: VerifierSpec,
 	ctx: VerifyContext,
 	cfg: ModelConfig,
 	{ taskId, label, meta, agentId }: VerifierTask & { agentId: string }
@@ -333,12 +330,18 @@ async function runVerifier(
 	let retrievals = 0;
 
 	try {
+		const grounded =
+			exec && !mutation && dependencyGroundingOn()
+				? await dependencyApiSource(candidate, ctx.workspace, user, ctx.signal)
+				: user;
+
 		const result = await runJsonAgent({
+			toolOpBudget,
 			stage: 'verifier',
 			label: `verify ${candidate.candidateId}`,
 			agentId,
 			system,
-			user,
+			user: compact ? await compactVerifierSource(candidate, ctx.evidence, grounded, ctx.signal) : grounded,
 			exec,
 			checkFinal: exec
 				? (value, state) => verifierPushBack(value, state, ctx.evidence, agentId, mutation)
@@ -373,7 +376,7 @@ async function runVerifier(
 		});
 
 		return result.value
-			? { value: result.value, agentId, retrievals }
+			? { value: result.value, agentId, retrievals, budgetExhausted: result.opBudgetExhausted }
 			: (result.error ?? 'the verifier did not finish');
 	} catch (err) {
 		if (err instanceof ModelBlockedError || err instanceof ReviewAbortedError) throw err;

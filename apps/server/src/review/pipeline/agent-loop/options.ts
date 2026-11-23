@@ -18,6 +18,8 @@ export interface JsonAgentOptions<T> {
 	budget: ModelBudget;
 	evidence: EvidenceStore;
 	maxTurns: number;
+	/** Overrides the native verifier's env budget; null gives its one full-verification retry the existing limits. */
+	toolOpBudget?: number | null;
 	/**
 	 * Reasoning characters after which one model call is cut off and asked to answer; `REVIEW_POLICY.maxReasoningChars`
 	 * when absent. An agent that answers in one call reads all of its evidence in that call, so it is given more.

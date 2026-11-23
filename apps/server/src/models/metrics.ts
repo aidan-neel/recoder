@@ -19,14 +19,7 @@ import type { TopicTally } from '../review/guidelines/learned/votes';
 import { db, modelCalls, reviewMetrics } from '../store';
 import { metricWrites } from '../storage/persistence-queue';
 import { providerErrorText } from './error-text';
-import {
-	CapacityError,
-	isRateLimitError,
-	LlmError,
-	OutOfTimeError,
-	TimedOutError,
-	UsageLimitError
-} from './llm/errors';
+import { errorKindOf, isCancellation } from './call-errors';
 import { lockedModels } from './llm/locked-models';
 import { withLlmLane } from './llm/lane';
 import { currentLease } from '../review/runtime/ownership';
@@ -272,31 +265,6 @@ export function recordHistory(history: RunHistory): void {
 /** Queue bucket for calls with no owning review or chat, so their rows drain together. */
 const UNOWNED_CALLS = 'model-calls';
 
-/** The error ended the call because its caller stopped it, not because the model or the transport did. */
-function isCancellation(err: unknown): boolean {
-	if (!(err instanceof Error)) return false;
-	if (err.name === 'AbortError' || err.name === 'ReviewAbortedError') return true;
-
-	return err instanceof LlmError && err.status === 0 && /cancelled/i.test(err.message);
-}
-
-/** A one-word classification of a failed call's error, so the usage report can group them. */
-function errorKindOf(err: unknown): string {
-	if (err instanceof UsageLimitError) return 'usage-limit';
-	if (err instanceof CapacityError) return 'capacity';
-	if (err instanceof TimedOutError) return 'timeout';
-	if (err instanceof OutOfTimeError) return 'deadline';
-	if (err instanceof Error && err.name === 'TimeoutError') return 'timeout';
-
-	if (err instanceof LlmError) {
-		if (isRateLimitError(err)) return 'rate-limit';
-		if (err.status >= 500) return 'provider';
-		if (err.status >= 400) return 'request';
-	}
-
-	return 'error';
-}
-
 export function trackTokenCall(
 	model: string,
 	provider: TokenCall['provider'],
@@ -355,6 +323,7 @@ export function trackTokenCall(
 			...(effort && { effort }),
 			...position,
 			usage: call.usage,
+			...(call.verifierSession && { verifierSession: call.verifierSession }),
 			...(durationMs !== undefined && { durationMs }),
 			outcome,
 			...(errorKind && { errorKind }),
@@ -387,6 +356,10 @@ export function trackTokenCall(
 	save();
 
 	return {
+		verifierSession: (value: NonNullable<RunTokenCall['verifierSession']>) => {
+			call.verifierSession = structuredClone(value);
+			save();
+		},
 		usage: (usage: TokenUsage) => {
 			if (tally && usage.outputTokens !== null) {
 				tally.outputTokens = (tally.outputTokens ?? 0) + usage.outputTokens - (call.usage.outputTokens ?? 0);

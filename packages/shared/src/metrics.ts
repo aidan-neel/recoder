@@ -40,6 +40,17 @@ export interface OutputRate {
 	estimated: boolean;
 }
 
+/** Cumulative verifier-session counters; deduplicate snapshots by id, keeping the latest. Unknown turns stay null. */
+export interface VerifierSessionUsage {
+	id: string;
+	opBudget: number | null;
+	ops: number;
+	refusals: number;
+	prompts: number;
+	internalTurns: number | null;
+	exhausted: boolean;
+}
+
 export interface TokenCall {
 	/** Optional subtask within a stage, such as a diff guide using the brief model. */
 	purpose?: string;
@@ -55,6 +66,7 @@ export interface TokenCall {
 	/** A failed call's provider error, with keys, tokens, auth headers and home paths removed; absent on other calls. */
 	error?: string;
 	usage: TokenUsage;
+	verifierSession?: VerifierSessionUsage;
 	/** What paid for a Claude Code call, as the CLI reports it: `none` is the signed-in subscription, not a key. */
 	apiKeySource?: string;
 }

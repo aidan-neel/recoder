@@ -5,6 +5,7 @@ import { canLaunchInvestigation } from '../agent-loop.js';
 import { isNotRun, type CandidateFinding } from '../consolidate.js';
 import { sameIssue } from '../consolidate-merge.js';
 import { isMutationFinding } from '../verify/runs.js';
+import { verifierSessionFixes } from '../verify/session-policy.js';
 import { CandidateProgress } from './candidate-progress.js';
 import { publishBudget, saveCheckpoint, syncWorkspaceDeadline, type ReviewRun } from './context.js';
 
@@ -211,7 +212,8 @@ export class VerifyQueue {
 		this.followers.delete(leader);
 
 		for (const follower of waiting) {
-			if (proved(leader)) this.shareProof(follower, leader);
+			if (proved(leader) && (!verifierSessionFixes() || sameIssue(leader, follower, this.run.inventory)))
+				this.shareProof(follower, leader);
 			else this.add(follower);
 		}
 	}

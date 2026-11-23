@@ -1,7 +1,15 @@
+import { spyOn } from 'bun:test';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fakeBin } from './fake-bin';
+
+export function captureRetryWarning() {
+	const waiting = Promise.withResolvers<void>();
+	const warning = spyOn(console, 'warn').mockImplementation(waiting.resolve);
+
+	return { waiting: waiting.promise, warning };
+}
 
 /** What the `tool` mode runs with Bun: one MCP call to the server Recoder put in the local MCP config. */
 const TOOL_CALL = [
@@ -67,17 +75,21 @@ done
 env > "$FAKE_DEVIN_LOG.env"
 
 if [ -n "$resumed" ]; then
-	echo '{"session_id":"quiet-owl","final_metrics":{"total_prompt_tokens":1500,"total_completion_tokens":50,"total_cached_tokens":900}}' > "$export_file"
+	echo '{"session_id":"quiet-owl","final_metrics":{"total_prompt_tokens":1500,"total_completion_tokens":50,"total_cached_tokens":900,"total_steps":7}}' > "$export_file"
 else
-	echo '{"session_id":"quiet-owl","final_metrics":{"total_prompt_tokens":1000,"total_completion_tokens":20,"total_cached_tokens":600}}' > "$export_file"
+	echo '{"session_id":"quiet-owl","final_metrics":{"total_prompt_tokens":1000,"total_completion_tokens":20,"total_cached_tokens":600,"total_steps":4}}' > "$export_file"
 fi
 
 case "$FAKE_DEVIN_MODE" in
+partialthrottle) if [ ! -f "$FAKE_DEVIN_LOG.retried" ]; then touch "$FAKE_DEVIN_LOG.retried"; echo 'The scratch test was written.'; echo 'Error: Reached request rate limit. Your limit will reset in 2 seconds.' >&2; exit 1; fi; echo 'the reply' ;;
+throttleonce) if [ ! -f "$FAKE_DEVIN_LOG.retried" ]; then touch "$FAKE_DEVIN_LOG.retried"; echo 'Error: Reached request rate limit. Your limit will reset in 2 seconds.' >&2; exit 1; fi; echo 'the reply' ;;
+missingexport) if [ -n "$resumed" ]; then rm "$export_file"; fi; echo 'the reply' ;;
 signedout) echo "Error: Not logged in. Run devin auth login" >&2; exit 1 ;;
 empty) exit 0 ;;
 refused) if [ -n "$resumed" ]; then echo "the reply"; fi ;;
 crash) echo "boom" >&2; exit 1 ;;
 tool) bun -e "$TOOL_CALL" ;;
+blockedtool) bun -e "$BLOCKED_TOOL_CALL" ;;
 spawn) sleep 30 & echo "$$ $!" > "$FAKE_DEVIN_LOG.pids"; wait ;;
 limited) printf '%s\n' 'Error: Agent error: Reached free model rate limit. Your limit will reset in 3 hours (at Oct 9 00:01 UTC). (trace ID: 21f5): {' '  "cognition.ai/errorKind": "unavailable",' '  "cognition.ai/retryable": true' '}' >&2; exit 1 ;;
 *) echo "the reply" ;;

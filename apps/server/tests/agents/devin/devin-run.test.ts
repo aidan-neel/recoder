@@ -1,13 +1,71 @@
-import { describe, expect, test } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import { describe, expect, jest, test } from 'bun:test';
+import { readFile, readdir } from 'node:fs/promises';
 import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { DevinAgent } from '../../../src/agents/devin/devin';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
-import { fakeDevin } from '../../helpers/fake-devin';
+import { captureRetryWarning, fakeDevin } from '../../helpers/fake-devin';
+import { useFakeClock } from '../../helpers/fake-clock';
 import { fixtureReview, openCollectingRun, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
+import { whenFileExists } from '../../helpers/when-found';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
+
+describe('Devin throttled prompts', () => {
+	useFakeClock();
+
+	test('retries a CLI throttle within one prompt, resuming its session and retaining both attempts usage', async () => {
+		const { run, events, log } = await openRun('throttleonce');
+		const { waiting, warning } = captureRetryWarning();
+
+		try {
+			const work = run.prompt('Review it.', PROMPT);
+			const backedOff = await Promise.race([waiting.then(() => true), work.then(() => false)]);
+
+			expect(backedOff).toBe(true);
+			jest.advanceTimersByTime(4000);
+
+			const reply = await work;
+
+			expect(reply.error).toBeUndefined();
+			expect(reply.text).toBe('the reply\n');
+			expect(events.filter((event) => event.type === 'step-start')).toHaveLength(2);
+			expect(events.flatMap((event) => (event.type === 'usage' ? [event.usage.inputTokens] : []))).toEqual([1000, 500]);
+			expect(await readFile(log, 'utf8')).toContain('[--resume] [quiet-owl]');
+		} finally {
+			warning.mockRestore();
+			await run.close();
+		}
+	});
+
+	test('a partial throttled session continues without replaying the tool-using request and keeps raw exports after close', async () => {
+		const { run, log } = await openRun('partialthrottle', undefined, true);
+		const { waiting, warning } = captureRetryWarning();
+
+		try {
+			const work = run.prompt('Original request with tool side effects.', PROMPT);
+
+			expect(await Promise.race([waiting.then(() => true), work.then(() => false)])).toBe(true);
+			jest.advanceTimersByTime(4000);
+			expect((await work).error).toBeUndefined();
+
+			const resumed = await readFile(log, 'utf8');
+
+			expect(resumed).toContain('[--resume] [quiet-owl]');
+			expect(resumed).not.toContain('Original request with tool side effects.');
+			await run.close();
+
+			const exports = await readdir(`${log}.exports`);
+
+			expect(exports).toHaveLength(2);
+			for (const file of exports)
+				expect(JSON.parse(await readFile(`${log}.exports/${file}`, 'utf8')).session_id).toBe('quiet-owl');
+		} finally {
+			warning.mockRestore();
+			await run.close();
+		}
+	});
+});
 
 /** The config file the CLI ran under, as the fake logged it. */
 const configSchema = z.object({
@@ -22,9 +80,12 @@ const serversSchema = z.object({
 /** A run on the fake CLI in `mode`, with its events collected and the path of the fake's log. */
 async function openRun(
 	mode = 'reply',
-	userConfig?: Record<string, unknown>
+	userConfig?: Record<string, unknown>,
+	retain = false
 ): Promise<{ run: AgentRun; events: AgentEvent[]; log: string }> {
 	const env = await fakeDevin({ FAKE_DEVIN_MODE: mode }, userConfig);
+
+	if (retain) env.RECODER_DEVIN_EXPORT_DIR = `${env.FAKE_DEVIN_LOG}.exports`;
 
 	const { run, events } = await openCollectingRun(new DevinAgent(env), {
 		model: 'swe-2-high',
@@ -41,6 +102,24 @@ function logged(text: string, label: string): string {
 }
 
 describe('DevinAgent.openRun', () => {
+	test('an aborted prompt returns its available export usage as well as emitting it', async () => {
+		const { run, events, log } = await openRun('spawn');
+		const pending = run.prompt('Review it.', PROMPT);
+
+		try {
+			await whenFileExists(`${log}.pids`);
+			await run.abort();
+
+			const reply = await pending;
+
+			expect(reply.error?.message).toMatch(/cancel/i);
+			expect(reply.tokens?.inputTokens).toBe(1000);
+			expect(events.filter((event) => event.type === 'usage')).toHaveLength(1);
+		} finally {
+			await run.close();
+		}
+	});
+
 	test('denies the CLI its own tools and gives it only Recoder’s MCP server, in the local config of its directory', async () => {
 		const { run, log } = await openRun();
 
@@ -111,6 +190,7 @@ describe('DevinAgent.openRun', () => {
 		expect(events).toEqual([
 			{ type: 'step-start' },
 			{ type: 'text', delta: 'the reply\n', partId: 'devin_1' },
+			{ type: 'internal-turns', total: 4 },
 			{
 				type: 'usage',
 				usage: {
@@ -140,6 +220,19 @@ describe('DevinAgent.openRun', () => {
 		expect(text).toContain('[--resume] [quiet-owl]');
 		expect(logged(text, 'prompt')).toBe('Continue.');
 		expect(usage).toEqual([1000, 500]);
+		expect(events.flatMap((event) => (event.type === 'internal-turns' ? [event.total] : []))).toEqual([4, 7]);
+	});
+
+	test('a resumed prompt without an export leaves internal turns and usage unknown instead of reusing old totals', async () => {
+		const { run, events } = await openRun('missingexport');
+
+		await run.prompt('Review it.', PROMPT);
+
+		const reply = await run.prompt('Continue.', PROMPT);
+
+		await run.close();
+		expect(reply.tokens).toBeUndefined();
+		expect(events.flatMap((event) => (event.type === 'internal-turns' ? [event.total] : []))).toEqual([4, null]);
 	});
 
 	testPromptFailures(openRun, [

@@ -1,0 +1,39 @@
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from iteration5_benchmark import verify_hashes
+from iteration5_freeze import digest
+from iteration5_metrics import adjudicated_class, precision_bounds
+
+
+class Iteration5Tests(unittest.TestCase):
+    def test_audit_overlay_requires_evidence_and_preserves_frozen_matches(self):
+        self.assertEqual(adjudicated_class('unresolved',dict(label='false',evidence='Go discovers Test functions by name')),'false')
+        self.assertEqual(adjudicated_class('unresolved',None),'unresolved')
+        for original,decision in [('planted',dict(label='false',evidence='audit')),('duplicate',dict(label='additional',evidence='audit')),('unresolved',dict(label='false',evidence='  ')),('unresolved',dict(label='planted',evidence='audit'))]:
+            with self.subTest(original=original,decision=decision):
+                with self.assertRaises(AssertionError):adjudicated_class(original,decision)
+
+    def test_precision_retains_unknowns_and_penalizes_duplicates(self):
+        self.assertEqual(precision_bounds(['planted','additional','duplicate','false','unresolved']),dict(lower=.4,upper=.6,published=5,unresolved=1))
+        self.assertEqual(precision_bounds(['false','unresolved'])['upper'],.5)
+
+    def test_empty_precision_is_undefined_not_perfect(self):
+        self.assertIsNone(precision_bounds([]))
+
+    def test_invalid_class_is_not_silently_ignored(self):
+        with self.assertRaises(AssertionError):precision_bounds(['unknown'])
+
+    def test_frozen_inputs_cannot_change_or_disappear(self):
+        with tempfile.TemporaryDirectory() as name:
+            p=Path(name);(p/'label.json').write_text('original')
+            (p/'SHA256SUMS.json').write_text(json.dumps({'label.json':digest(b'original')}))
+            verify_hashes(p)
+            (p/'label.json').write_text('edited')
+            with self.assertRaises(AssertionError):verify_hashes(p)
+            (p/'label.json').unlink()
+            with self.assertRaises(FileNotFoundError):verify_hashes(p)
+
+
+if __name__=='__main__':unittest.main()

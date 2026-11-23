@@ -8,6 +8,8 @@ import {
 import { isHeldBack, isPublishable, toFinding, type CandidateFinding } from './consolidate.js';
 import { claimTerms, lineAnchor, refineFingerprint, sameClaim, type ClaimTerms } from './harness/findings.js';
 import type { ReviewInventory } from './inventory.js';
+import { sameProofClaim } from './harness/proof-claim.js';
+import { verifierSessionFixes } from './verify/session-policy.js';
 
 /** Strongest proof first: a run beats a deterministic check, which beats a trace or a convention. */
 const PROOF_RANK: Record<NonNullable<FindingVerification['method']>, number> = {
@@ -160,7 +162,9 @@ export function sameIssue(a: CandidateFinding, b: CandidateFinding, inventory: R
 	const title = titleKey(a);
 	const placed = mergeKey(a) === mergeKey(b) || (title !== null && title === titleKey(b));
 
-	return placed && sameClaim(claimOf(a, inventory), claimOf(b, inventory));
+	return (
+		placed && (verifierSessionFixes() ? sameProofClaim(a, b) : sameClaim(claimOf(a, inventory), claimOf(b, inventory)))
+	);
 }
 
 /**
@@ -175,7 +179,17 @@ function byClaim(reports: CandidateFinding[], inventory: ReviewInventory): Candi
 
 	for (const report of reports) {
 		const claim = claimOf(report, inventory);
-		const group = groups.find((entry) => entry.claims.every((other) => sameClaim(claim, other)));
+
+		const group = groups.find(
+			(entry) =>
+				entry.claims.every((other) => sameClaim(claim, other)) &&
+				(!verifierSessionFixes() ||
+					entry.members.every(
+						(other) =>
+							!(report.verification?.status === 'verified' || other.verification?.status === 'verified') ||
+							sameProofClaim(report, other)
+					))
+		);
 
 		if (group) {
 			group.members.push(report);

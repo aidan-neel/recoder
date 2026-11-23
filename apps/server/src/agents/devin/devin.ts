@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
@@ -9,9 +9,11 @@ import { CLI_OUTPUT_CAP_BYTES, streamCli } from '../cli-stream';
 import { SessionCliAgent } from '../session-run';
 import type { AgentModelSettings, AgentRun, AgentRunOptions, AgentSetup } from '../contract';
 import { parseDevinModels } from './devin-models';
-import { DEVIN_LOGIN, exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
+import { DEVIN_LOGIN, exitError, readExport, tokenUsage } from './devin-output';
 import { devinDataHome, devinEnv, removeToolFreeHome, toolFreeHome } from './devin-process';
 import { DevinRun, DEVIN_PRINT_ARGS } from './devin-run';
+import { withDevinRetries } from './devin-retry';
+import { retainDevinExport } from './devin-artifacts';
 
 const INSTALL = 'curl -fsSL https://cli.devin.ai/install.sh | bash';
 
@@ -37,6 +39,7 @@ const TOOL_RETRIES = 2;
  */
 export class DevinAgent extends SessionCliAgent {
 	readonly id = 'devin';
+	readonly stepGranularity = 'prompt' as const;
 	readonly name = 'Devin';
 	/** Its CLI documents no image input; the prompt goes in as text (`--prompt-file`). */
 	readonly readsImages = false;
@@ -110,21 +113,46 @@ export class DevinAgent extends SessionCliAgent {
 
 			const env = { ...devinEnv(this.env), XDG_CONFIG_HOME: await toolFreeHome(this.env) };
 			let text = '';
-			let exported: DevinExport | null = null;
 
 			for (let attempt = 0; attempt <= TOOL_RETRIES && !text.trim(); attempt++) {
 				if (attempt > 0) await writeFile(promptFile, TOOL_REFUSED_NUDGE, { mode: 0o600 });
 
-				const args = [...DEVIN_PRINT_ARGS, '--prompt-file', promptFile, '--model', opts.model, '--export', exportFile];
+				const result = await withDevinRetries<{ text: string } | { error: unknown }>(deadline.signal, async () => {
+					const args = [
+						...DEVIN_PRINT_ARGS,
+						'--prompt-file',
+						promptFile,
+						'--model',
+						opts.model,
+						'--export',
+						exportFile
+					];
 
-				if (session) args.push('--resume', session);
+					if (session) args.push('--resume', session);
+					await retainDevinExport(exportFile, this.env);
+					await rm(exportFile, { force: true });
 
-				text = await this.run(path, args, { cwd, env }, deadline.signal, onToken);
-				exported = await readExport(exportFile);
-				session = exported?.session_id ?? session;
+					let reply: { text: string } | { error: unknown };
+
+					try {
+						reply = { text: await this.run(path, args, { cwd, env }, deadline.signal, onToken) };
+					} catch (error) {
+						reply = { error };
+					}
+
+					const saved = await readExport(exportFile);
+
+					session = saved?.session_id ?? session;
+
+					return {
+						value: reply,
+						errorOutput: 'error' in reply ? String(reply.error) : undefined
+					};
+				});
+
+				if ('error' in result) throw result.error;
+				text = result.text;
 			}
-
-			if (exported?.final_metrics) opts.onUsage?.(tokenUsage(exported.final_metrics));
 
 			if (!text.trim()) throw new LlmError(0, 'Devin ended without a reply.');
 
@@ -133,6 +161,10 @@ export class DevinAgent extends SessionCliAgent {
 			session ??= (await readExport(exportFile))?.session_id;
 			throw deadline.failure(error, 'Devin request failed.');
 		} finally {
+			const saved = await readExport(exportFile);
+
+			if (saved?.final_metrics) opts.onUsage?.(tokenUsage(saved.final_metrics));
+			await retainDevinExport(exportFile, this.env);
 			await removeScratchDir(this.scratch, scratch);
 			if (session) await this.forget(path, session);
 		}

@@ -237,21 +237,27 @@ test('two different verified defects on one line, sharing category, fingerprint 
 	expect(new Set(findings.map((finding) => finding.fingerprint)).size).toBe(2);
 });
 
-test('one defect reported three times in different words becomes one finding with three member ids and all evidence', () => {
+test('differently stated verified claims retain their own proof and evidence instead of borrowing a representative', () => {
 	const reports = [
 		verified('c1', SPOOFED, ['E1']),
 		verified('c2', FORGED, ['E2']),
 		verified('c3', CROSS_TENANT, ['E3', 'E1'])
 	];
 
-	const [finding, ...rest] = consolidateFindings(reports, ctx.inventory);
+	const findings = consolidateFindings(reports, ctx.inventory);
 
-	expect(rest).toHaveLength(0);
-	expect(finding.memberIds).toEqual(reports.map((report) => report.id));
-	expect(finding.evidenceIds?.sort()).toEqual(['E1', 'E2', 'E3']);
+	expect(findings).toHaveLength(3);
+
+	for (const report of reports) {
+		const finding = findings.find((item) => item.id === report.id)!;
+
+		expect(finding.memberIds).toEqual([report.id]);
+		expect(finding.verification).toEqual(report.verification);
+		expect(finding.evidenceIds?.sort()).toEqual([...new Set(report.evidenceIds)].sort());
+	}
 });
 
-test('a report that names two defects joins one of them without chaining the other in', () => {
+test('a verified report that names two defects cannot absorb either distinct verified claim', () => {
 	const reports = [
 		verified('c1', SPOOFED, []),
 		verified('c2', FORGED, []),
@@ -263,7 +269,7 @@ test('a report that names two defects joins one of them without chaining the oth
 	const findings = consolidateFindings(reports, ctx.inventory);
 	const ids = (...indices: number[]) => indices.map((index) => reports[index].id);
 
-	expect(findings.map((finding) => finding.memberIds)).toEqual([ids(0, 1, 2), ids(3, 4)]);
+	expect(findings.map((finding) => finding.memberIds)).toEqual([ids(0), ids(1), ids(2), ids(3), ids(4)]);
 });
 
 test('reversing the order of the candidates gives byte-identical findings', () => {
@@ -292,8 +298,8 @@ test('reversing the order of the candidates gives byte-identical findings', () =
 
 test('a merged finding keeps every member id, earliest raised first, including a warning-tier report', () => {
 	const traced = verified('c1', SPOOFED, ['E1']);
-	const ran = verified('c2', FORGED, ['E2'], 'run');
-	const held = verified('c3', { ...CROSS_TENANT, severity: 'medium' }, ['E3']);
+	const ran = verified('c2', { ...FORGED, claim: SPOOFED.claim }, ['E2'], 'run');
+	const held = verified('c3', { ...CROSS_TENANT, claim: SPOOFED.claim, severity: 'medium' }, ['E3']);
 	const [finding, ...rest] = consolidateFindings([held, ran, traced], ctx.inventory);
 
 	expect(held.tier).toBe('warning');
@@ -302,23 +308,17 @@ test('a merged finding keeps every member id, earliest raised first, including a
 	expect(finding.memberIds).toEqual([traced.id, ran.id, held.id]);
 });
 
-test('a detector result and a reviewer report of the same defect on one line become one finding', () => {
-	const detected = candidateFromDetector(WEAKENED, { candidateId: 'c1' }, ctx);
-	const reported = verified('c2', ANY_ERROR, ['E1'], 'run');
-	const findings = consolidateFindings([reported, detected], ctx.inventory);
+test.each([ANY_ERROR, SHARED_FIXTURE])(
+	'a detector and reviewer without an identical explicit claim retain independent proofs (case %#)',
+	(report) => {
+		const detected = candidateFromDetector(WEAKENED, { candidateId: 'c1' }, ctx);
+		const reported = verified('c2', report, ['E1'], 'run');
+		const findings = consolidateFindings([reported, detected], ctx.inventory);
 
-	expect(detected.fingerprint).toBe(reported.fingerprint);
-	expect(findings.map((finding) => finding.memberIds)).toEqual([[detected.id, reported.id]]);
-});
-
-test('a detector result and a reviewer report of different defects on one line stay two findings', () => {
-	const detected = candidateFromDetector(WEAKENED, { candidateId: 'c1' }, ctx);
-	const reported = verified('c2', SHARED_FIXTURE, ['E1'], 'run');
-	const findings = consolidateFindings([reported, detected], ctx.inventory);
-
-	expect(detected.fingerprint).toBe(reported.fingerprint);
-	expect(findings.map((finding) => finding.memberIds).sort()).toEqual([[detected.id], [reported.id]].sort());
-});
+		expect(detected.fingerprint).toBe(reported.fingerprint);
+		expect(findings.map((finding) => finding.memberIds).sort()).toEqual([[detected.id], [reported.id]].sort());
+	}
+);
 
 test('a finding that stood alone keeps its fingerprint when a more severe defect is split off it', () => {
 	const alone = verified('c1', { ...SPOOFED, severity: 'medium' }, ['E1']);

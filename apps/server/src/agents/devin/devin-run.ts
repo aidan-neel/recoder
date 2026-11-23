@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TokenUsage } from '@recoder/shared';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
@@ -9,6 +9,9 @@ import type { ToolLease } from '../tools/mcp-host';
 import { usageDelta } from '../usage-delta';
 import { exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
 import { devinEnv, runConfig } from './devin-process';
+import { withDevinRetries } from './devin-retry';
+import { retainDevinExport } from './devin-artifacts';
+import { mcpOnlyTools } from './devin-tools';
 
 type Env = Record<string, string | undefined>;
 
@@ -40,8 +43,8 @@ function runFiles(root: string): RunFiles {
  * whose only content is the local MCP config naming Recoder's server (the CLI reads `.devin/mcp_config.local.json`
  * of the directory it runs in).
  */
-async function writeRunFiles(files: RunFiles, env: Env, lease: ToolLease | null): Promise<void> {
-	await Bun.write(join(files.configHome, 'devin', 'config.json'), await runConfig(env, lease?.name ?? null));
+async function writeRunFiles(files: RunFiles, env: Env, lease: ToolLease | null, tools = {}): Promise<void> {
+	await Bun.write(join(files.configHome, 'devin', 'config.json'), await runConfig(env, lease?.name ?? null, tools));
 	await mkdir(files.cwd, { recursive: true });
 
 	if (!lease) return;
@@ -58,12 +61,22 @@ async function writeRunFiles(files: RunFiles, env: Env, lease: ToolLease | null)
  */
 export class DevinRun extends SessionRun<RunFiles> {
 	private used: TokenUsage | null = null;
+	private turnsMissing = false;
+	private mcpNotice = '';
 
 	static async open(host: SessionHost, options: AgentRunOptions): Promise<DevinRun> {
 		const root = await SessionRun.scratchDirectory('devin');
 		const run = new DevinRun(host, options, root, runFiles(root));
 
-		return SessionRun.ready(run, () => writeRunFiles(run.files, host.env, run.lease));
+		const tools =
+			host.env.RECODER_DEVIN_MCP_ONLY !== '0' && options.stage === 'verifier' && run.lease
+				? mcpOnlyTools(run.lease.name, options.tools)
+				: {};
+
+		if ('disabled_tools' in tools && run.lease)
+			run.mcpNotice = `The CLI working directory is empty, not the checkout. Its local tools are disabled. Repository access is ONLY through Recoder MCP server ${run.lease.name}: use mcp_list_tools with server_name=${run.lease.name}, then mcp_call_tool on that server. Available Recoder operations: ${options.tools.join(', ')}. A tool refusal is not a verdict; use the MCP equivalent and continue.\n\n`;
+
+		return SessionRun.ready(run, () => writeRunFiles(run.files, host.env, run.lease, tools));
 	}
 
 	/** Runs the agent on `text` until it answers. Devin takes no system prompt, so the first prompt carries it. */
@@ -71,36 +84,63 @@ export class DevinRun extends SessionRun<RunFiles> {
 		const deadline = this.begin(options.timeoutMs);
 		const partId = `devin_${++this.prompts}`;
 		const asked = options.schema ? `${text}\n\n${JSON_MODE_INSTRUCTION}` : text;
+		let continued = false;
 		let answer = '';
-
-		await writeFile(this.files.prompt, this.session ? asked : `${this.options.system}\n\n${asked}`, { mode: 0o600 });
-		this.options.onEvent({ type: 'step-start' });
+		let usageRead = true;
 
 		try {
-			const exit = await streamCli({
-				argv: [this.host.path, ...this.args()],
-				cwd: this.files.cwd,
-				env: { ...devinEnv(this.host.env), XDG_CONFIG_HOME: this.files.configHome },
-				stdin: null,
-				signal: deadline.signal,
-				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
-				onOutput: (piece) => {
-					answer += piece;
-					this.options.onEvent({ type: 'text', delta: piece, partId });
-				},
-				running: this.host.running,
-				name: 'Devin'
+			return await withDevinRetries<AgentReply>(deadline.signal, async () => {
+				answer = '';
+
+				const next = continued
+					? `Continue the interrupted request from your saved session. Do not repeat completed tools or work. Finish your answer.${options.schema ? `\n\n${JSON_MODE_INSTRUCTION}` : ''}`
+					: asked;
+
+				await writeFile(this.files.prompt, this.session ? next : `${this.options.system}\n\n${this.mcpNotice}${next}`, {
+					mode: 0o600
+				});
+
+				this.options.onEvent({ type: 'step-start' });
+				await rm(this.files.export, { force: true });
+				usageRead = false;
+
+				const exit = await streamCli({
+					argv: [this.host.path, ...this.args()],
+					cwd: this.files.cwd,
+					env: { ...devinEnv(this.host.env), XDG_CONFIG_HOME: this.files.configHome },
+					stdin: null,
+					signal: deadline.signal,
+					maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
+					onOutput: (piece) => {
+						answer += piece;
+						this.options.onEvent({ type: 'text', delta: piece, partId });
+					},
+					running: this.host.running,
+					name: 'Devin'
+				});
+
+				const tokens = await this.exported();
+
+				usageRead = true;
+
+				if (exit.code !== 0)
+					return {
+						value: { text: answer, error: exitError(exit, answer), tokens },
+						errorOutput: exit.stderr.trim() ? exit.stderr : answer,
+						partial: Boolean(answer.trim()) && !/^\s*(?:error\b|HTTP\s*429\b)/i.test(answer),
+						resume: this.session
+							? () => {
+									continued = true;
+								}
+							: undefined
+					};
+
+				return { value: { text: answer, tokens } };
 			});
-
-			const tokens = await this.exported();
-
-			if (exit.code !== 0) return { text: answer, error: exitError(exit, answer), tokens };
-
-			return { text: answer, tokens };
 		} catch (error) {
-			await this.exported();
+			const tokens = !usageRead ? await this.exported() : undefined;
 
-			return { text: answer, error: deadline.failure(error, 'Devin run failed.') };
+			return { text: answer, tokens, error: deadline.failure(error, 'Devin run failed.') };
 		}
 	}
 
@@ -124,9 +164,16 @@ export class DevinRun extends SessionRun<RunFiles> {
 	 * the end of its step. Null when the CLI exported nothing.
 	 */
 	private async exported(): Promise<TokenUsage | undefined> {
+		await retainDevinExport(this.files.export, this.host.env);
+
 		const exported: DevinExport | null = await readExport(this.files.export);
 
 		this.session = exported?.session_id ?? this.session;
+
+		const turns = exported?.final_metrics?.total_steps;
+
+		this.turnsMissing ||= turns === undefined;
+		this.options.onEvent({ type: 'internal-turns', total: this.turnsMissing ? null : turns! });
 
 		if (!exported?.final_metrics) return undefined;
 

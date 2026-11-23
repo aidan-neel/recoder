@@ -20,8 +20,10 @@ import { agentDeadlines, deadlineError, newAgentId, toolTurns, type AgentLimits 
 import { StepRelay } from './step-relay.js';
 import { FINAL_TURN_NOTE, ToolGate } from './tool-gate.js';
 import type { JsonAgentOptions } from './options.js';
+import { verifierOpBudget } from './verifier-budget.js';
+import { verifierSessionFixes } from '../verify/session-policy.js';
 
-type AgentResult<T> = { value: T | null; error?: string };
+type AgentResult<T> = { value: T | null; error?: string; opBudgetExhausted?: boolean };
 
 /** Why Recoder stopped a run that the CLI was still driving. */
 type Interrupt = 'paused' | 'deadline' | 'budget' | 'final' | 'runaway' | 'overthought';
@@ -72,6 +74,9 @@ class NativeRun<T> {
 	private interrupt: Interrupt | null = null;
 	private toolsOn: boolean;
 	private repaired = 0;
+	private readonly sessionId = newAgentId();
+	private readonly opBudget: number | null;
+	private prompts = 0;
 
 	/** Steps taken before the current prompt, and whether that prompt left the tools on. */
 	private stepsBefore = 0;
@@ -85,6 +90,11 @@ class NativeRun<T> {
 		initialDiscussion: string
 	) {
 		this.limits = limits;
+
+		const opaque = agent.stepGranularity === 'prompt' && verifierSessionFixes();
+		const configured = opts.toolOpBudget === undefined ? verifierOpBudget(opts.stage) : opts.toolOpBudget;
+
+		this.opBudget = configured ?? (opaque ? Math.max(1, toolTurns(opts)) * REVIEW_POLICY.maxRetrievalsPerTurn : null);
 		this.endpoint = llmEndpoint(opts.config);
 		this.spendOpts = { consumeReserve: opts.consumeReserve };
 		this.toolsOn = toolTurns(opts) > 0;
@@ -99,7 +109,14 @@ class NativeRun<T> {
 			opts,
 			opts.agentId ?? newAgentId(),
 			{ isFinal: () => this.finalTurn(), nextIsFinal: () => this.relay.finished + 1 >= toolTurns(opts) },
-			initialDiscussion
+			initialDiscussion,
+			this.opBudget === null
+				? undefined
+				: {
+						limit: this.opBudget,
+						onExhausted: () => this.stop(this.promptTools ? 'final' : 'runaway')
+					},
+			opaque
 		);
 	}
 
@@ -107,6 +124,7 @@ class NativeRun<T> {
 	private finalTurn(): boolean {
 		return (
 			!this.toolsOn ||
+			this.gate.exhausted ||
 			this.gate.stuck ||
 			this.relay.finished >= toolTurns(this.opts) ||
 			!this.opts.budget.canSpend(1, this.spendOpts) ||
@@ -133,6 +151,7 @@ class NativeRun<T> {
 		opts.onProgress?.('running', 0, `Running ${opts.label}`);
 
 		if (!opts.budget.canSpend(0, this.spendOpts)) this.stop('budget');
+		else if (this.promptTools && this.gate.exhausted) this.stop('final');
 		else if (!this.promptTools && step - this.stepsBefore > this.answerSteps()) this.stop('runaway');
 		else if (this.promptTools && step > Math.max(opts.maxTurns, toolTurns(opts) + ANSWER_STEPS)) this.stop('final');
 	}
@@ -167,6 +186,7 @@ class NativeRun<T> {
 			reasoningEffort: opts.config.reasoningEffort,
 			system: forNativeTools(opts.system) + (this.toolsOn ? NATIVE_REPLY_RULES : TOOLLESS_REPLY_RULES) + CHAT_STYLE,
 			tools: toolTurns(opts) > 0 ? nativeToolNames(this.listedTools()) : [],
+			stage: opts.stage,
 			runTool: this.gate.run,
 			onEvent: this.relay.onEvent,
 			signal: opts.signal,
@@ -186,6 +206,7 @@ class NativeRun<T> {
 		const clock = setTimeout(() => this.stop('deadline'), untilDeadline);
 
 		this.interrupt = null;
+		this.prompts++;
 		this.stepsBefore = this.relay.steps;
 		this.promptTools = !final;
 		pauseSignal?.addEventListener('abort', onPause, { once: true });
@@ -201,6 +222,7 @@ class NativeRun<T> {
 
 			return { reply, why: this.interrupt, final: final || this.finalTurn() };
 		} finally {
+			this.recordSession();
 			clearTimeout(clock);
 			pauseSignal?.removeEventListener('abort', onPause);
 		}
@@ -229,7 +251,11 @@ class NativeRun<T> {
 		if (why === 'final') {
 			this.toolsOn = false;
 
-			return { next: FINAL_TURN_NOTE };
+			return {
+				next: this.gate.exhausted
+					? `${this.opts.user}\n\nUNTRUSTED SESSION EVIDENCE:\n${this.gate.finalEvidence()}\n\n${FINAL_TURN_NOTE} If evidence is insufficient, answer unverified, never refuted merely because the budget ended.`
+					: FINAL_TURN_NOTE
+			};
 		}
 
 		if (!this.canRepair()) return { value: null, error: 'reasoning ran too long without an answer' };
@@ -356,8 +382,27 @@ class NativeRun<T> {
 		}
 	}
 
+	private recordSession(): void {
+		if (this.opts.stage !== 'verifier') return;
+
+		this.relay.verifierSession({
+			id: this.sessionId,
+			opBudget: this.opBudget,
+			ops: this.gate.ops,
+			refusals: this.gate.refusals,
+			prompts: this.prompts,
+			internalTurns: this.relay.internalTurns,
+			exhausted: this.gate.exhausted
+		});
+	}
+
+	get opBudgetExhausted(): boolean {
+		return this.gate.exhausted;
+	}
+
 	async close(): Promise<void> {
 		this.relay.settle(SESSION_CLOSED);
+		this.recordSession();
 		await this.session?.close();
 	}
 }
@@ -383,7 +428,9 @@ export async function runNativeAgent<T>(opts: JsonAgentOptions<T>, agent: AgentA
 	const run = new NativeRun(opts, agent, limits, (await opts.getDiscussion?.()) ?? '');
 
 	try {
-		return await run.toAnswer();
+		const result = await run.toAnswer();
+
+		return run.opBudgetExhausted ? { ...result, opBudgetExhausted: true } : result;
 	} catch (err) {
 		if (opts.signal.aborted) throw new ReviewAbortedError('review aborted');
 

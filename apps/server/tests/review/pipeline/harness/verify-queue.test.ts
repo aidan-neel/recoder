@@ -5,6 +5,9 @@ import type { CandidateFinding } from '../../../../src/review/pipeline/consolida
 import type { ReviewRun } from '../../../../src/review/pipeline/harness/context';
 import { VerifyQueue } from '../../../../src/review/pipeline/harness/verify-queue';
 import { REVIEW_POLICY } from '../../../../src/review/session/review-policy';
+import { envFlag } from '../../../helpers/env-flag';
+
+envFlag('RECODER_VERIFIER_SESSION_FIXES', '1');
 
 const VERIFIED_TASK = { message: 'Verified by a run' };
 
@@ -219,6 +222,7 @@ function bug(candidateId: string): CandidateFinding {
 /** A queue that shares proofs, whose verifiers settle as `verdict` says once released. */
 function sharingQueue(verdict: (next: CandidateFinding) => void) {
 	const started: string[] = [];
+	const notices = new Map<string, () => void>();
 	const gates: (() => void)[] = [];
 	const candidates: ReviewCandidate[] = [];
 
@@ -232,6 +236,7 @@ function sharingQueue(verdict: (next: CandidateFinding) => void) {
 		run,
 		(next) => {
 			started.push(next.candidateId);
+			notices.get(next.candidateId)?.();
 
 			return new Promise<typeof VERIFIED_TASK>((resolve) =>
 				gates.push(() => {
@@ -248,7 +253,14 @@ function sharingQueue(verdict: (next: CandidateFinding) => void) {
 		}
 	);
 
-	return { queue, started, candidates, release: () => gates.shift()?.() };
+	return {
+		queue,
+		started,
+		candidates,
+		release: () => gates.shift()?.(),
+		waitForStart: (id: string) =>
+			started.includes(id) ? Promise.resolve() : new Promise<void>((resolve) => notices.set(id, resolve))
+	};
 }
 
 test('a report of an issue a waiting verifier proves takes that proof without a verifier of its own', async () => {
@@ -291,4 +303,23 @@ test('a report whose leader was not proved gets a verifier of its own', async ()
 
 	expect(started).toEqual(['a', 'b']);
 	expect(follower.verification?.status).toBe('verified');
+});
+
+test('a leader whose claim changes while being verified cannot pass its proof to a waiting follower', async () => {
+	const { queue, started, release, waitForStart } = sharingQueue((next) => {
+		if (next.candidateId === 'a') next.message = 'A distinct overflow defect with another trigger.';
+		next.verification = { status: 'verified', method: 'run', reason: `Proof for ${next.message}` };
+	});
+
+	const follower = bug('b');
+
+	queue.add(bug('a'));
+	queue.add(follower);
+	release();
+	await waitForStart('b');
+	release();
+	await queue.drain();
+
+	expect(started).toEqual(['a', 'b']);
+	expect(follower.verification?.reason).toContain(follower.message);
 });
