@@ -89,6 +89,45 @@ const FINDINGS: Finding[] = [
 		suggestion: 'Cap the refill: `Math.min(capacity, tokens + elapsed * refillPerSecond)`.'
 	},
 	{
+		id: 'sample-f6',
+		title: 'Refused requests still count as usage',
+		file: 'src/rate-limit/middleware.ts',
+		line: 18,
+		endLine: 18,
+		severity: 'warning',
+		tier: 'warning',
+		category: 'correctness',
+		kind: 'bug',
+		symbol: 'rateLimit',
+		message: [
+			'`rateLimit` calls `usage.record(tenant)` before it checks `allowed`, so every refused request still counts as usage. A tenant over its limit keeps adding to `UsageStore` while it gets `429`, and the dashboard bills it for requests it never got.',
+			'',
+			'- middleware.ts:18 records the request before the `if (!allowed)` branch at `middleware.ts:20`.',
+			'- `src/rate-limit/store.ts:14` runs `INCR` on `usage:{tenant}:{minute}` for each call, refused or not.',
+			'- `billing/usage-report.ts:40` sums those keys into the invoice line without looking at the status code.',
+			'',
+			'A client that retries on `429` with no backoff multiplies its own bill by the retry count, and the usage page stops matching what the API served.'
+		].join('\n'),
+		claim: {
+			trigger: 'A tenant over its limit keeps sending requests.',
+			executionPath: [
+				{ file: 'src/rate-limit/middleware.ts', line: 18, note: 'records the request' },
+				{ file: 'src/rate-limit/store.ts', line: 14, note: 'INCR for the minute' },
+				{ file: 'src/rate-limit/middleware.ts', line: 20, note: 'only then refuses it' }
+			],
+			consequence: 'Refused requests are counted and billed.',
+			violatedContract: 'Usage counts the requests the API served (docs/rate-limits.md).'
+		},
+		verification: {
+			status: 'verified',
+			method: 'trace',
+			outcome: 'traced',
+			reason: 'The record call runs on every path through the middleware, before the limiter decides.'
+		},
+		suggestion:
+			'Move `await usage.record(tenant)` below the `if (!allowed)` branch in middleware.ts, so only requests the limiter let through are counted.'
+	},
+	{
 		id: 'sample-f3',
 		title: 'Refill rate ignores the configured window',
 		file: 'src/rate-limit/middleware.ts',

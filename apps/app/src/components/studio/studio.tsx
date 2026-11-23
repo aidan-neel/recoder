@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Card, cn, Popover, PopoverContent, PopoverTrigger, RowButton } from '@recoder/ui';
+import { Button, Card, cn, FileChip, Popover, PopoverContent, PopoverTrigger, RowButton } from '@recoder/ui';
 import type { ReviewToolCall } from '@recoder/shared';
 import { useReducedMotion } from 'motion/react';
 import { useEffect, useMemo, useRef, type CSSProperties, type RefObject } from 'react';
@@ -155,10 +155,7 @@ function Commons({ view, ended, rows }: { view: StudioView; ended: boolean; rows
 					{proven.map((candidate) => (
 						<li key={candidate.id}>
 							<span className="studio-table-title">{candidate.title}</span>
-							<span className="meta studio-table-where">
-								{candidate.path}
-								{candidate.line ? `:${candidate.line}` : ''}
-							</span>
+							<FileChip path={candidate.path} line={candidate.line} className="studio-table-where" />
 							<CandidateChain candidate={candidate} steps={view.chains.get(candidate.id) ?? []} />
 						</li>
 					))}

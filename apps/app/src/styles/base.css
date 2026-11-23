@@ -240,6 +240,12 @@
 	font-family: var(--font-code);
 }
 
+/* A file chip in a line of prose sits in the middle of the line like a word, without making the line taller. */
+[data-ui='markdown'] [data-ui='file-chip'][data-framed] {
+	margin-block: -3px;
+	vertical-align: middle;
+}
+
 /*
  * A reference in a line of text: a file or a commit as a small chip, a mark before its name. Its block margins are
  * negative, so a 20px chip never makes a 20px line taller than the lines without one.

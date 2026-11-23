@@ -1,8 +1,8 @@
 'use client';
 
-import type { PullDescription, PullDescriptionState, PullPage } from '@recoder/shared';
+import type { PullDescription, PullDescriptionState } from '@recoder/shared';
 import { Button, Skeleton, StatusNotice } from '@recoder/ui';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type { BugView } from '@/lib/bugs/types';
 import { useBugsView, useSummaryView } from '@/lib/bugs/use-bugs';
@@ -11,7 +11,8 @@ import {
 	usePullConversationView,
 	usePullDescriptionView,
 	usePullDiffView,
-	usePullPageView
+	usePullPageView,
+	useWarmCommits
 } from '@/lib/pull/pull-session';
 import type { PullDescriptionView } from '@/lib/pull/types';
 import { useRunView } from '@/lib/run/use-run';
@@ -25,7 +26,6 @@ import { Conversation } from './conversation';
 import { DescriptionLede } from './description-lede';
 import { DescriptionRail } from './description-rail';
 import { Overview } from './overview';
-import { ProseRefsContext } from './prose';
 import { Walkthrough } from './walkthrough';
 
 interface DescriptionTabProps {
@@ -55,19 +55,6 @@ interface UndescribedProps {
 	conversation: ReactNode;
 }
 
-/** The forge origin (`https://github.com`, a self-hosted GitLab host) from the pull request's URL, or null locally. */
-function forgeOriginOf(page: PullPage | null): string | null {
-	if (!page || page.provider === 'local' || !page.pull.url) return null;
-
-	try {
-		const parsed = new URL(page.pull.url);
-
-		return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.origin : null;
-	} catch {
-		return null;
-	}
-}
-
 /**
  * The Description tab: what the change does as a model wrote it, then the change in groups to read in order, each
  * with its files and findings, and the pull request's conversation; every open finding and the notes stand beside it.
@@ -75,12 +62,10 @@ function forgeOriginOf(page: PullPage | null): string | null {
  * request's files and commits as badges, so text that could gain one waits for the diff or the commits.
  */
 export function DescriptionTab({ onOpenGuide, onOpenFile, onOpenFinding, onOpenReview }: DescriptionTabProps) {
-	const page = usePullPageView().page;
 	const view = usePullDescriptionView();
 	const conversationView = usePullConversationView();
-	const { sources, awaits } = useProseSources();
-	const forgeOrigin = forgeOriginOf(page);
-	const refs = useMemo(() => ({ sources, openFile: onOpenFile, forgeOrigin }), [sources, onOpenFile, forgeOrigin]);
+	const { awaits } = useProseSources();
+	const warmCommits = useWarmCommits();
 	const state = view.state.phase === 'ready' ? view.state.value : null;
 	const phase = describedPhase(view, state);
 	const ready = state?.status === 'ready' ? state.description : null;
@@ -90,40 +75,40 @@ export function DescriptionTab({ onOpenGuide, onOpenFile, onOpenFinding, onOpenR
 
 	const shown = ready ?? (phase ? kept : null);
 
+	useEffect(warmCommits, [warmCommits]);
+
 	const conversation = (
 		<Conversation view={conversationView} waiting={conversationView.entries.some((entry) => awaits(entry.body))} />
 	);
 
 	return (
-		<ProseRefsContext value={refs}>
-			<div className="summary">
-				<div className="reading">
-					<div className="page-column description-layout">
-						{phase ? (
-							<Described
-								description={shown ?? LOADING_DESCRIPTION}
-								phase={phase}
-								standIn={!shown}
-								awaits={awaits}
-								onRedescribe={view.redescribe}
-								onOpenGuide={onOpenGuide}
-								onOpenFile={onOpenFile}
-								onOpenFinding={onOpenFinding}
-								onOpenReview={onOpenReview}
-								conversation={conversation}
-							/>
-						) : (
-							<Undescribed
-								notice={<DescriptionNotice view={view} state={state} />}
-								awaits={awaits}
-								onOpenGuide={onOpenGuide}
-								conversation={conversation}
-							/>
-						)}
-					</div>
+		<div className="summary">
+			<div className="reading">
+				<div className="page-column description-layout">
+					{phase ? (
+						<Described
+							description={shown ?? LOADING_DESCRIPTION}
+							phase={phase}
+							standIn={!shown}
+							awaits={awaits}
+							onRedescribe={view.redescribe}
+							onOpenGuide={onOpenGuide}
+							onOpenFile={onOpenFile}
+							onOpenFinding={onOpenFinding}
+							onOpenReview={onOpenReview}
+							conversation={conversation}
+						/>
+					) : (
+						<Undescribed
+							notice={<DescriptionNotice view={view} state={state} />}
+							awaits={awaits}
+							onOpenGuide={onOpenGuide}
+							conversation={conversation}
+						/>
+					)}
 				</div>
 			</div>
-		</ProseRefsContext>
+		</div>
 	);
 }
 
