@@ -116,6 +116,8 @@ export function planSubagents(
 			id: `subagent-${index + 1}`,
 			title: entry.request.concern,
 			reason: `Asked by the reviewer of ${entry.unitTitle}: ${entry.request.question}\nWhy: ${entry.request.why}`,
+			askedBy: entry.unitId,
+			question: entry.request.question,
 			scope
 		})),
 		dropped: unique.slice(cap).map(({ entry }) => entry)
