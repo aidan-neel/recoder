@@ -18,3 +18,14 @@ export function errorToast(title: string, description?: string, action?: Failure
 
 	toast.error(title, { description, duration: button ? 10000 : 6000, action: button });
 }
+
+/**
+ * A rejection handler that toasts why an action did not go through (`fallback` when the error says nothing) and
+ * rethrows, so the button that ran it shows it failed.
+ */
+export function rejectWithToast(fallback: string): (error: unknown) => never {
+	return (error) => {
+		errorToast(error instanceof Error && error.message ? error.message : fallback);
+		throw error;
+	};
+}
