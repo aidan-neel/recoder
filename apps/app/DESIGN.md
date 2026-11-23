@@ -356,14 +356,23 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   paused, failed or out-of-date review shows one glyph with its word as a
   tooltip (failed in the danger tone, out of date in medium); a done review
   shows its open bugs as the count. The page has one control that starts a
-  review: the Review split button at the end of the title's row, before the
-  menu and the merge button, on every tab. It reads Review until a review has
-  run and Review again after; `r` presses it, its menu offers Spark, and on a
-  failed review at the same head it continues from where the review stopped.
-  It is the region's primary, with its `r` keycap, while a review is the next
-  step (none yet, cancelled, failed, out of date) and an outline otherwise.
-  While a review is queued, runs or is paused it is gone, and the Review tab's
-  row holds Pause and Cancel. Nothing else on the page starts a review. The tabs:
+  review: the review split button at the end of the title's row, before the
+  menu and the merge button, on every tab. It never leaves that place or
+  changes its width (every label it can show sizes it, unseen): it reads
+  where the review stands. It reads Review until a review has run and Review
+  again after; `r` presses it and its menu offers Spark. On a failed review
+  at the same head it reads Continue review and continues from where the
+  review stopped. It is the region's primary, with its `r` keycap, while a
+  review is the next step (none yet, cancelled, failed, out of date) and an
+  outline otherwise. While a review is queued or runs it reads Cancel review,
+  an outline with a spinner that turns into Capy's stop square under the
+  pointer or focus, and its menu holds Pause (shut while queued). A paused
+  review reads Resume review, the primary, and its menu holds Cancel.
+  Cancelling a review that has started asks first, since its findings so far
+  are dropped; a queued one cancels at once. The button shows the cancel
+  itself: Cancelling with a spinner, then Cancelled with a check, then Review.
+  The Review tab's row shows only the live review's facts. Nothing else on
+  the page starts a review. The tabs:
   - **Changes**: one reading column of diffs, as Capy Desktop shows a pull
     request; nothing sits beside it. See Changes below.
   - **Summary**: what the change does (clamped), the order to read the
