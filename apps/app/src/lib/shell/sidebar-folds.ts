@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { readStoredJson, writeStored } from './browser-storage';
 
 /** A sidebar list a person can fold away or hide. */
-export type SidebarList = 'repos' | 'chats' | 'reviews';
+export type SidebarList = 'repos' | 'chats' | 'messages' | 'reviews';
 
 /** Where the folded lists are kept in this browser. */
 const FOLDS_KEY = 'recoder.sidebar-folds.v1';
@@ -11,7 +11,7 @@ const FOLDS_KEY = 'recoder.sidebar-folds.v1';
 /** Where the hidden lists are kept in this browser. */
 const HIDDEN_KEY = 'recoder.sidebar-hidden.v1';
 
-const LISTS: readonly SidebarList[] = ['repos', 'chats', 'reviews'];
+const LISTS: readonly SidebarList[] = ['repos', 'chats', 'messages', 'reviews'];
 
 interface ListsState {
 	/** Lists showing only their title. */

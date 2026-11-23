@@ -20,7 +20,7 @@ export interface RepoFacts {
 
 /** One figure in the row under the header: a label over a number, with a quieter fact beside the number. */
 export interface RepoFigure {
-	id: 'open' | 'bugs' | 'merged' | 'accepted' | 'typical';
+	id: string;
 	label: string;
 	value: string;
 	detail: string | null;

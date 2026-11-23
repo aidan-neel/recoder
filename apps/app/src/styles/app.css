@@ -17,6 +17,8 @@
 @import './ask.css';
 @import './chat.css';
 @import './chat-trail.css';
+@import './people.css';
+@import './messages.css';
 @import './files.css';
 @import './commits.css';
 @import './compose.css';

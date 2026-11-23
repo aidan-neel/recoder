@@ -12,7 +12,7 @@ import { PullList } from '@/components/pulls/pull-list';
 import { RepoEmpty, RepoSection } from './repo-section';
 
 /** The pull requests that merged after a review: what the reviews fixed, and when it merged. */
-function Merged({ rows }: { rows: MergedRow[] }) {
+export function Merged({ rows }: { rows: MergedRow[] }) {
 	if (rows.length === 0) return <RepoEmpty>No reviewed pull request has merged yet.</RepoEmpty>;
 
 	return (

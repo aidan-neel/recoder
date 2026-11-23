@@ -1,18 +1,18 @@
 'use client';
 
 import type { RepoOverview } from '@recoder/shared';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useApi, useListStore, useOverviewCache, useSessionCache } from '../api/client';
+import { useApi, useListStore, useOverviewCache } from '../api/client';
 import { ApiError, failureText, isOffline } from '../api/http';
 import { useComposeMode, type ComposeMode } from '../compose/compose-mode';
-import type { PullRow } from '../pulls/types';
+import { useRowActions } from '../pulls/use-row-actions';
 import { useRowEntries, useWatchList } from '../pulls/use-rows';
-import { errorToast } from '../shell/notify';
 import { repoName } from '../shell/format';
 import { newReviewHref, pullsHref, reposHref } from '../shell/routes';
+import { useKeyedRead } from '../shell/use-keyed-read';
 import { repoPageData } from './repo-page';
 import type { RepoPageView } from './types';
 
@@ -30,36 +30,25 @@ type OverviewState =
  */
 function useOverview(repoId: string): { state: OverviewState; retry: () => void } {
 	const overviews = useOverviewCache();
-	const [answer, setAnswer] = useState<{ repoId: string; state: OverviewState } | null>(null);
-	const [attempt, setAttempt] = useState(0);
 
-	const retry = useCallback(() => {
-		setAnswer(null);
-		setAttempt((count) => count + 1);
-	}, []);
-
-	useEffect(() => {
-		let current = true;
-		const settle = (state: OverviewState) => current && setAnswer({ repoId, state });
-
+	const { answer, retry } = useKeyedRead(repoId, () =>
 		overviews.read(repoId).then(
-			(overview) => settle({ phase: 'ready', overview }),
-			(error: unknown) => {
+			(overview): OverviewState => ({ phase: 'ready', overview }),
+			(error: unknown): OverviewState | null => {
 				if (error instanceof ApiError && error.status === 404) {
 					overviews.forget(repoId);
-					settle({ phase: 'missing' });
-				} else if (!overviews.peek(repoId)) {
-					settle({ phase: 'failed', error: failureText(error), offline: isOffline(error) });
+
+					return { phase: 'missing' };
 				}
+
+				return overviews.peek(repoId)
+					? null
+					: { phase: 'failed', error: failureText(error), offline: isOffline(error) };
 			}
-		);
+		)
+	);
 
-		return () => {
-			current = false;
-		};
-	}, [overviews, repoId, attempt]);
-
-	return { state: answer?.repoId === repoId ? answer.state : keptState(overviews.peek(repoId)), retry };
+	return { state: answer ?? keptState(overviews.peek(repoId)), retry };
 }
 
 /** What the page shows before this visit's read answers: the copy read before, or loading. */
@@ -76,7 +65,6 @@ export function useRepoPage(repoId: string): RepoPageView {
 
 	const { base } = useApi();
 	const list = useListStore();
-	const sessions = useSessionCache();
 	const allEntries = useRowEntries();
 	const overview = useOverview(repoId);
 	const setComposeMode = useComposeMode((state) => state.setMode);
@@ -117,16 +105,7 @@ export function useRepoPage(repoId: string): RepoPageView {
 		if (listFailed) list.refresh();
 	}, [retryOverview, listFailed, list]);
 
-	const review = useCallback(
-		(row: PullRow) => {
-			list.start({ repoId: row.repoId, number: row.number, title: row.title }).catch((error: unknown) => {
-				errorToast(failureText(error, 'The review did not start.'));
-			});
-		},
-		[list]
-	);
-
-	const warm = useCallback((row: PullRow) => sessions.warm(row.repoId, row.number), [sessions]);
+	const { review, warm } = useRowActions();
 
 	/** Sets the New screen to this repository in `mode`, before the link takes the person there. */
 	const prepare = useCallback(

@@ -16,6 +16,8 @@ import { createSampleAuth } from './sample-auth';
 import { createSampleChat } from './sample-chat';
 import { createSampleFiles } from './sample-files';
 import { createSampleMembers } from './sample-members';
+import { createSampleMessages } from './sample-messages';
+import { createSamplePeople } from './sample-people';
 import { sampleChatMetrics, sampleReviewMetrics } from './sample-metrics';
 import { createSampleTelemetry } from './sample-telemetry';
 import { createSampleUpdate } from './sample-update';
@@ -214,6 +216,8 @@ export function createSampleApi(): ApiClient {
 		base: '/sample',
 		auth: createSampleAuth(),
 		members: createSampleMembers(),
+		people: createSamplePeople(world),
+		messages: createSampleMessages(),
 		usage: createSampleUsage(),
 		telemetry: createSampleTelemetry(),
 		update: createSampleUpdate(),

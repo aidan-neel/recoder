@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
+import { messageHref, personHref } from '../../src/lib/people/refs';
 import { pullHref, pullTabOf, repoHref, routeOf } from '../../src/lib/shell/routes';
 
 describe('pullTabOf', () => {
@@ -70,5 +71,24 @@ describe('routeOf', () => {
 
 	test('does not read a path outside its base as one of its own', () => {
 		expect(routeOf('/samples', '/sample')).toEqual({ screen: 'missing' });
+	});
+
+	test('reads back the person a profile link names, a bot and a self-managed GitLab among them', () => {
+		const people = [
+			{ provider: 'github' as const, host: null, login: 'renovate[bot]' },
+			{ provider: 'gitlab' as const, host: 'git.acme.dev:8443', login: 'tomas' }
+		];
+
+		for (const person of people)
+			expect(routeOf(personHref('/sample', person), '/sample')).toEqual({ screen: 'person', person });
+	});
+
+	test('shows the missing page for a profile on a forge people do not come from', () => {
+		expect(routeOf('/people/local/mira', '')).toEqual({ screen: 'missing' });
+		expect(routeOf('/people/github/acme.dev/mira', '')).toEqual({ screen: 'missing' });
+	});
+
+	test('reads back the conversation a message link names', () => {
+		expect(routeOf(messageHref('', 'dm 1/2'), '')).toEqual({ screen: 'messages', conversationId: 'dm 1/2' });
 	});
 });
