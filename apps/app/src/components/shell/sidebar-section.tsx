@@ -64,7 +64,7 @@ export function SidebarSection({
 				{add || onHide ? (
 					<div className="section-tools">
 						{add ? (
-							<Tooltip content={add.label}>
+							<Tooltip content={add.label} side="right">
 								<Button variant="ghost" size="icon" aria-label={add.label} onClick={add.onSelect}>
 									<Icon name="add" />
 								</Button>

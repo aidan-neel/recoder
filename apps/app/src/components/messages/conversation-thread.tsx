@@ -11,7 +11,7 @@ import { Avatar } from '@/components/common/avatar';
 
 import { PullChip } from './pull-chip';
 
-/** How long one person may pause and still go on under the same name and hour. */
+/** How long one person may pause and still go on in the same run of bubbles. */
 const RUN_GAP_MS = 5 * 60 * 1000;
 
 /** A message on the page: one the server holds, or one still on its way. */
@@ -49,7 +49,7 @@ function lines(view: ConversationView, theirId: string): Line[] {
 	return [...held, ...going];
 }
 
-/** The day a time falls on, as the divider names it: Today, Yesterday, or the date. */
+/** The day a time falls on: Today, Yesterday, or the date. */
 function dayLabel(at: string, now: Date): string {
 	const day = new Date(at);
 	const yesterday = new Date(now);
@@ -62,15 +62,24 @@ function dayLabel(at: string, now: Date): string {
 	return dayDate(at);
 }
 
-/** Whether a line starts a new run under its author's name: another author, a long pause, or another day. */
-function startsRun(line: Line, previous: Line | undefined): boolean {
-	if (!previous || previous.mine !== line.mine) return true;
-
-	return Date.parse(line.at) - Date.parse(previous.at) > RUN_GAP_MS || newDay(line, previous);
-}
-
 function newDay(line: Line, previous: Line | undefined): boolean {
 	return !previous || new Date(line.at).toDateString() !== new Date(previous.at).toDateString();
+}
+
+function longPause(line: Line, previous: Line | undefined): boolean {
+	return !previous || Date.parse(line.at) - Date.parse(previous.at) > RUN_GAP_MS;
+}
+
+/** Whether a line starts a new run of bubbles: another author, a long pause, or another day. */
+function startsRun(line: Line, previous: Line | undefined): boolean {
+	return !previous || previous.mine !== line.mine || longPause(line, previous) || newDay(line, previous);
+}
+
+/** The time over a line, centred: the day and hour on a new day, the hour after a long pause, else none. */
+function stampOf(line: Line, previous: Line | undefined, now: Date): string | null {
+	if (newDay(line, previous)) return `${dayLabel(line.at, now)} ${clockTime(line.at)}`;
+
+	return longPause(line, previous) ? clockTime(line.at) : null;
 }
 
 /** The sequence of the newest message the other person has read that the signed-in person sent; null for none. */
@@ -86,14 +95,15 @@ function seenAt(all: Line[], conversation: Conversation): number | null {
 interface ThreadProps {
 	view: ConversationView;
 	conversation: Conversation;
-	/** The signed-in person, as their own messages are signed. */
+	/** The signed-in person, as their own messages are named. */
 	me: { name: string; avatarUrl: string | null };
 }
 
 /**
- * The conversation, oldest first: a divider for each day, each run of messages under its author's avatar, name and
- * hour, and the pull requests attached as chips. A message still on its way is drawn faded; one the server refused
- * says why, with Retry. Seen follows the signed-in person's last message once the other person has read it.
+ * The conversation as chat bubbles, oldest first: the signed-in person's on the right in the accent, the other
+ * person's on the left with their avatar beside the last of each run. A new day or a long pause puts its time over
+ * the next bubble, and attached pull requests follow their bubble as chips. A message still on its way is faded;
+ * one the server refused says why, with Retry. Seen follows the signed-in person's last message once it is read.
  */
 export function ConversationThread({ view, conversation, me }: ThreadProps) {
 	const them = { name: displayName(conversation.with), avatarUrl: conversation.with.avatarUrl };
@@ -115,43 +125,59 @@ export function ConversationThread({ view, conversation, me }: ThreadProps) {
 			) : null}
 			{all.map((line, index) => {
 				const previous = all[index - 1];
+				const next = all[index + 1];
 				const who = line.mine ? me : them;
+				const stamp = stampOf(line, previous, now);
+				const ends = !next || startsRun(next, line);
 
 				return (
-					<div key={line.key} className="dm-line" data-run={startsRun(line, previous) || undefined}>
-						{newDay(line, previous) ? (
-							<div className="dm-day" role="separator">
-								<span>{dayLabel(line.at, now)}</span>
+					<div
+						key={line.key}
+						className="dm-line"
+						data-mine={line.mine || undefined}
+						data-run={startsRun(line, previous) || undefined}
+						data-end={ends || undefined}
+					>
+						{stamp ? (
+							<div className="dm-stamp" role="separator">
+								{stamp}
 							</div>
 						) : null}
-						{startsRun(line, previous) ? (
-							<div className="dm-author">
-								<Avatar name={who.name} src={who.avatarUrl} className="dm-avatar" />
-								<span className="dm-name">{who.name}</span>
-								<time dateTime={line.at} title={fullTime(line.at)} className="dm-time">
-									{clockTime(line.at)}
-								</time>
-							</div>
-						) : null}
-						<article className="dm-message" data-state={line.outgoing?.state} aria-label={`${who.name} said`}>
-							{line.body ? <Markdown>{line.body}</Markdown> : null}
-							{line.attachments.length > 0 ? (
-								<div className="dm-attachments">
-									{line.attachments.map((attachment) => (
-										<PullChip key={`${attachment.repoId}#${attachment.number}`} attachment={attachment} />
-									))}
-								</div>
-							) : null}
-							{line.outgoing?.state === 'failed' ? (
-								<p className="dm-failed" role="alert">
-									{line.outgoing.error ?? 'The message was not sent.'}
-									<Button variant="outline" onClick={() => view.resend(line.key)}>
-										<Icon name="refresh" />
-										Retry
-									</Button>
-								</p>
-							) : null}
-						</article>
+						<div className="dm-row">
+							{line.mine ? null : ends ? (
+								<Avatar name={them.name} src={them.avatarUrl} className="dm-avatar" />
+							) : (
+								<span className="dm-avatar" aria-hidden data-gap />
+							)}
+							<article
+								className="dm-message"
+								data-state={line.outgoing?.state}
+								aria-label={`${who.name}, ${clockTime(line.at)}`}
+								title={fullTime(line.at)}
+							>
+								{line.body ? (
+									<div className="dm-bubble">
+										<Markdown>{line.body}</Markdown>
+									</div>
+								) : null}
+								{line.attachments.length > 0 ? (
+									<div className="dm-attachments">
+										{line.attachments.map((attachment) => (
+											<PullChip key={`${attachment.repoId}#${attachment.number}`} attachment={attachment} />
+										))}
+									</div>
+								) : null}
+								{line.outgoing?.state === 'failed' ? (
+									<p className="dm-failed" role="alert">
+										{line.outgoing.error ?? 'The message was not sent.'}
+										<Button variant="outline" onClick={() => view.resend(line.key)}>
+											<Icon name="refresh" />
+											Retry
+										</Button>
+									</p>
+								) : null}
+							</article>
+						</div>
 						{line.sequence !== null && line.sequence === seen ? <p className="dm-seen">Seen</p> : null}
 					</div>
 				);

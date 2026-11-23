@@ -39,8 +39,3 @@ export function personKey({ provider, host, login }: PersonRef): string {
 export function displayName(person: { login: string; name?: string | null }): string {
 	return person.name || (isBotLogin(person.login) ? person.login.replace(/\[bot\]$/i, '') : person.login);
 }
-
-/** A conversation's address. */
-export function messageHref(base: string, conversationId: string): string {
-	return `${base}/messages/${encodeURIComponent(conversationId)}`;
-}

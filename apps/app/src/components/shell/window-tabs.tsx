@@ -35,7 +35,6 @@ const ICONS: Record<Route['screen'], IconName> = {
 	repo: 'folder',
 	chat: 'chat_bubble',
 	person: 'person',
-	messages: 'forum',
 	automations: 'schedule',
 	guidelines: 'menu_book',
 	settings: 'settings',

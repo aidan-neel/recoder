@@ -5,13 +5,12 @@ import { useCallback, useState } from 'react';
 
 import { useApi, useInboxStore } from '../api/client';
 import { failureText } from '../api/http';
-import { messageHref } from '../people/refs';
-import { navigate } from '../shell/navigation';
 import { errorToast } from '../shell/notify';
+import { useDock } from './dock-store';
 import { useDraftAttachments } from './draft-attachments';
 
 /**
- * Opens the conversation with an account in the tab on screen, made on first use, with `attach` waiting in its
+ * Opens the conversation with an account in the floating message window, made on first use, with `attach` waiting in its
  * composer. `opening` is true while the server makes it; a refusal shows as a toast.
  */
 export function useOpenConversation(): {
@@ -34,7 +33,7 @@ export function useOpenConversation(): {
 
 				if (attach) attachTo(conversation.id, attach);
 
-				navigate(messageHref(client.base, conversation.id));
+				useDock.getState().openConversation(conversation.id);
 			} catch (error) {
 				errorToast('The conversation did not open.', failureText(error));
 			} finally {
