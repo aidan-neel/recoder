@@ -22,6 +22,9 @@ export interface ReviewUnit {
 	/** Why the unit runs; a retry carries how the first attempt failed. */
 	reason: string;
 	scope: UnitScope;
+	/** The reviewer and exact question behind a requested subagent. */
+	askedBy?: string;
+	question?: string;
 	/** The lenses a reviewer applies to its slice; unset on a brief unit and on a subagent. */
 	lenses?: LensId[];
 	/** Set on a subagent the harness sends for a second look rather than one a reviewer asked for. */
@@ -170,6 +173,7 @@ export function unitRecord(unit: ReviewUnit, role = 'reviewer'): ReviewAssignmen
 		role,
 		title: unit.title,
 		reason: unit.reason,
+		...(unit.askedBy !== undefined && { askedBy: unit.askedBy, question: unit.question }),
 		status: 'queued',
 		scope: unit.scope,
 		candidateCount: 0,

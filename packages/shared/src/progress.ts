@@ -1,4 +1,5 @@
 import type { DiffGuide } from './diff-guide';
+import type { FindingTier } from './findings';
 import type { OutputRate } from './metrics';
 
 export type ReviewTaskStatus = 'queued' | 'waiting' | 'running' | 'done' | 'error' | 'skipped' | 'partial';
@@ -51,7 +52,6 @@ export interface ReviewTask {
 	batches?: number;
 	scout?: number;
 	files?: string[];
-	currentFile?: string;
 	startedAt?: string;
 	updatedAt: string;
 	elapsedMs?: number;
@@ -61,6 +61,10 @@ export interface ReviewTask {
 	queuedAt?: string;
 	activityAt?: string;
 	candidateCount?: number;
+	/** A verification task: the candidate it checks. */
+	candidateId?: string;
+	/** A verification task: the verification lane running it, `verifier-1`, reused by the next candidate once free. */
+	verifierId?: string;
 }
 
 export interface ReviewAssignmentScope {
@@ -82,6 +86,35 @@ export interface ReviewAssignment {
 	queuedAt?: string;
 	completedAt?: string;
 	elapsedMs?: number;
+	/** A subagent: the assignment whose reviewer asked for it. */
+	askedBy?: string;
+	/** A subagent: the question it was asked, in the reviewer's words. */
+	question?: string;
+}
+
+/** Where a candidate finding stands, from the moment a reviewer raises it to its verdict. */
+export type ReviewCandidateState = 'raised' | 'verifying' | 'proven' | 'unproven' | 'dropped' | 'merged';
+
+/** A candidate finding on the stream: who raised it and where, who checked it, and what became of it. */
+export interface ReviewCandidate {
+	id: string;
+	title: string;
+	path: string;
+	line?: number;
+	tier: FindingTier;
+	/** The assignment that raised it. */
+	raisedBy?: string;
+	raisedAt: string;
+	state: ReviewCandidateState;
+	/** The verification lane that took it, as on its verification task. */
+	verifierId?: string;
+	/** The validation stage that dropped it before verification: `location`, `evidence`, `category`, `dismissed`. */
+	dropStage?: string;
+	/** Its verdict or drop reason in words: `Traced through the code`, `Covered by the PR description; dropped`. */
+	message?: string;
+	settledAt?: string;
+	/** Consolidation folded it into this candidate. */
+	mergedInto?: string;
 }
 
 export interface CoverageGap {
@@ -273,6 +306,8 @@ export interface ReviewProgress {
 	updatedAt: string;
 	planVersion?: number;
 	assignments?: ReviewAssignment[];
+	/** Every candidate finding raised so far, in the order they were raised. */
+	candidates?: ReviewCandidate[];
 	budget?: ReviewBudgetSnapshot;
 	candidateCount?: number;
 	coverage?: CoverageSummary;

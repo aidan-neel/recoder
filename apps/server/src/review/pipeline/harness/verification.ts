@@ -39,6 +39,7 @@ import type { HarnessEvents, TaskFn } from './types.js';
 import { candidateRepairOn, repairCandidate } from './repair.js';
 import { diffChanges, type DiffChanges } from './run-outcome.js';
 import { recordBaseline } from './verify-baseline.js';
+import { finishVerifierTask, settledLabel, verifierTask, type VerifierTask } from './verification-task.js';
 import { VerifyQueue } from './verify-queue.js';
 
 interface VerifyContext {
@@ -103,9 +104,9 @@ export function startVerification(run: ReviewRun, sandbox: Promise<BackgroundChe
 
 	const queue = new VerifyQueue(
 		run,
-		(candidate, attempt) => verifyOne(candidate, ctx, attempt),
+		(candidate, attempt, verifierId) => verifyOne(candidate, ctx, attempt, verifierId),
 		repair,
-		(follower, leader) => shareVerdict(follower, leader, ctx)
+		(follower, leader, verifierId) => shareVerdict(follower, leader, ctx, verifierId)
 	);
 
 	run.verifying = queue;
@@ -215,21 +216,6 @@ function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext): Verifier
 	};
 }
 
-/** The task row a candidate's verification shows under. */
-function verifierTask(candidate: CandidateFinding, model = configForVerifier().model): VerifierTask {
-	return {
-		taskId: `verify:${candidate.candidateId}`,
-		label: `Verify: ${candidate.title ?? candidate.file}`,
-		meta: {
-			kind: 'verification',
-			agent: candidate.agent ?? 'reviewer',
-			model,
-			assignmentId: candidate.assignmentId,
-			files: [candidate.file]
-		}
-	};
-}
-
 /** Stamps the verifier's model and reasoning effort onto a settled verification. */
 function stampedVerification(verification: FindingVerification, cfg: ModelConfig): FindingVerification {
 	return {
@@ -244,8 +230,13 @@ function stampedVerification(verification: FindingVerification, cfg: ModelConfig
  * a verifier of its own; consolidation merges the two into one finding. The
  * leader's runs lead its evidence, as a verifier's own proof would.
  */
-function shareVerdict(follower: CandidateFinding, leader: CandidateFinding, ctx: VerifyContext): void {
-	const { taskId, label, meta } = verifierTask(follower, leader.verification?.model);
+function shareVerdict(
+	follower: CandidateFinding,
+	leader: CandidateFinding,
+	ctx: VerifyContext,
+	verifierId?: string
+): string {
+	const row = verifierTask(follower, leader.verification?.model, verifierId);
 	const proof = (leader.evidenceIds ?? []).filter((id) => ctx.evidence.get(id)?.kind === 'run');
 
 	delete follower.publishedBy;
@@ -253,26 +244,32 @@ function shareVerdict(follower: CandidateFinding, leader: CandidateFinding, ctx:
 	if (leader.ruleCheck) follower.ruleCheck = leader.ruleCheck;
 	follower.evidenceIds = [...new Set([...proof, ...(follower.evidenceIds ?? [])])];
 	publishHeldBack(follower, ctx.ledger);
-	ctx.task(taskId, label, 'done', `Verified with "${leader.title ?? leader.file}"`, meta);
+
+	return finishVerifierTask(ctx.task, row, `Verified with "${leader.title ?? leader.file}"`);
 }
 
 /**
- * One attempt at settling a candidate. Returns false when the verifier gave no
+ * One attempt at settling a candidate. The queue can retry when there is no
  * verdict, leaving the candidate unverified with the reason. Its thinking, tools
  * and messages are its own (owned by its task), so they show in the Verify step
  * rather than in the thread that raised the finding.
  */
-async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attempt: number): Promise<boolean> {
+async function verifyOne(
+	candidate: CandidateFinding,
+	ctx: VerifyContext,
+	attempt: number,
+	verifierId: string
+): Promise<{ message: string; retry?: true }> {
 	const cfg = configForVerifier();
-	const { taskId, label, meta } = verifierTask(candidate, cfg.model);
+	const row = verifierTask(candidate, cfg.model, verifierId);
+	const { taskId, label, meta } = row;
 
 	const notRun = findingKind(candidate.category) === 'quality' ? null : await ctx.cannotRun();
 
 	if (notRun) {
 		candidate.verification = { status: 'unverified', outcome: 'not-run', reason: `Not verified: ${notRun}.` };
-		ctx.task(taskId, label, 'done', 'Not run: the code cannot run here', meta);
 
-		return true;
+		return { message: finishVerifierTask(ctx.task, row, 'Not run: the code cannot run here') };
 	}
 
 	const spec = verifierSpec(candidate, ctx);
@@ -283,18 +280,16 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 
 	if (rulePrecheck) {
 		refuteByRuleScope(candidate, rulePrecheck);
-		ctx.task(taskId, label, 'done', 'Rule does not apply; dropped', meta);
 
-		return true;
+		return { message: finishVerifierTask(ctx.task, row, 'Rule does not apply; dropped') };
 	}
 
 	const doing = !spec.exec ? 'Tracing the finding through the code' : 'Reproducing the finding';
 
 	if (candidate.category === 'convention' && !(await examplesOnDisk(ctx.checkout, candidate.examples))) {
 		candidate.verification = { status: 'unverified', reason: 'The examples it cites are not in the repository.' };
-		ctx.task(taskId, label, 'done', 'Examples not found', meta);
 
-		return true;
+		return { message: finishVerifierTask(ctx.task, row, 'Examples not found') };
 	}
 
 	ctx.task(taskId, label, 'running', attempt > 1 ? `${doing}, second attempt` : doing, meta);
@@ -305,9 +300,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 		const outcome = await runVerifier(candidate, spec, ctx, cfg, { taskId, label, meta, agentId });
 
 		if (typeof outcome !== 'string') {
-			await settle(candidate, outcome, ctx, cfg, { taskId, label, meta });
-
-			return true;
+			return { message: await settle(candidate, outcome, ctx, cfg, row) };
 		}
 
 		candidate.verification = stampedVerification({ status: 'unverified', reason: `Not verified: ${outcome}.` }, cfg);
@@ -315,15 +308,11 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 		ctx.workspace?.release(agentId);
 	}
 
-	ctx.task(taskId, label, 'partial', 'Could not verify', meta);
+	const message = 'Could not verify';
 
-	return false;
-}
+	ctx.task(taskId, label, 'partial', message, meta);
 
-interface VerifierTask {
-	taskId: string;
-	label: string;
-	meta: Parameters<TaskFn>[4];
+	return { message, retry: true };
 }
 
 interface VerifierRunOutcome {
@@ -424,8 +413,8 @@ async function settle(
 	outcome: VerifierRunOutcome,
 	ctx: VerifyContext,
 	cfg: ModelConfig,
-	{ taskId, label, meta }: VerifierTask
-): Promise<void> {
+	row: VerifierTask
+): Promise<string> {
 	const { value, agentId } = outcome;
 	const settled = verdictFor(candidate, outcome, ctx);
 
@@ -443,15 +432,11 @@ async function settle(
 			cfg
 		);
 
-		ctx.task(
-			taskId,
-			label,
-			'done',
-			value.coveredBy ? `Covered by ${value.coveredBy}; dropped` : 'Disproved; dropped',
-			meta
+		return finishVerifierTask(
+			ctx.task,
+			row,
+			value.coveredBy ? `Covered by ${value.coveredBy}; dropped` : 'Disproved; dropped'
 		);
-
-		return;
 	}
 
 	const baseline = isMutationFinding(candidate, true) ? settled : await recordBaseline(settled, ctx, agentId);
@@ -460,17 +445,7 @@ async function settle(
 	publishHeldBack(candidate, ctx.ledger);
 	if (settled.status === 'verified') leadWithProof(candidate, value.evidenceIds, ctx.evidence, agentId);
 
-	ctx.task(taskId, label, 'done', settledLabel(settled), meta);
-}
-
-/** The task row's last word on a verification. */
-function settledLabel(settled: FindingVerification): string {
-	if (settled.status !== 'verified') return 'Could not prove it';
-	if (settled.method === 'run') return 'Verified by a run';
-	if (settled.method === 'rule') return 'Checked against the rule';
-	if (settled.method === 'convention') return 'Checked against the repo';
-
-	return 'Traced through the code';
+	return finishVerifierTask(ctx.task, row, settledLabel(settled));
 }
 
 /** The proving runs lead the candidate's evidence, so the finding opens on their output. */

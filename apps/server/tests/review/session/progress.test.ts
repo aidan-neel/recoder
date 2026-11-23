@@ -1,15 +1,23 @@
 import { expect, jest, test } from 'bun:test';
-import { applyProgressMessage, emptyReviewProgress, taskSummary, type Review } from '@recoder/shared';
+import {
+	applyProgressMessage,
+	emptyReviewProgress,
+	taskSummary,
+	type Review,
+	type ReviewCandidate
+} from '@recoder/shared';
 import { app } from '../../../src/app';
 import { localApp } from '../../helpers/local-app';
 import { db, reviewProgress } from '../../../src/store';
 import {
 	emitReviewEvent,
 	listenerCount,
+	reportReviewCandidate,
 	reportReviewTask,
 	reportReviewReasoning,
 	reportReviewTool,
 	reviewEventBuffer,
+	settleReviewTasks,
 	trackReviewTask
 } from '../../../src/review/session/events';
 import { chatCompletion, resetLlmLimiter } from '../../../src/models/llm';
@@ -171,7 +179,19 @@ test('task snapshots retain early completions after event history overflows', as
 test('reconnecting starts with a complete snapshot and cancelling unsubscribes', async () => {
 	const { id } = await storeRunningReview('Test');
 
+	const candidate: ReviewCandidate = {
+		id: 'c1',
+		title: 'Missing guard',
+		path: 'src/a.ts',
+		line: 1,
+		tier: 'warning',
+		state: 'raised',
+		raisedBy: 'reviewer-1',
+		raisedAt: '2026-11-23T13:00:00.000Z'
+	};
+
 	reportReviewTask(id, { id: 'fetch', label: 'Metadata', status: 'done', message: 'Fetched' });
+	reportReviewCandidate(id, candidate);
 
 	const response = await localApp.request('/api/reviews/' + id + '/events');
 	const reader = response.body!.getReader();
@@ -180,9 +200,20 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 
 	expect(event.type).toBe('snapshot');
 	expect(event.snapshot.tasks.fetch.status).toBe('done');
+	expect(event.snapshot.candidates).toEqual([candidate]);
 	expect(listenerCount(id)).toBe(1);
 	await reader.cancel();
 	expect(listenerCount(id)).toBe(0);
+
+	const settled: ReviewCandidate = {
+		...candidate,
+		state: 'unproven',
+		verifierId: 'verifier-1',
+		message: 'Could not prove it',
+		settledAt: '2026-11-23T13:00:01.000Z'
+	};
+
+	reportReviewCandidate(id, settled);
 	await db.reviews.set({ ...(await db.reviews.get(id))!, status: 'failed', summary: 'Server restarted' });
 
 	const completed = await localApp.request('/api/reviews/' + id + '/events');
@@ -196,9 +227,48 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 	);
 
 	expect(terminal.status).toBe('failed');
+	expect(terminal.snapshot.candidates).toEqual([settled]);
+	expect(terminal.snapshot.activity.map((item: { message: string }) => item.message)).toEqual(['Fetched']);
 	expect(listenerCount(id)).toBe(1);
 	await completedReader.cancel();
 	expect(listenerCount(id)).toBe(0);
+});
+
+test('interruption settles verification tickets with or without a task', async () => {
+	const id = crypto.randomUUID();
+
+	const candidate: ReviewCandidate = {
+		id: 'c1',
+		title: 'Missing guard',
+		path: 'src/a.ts',
+		tier: 'warning',
+		raisedAt: new Date().toISOString(),
+		state: 'verifying',
+		verifierId: 'verifier-1'
+	};
+
+	reportReviewCandidate(id, candidate);
+	reportReviewCandidate(id, { ...candidate, id: 'c2', verifierId: 'verifier-2' });
+	reportReviewCandidate(id, { ...candidate, id: 'c3', state: 'raised', verifierId: undefined });
+
+	reportReviewTask(id, {
+		id: 'verify:c1',
+		label: 'Verify: Missing guard',
+		status: 'running',
+		message: 'Thinking',
+		candidateId: 'c1',
+		verifierId: 'verifier-1'
+	});
+
+	await settleReviewTasks(id, 'Review cancelled');
+
+	const snapshot = (await reviewProgress.get(id))!;
+
+	expect(snapshot.candidates).toMatchObject([
+		{ id: 'c1', state: 'unproven', message: snapshot.tasks['verify:c1'].message, settledAt: expect.any(String) },
+		{ id: 'c2', state: 'unproven', message: 'Review cancelled', settledAt: expect.any(String) },
+		{ id: 'c3', state: 'unproven', message: 'Review cancelled', settledAt: expect.any(String) }
+	]);
 });
 
 test('a real HTTP subscription survives idle periods and still delivers review and chat updates', async () => {

@@ -11,7 +11,7 @@ const TERMINAL: ReadonlySet<ReviewTaskStatus> = new Set(['done', 'partial', 'err
 /** Why work still going when a complete review finished is `partial`. */
 export const STILL_RUNNING = 'Still running when the review finished';
 
-const NOT_STARTED = 'Not started before the review finished';
+export const NOT_STARTED = 'Not started before the review finished';
 
 export function isTerminalTask(task: Pick<ReviewTask, 'status'>): boolean {
 	return TERMINAL.has(task.status);

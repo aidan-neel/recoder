@@ -43,10 +43,8 @@ export class PostgresEvents {
 				const snapshot = current ?? emptyReviewProgress(reviewId);
 
 				message.sequence = snapshot.sequence + 1;
-				snapshot.sequence = message.sequence;
-				snapshot.updatedAt = message.at;
 
-				return reduce(snapshot, message);
+				return { ...reduce(snapshot, message), sequence: message.sequence, updatedAt: message.at };
 			});
 
 			if (!next) throw new Error('The review event reducer must preserve its progress snapshot.');

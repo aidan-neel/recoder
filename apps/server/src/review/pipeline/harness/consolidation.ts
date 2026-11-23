@@ -33,11 +33,11 @@ function withLedgerRules(findings: Finding[], ledger: RuleLedger | null): Findin
  * citing one), its feedback topic, and quieted where people keep dismissing it.
  */
 export function confirmedFindings(run: ReviewRun): Finding[] {
-	return withTopics(
-		withLedgerRules(consolidateFindings(run.candidates, run.inventory), run.ledger),
-		run.ledger,
-		run.topicTallies
+	const findings = consolidateFindings(run.candidates, run.inventory, (folded, lead) =>
+		run.verifying?.progress.merge(folded, lead)
 	);
+
+	return withTopics(withLedgerRules(findings, run.ledger), run.ledger, run.topicTallies);
 }
 
 /**
