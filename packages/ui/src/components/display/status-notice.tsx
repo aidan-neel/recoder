@@ -78,6 +78,7 @@ export function StatusNotice({
 			data-ui="status-notice"
 			data-variant={variant ?? (tone === 'danger' ? 'banner' : 'section')}
 			data-tone={tone}
+			data-glyph={mark ? '' : undefined}
 			role={role ?? (tone === 'danger' ? 'alert' : 'status')}
 			aria-label={label}
 			className={cn(className)}

@@ -81,8 +81,11 @@
 	}
 }
 
-/* A drag follows the pointer with no easing; the open and close slide is untouched. */
-.app-frame:has([data-ui='resize-handle'][data-dragging]) {
+/*
+ * A drag follows the pointer with no easing; the open and close slide is untouched. The resize handle marks the root
+ * while it drags: a `:has()` on the frame searched the whole app again whenever a node was added.
+ */
+:root[data-resizing] .app-frame {
 	transition: none;
 }
 
@@ -145,7 +148,7 @@
 			visibility 0s linear var(--dur-hover);
 	}
 }
-.app-frame:has([data-ui='resize-handle'][data-dragging]) .topbar-lead {
+:root[data-resizing] .topbar-lead {
 	transition: none;
 }
 .window-tabs {
