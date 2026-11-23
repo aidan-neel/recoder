@@ -180,14 +180,18 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
  * out of time once units exist still finishes with what the reviewers found.
  * The deadline grows with change size, prep and verification, so the message reports what actually elapsed.
  */
-export function stoppedReview(run: ReviewRun, err: unknown): AdaptiveReviewResult {
+export function stoppedReview(
+	run: ReviewRun,
+	err: unknown,
+	wasAborted = run.controller.signal.aborted
+): AdaptiveReviewResult {
 	const { assignments, coverage } = run;
 
 	if (err instanceof ModelBlockedError) {
 		return { ...failReview(assignments, coverage, err.message), failure: err.failure };
 	}
 
-	if (!(err instanceof ReviewAbortedError) && !run.controller.signal.aborted) {
+	if (!(err instanceof ReviewAbortedError) && !wasAborted) {
 		return failReview(assignments, coverage, err instanceof Error ? err.message : 'Review failed');
 	}
 

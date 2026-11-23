@@ -20,6 +20,8 @@ const PROOF_RANK: Record<NonNullable<FindingVerification['method']>, number> = {
 
 const SEVERITY_RANK: Record<string, number> = { error: 0, warning: 1, info: 2 };
 
+type OnMerge = (folded: CandidateFinding, lead: CandidateFinding) => void;
+
 /** Earliest raised first; the id settles candidates that share a candidate id, so the order is total. */
 const byId = (a: CandidateFinding, b: CandidateFinding) =>
 	a.candidateId.localeCompare(b.candidateId, 'en', { numeric: true }) || a.id.localeCompare(b.id);
@@ -51,7 +53,7 @@ function locationKey(location: FindingLocation): string {
  * member's evidence and locations, the first checked patch, and every member's
  * id, so an evaluation can trace the finding to each report behind it.
  */
-function mergeCluster(group: CandidateFinding[]): Finding {
+function mergeCluster(group: CandidateFinding[], onMerge?: OnMerge): Finding {
 	const members = [...group].sort(byId);
 	const lead = representative(members);
 	const own = locationKey(lead);
@@ -70,6 +72,7 @@ function mergeCluster(group: CandidateFinding[]): Finding {
 
 	for (const member of members) {
 		if (member === lead) continue;
+		onMerge?.(member, lead);
 		add(member);
 		for (const location of member.relatedLocations ?? []) add(location);
 	}
@@ -217,7 +220,11 @@ function settleFingerprints(findings: Finding[]): void {
  * member is below the bar is held back, and one with a member above it is
  * published.
  */
-export function consolidateFindings(candidates: CandidateFinding[], inventory: ReviewInventory): Finding[] {
+export function consolidateFindings(
+	candidates: CandidateFinding[],
+	inventory: ReviewInventory,
+	onMerge?: OnMerge
+): Finding[] {
 	const groups = new Map<string, CandidateFinding[]>();
 	const byTitle = new Map<string, string>();
 
@@ -233,7 +240,7 @@ export function consolidateFindings(candidates: CandidateFinding[], inventory: R
 		.flatMap((group) => byClaim(group, inventory))
 		.filter((members) => members.some((member) => !isHeldBack(member)))
 		.sort((a, b) => byId(a[0], b[0]))
-		.map(mergeCluster);
+		.map((group) => mergeCluster(group, onMerge));
 
 	const ordered = [...findings].sort(compareFindings);
 

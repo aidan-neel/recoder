@@ -22,7 +22,13 @@ import {
 	effectiveTokenBudget
 } from '../review/session/review-settings';
 import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress } from '../store';
-import { flushReviewEvents, emitReviewEvent, settleReviewTasks, trackReviewTask } from '../review/session/events';
+import {
+	flushReviewEvents,
+	emitReviewEvent,
+	restoreCandidateProgress,
+	settleReviewTasks,
+	trackReviewTask
+} from '../review/session/events';
 import { fetchPull, PULL_VIEW_COMMANDS } from '../forge/pull-preview';
 import { settlePullComment, trackPullComment, stopPullCommentTracking } from '../forge/publish/pull-comment';
 import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
@@ -206,6 +212,11 @@ async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal):
 			emitReviewEvent(reviewId, { type: 'log', step: 'review', message: discarded });
 		}
 
+		const candidateProgress = await restoreCandidateProgress(
+			reviewId,
+			new Set(resume?.candidates.map((candidate) => candidate.candidateId))
+		);
+
 		const tokenBudget = REVIEW_SPEED_PLANS[review.speed ?? 'standard'].tokenBudget ?? effectiveTokenBudget();
 
 		recordTokenBudget(tokenBudget);
@@ -230,7 +241,8 @@ async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal):
 					reportLowSeverity: effectiveReportLowSeverity(),
 					baselineCache: review.baselineCache,
 					speed: review.speed,
-					resume
+					resume,
+					candidateProgress
 				},
 				harnessCallbacks(reviewId, { headSha, mergeBaseSha })
 			)

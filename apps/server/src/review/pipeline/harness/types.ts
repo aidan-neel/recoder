@@ -9,6 +9,7 @@ import type {
 	ObligationReport,
 	ReviewAssignment,
 	ReviewBudgetSnapshot,
+	ReviewCandidate,
 	ReviewChatMessage,
 	ReviewContext,
 	ReviewFunnel,
@@ -36,6 +37,7 @@ export interface HarnessEvents {
 	onCoverage?: (coverage: CoverageSummary, gaps: CoverageGap[]) => void;
 	onBudget?: (budget: ReviewBudgetSnapshot) => void;
 	onCandidates?: (count: number) => void;
+	onCandidate?: (candidate: ReviewCandidate) => void;
 	onStage?: (stage: ReviewStage) => void;
 	onReasoning?: (reasoning: Omit<ReviewReasoningEntry, 'at'>) => void;
 	onMessage?: (message: Omit<ReviewChatMessage, 'at' | 'from'>) => void;
@@ -96,6 +98,8 @@ export interface AdaptiveReviewInput {
 	lenses?: readonly LensId[];
 	/** Continue a failed review: skip the units that finished. It must have been saved under the same `lenses`. */
 	resume?: ReviewProgressCheckpoint | null;
+	/** The session's last streamed candidates, kept across an executor restart. */
+	candidateProgress?: readonly ReviewCandidate[];
 }
 
 export interface AdaptiveReviewResult {
