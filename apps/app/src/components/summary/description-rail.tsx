@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Skeleton } from '@recoder/ui';
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { Button, Icon, Skeleton } from '@recoder/ui';
 
 import { useShowFyi } from '@/lib/bugs/show-fyi';
 import type { BugsView, BugView } from '@/lib/bugs/types';
@@ -31,7 +30,7 @@ export function DescriptionRail({ bugs, notes, standIn, onOpenFinding, onOpenRev
 					</h2>
 					<Button variant="ghost" onClick={onOpenReview}>
 						Open Review
-						<CaretRightIcon aria-hidden />
+						<Icon name="chevron_right" />
 					</Button>
 				</div>
 				<RailFindings bugs={bugs} onOpenFinding={onOpenFinding} />

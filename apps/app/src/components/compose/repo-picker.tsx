@@ -9,9 +9,9 @@ import {
 	CommandItem,
 	CommandList,
 	ForgeMark,
+	Icon,
 	type CommandHint
 } from '@recoder/ui';
-import { CheckIcon, CaretDownIcon, PlusIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import type { ComposeRepo } from '@/lib/compose/types';
@@ -58,7 +58,7 @@ export function RepoPicker({ repos, repoId, onPick, onAdd }: RepoPickerProps) {
 	if (!current) {
 		return (
 			<Button variant="quiet" className="bar-trigger" onClick={onAdd}>
-				<PlusIcon aria-hidden className="bar-trigger-add" />
+				<Icon name="add" className="bar-trigger-add" />
 				Add repository
 			</Button>
 		);
@@ -77,7 +77,7 @@ export function RepoPicker({ repos, repoId, onPick, onAdd }: RepoPickerProps) {
 			>
 				<ForgeMark provider={current.provider} />
 				<span className="bar-trigger-name">{repoName(current.name)}</span>
-				<CaretDownIcon aria-hidden className="bar-trigger-chevron" />
+				<Icon name="expand_more" className="bar-trigger-chevron" />
 			</Button>
 			<CommandDialog
 				open={open}
@@ -104,7 +104,7 @@ export function RepoPicker({ repos, repoId, onPick, onAdd }: RepoPickerProps) {
 					<CommandItem
 						value="Add repository"
 						onSelect={add}
-						leading={<PlusIcon aria-hidden />}
+						leading={<Icon name="add" />}
 						className="repo-row repo-row-add"
 					>
 						Add repository
@@ -121,7 +121,7 @@ export function RepoPicker({ repos, repoId, onPick, onAdd }: RepoPickerProps) {
 function CurrentMark() {
 	return (
 		<>
-			<CheckIcon aria-hidden className="repo-row-check" />
+			<Icon name="check" className="repo-row-check" />
 			<span className="sr-only">Current repository</span>
 		</>
 	);

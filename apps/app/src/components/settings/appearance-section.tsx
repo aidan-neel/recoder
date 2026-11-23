@@ -1,8 +1,7 @@
 'use client';
 
 import type { ThemeChoice } from '@recoder/shared';
-import { SegmentedControl } from '@recoder/ui';
-import { MonitorIcon, MoonIcon, SunIcon } from '@phosphor-icons/react';
+import { Icon, SegmentedControl } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import { SIDEBAR_ROWS, TYPEFACE, type SidebarRowsId } from '@/lib/appearance/choices';
@@ -12,9 +11,9 @@ import { PalettePicker } from './palette-picker';
 import { SettingsGroup, SettingsRow } from './settings-group';
 
 const THEMES: { value: ThemeChoice; label: string; icon: ReactNode }[] = [
-	{ value: 'system', label: 'System', icon: <MonitorIcon /> },
-	{ value: 'light', label: 'Light', icon: <SunIcon /> },
-	{ value: 'dark', label: 'Dark', icon: <MoonIcon /> }
+	{ value: 'system', label: 'System', icon: <Icon name="monitor" /> },
+	{ value: 'light', label: 'Light', icon: <Icon name="light_mode" /> },
+	{ value: 'dark', label: 'Dark', icon: <Icon name="dark_mode" /> }
 ];
 
 const DETAIL: Record<ThemeChoice, string> = {

@@ -1,7 +1,15 @@
 'use client';
 
-import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, FileChip, Pill, StatusGlyph } from '@recoder/ui';
-import { CaretRightIcon } from '@phosphor-icons/react';
+import {
+	Button,
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+	FileChip,
+	Icon,
+	Pill,
+	StatusGlyph
+} from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import type { BugsView, BugView, UnresolvedItem } from '@/lib/bugs/types';
@@ -20,7 +28,7 @@ function Group({ title, meta, children }: GroupProps) {
 	return (
 		<Collapsible>
 			<CollapsibleTrigger className="bug-group-head">
-				<CaretRightIcon aria-hidden data-ui="disclosure-chevron" />
+				<Icon name="chevron_right" data-ui="disclosure-chevron" />
 				{title}
 				<span className="meta">{meta}</span>
 			</CollapsibleTrigger>

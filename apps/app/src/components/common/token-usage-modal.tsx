@@ -5,6 +5,7 @@ import {
 	Button,
 	cn,
 	formatCompact,
+	Icon,
 	Meter,
 	Modal,
 	ModalBody,
@@ -14,7 +15,6 @@ import {
 	StackedBar,
 	StatusNotice
 } from '@recoder/ui';
-import { CoinsIcon, ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
 import { useState } from 'react';
 
 import type { TokenUsageKind, TokenUsageSummary } from '@/lib/metrics/token-usage';
@@ -56,7 +56,7 @@ export function TokenUsageButton({ kind, id, className }: TokenUsageButtonProps)
 				className={cn('token-usage-trigger', className)}
 				onClick={() => setOpen(true)}
 			>
-				<CoinsIcon aria-hidden className="size-3.5" />
+				<Icon name="toll" className="size-3.5" />
 				Token usage
 			</Button>
 			<Modal open={open} onOpenChange={setOpen}>
@@ -120,7 +120,7 @@ function TokenUsageFailed({ error, onRetry }: { error: string; onRetry: () => vo
 				detail={error}
 				actions={
 					<Button onClick={onRetry}>
-						<ArrowCounterClockwiseIcon aria-hidden />
+						<Icon name="replay" />
 						Try again
 					</Button>
 				}

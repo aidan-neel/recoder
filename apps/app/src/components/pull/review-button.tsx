@@ -1,8 +1,7 @@
 'use client';
 
 import { REVIEW_SPEED_PLANS, type ReviewSpeed } from '@recoder/shared';
-import { ConfirmDialog, DropdownMenuItem, Keycap, Spinner, SplitButton } from '@recoder/ui';
-import { LightningIcon, PauseIcon, PlayIcon, StopIcon, XIcon } from '@phosphor-icons/react';
+import { ConfirmDialog, DropdownMenuItem, Icon, Keycap, Spinner, SplitButton } from '@recoder/ui';
 import { useState } from 'react';
 
 import { isLive } from '@/lib/run/run-phase';
@@ -52,7 +51,7 @@ function StopGlyph() {
 	return (
 		<span className="review-stop" aria-hidden>
 			<Spinner size={13} />
-			<StopIcon weight="fill" className="review-stop-square size-2.5" />
+			<Icon name="stop" fill className="review-stop-square size-2.5" />
 		</span>
 	);
 }
@@ -71,7 +70,7 @@ function FaceLabel({ face, next }: { face: Face; next: boolean }) {
 	if (face === 'resume') {
 		return (
 			<span>
-				<PlayIcon weight="fill" aria-hidden className="size-3" />
+				<Icon name="play_arrow" fill className="size-3" />
 				{LABELS.resume}
 			</span>
 		);
@@ -188,7 +187,7 @@ export function ReviewButton({ run }: { run: RunView }) {
 /** The menu's one row while no review runs: Spark, the fast review, and what it leaves out. */
 function SparkItem({ onStart }: { onStart: (speed: ReviewSpeed) => void }) {
 	return (
-		<DropdownMenuItem icon={<LightningIcon />} className="split-option" onSelect={() => onStart('spark')}>
+		<DropdownMenuItem icon={<Icon name="bolt" />} className="split-option" onSelect={() => onStart('spark')}>
 			<span className="flex flex-col gap-0.5 whitespace-normal">
 				{SPARK.label} review
 				<span className="split-option-detail">{SPARK.description}</span>
@@ -208,7 +207,7 @@ interface LiveMenuProps {
 function LiveMenu({ run, onPause, onCancel }: LiveMenuProps) {
 	if (run.phase === 'paused') {
 		return (
-			<DropdownMenuItem icon={<XIcon />} className="split-option" onSelect={onCancel}>
+			<DropdownMenuItem icon={<Icon name="close" />} className="split-option" onSelect={onCancel}>
 				<span className="flex flex-col gap-0.5 whitespace-normal">
 					Cancel review
 					<span className="split-option-detail">Stops the review and drops its findings.</span>
@@ -219,7 +218,7 @@ function LiveMenu({ run, onPause, onCancel }: LiveMenuProps) {
 
 	return (
 		<DropdownMenuItem
-			icon={<PauseIcon />}
+			icon={<Icon name="pause" />}
 			className="split-option"
 			disabled={run.phase !== 'running'}
 			onSelect={() => onPause(() => run.pause().catch(rejectWithToast('The review did not pause.')))}

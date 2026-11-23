@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUpIcon, StopIcon, TerminalIcon } from '@phosphor-icons/react';
+import { Icon } from '../icon';
 import {
 	useId,
 	useMemo,
@@ -212,7 +212,7 @@ export function Composer({
 								disabled={disabled}
 								onClick={menu.toggle}
 							>
-								<TerminalIcon />
+								<Icon name="terminal" />
 							</ComposerTool>
 						) : null}
 						{targets}
@@ -280,7 +280,7 @@ export function ComposerSend({ label = 'Send', disabled, pending, onClick }: Com
 			status={pending ? 'pending' : 'idle'}
 			onClick={onClick}
 		>
-			<ArrowUpIcon />
+			<Icon name="arrow_upward" />
 		</Button>
 	);
 }
@@ -290,7 +290,7 @@ export function ComposerStop({ label = 'Stop', onClick }: { label?: string; onCl
 	return (
 		<Tooltip content={label}>
 			<Button variant="primary" size="icon" aria-label={label} data-ui="composer-stop" onClick={onClick}>
-				<StopIcon className="size-3" weight="fill" />
+				<Icon name="stop" className="size-3" fill />
 			</Button>
 		</Tooltip>
 	);

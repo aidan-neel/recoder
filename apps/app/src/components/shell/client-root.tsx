@@ -1,6 +1,5 @@
 'use client';
 
-import { IconRoot } from '@recoder/ui';
 import { useSyncExternalStore, type ReactNode } from 'react';
 
 /** Nothing to subscribe to: whether this is the browser never changes after the first render. */
@@ -22,5 +21,5 @@ export function ClientRoot({ children }: { children: ReactNode }) {
 		() => false
 	);
 
-	return browser ? <IconRoot>{children}</IconRoot> : null;
+	return browser ? children : null;
 }

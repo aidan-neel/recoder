@@ -1,4 +1,4 @@
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { Icon } from '@recoder/ui';
 import { Link } from './link';
 import { Fragment } from 'react';
 
@@ -14,7 +14,7 @@ export function Crumbs({ parts }: { parts: Crumb[] }) {
 		<nav aria-label="Breadcrumb" className="crumbs">
 			{parts.map((part, index) => (
 				<Fragment key={part.label}>
-					{index > 0 ? <CaretRightIcon aria-hidden /> : null}
+					{index > 0 ? <Icon name="chevron_right" /> : null}
 					{part.href ? <Link href={part.href}>{part.label}</Link> : null}
 					{!part.href && index < parts.length - 1 ? <span>{part.label}</span> : null}
 					{!part.href && index === parts.length - 1 ? <span aria-current="page">{part.label}</span> : null}

@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Skeleton, StatusNotice } from '@recoder/ui';
-import { ArrowCounterClockwiseIcon, UserCircleDashedIcon } from '@phosphor-icons/react';
+import { Button, Skeleton, StatusNotice, Icon } from '@recoder/ui';
 import type { PersonRef } from '@recoder/shared';
 
 import { usePersonPage } from '@/lib/people/use-person-page';
@@ -37,7 +36,7 @@ export function PersonScreen({ person }: { person: PersonRef }) {
 						<StatusNotice
 							variant="banner"
 							heading="h1"
-							glyph={<UserCircleDashedIcon aria-hidden />}
+							glyph={<Icon name="account_circle_off" />}
 							title={`No one called ${person.login} works in the tracked repositories.`}
 							detail="The login may be mistyped, or they renamed it on the forge."
 						/>
@@ -52,7 +51,7 @@ export function PersonScreen({ person }: { person: PersonRef }) {
 							detail={view.error}
 							actions={
 								<Button onClick={view.retry}>
-									<ArrowCounterClockwiseIcon aria-hidden />
+									<Icon name="replay" />
 									Try again
 								</Button>
 							}

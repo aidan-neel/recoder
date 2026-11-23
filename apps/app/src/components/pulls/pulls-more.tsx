@@ -1,7 +1,6 @@
 'use client';
 
-import { Button } from '@recoder/ui';
-import { WarningIcon } from '@phosphor-icons/react';
+import { Button, Icon } from '@recoder/ui';
 import { useEffect, useRef } from 'react';
 
 import type { PullListView } from '@/lib/pulls/types';
@@ -50,7 +49,7 @@ export function PullsMore({ more, rowCount }: { more: PullListView['more']; rowC
 			{more.loading ? <LoadingPullRows count={LOADING_ROWS} /> : null}
 			{more.error !== null ? (
 				<div className="strip" role="status">
-					<WarningIcon aria-hidden />
+					<Icon name="warning" />
 					<span className="strip-text">More pull requests did not load. {more.error}</span>
 					<Button variant="outline" onClick={more.load}>
 						Retry

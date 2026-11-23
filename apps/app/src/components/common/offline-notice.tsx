@@ -1,5 +1,4 @@
-import { Button, StatusNotice } from '@recoder/ui';
-import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
+import { Button, Icon, StatusNotice } from '@recoder/ui';
 
 import { OFFLINE_TEXT } from '@/lib/api/http';
 
@@ -12,7 +11,7 @@ export function OfflineNotice({ onRetry }: { onRetry: () => void }) {
 			detail="Start it, then try again."
 			actions={
 				<Button onClick={onRetry}>
-					<ArrowCounterClockwiseIcon aria-hidden />
+					<Icon name="replay" />
 					Try again
 				</Button>
 			}

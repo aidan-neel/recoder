@@ -7,9 +7,9 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
-	writeClipboard
+	writeClipboard,
+	Icon
 } from '@recoder/ui';
-import { ChatsCircleIcon, DotsThreeIcon, GitBranchIcon, LinkSimpleIcon } from '@phosphor-icons/react';
 
 import { useApi, useProfileCache } from '@/lib/api/client';
 import { failureText } from '@/lib/api/http';
@@ -85,19 +85,19 @@ export function PullMenu({ page }: { page: PullPage }) {
 		<DropdownMenu onOpenChange={(open) => open && author?.warm()}>
 			<DropdownMenuTrigger>
 				<Button variant="ghost" size="icon" aria-label={`More for #${page.pull.number}`}>
-					<DotsThreeIcon />
+					<Icon name="more_horiz" />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end">
 				{author ? (
-					<DropdownMenuItem icon={<ChatsCircleIcon />} onSelect={author.message}>
+					<DropdownMenuItem icon={<Icon name="forum" />} onSelect={author.message}>
 						Message author
 					</DropdownMenuItem>
 				) : null}
-				<DropdownMenuItem icon={<GitBranchIcon />} onSelect={() => copyBranch(page.pull.headRef)}>
+				<DropdownMenuItem icon={<Icon name="fork_right" />} onSelect={() => copyBranch(page.pull.headRef)}>
 					Copy branch name
 				</DropdownMenuItem>
-				<DropdownMenuItem icon={<LinkSimpleIcon />} onSelect={() => copyLink(new URL(href, location.origin).href)}>
+				<DropdownMenuItem icon={<Icon name="link" />} onSelect={() => copyLink(new URL(href, location.origin).href)}>
 					Copy link
 				</DropdownMenuItem>
 			</DropdownMenuContent>

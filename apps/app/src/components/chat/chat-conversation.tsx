@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, SkeletonBox, SkeletonText, StatusNotice } from '@recoder/ui';
-import { ArrowDownIcon } from '@phosphor-icons/react';
+import { Button, Icon, SkeletonBox, SkeletonText, StatusNotice } from '@recoder/ui';
 
 import { useFollowEnd } from '@/lib/ask/use-follow-end';
 import type { RepoChatView } from '@/lib/chat/types';
@@ -43,7 +42,7 @@ export function ChatConversation({ chat }: { chat: RepoChatView }) {
 				<div className="chat-dock-column">
 					{away && !chat.note ? (
 						<Button variant="secondary" className="chat-to-end" onClick={toEnd}>
-							<ArrowDownIcon aria-hidden />
+							<Icon name="arrow_downward" />
 							Scroll to end
 						</Button>
 					) : null}

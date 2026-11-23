@@ -1,5 +1,4 @@
-import { ForgeMark, Pill } from '@recoder/ui';
-import { CalendarDotsIcon, GitBranchIcon } from '@phosphor-icons/react';
+import { ForgeMark, Icon, Pill } from '@recoder/ui';
 
 import type { RepoFacts, RepoFigure } from '@/lib/repo/types';
 
@@ -17,10 +16,10 @@ function RepoTitle({ repo }: { repo: RepoFacts }) {
 				</span>
 			</h1>
 			<div className="repo-facts">
-				<Pill face="code" icon={<GitBranchIcon aria-hidden />} title="Default branch">
+				<Pill face="code" icon={<Icon name="fork_right" />} title="Default branch">
 					{repo.defaultBranch}
 				</Pill>
-				<Pill icon={<CalendarDotsIcon aria-hidden />}>{repo.tracked}</Pill>
+				<Pill icon={<Icon name="calendar_month" />}>{repo.tracked}</Pill>
 				<Pill tone={repo.autoReview ? 'ok' : 'neutral'} icon={<span aria-hidden className="pill-dot" />}>
 					{repo.autoReview ? 'Auto review on' : 'Auto review off'}
 				</Pill>

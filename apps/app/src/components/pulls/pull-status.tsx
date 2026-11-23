@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Pill, Spinner, type ButtonStatus, type PillTone } from '@recoder/ui';
-import { ProhibitIcon } from '@phosphor-icons/react';
+import { Button, Icon, Pill, Spinner, type ButtonStatus, type PillTone } from '@recoder/ui';
 
 import { foundLabel, foundTone } from '@/lib/bugs/tiers';
 import { plural } from '@/lib/shell/format';
@@ -106,7 +105,7 @@ export function PullStatus({ status, reviewHref, starting, onReview }: PullStatu
 		<>
 			{status.kind === 'not-reviewed' && status.cancelledAt ? (
 				<span className="meta pull-row-cancelled">
-					<ProhibitIcon aria-hidden />
+					<Icon name="block" />
 					Cancelled <Age at={status.cancelledAt} form="long" />
 				</span>
 			) : null}

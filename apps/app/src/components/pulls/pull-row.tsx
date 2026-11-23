@@ -7,9 +7,9 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
+	Icon,
 	RowButton
 } from '@recoder/ui';
-import { ArrowUpRightIcon, DotsThreeIcon, LinkSimpleIcon, ArrowClockwiseIcon } from '@phosphor-icons/react';
 import { memo, useCallback } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -45,19 +45,25 @@ function RowMenu({ row, onReview }: Pick<PullRowProps, 'row' | 'onReview'>) {
 		<DropdownMenu>
 			<DropdownMenuTrigger>
 				<Button variant="ghost" size="icon" aria-label={`More for #${row.number}`}>
-					<DotsThreeIcon />
+					<Icon name="more_horiz" />
 				</Button>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent align="end">
 				{canReviewAgain(row) ? (
-					<DropdownMenuItem icon={<ArrowClockwiseIcon />} onSelect={() => onReview(row)}>
+					<DropdownMenuItem icon={<Icon name="refresh" />} onSelect={() => onReview(row)}>
 						Review again
 					</DropdownMenuItem>
 				) : null}
-				<DropdownMenuItem icon={<ArrowUpRightIcon />} onSelect={() => window.open(row.href, '_blank', 'noopener')}>
+				<DropdownMenuItem
+					icon={<Icon name="arrow_outward" />}
+					onSelect={() => window.open(row.href, '_blank', 'noopener')}
+				>
 					Open in a new tab
 				</DropdownMenuItem>
-				<DropdownMenuItem icon={<LinkSimpleIcon />} onSelect={() => copyLink(new URL(row.href, location.origin).href)}>
+				<DropdownMenuItem
+					icon={<Icon name="link" />}
+					onSelect={() => copyLink(new URL(row.href, location.origin).href)}
+				>
 					Copy link
 				</DropdownMenuItem>
 			</DropdownMenuContent>

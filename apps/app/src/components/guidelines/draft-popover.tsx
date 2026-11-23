@@ -1,8 +1,17 @@
 'use client';
 
 import type { GuidelinesDraftRequest } from '@recoder/shared';
-import { Button, Checkbox, Keycap, LinkField, Popover, PopoverContent, PopoverTrigger, SwapText } from '@recoder/ui';
-import { SparkleIcon, StopIcon } from '@phosphor-icons/react';
+import {
+	Button,
+	Checkbox,
+	Icon,
+	Keycap,
+	LinkField,
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+	SwapText
+} from '@recoder/ui';
 import { useId } from 'react';
 
 import { DRAFT_SOURCES, useDraftPopover, type DraftPopoverView } from '@/lib/guidelines/use-draft-popover';
@@ -59,7 +68,7 @@ export function DraftPopover({ repoId, revising, streaming, disabled, onDraft, o
 					onClick={view.onTriggerClick}
 				>
 					<SwapText id={streaming ? 'stop' : 'draft'} textClassName="guidelines-draft-face">
-						{streaming ? <StopIcon aria-hidden data-glyph="stop" weight="fill" /> : <SparkleIcon aria-hidden />}
+						{streaming ? <Icon name="stop" data-glyph="stop" fill /> : <Icon name="auto_awesome" />}
 						{streaming ? 'Stop' : 'Draft with AI'}
 					</SwapText>
 				</Button>

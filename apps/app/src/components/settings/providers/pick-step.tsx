@@ -1,8 +1,7 @@
 'use client';
 
 import type { AgentProvider } from '@recoder/shared';
-import { HoverList, Input, Keycap, RowButton, ScrollArea, SkeletonBox } from '@recoder/ui';
-import { CheckIcon, CaretRightIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
+import { HoverList, Icon, Input, Keycap, RowButton, ScrollArea, SkeletonBox } from '@recoder/ui';
 
 import { modelCount, type PickGroup } from '@/lib/settings/provider-options';
 import { usePickStep } from '@/lib/settings/providers/use-pick-step';
@@ -17,7 +16,7 @@ function RowMeta({ provider }: { provider: AgentProvider }) {
 	if (provider.connected) {
 		return (
 			<span className="provider-pick-meta">
-				<CheckIcon aria-hidden />
+				<Icon name="check" />
 				Connected
 			</span>
 		);
@@ -41,7 +40,7 @@ function PickRow({ provider, isEnterTarget, onChoose }: PickRowProps) {
 		<RowButton data-provider-row="" className="provider-pick-row" onClick={() => onChoose(provider)}>
 			<span className="provider-pick-name">{provider.name}</span>
 			<RowMeta provider={provider} />
-			<span className="provider-pick-end">{isEnterTarget ? <Keycap k="Enter" /> : <CaretRightIcon aria-hidden />}</span>
+			<span className="provider-pick-end">{isEnterTarget ? <Keycap k="Enter" /> : <Icon name="chevron_right" />}</span>
 		</RowButton>
 	);
 }
@@ -116,7 +115,7 @@ export function PickStep({ query, onQueryChange, onChoose }: PickStepProps) {
 		<div className="provider-pick" onKeyDown={onKeyDown}>
 			<Input
 				ref={search}
-				leading={<MagnifyingGlassIcon aria-hidden />}
+				leading={<Icon name="search" />}
 				placeholder="Search providers"
 				aria-label="Search providers"
 				autoComplete="off"

@@ -1,8 +1,7 @@
 'use client';
 
 import { isStepRunning } from '@recoder/shared';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@recoder/ui';
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger, Icon } from '@recoder/ui';
 import { useState } from 'react';
 
 import { hasDetail, opensDetail, stepSpan, toolLine, type ToolStep } from '@/lib/chat/trail';
@@ -24,7 +23,7 @@ export function ToolCall({ step }: { step: ToolStep }) {
 				<Collapsible open={chosen ?? opensDetail(step)} onOpenChange={setChosen}>
 					<CollapsibleTrigger className="trail-label trail-toggle">
 						<ToolLabel step={step} />
-						<CaretRightIcon className="trail-chevron" aria-hidden />
+						<Icon name="chevron_right" className="trail-chevron" />
 					</CollapsibleTrigger>
 					<CollapsibleContent>
 						<ToolDetail step={step} />

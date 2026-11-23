@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ArrowRightIcon } from '@phosphor-icons/react/dist/ssr';
+import { Icon } from '@recoder/ui';
 import Link from 'next/link';
 
 import { docHref, type DocPage } from '~/lib/docs';
@@ -16,7 +16,7 @@ export function DocPager({ previous, next }: DocPagerProps) {
 				<Link href={docHref(previous)} className="docs-pager-link">
 					<span className="docs-pager-label">Previous</span>
 					<span className="docs-pager-title">
-						<ArrowLeftIcon aria-hidden weight="bold" />
+						<Icon name="arrow_back" />
 						{previous.title}
 					</span>
 				</Link>
@@ -26,7 +26,7 @@ export function DocPager({ previous, next }: DocPagerProps) {
 					<span className="docs-pager-label">Next</span>
 					<span className="docs-pager-title">
 						{next.title}
-						<ArrowRightIcon aria-hidden weight="bold" />
+						<Icon name="arrow_forward" />
 					</span>
 				</Link>
 			) : null}

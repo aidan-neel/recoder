@@ -1,7 +1,6 @@
 'use client';
 
-import { Input, Keycap } from '@recoder/ui';
-import { MagnifyingGlassIcon } from '@phosphor-icons/react';
+import { Icon, Input, Keycap } from '@recoder/ui';
 import { useRef, type KeyboardEvent } from 'react';
 
 import { useKeys } from '@/lib/shell/use-keys';
@@ -42,7 +41,7 @@ export function FindField({ query, onQueryChange, label, placeholder, onSubmit, 
 			placeholder={placeholder}
 			autoComplete="off"
 			spellCheck={false}
-			leading={<MagnifyingGlassIcon aria-hidden />}
+			leading={<Icon name="search" />}
 			trailing={query ? undefined : <Keycap k="/" />}
 			value={query}
 			onChange={(event) => onQueryChange(event.target.value)}

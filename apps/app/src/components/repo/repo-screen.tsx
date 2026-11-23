@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Skeleton, Tooltip } from '@recoder/ui';
-import { ArrowUpRightIcon, ChatIcon, PlusIcon } from '@phosphor-icons/react';
+import { Button, Icon, Skeleton, Tooltip } from '@recoder/ui';
 
 import { useRepoPage } from '@/lib/repo/use-repo-page';
 import { useAfterPaint } from '@/lib/shell/use-after-paint';
@@ -27,21 +26,21 @@ function RepoActions({ view }: { view: RepoPageView }) {
 				<Tooltip content={`Open on ${forge.label}`}>
 					<Button asChild variant="ghost" size="icon" aria-label={`Open on ${forge.label}`}>
 						<a href={forge.url} target="_blank" rel="noreferrer">
-							<ArrowUpRightIcon />
+							<Icon name="arrow_outward" />
 						</a>
 					</Button>
 				</Tooltip>
 			) : null}
 			<Button asChild variant="outline">
 				<Link href={view.newHref} onClick={view.prepareAsk}>
-					<ChatIcon aria-hidden />
+					<Icon name="chat_bubble" />
 					Ask
 				</Link>
 			</Button>
 			<Tooltip content="New review" shortcut="c">
 				<Button asChild variant="primary" size="icon">
 					<Link href={view.newHref} onClick={view.prepareReview} aria-label="New review">
-						<PlusIcon aria-hidden />
+						<Icon name="add" />
 					</Link>
 				</Button>
 			</Tooltip>

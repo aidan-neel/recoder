@@ -1,8 +1,7 @@
 'use client';
 
 import { REPO_FILE_TEXT_BYTES, type ChatTrailFile } from '@recoder/shared';
-import { Button, CodeLines, langForPath, SkeletonText } from '@recoder/ui';
-import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
+import { Button, CodeLines, Icon, langForPath, SkeletonText } from '@recoder/ui';
 import { useMemo, useRef } from 'react';
 
 import { fileLines } from '@/lib/files/file-lines';
@@ -84,7 +83,7 @@ export function FileView({ reference, file, refName, onClose }: FileViewProps) {
 			<div className="file-state">
 				<p>{file.error}</p>
 				<Button variant="outline" onClick={file.retry}>
-					<ArrowCounterClockwiseIcon aria-hidden />
+					<Icon name="replay" />
 					Retry
 				</Button>
 			</div>

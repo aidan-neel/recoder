@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Tooltip, swapMotion, toast } from '@recoder/ui';
-import { CheckIcon, XIcon } from '@phosphor-icons/react';
+import { Button, Icon, swapMotion, toast, Tooltip } from '@recoder/ui';
 import { AnimatePresence, motion } from 'motion/react';
 import { createContext, useContext, type ReactNode } from 'react';
 
@@ -153,12 +152,12 @@ function SelectionBar({ count, onSettle, onClear }: SelectionBarProps) {
 					</span>
 					<Tooltip content="Clear selection" shortcut="Escape">
 						<Button variant="ghost" size="icon" aria-label="Clear selection" onClick={onClear}>
-							<XIcon />
+							<Icon name="close" />
 						</Button>
 					</Tooltip>
 					<Tooltip content={`Settle ${plural(count, 'row')}`} shortcut="e">
 						<Button variant="primary" aria-keyshortcuts="E" onClick={onSettle}>
-							<CheckIcon />
+							<Icon name="check" />
 							Settle
 						</Button>
 					</Tooltip>

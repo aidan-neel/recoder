@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Pill } from '@recoder/ui';
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { Button, Icon, Pill } from '@recoder/ui';
 import { useMemo } from 'react';
 
 import { foundLabel, foundTone, foundTotal } from '@/lib/bugs/tiers';
@@ -34,7 +33,7 @@ export function Walkthrough({ parts, onOpenGuide }: WalkthroughProps) {
 				</h2>
 				<Button variant="ghost" onClick={onOpenGuide}>
 					Open in Changes
-					<CaretRightIcon aria-hidden />
+					<Icon name="chevron_right" />
 				</Button>
 			</div>
 			<ol className="walkthrough">

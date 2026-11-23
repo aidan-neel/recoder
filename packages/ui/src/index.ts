@@ -6,7 +6,7 @@ export { cn } from './lib/cn';
 export * from './motion/presets';
 export { useMotionVariants } from './motion/reduced';
 export * from './components/button';
-export * from './components/icon-root';
+export * from './components/icon';
 export * from './components/keycap';
 export * from './components/spinner';
 export * from './components/toast';

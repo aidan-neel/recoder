@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, StatusNotice, StatusNoticeDetails } from '@recoder/ui';
-import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
+import { Button, Icon, StatusNotice, StatusNoticeDetails } from '@recoder/ui';
 import { Link } from './link';
 import { usePathname } from '@/lib/shell/navigation';
 
@@ -64,7 +63,7 @@ export function PageError({ error, retry }: PageErrorProps) {
 								</Button>
 							)}
 							<Button onClick={retry}>
-								<ArrowCounterClockwiseIcon aria-hidden />
+								<Icon name="replay" />
 								Try again
 							</Button>
 						</>

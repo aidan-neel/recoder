@@ -1,8 +1,7 @@
 'use client';
 
 import type { Repo } from '@recoder/shared';
-import { Button, Select } from '@recoder/ui';
-import { WarningCircleIcon } from '@phosphor-icons/react';
+import { Button, Icon, Select } from '@recoder/ui';
 
 import { useWatcher, type WatcherError, type WatcherStatus } from '@/lib/settings/use-watcher';
 
@@ -31,7 +30,7 @@ function WatcherErrors({ errors }: { errors: WatcherError[] }) {
 		<ul className="automations-errors" aria-label="Repositories the last check could not read">
 			{errors.map((error) => (
 				<li key={error.repoId} className="strip">
-					<WarningCircleIcon aria-hidden />
+					<Icon name="error" />
 					<span className="strip-text">
 						<strong>{error.name}</strong>
 						<span className="meta-sep">{error.message}</span>

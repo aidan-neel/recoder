@@ -1,8 +1,7 @@
 'use client';
 
 import type { Member } from '@recoder/shared';
-import { Button, ConfirmDialog, ForgeMark, Pill } from '@recoder/ui';
-import { XIcon } from '@phosphor-icons/react';
+import { Button, ConfirmDialog, ForgeMark, Icon, Pill } from '@recoder/ui';
 import { useRef, type Ref } from 'react';
 
 import { forgeLabel } from '@/lib/connections/forges';
@@ -57,7 +56,7 @@ function MemberRow({ member, onRemove, removeRef }: MemberRowProps) {
 					aria-label={`Remove ${mention(member)}`}
 					onClick={() => onRemove(member)}
 				>
-					<XIcon aria-hidden />
+					<Icon name="close" />
 				</Button>
 			)}
 		</SettingsRow>

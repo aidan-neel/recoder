@@ -1,7 +1,7 @@
 'use client';
 
+import { Icon } from '../icon';
 import { Command } from 'cmdk';
-import { MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Dialog } from 'radix-ui';
 import {
@@ -151,7 +151,7 @@ export function CommandBar({
 	const rect = useAnchorRect(anchor, open);
 	const { panelRef, restoreFocus } = useReturnFocus<HTMLDivElement>(open);
 	const variants = useMotionVariants(menuMotion);
-	const lead = leading ?? <MagnifyingGlassIcon aria-hidden className="size-4 shrink-0 text-fg-muted" />;
+	const lead = leading ?? <Icon name="search" className="size-4 shrink-0 text-fg-muted" />;
 
 	return (
 		<Dialog.Root open={open} onOpenChange={onOpenChange}>

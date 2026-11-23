@@ -1,6 +1,6 @@
 'use client';
 
-import { CheckIcon, XIcon } from '@phosphor-icons/react';
+import { Icon } from './icon';
 import { Slot } from 'radix-ui';
 import {
 	Children,
@@ -235,11 +235,11 @@ function Faces({ status, labels, children }: { status: ButtonStatus; labels: Fac
 				{labels.pending}
 			</span>
 			<span data-face="success" data-on={status === 'success'} aria-hidden={spoken !== 'success'}>
-				{faceIcon(drawn.includes('success'), <CheckIcon />, 24)}
+				{faceIcon(drawn.includes('success'), <Icon name="check" />, 24)}
 				{labels.success}
 			</span>
 			<span data-face="error" data-on={status === 'error'} aria-hidden={spoken !== 'error'}>
-				{faceIcon(drawn.includes('error'), <XIcon />, 24)}
+				{faceIcon(drawn.includes('error'), <Icon name="close" />, 24)}
 				{labels.error}
 			</span>
 		</span>

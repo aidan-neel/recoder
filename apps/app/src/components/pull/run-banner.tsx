@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, cn, StatusGlyph, StatusNotice } from '@recoder/ui';
-import { CheckIcon, CircleIcon, XIcon } from '@phosphor-icons/react';
+import { Button, cn, Icon, StatusGlyph, StatusNotice } from '@recoder/ui';
 import type { ComponentProps } from 'react';
 
 import type { RunStage, RunView } from '@/lib/run/types';
@@ -39,12 +38,12 @@ function Banner(props: BannerProps) {
 
 /** The mark before a step in the footer: a check once done, a cross where it stopped, a ring for the rest. */
 function StepMark({ done, stopped }: { done: boolean; stopped: boolean }) {
-	if (done) return <CheckIcon className="text-ok" aria-hidden />;
-	if (stopped) return <XIcon className="text-danger" aria-hidden />;
+	if (done) return <Icon name="check" className="text-ok" />;
+	if (stopped) return <Icon name="close" className="text-danger" />;
 
 	return (
 		<span className="grid size-3 place-items-center" aria-hidden>
-			<CircleIcon className="size-2 text-fg-ghost" />
+			<Icon name="circle" className="size-2 text-fg-ghost" />
 		</span>
 	);
 }
