@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, StatusNotice, StatusNoticeDetails } from '@recoder/ui';
-import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
+import { Button, Icon, StatusNotice, StatusNoticeDetails } from '@recoder/ui';
 import { useLayoutEffect } from 'react';
 
 import { errorText } from '@/components/common/page-error';
@@ -42,7 +41,7 @@ export default function GlobalError({ error, retry }: GlobalErrorProps) {
 							footer={details ? <StatusNoticeDetails code={details} /> : null}
 							actions={
 								<Button onClick={retry}>
-									<ArrowCounterClockwiseIcon aria-hidden />
+									<Icon name="replay" />
 									Try again
 								</Button>
 							}

@@ -1,8 +1,7 @@
 'use client';
 
 import type { CheckThreshold } from '@recoder/shared';
-import { Button, Input, Select } from '@recoder/ui';
-import { XIcon } from '@phosphor-icons/react';
+import { Button, Icon, Input, Select } from '@recoder/ui';
 
 import { useAutoReviewSwitch } from '@/lib/settings/use-auto-review-switch';
 import { useCheckThreshold } from '@/lib/settings/use-check-threshold';
@@ -89,7 +88,7 @@ function IgnoredGlobs({ view }: { view: IgnoredPathsView }) {
 				<li key={path} className="automations-glob">
 					<span className="mono">{path}</span>
 					<Button variant="ghost" size="icon" aria-label={`Stop ignoring ${path}`} onClick={() => view.remove(path)}>
-						<XIcon />
+						<Icon name="close" />
 					</Button>
 				</li>
 			))}

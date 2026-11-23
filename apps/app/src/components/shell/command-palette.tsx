@@ -8,22 +8,10 @@ import {
 	CommandInput,
 	CommandItem,
 	CommandList,
-	type CommandHint
+	type CommandHint,
+	type IconName
 } from '@recoder/ui';
-import {
-	BookOpenIcon,
-	ClockIcon,
-	ArrowElbowDownLeftIcon,
-	FolderSimpleIcon,
-	GitPullRequestIcon,
-	KeyboardIcon,
-	PaletteIcon,
-	PlusIcon,
-	GearIcon,
-	UserGearIcon,
-	CircleHalfIcon
-} from '@phosphor-icons/react';
-import { useState, type ComponentType } from 'react';
+import { useState } from 'react';
 
 import { useIsAdmin } from '@/lib/account/use-is-admin';
 import { useApi } from '@/lib/api/client';
@@ -51,7 +39,7 @@ const RESTING_PULLS = 6;
 interface Action {
 	id: string;
 	label: string;
-	icon: ComponentType<{ className?: string }>;
+	icon: IconName;
 	shortcut?: string;
 	run: () => void;
 }
@@ -117,23 +105,25 @@ export function CommandPalette() {
 
 	/** The live app's own pages and its Settings; the sample has none of them, so its palette leaves them out. */
 	const livePlaces: Action[] = [
-		{ id: 'automations', label: 'Automations', icon: ClockIcon, run: () => go(AUTOMATIONS_HREF) },
-		{ id: 'guidelines', label: 'Guidelines', icon: BookOpenIcon, run: () => go(GUIDELINES_HREF) },
-		...(admin ? [{ id: 'admin', label: 'Recoder', icon: UserGearIcon, run: () => openSettings('admin') }] : []),
-		{ id: 'settings', label: 'Settings', icon: GearIcon, shortcut: 'mod+,', run: () => openSettings() },
-		{ id: 'palette', label: 'Change palette', icon: PaletteIcon, run: () => openSettings('appearance') }
+		{ id: 'automations', label: 'Automations', icon: 'schedule', run: () => go(AUTOMATIONS_HREF) },
+		{ id: 'guidelines', label: 'Guidelines', icon: 'menu_book', run: () => go(GUIDELINES_HREF) },
+		...(admin
+			? ([{ id: 'admin', label: 'Recoder', icon: 'manage_accounts', run: () => openSettings('admin') }] as Action[])
+			: []),
+		{ id: 'settings', label: 'Settings', icon: 'settings', shortcut: 'mod+,', run: () => openSettings() },
+		{ id: 'palette', label: 'Change palette', icon: 'palette', run: () => openSettings('appearance') }
 	];
 
 	const actions: Action[] = [
-		{ id: 'new', label: 'New review', icon: PlusIcon, shortcut: 'c', run: () => go(newReviewHref(base)) },
-		{ id: 'pulls', label: 'Pull requests', icon: GitPullRequestIcon, run: () => go(pullsHref(base)) },
-		{ id: 'repos', label: 'Repositories', icon: FolderSimpleIcon, run: () => go(reposHref(base)) },
+		{ id: 'new', label: 'New review', icon: 'add', shortcut: 'c', run: () => go(newReviewHref(base)) },
+		{ id: 'pulls', label: 'Pull requests', icon: 'pull_request', run: () => go(pullsHref(base)) },
+		{ id: 'repos', label: 'Repositories', icon: 'folder', run: () => go(reposHref(base)) },
 		...(isLiveApp(base) ? livePlaces : []),
-		{ id: 'theme', label: 'Switch theme', icon: CircleHalfIcon, run: toggleTheme },
+		{ id: 'theme', label: 'Switch theme', icon: 'contrast', run: toggleTheme },
 		{
 			id: 'shortcuts',
 			label: 'Keyboard shortcuts',
-			icon: KeyboardIcon,
+			icon: 'keyboard',
 			shortcut: '?',
 			run: () => setShortcutsOpen(true)
 		}
@@ -153,7 +143,7 @@ export function CommandPalette() {
 				<CommandEmpty>Nothing matches. Paste a pull request link to open it.</CommandEmpty>
 				{pasted ? (
 					<CommandGroup>
-						<CommandItem value={query} icon={ArrowElbowDownLeftIcon} onSelect={openPasted}>
+						<CommandItem value={query} icon={'keyboard_return'} onSelect={openPasted}>
 							{pasted}
 						</CommandItem>
 					</CommandGroup>

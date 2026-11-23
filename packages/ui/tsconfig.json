@@ -12,5 +12,5 @@
 		"forceConsistentCasingInFileNames": true,
 		"types": ["bun-types"]
 	},
-	"include": ["src", "tests", "px-to-rem.ts"]
+	"include": ["src", "tests", "scripts", "px-to-rem.ts"]
 }

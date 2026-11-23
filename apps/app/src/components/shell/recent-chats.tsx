@@ -1,7 +1,6 @@
 'use client';
 
-import { Pill } from '@recoder/ui';
-import { ChatIcon } from '@phosphor-icons/react';
+import { Icon, Pill } from '@recoder/ui';
 
 import { useApi, useChatCache } from '@/lib/api/client';
 import { useComposeMode } from '@/lib/compose/compose-mode';
@@ -63,10 +62,10 @@ export function RecentChats({ chats }: { chats: RecentChat[] }) {
 								active={pathname === chat.href}
 								title={chat.title}
 								age={shortAge(chat.updatedAt, now)}
-								glyph={<ChatIcon aria-hidden />}
+								glyph={<Icon name="chat_bubble" />}
 								place={
 									<>
-										<ChatIcon aria-hidden />
+										<Icon name="chat_bubble" />
 										<span className="thread-place-text">{chat.repoName}</span>
 									</>
 								}

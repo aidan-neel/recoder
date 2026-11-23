@@ -1,7 +1,6 @@
 'use client';
 
-import { Pill, Skeleton, StatusGlyph, type GlyphKind, type PillTone } from '@recoder/ui';
-import { GitPullRequestIcon } from '@phosphor-icons/react';
+import { Icon, Pill, Skeleton, StatusGlyph, type GlyphKind, type PillTone } from '@recoder/ui';
 
 import { useApi, useSessionCache } from '@/lib/api/client';
 import { shortAge } from '@/lib/shell/age';
@@ -62,7 +61,7 @@ function StatePill({ review }: { review: RecentReview }) {
 function ReviewPlace({ review }: { review: RecentReview }) {
 	return (
 		<>
-			<GitPullRequestIcon aria-hidden />
+			<Icon name="pull_request" />
 			<span className="thread-place-text">
 				{review.repoName} #{review.number}
 			</span>

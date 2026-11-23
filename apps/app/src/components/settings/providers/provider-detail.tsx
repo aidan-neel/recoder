@@ -1,8 +1,7 @@
 'use client';
 
 import type { AgentStatus } from '@recoder/shared';
-import { Button, CopyButton, StatusGlyph } from '@recoder/ui';
-import { ArrowClockwiseIcon } from '@phosphor-icons/react';
+import { Button, CopyButton, Icon, StatusGlyph } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import { cliState } from '@/lib/settings/providers/agent-cli';
@@ -50,7 +49,7 @@ function DetailHead({ agent }: { agent: AgentStatus }) {
 			<h2 className="provider-detail-title">{agent.name}</h2>
 			{agent.version ? <span className="provider-version">{agent.version}</span> : null}
 			<Button variant="ghost" status={check.status} successLabel="Checked" onClick={check.run}>
-				<ArrowClockwiseIcon aria-hidden />
+				<Icon name="refresh" />
 				Check again
 			</Button>
 		</div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { TerminalWindowIcon } from '@phosphor-icons/react';
+import { Icon } from '../icon';
 import { useId } from 'react';
 
 import { cn } from '../../lib/cn';
@@ -89,7 +89,7 @@ export function AgentMark({ agent, label, className }: AgentMarkProps) {
 	const classes = cn('size-4 shrink-0', className);
 	const a11y = label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true };
 
-	if (!spec) return <TerminalWindowIcon data-ui="agent-mark" className={classes} {...a11y} />;
+	if (!spec) return <Icon name="terminal" data-ui="agent-mark" className={classes} {...a11y} />;
 
 	return (
 		<svg

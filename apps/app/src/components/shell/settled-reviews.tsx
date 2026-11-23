@@ -1,7 +1,6 @@
 'use client';
 
-import { RowButton } from '@recoder/ui';
-import { CaretDownIcon, GitMergeIcon, GitPullRequestIcon, ChatIcon, ArrowUUpLeftIcon } from '@phosphor-icons/react';
+import { Icon, RowButton, type IconName } from '@recoder/ui';
 import { usePathname } from '@/lib/shell/navigation';
 import { useState } from 'react';
 
@@ -18,11 +17,11 @@ import { SidebarSection } from './sidebar-section';
 /** How many settled rows show before "Show more". */
 const PREVIEW = 5;
 
-const MARKS = {
-	merged: { icon: GitMergeIcon, label: 'Merged' },
-	closed: { icon: GitPullRequestIcon, label: 'Closed' },
-	review: { icon: GitPullRequestIcon, label: 'Review' },
-	chat: { icon: ChatIcon, label: 'Chat' }
+const MARKS: Record<NonNullable<SettledRow['outcome']> | SettledRow['kind'], { icon: IconName; label: string }> = {
+	merged: { icon: 'merge', label: 'Merged' },
+	closed: { icon: 'pull_request', label: 'Closed' },
+	review: { icon: 'pull_request', label: 'Review' },
+	chat: { icon: 'chat_bubble', label: 'Chat' }
 };
 
 /** The mark for a settled row: how its pull request ended, or what it is. */
@@ -81,13 +80,13 @@ function SettledRows({ reviews, hidden, onShowAll }: SettledRowsProps) {
 		const base = entry.kind === 'review' ? reviewActions(entry.row) : chatActions(entry.row);
 		const restore = entry.kind === 'review' && entry.outcome === null ? () => clear(id) : () => unsettle(id);
 
-		return [{ id: 'unsettle', label: 'Unsettle', icon: ArrowUUpLeftIcon, onSelect: restore }, ...base];
+		return [{ id: 'unsettle', label: 'Unsettle', icon: 'undo', onSelect: restore }, ...base];
 	}
 
 	return (
 		<div className="thread-list settled-list">
 			{reviews.map((entry) => {
-				const { icon: Icon, label } = markOf(entry);
+				const { icon, label } = markOf(entry);
 				const { row } = entry;
 
 				return (
@@ -96,7 +95,7 @@ function SettledRows({ reviews, hidden, onShowAll }: SettledRowsProps) {
 						href={row.href}
 						active={pathname === row.href.split('?')[0]}
 						density="compact"
-						glyph={<Icon aria-hidden />}
+						glyph={<Icon name={icon} />}
 						status={label}
 						place={row.repoName}
 						title={row.title}
@@ -112,7 +111,7 @@ function SettledRows({ reviews, hidden, onShowAll }: SettledRowsProps) {
 			})}
 			{hidden > 0 ? (
 				<RowButton className="settled-more" onClick={onShowAll}>
-					<CaretDownIcon aria-hidden className="settled-more-mark" />
+					<Icon name="expand_more" className="settled-more-mark" />
 					Show {hidden} more
 				</RowButton>
 			) : null}

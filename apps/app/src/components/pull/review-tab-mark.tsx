@@ -1,7 +1,6 @@
 'use client';
 
-import { Spinner, Tooltip } from '@recoder/ui';
-import { WarningCircleIcon, ClockIcon, ClockCounterClockwiseIcon, PauseIcon, type Icon } from '@phosphor-icons/react';
+import { Icon, Spinner, Tooltip, type IconName } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import type { RunView } from '@/lib/run/types';
@@ -14,15 +13,15 @@ type WaitingState = 'queued' | 'paused' | 'failed' | 'outdated';
 interface Glyph {
 	/** The word for it, as a tooltip and for a screen reader. */
 	label: string;
-	icon: Icon;
+	icon: IconName;
 	tone?: 'danger' | 'medium';
 }
 
 const GLYPHS: Record<WaitingState, Glyph> = {
-	queued: { label: 'Queued', icon: ClockIcon },
-	paused: { label: 'Paused', icon: PauseIcon },
-	failed: { label: 'Failed', icon: WarningCircleIcon, tone: 'danger' },
-	outdated: { label: 'Out of date', icon: ClockCounterClockwiseIcon, tone: 'medium' }
+	queued: { label: 'Queued', icon: 'schedule' },
+	paused: { label: 'Paused', icon: 'pause' },
+	failed: { label: 'Failed', icon: 'error', tone: 'danger' },
+	outdated: { label: 'Out of date', icon: 'history', tone: 'medium' }
 };
 
 /** Where the review stands for the tab: running, one of the glyph states, or `done` (done, or none yet) when the tab shows its open bugs. */
@@ -54,12 +53,12 @@ export function reviewTabMark(run: RunView): ReactNode {
 		);
 	}
 
-	const { label, icon: Icon, tone } = GLYPHS[state];
+	const { label, icon, tone } = GLYPHS[state];
 
 	return (
 		<Tooltip content={label}>
 			<span className="page-tab-mark" data-tone={tone} role="img" aria-label={label}>
-				<Icon aria-hidden />
+				<Icon name={icon} />
 			</span>
 		</Tooltip>
 	);

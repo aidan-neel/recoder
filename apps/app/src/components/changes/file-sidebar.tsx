@@ -1,7 +1,6 @@
 'use client';
 
-import { Input, Keycap, SkeletonRows, Tree } from '@recoder/ui';
-import { MagnifyingGlassIcon } from '@phosphor-icons/react';
+import { Icon, Input, Keycap, SkeletonRows, Tree } from '@recoder/ui';
 import { useMemo, useState, type KeyboardEvent } from 'react';
 
 import { foundLabel, foundTone } from '@/lib/bugs/tiers';
@@ -109,7 +108,7 @@ export function FileSidebar({ current, onOpen, outline }: FileSidebarProps) {
 					value={query}
 					onChange={(event) => setQuery(event.target.value)}
 					onKeyDown={onFilterKey}
-					leading={<MagnifyingGlassIcon aria-hidden />}
+					leading={<Icon name="search" />}
 					trailing={query ? null : <Keycap k="t" />}
 				/>
 			</div>

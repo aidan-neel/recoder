@@ -1,8 +1,7 @@
 'use client';
 
 import { parseUnifiedDiff } from '@recoder/shared';
-import { Button, CodeBlock, CodeLines, type CodeLine, FileChip, langForPath, Markdown } from '@recoder/ui';
-import { ArrowBendDownRightIcon, CheckCircleIcon } from '@phosphor-icons/react';
+import { Button, CodeBlock, CodeLines, FileChip, Icon, langForPath, Markdown, type CodeLine } from '@recoder/ui';
 import { useMemo } from 'react';
 
 import { useGoToOrigin } from '@/lib/bugs/move-origin';
@@ -41,7 +40,7 @@ function FixBlock({ fix }: { fix: NonNullable<BugView['fix']> }) {
 				{patch ? <FileChip path={patch.path} className="fix-path" /> : null}
 				{checks.length > 0 ? (
 					<span className="fix-checks" title={checks.join(', ')}>
-						<CheckCircleIcon aria-hidden />
+						<Icon name="check_circle" />
 						{plural(checks.length, 'check')} passed
 					</span>
 				) : null}
@@ -74,7 +73,7 @@ function MovedCode({ move }: { move: BugMove }) {
 				<h3 className="section-label">On moved code</h3>
 			</div>
 			<div className="bug-move">
-				<ArrowBendDownRightIcon aria-hidden className="move-note-icon" />
+				<Icon name="subdirectory_arrow_right" className="move-note-icon" />
 				<span>{MOVE_VERBS[move.kind]}</span>
 				<FileChip path={move.from.path} line={move.from.lines} framed />
 				<span>to</span>

@@ -1,5 +1,4 @@
-import { Pill, StatusNotice } from '@recoder/ui';
-import { CalendarDotsIcon } from '@phosphor-icons/react';
+import { Pill, StatusNotice, Icon } from '@recoder/ui';
 
 import type { PersonPageData } from '@/lib/people/types';
 
@@ -38,7 +37,7 @@ export function PersonHeader({ data }: { data: PersonPageData }) {
 					<div className="repo-facts">
 						<Handle data={data} />
 						<Pill tone={data.standing.tone}>{data.standing.label}</Pill>
-						{data.since ? <Pill icon={<CalendarDotsIcon aria-hidden />}>{data.since}</Pill> : null}
+						{data.since ? <Pill icon={<Icon name="calendar_month" />}>{data.since}</Pill> : null}
 					</div>
 				</div>
 			</header>

@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Tooltip } from '@recoder/ui';
-import { SidebarSimpleIcon } from '@phosphor-icons/react';
+import { Button, Icon, Tooltip } from '@recoder/ui';
 
 import { keepTooltipShutOnCarry, toggleSidebar } from '@/lib/shell/sidebar-toggle';
 import { useSidebarShown } from '@/lib/shell/use-sidebar-shown';
@@ -14,7 +13,7 @@ export function SidebarToggle() {
 	return (
 		<Tooltip content={label} shortcut="mod+b" onFocus={keepTooltipShutOnCarry}>
 			<Button variant="ghost" size="icon" aria-label={label} data-sidebar-toggle onClick={toggleSidebar}>
-				<SidebarSimpleIcon />
+				<Icon name="dock_to_right" />
 			</Button>
 		</Tooltip>
 	);

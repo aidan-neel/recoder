@@ -1,11 +1,11 @@
 'use client';
 
-import { ChatTextIcon, PuzzlePieceIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useId, type RefObject } from 'react';
 
 import { menuMotion } from '../../motion/presets';
 import { useMotionVariants } from '../../motion/reduced';
+import { Icon } from '../icon';
 import { PRESENCE } from '../overlay/panel';
 import { MenuHighlight } from '../menu/menu-highlight';
 import type { SlashMenu, SlashRow } from './composer-slash';
@@ -108,7 +108,6 @@ function MenuGroup({ label, rows, menu, menuId }: MenuGroupProps) {
 /** A row: a command reads `/name`, a skill its bare name, then what it is. */
 function MenuRow({ row, menu, menuId }: { row: SlashRow; menu: SlashMenu; menuId: string }) {
 	const index = menu.rows.indexOf(row);
-	const Glyph = row.kind === 'command' ? ChatTextIcon : PuzzlePieceIcon;
 
 	return (
 		<div
@@ -119,7 +118,7 @@ function MenuRow({ row, menu, menuId }: { row: SlashRow; menu: SlashMenu; menuId
 			onPointerMove={() => menu.setActive(index)}
 			onClick={() => menu.pick(row)}
 		>
-			<Glyph aria-hidden data-ui="composer-menu-glyph" />
+			<Icon name={row.kind === 'command' ? 'chat' : 'extension'} data-ui="composer-menu-glyph" />
 			<span data-ui="composer-menu-name">{row.kind === 'command' ? `/${row.item.name}` : row.item.name}</span>
 			<span data-ui="composer-menu-description">{row.item.description}</span>
 		</div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { CaretRightIcon, FolderIcon, FolderOpenIcon } from '@phosphor-icons/react';
+import { Icon } from '../icon';
 import {
 	useEffect,
 	useRef,
@@ -55,7 +55,6 @@ interface TreeItemProps {
 /** A folder with its chevron and icon, or a file with its icon; a folder reading its contents shows a spinner. */
 function TreeItem({ row, selected, tabbable, end, onPress }: TreeItemProps) {
 	const folder = row.kind === 'folder';
-	const FolderMark = row.open ? FolderOpenIcon : FolderIcon;
 
 	return (
 		<button
@@ -74,8 +73,8 @@ function TreeItem({ row, selected, tabbable, end, onPress }: TreeItemProps) {
 			style={depthStyle(row.depth)}
 			onClick={onPress}
 		>
-			{folder ? <CaretRightIcon aria-hidden data-ui="tree-chevron" /> : <span data-ui="tree-gap" aria-hidden />}
-			{folder ? <FolderMark aria-hidden /> : <FileIcon path={row.label} />}
+			{folder ? <Icon name="chevron_right" data-ui="tree-chevron" /> : <span data-ui="tree-gap" aria-hidden />}
+			{folder ? <Icon name={row.open ? 'folder_open' : 'folder'} /> : <FileIcon path={row.label} />}
 			<span data-ui="tree-label">{row.label}</span>
 			{row.loading ? <Spinner size={12} /> : null}
 			{end ? <span data-ui="tree-end">{end}</span> : null}

@@ -1,7 +1,6 @@
 'use client';
 
-import { HoverList, RowButton, SkeletonRows } from '@recoder/ui';
-import { ChatCircleIcon } from '@phosphor-icons/react';
+import { HoverList, Icon, RowButton, SkeletonRows } from '@recoder/ui';
 import { useCallback } from 'react';
 
 import { useChatCache } from '@/lib/api/client';
@@ -56,7 +55,7 @@ function ChatRow({ chat }: { chat: RecentChat }) {
 	return (
 		<RowButton asChild data-chat className="compose-row">
 			<Link href={chat.href} {...intent}>
-				<ChatCircleIcon aria-hidden className="compose-row-glyph" />
+				<Icon name="chat_bubble" className="compose-row-glyph" />
 				<span className="compose-row-text">
 					<span className="compose-row-name">{chat.title}</span>
 					<span className="meta pull-meta">

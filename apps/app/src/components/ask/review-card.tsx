@@ -1,7 +1,6 @@
 'use client';
 
-import { Card, RowButton } from '@recoder/ui';
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { Card, Icon, RowButton } from '@recoder/ui';
 
 import type { StartedReview } from '@/lib/ask/types';
 
@@ -23,7 +22,7 @@ export function ReviewCard({ review }: { review: StartedReview }) {
 				</span>
 			</span>
 			<StatusPill status={review.status} />
-			<CaretRightIcon aria-hidden className="chat-review-chevron" />
+			<Icon name="chevron_right" className="chat-review-chevron" />
 		</Card>
 	);
 }

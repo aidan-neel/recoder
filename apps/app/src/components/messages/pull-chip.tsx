@@ -1,8 +1,7 @@
 'use client';
 
 import type { PullAttachment } from '@recoder/shared';
-import { Button, Tooltip } from '@recoder/ui';
-import { XIcon } from '@phosphor-icons/react';
+import { Button, Tooltip, Icon } from '@recoder/ui';
 import { useMemo } from 'react';
 import { useStore } from 'zustand';
 
@@ -57,7 +56,7 @@ export function PullChip({ attachment, onRemove }: PullChipProps) {
 						className="pull-chip-remove"
 						onClick={onRemove}
 					>
-						<XIcon />
+						<Icon name="close" />
 					</Button>
 				</Tooltip>
 			) : null}

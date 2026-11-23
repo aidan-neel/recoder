@@ -12,7 +12,6 @@
 		"lint": "eslint . && prettier --check . --ignore-path ../../.prettierignore"
 	},
 	"dependencies": {
-		"@phosphor-icons/react": "2.1.10",
 		"@recoder/shared": "workspace:*",
 		"@recoder/ui": "workspace:*",
 		"motion": "14.3.0",

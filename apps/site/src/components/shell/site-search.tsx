@@ -8,10 +8,10 @@ import {
 	CommandInput,
 	CommandItem,
 	CommandList,
+	Icon,
 	Tooltip,
 	type CommandHint
 } from '@recoder/ui';
-import { FileTextIcon, HashIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -72,7 +72,7 @@ export function SiteSearch({ pages }: { pages: NavPage[] }) {
 					aria-keyshortcuts="Meta+K Control+K"
 					onClick={() => setOpen(true)}
 				>
-					<MagnifyingGlassIcon />
+					<Icon name="search" />
 				</Button>
 			</Tooltip>
 			<CommandDialog open={open} onOpenChange={setOpen} label="Search Recoder">
@@ -97,14 +97,14 @@ export function SiteSearch({ pages }: { pages: NavPage[] }) {
 function PageRows({ page, onChoose }: { page: NavPage; onChoose: (href: string) => void }) {
 	return (
 		<>
-			<CommandItem value={page.title} icon={FileTextIcon} onSelect={() => onChoose(page.href)}>
+			<CommandItem value={page.title} icon="description" onSelect={() => onChoose(page.href)}>
 				{page.title}
 			</CommandItem>
 			{page.sections.map((section) => (
 				<CommandItem
 					key={section.id}
 					value={`${section.title} (${page.title})`}
-					icon={HashIcon}
+					icon="tag"
 					detail={page.title}
 					onSelect={() => onChoose(`${page.href}#${section.id}`)}
 				>

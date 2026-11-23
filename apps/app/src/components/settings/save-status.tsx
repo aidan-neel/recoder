@@ -1,5 +1,4 @@
-import { Spinner } from '@recoder/ui';
-import { CheckIcon, XIcon } from '@phosphor-icons/react';
+import { Icon, Spinner } from '@recoder/ui';
 
 import type { SaveState } from '@/lib/settings/use-save-state';
 
@@ -22,10 +21,10 @@ export function SaveStatus({ state }: { state: SaveState }) {
 				<Spinner size={14} />
 			</span>
 			<span data-face="success" data-on={state === 'success'} aria-hidden>
-				<CheckIcon />
+				<Icon name="check" />
 			</span>
 			<span data-face="error" data-on={state === 'error'} aria-hidden>
-				<XIcon />
+				<Icon name="close" />
 			</span>
 		</span>
 	);

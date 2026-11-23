@@ -9,16 +9,10 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
+	Icon,
 	RowButton,
 	Tooltip
 } from '@recoder/ui';
-import {
-	ArrowsInLineVerticalIcon,
-	ArrowsOutLineVerticalIcon,
-	DotsThreeIcon,
-	EyeSlashIcon,
-	PlusIcon
-} from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 
 interface SidebarSectionProps {
@@ -72,7 +66,7 @@ export function SidebarSection({
 						{add ? (
 							<Tooltip content={add.label}>
 								<Button variant="ghost" size="icon" aria-label={add.label} onClick={add.onSelect}>
-									<PlusIcon />
+									<Icon name="add" />
 								</Button>
 							</Tooltip>
 						) : null}
@@ -80,17 +74,17 @@ export function SidebarSection({
 							<DropdownMenu>
 								<DropdownMenuTrigger>
 									<Button variant="ghost" size="icon" aria-label={`More for ${title}`}>
-										<DotsThreeIcon />
+										<Icon name="more_horiz" />
 									</Button>
 								</DropdownMenuTrigger>
 								<DropdownMenuContent align="start" className="w-[200px]">
 									<DropdownMenuItem
-										icon={open ? <ArrowsInLineVerticalIcon /> : <ArrowsOutLineVerticalIcon />}
+										icon={open ? <Icon name="compress" /> : <Icon name="expand" />}
 										onSelect={() => onOpenChange(!open)}
 									>
 										{open ? 'Collapse' : 'Expand'} {title}
 									</DropdownMenuItem>
-									<DropdownMenuItem icon={<EyeSlashIcon />} onSelect={onHide}>
+									<DropdownMenuItem icon={<Icon name="visibility_off" />} onSelect={onHide}>
 										Hide {title}
 									</DropdownMenuItem>
 								</DropdownMenuContent>

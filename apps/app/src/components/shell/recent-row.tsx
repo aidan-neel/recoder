@@ -12,10 +12,10 @@ import {
 	DropdownMenuItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
+	Icon,
 	RowButton,
 	Tooltip
 } from '@recoder/ui';
-import { CheckIcon, DotsThreeIcon } from '@phosphor-icons/react';
 import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 
 import { useIntent } from '@/lib/shell/intent';
@@ -32,10 +32,10 @@ interface MenuParts {
 
 /** The entries of one menu; the two menus differ only in the parts they are built from. */
 function ActionItems({ actions, parts: { Item, Separator } }: { actions: RowAction[]; parts: MenuParts }) {
-	return actions.map(({ id, label, icon: Icon, destructive, separated, onSelect }) => (
+	return actions.map(({ id, label, icon, destructive, separated, onSelect }) => (
 		<Fragment key={id}>
 			{separated ? <Separator /> : null}
-			<Item icon={<Icon />} destructive={destructive} onSelect={onSelect}>
+			<Item icon={<Icon name={icon} />} destructive={destructive} onSelect={onSelect}>
 				{label}
 			</Item>
 		</Fragment>
@@ -208,7 +208,7 @@ export function ThreadRow({
 								aria-label={settleCount > 1 ? `Settle ${settleCount} selected` : `Settle ${title}`}
 								onClick={onSettle}
 							>
-								<CheckIcon />
+								<Icon name="check" />
 							</Button>
 						</Tooltip>
 					) : null}
@@ -216,7 +216,7 @@ export function ThreadRow({
 						<DropdownMenu>
 							<DropdownMenuTrigger>
 								<Button variant="ghost" size="icon" aria-label={`More for ${title}`}>
-									<DotsThreeIcon />
+									<Icon name="more_horiz" />
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent align="start" className="w-[200px]">
@@ -230,7 +230,7 @@ export function ThreadRow({
 	);
 
 	const contextActions: RowAction[] = onSettle
-		? [{ id: 'settle', label: settleLabel, icon: CheckIcon, onSelect: onSettle }, ...actions]
+		? [{ id: 'settle', label: settleLabel, icon: 'check', onSelect: onSettle }, ...actions]
 		: actions;
 
 	if (contextActions.length === 0) return row;

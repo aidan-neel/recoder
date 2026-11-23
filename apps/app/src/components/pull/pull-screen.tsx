@@ -1,8 +1,7 @@
 'use client';
 
 import type { PullPage } from '@recoder/shared';
-import { Button, Skeleton } from '@recoder/ui';
-import { ArrowUpRightIcon } from '@phosphor-icons/react';
+import { Button, Icon, Skeleton } from '@recoder/ui';
 import { useCallback, useState, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -181,7 +180,7 @@ function PullFrame({ repoId, number, tab: named }: PullOnTabProps) {
 						<Button asChild variant="ghost" className="pull-forge-link">
 							<a href={page.pull.url} target="_blank" rel="noreferrer">
 								Open on {forge}
-								<ArrowUpRightIcon aria-hidden className="size-3.5" />
+								<Icon name="arrow_outward" className="size-3.5" />
 							</a>
 						</Button>
 					) : null}

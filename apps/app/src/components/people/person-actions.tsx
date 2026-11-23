@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, ForgeMark, Tooltip } from '@recoder/ui';
-import { ArrowUpRightIcon, ChatsCircleIcon, LinkSimpleIcon } from '@phosphor-icons/react';
+import { Button, ForgeMark, Tooltip, Icon } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -30,20 +29,20 @@ export function PersonActions({ data, onMessage, messaging, children }: PersonAc
 			<Tooltip content={forgeName}>
 				<Button asChild variant="ghost" size="icon" aria-label={forgeName}>
 					<a href={data.forge.url} target="_blank" rel="noreferrer">
-						<ArrowUpRightIcon />
+						<Icon name="arrow_outward" />
 					</a>
 				</Button>
 			</Tooltip>
 			{children}
 			{data.accountId ? (
 				<Button variant="primary" status={messaging ? 'pending' : 'idle'} onClick={onMessage}>
-					<ChatsCircleIcon aria-hidden />
+					<Icon name="forum" />
 					Message
 				</Button>
 			) : null}
 			{data.invitable ? (
 				<Button variant="outline" onClick={() => copyInvite(base)}>
-					<LinkSimpleIcon aria-hidden />
+					<Icon name="link" />
 					Copy invite link
 				</Button>
 			) : null}

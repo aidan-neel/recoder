@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Tooltip } from '@recoder/ui';
-import { ArrowLeftIcon } from '@phosphor-icons/react';
+import { Button, Icon, Tooltip } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -53,7 +52,7 @@ function SettingsSide({ section }: { section: SettingsSection }) {
 			<div className="sidebar-head">
 				<Tooltip content="Back to the app" shortcut="mod+,">
 					<Button variant="ghost" className="settings-back" onClick={() => leaveSettings(pullsHref(''))}>
-						<ArrowLeftIcon />
+						<Icon name="arrow_back" />
 						Settings
 					</Button>
 				</Tooltip>

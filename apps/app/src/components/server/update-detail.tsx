@@ -1,5 +1,4 @@
-import { CheckIcon, XIcon } from '@phosphor-icons/react';
-import { Spinner } from '@recoder/ui';
+import { Icon, Spinner } from '@recoder/ui';
 
 import type { UpdateLine, UpdateStep } from '@/lib/update/update-line';
 
@@ -64,8 +63,8 @@ function StepMark({ stage }: { stage: UpdateStep['stage'] }) {
 	return (
 		<span className="update-step-mark" aria-hidden>
 			{stage === 'current' ? <Spinner size={12} /> : null}
-			{stage === 'done' ? <CheckIcon /> : null}
-			{stage === 'failed' ? <XIcon /> : null}
+			{stage === 'done' ? <Icon name="check" /> : null}
+			{stage === 'failed' ? <Icon name="close" /> : null}
 		</span>
 	);
 }

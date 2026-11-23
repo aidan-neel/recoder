@@ -247,6 +247,12 @@ A browser is always available on this machine. Never conclude otherwise:
   rather than passing it.
 - Do **not** pass `size="sm"` unless a compact control is explicitly required
   (e.g. a dense toolbar row). Prefer `md` everywhere else.
+- **Material Symbols are the only icon set** in apps/app, apps/site and
+  `packages/ui`: draw every UI icon with the kit's `<Icon name="…" />`
+  (Rounded, weight 500, optical size 20, inlined SVG, no icon font or CDN).
+  Add a symbol with `bun run --filter @recoder/ui icons <name>`; never add
+  another icon package. Logos (the file chip's language marks, forge marks,
+  the Re mark) are not UI icons. apps/web keeps Lucide.
 - For square icon-only controls use `size="icon"` (`--size-icon-md`: 30px in apps/web, 28px in the React kit);
   don't shrink icon buttons below 28px.
 - Sivir `ScrollArea` must always be used with `showCues={false}`. We never use

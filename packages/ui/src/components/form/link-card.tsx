@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowUpRightIcon } from '@phosphor-icons/react';
+import { Icon } from '../icon';
 import { useMemo, type MouseEvent, type PointerEventHandler } from 'react';
 
 import { Button } from '../button';
@@ -74,7 +74,7 @@ export function LinkCard({ target, onClose, onPointerEnter, onPointerLeave }: Li
 					<p data-ui="link-card-url">{url}</p>
 					<div data-ui="link-card-actions">
 						<Button variant="ghost" size="sm" onClick={() => openLink(url)}>
-							<ArrowUpRightIcon />
+							<Icon name="arrow_outward" />
 							Open
 							{target?.via === 'caret' ? (
 								<span data-ui="link-card-keys">

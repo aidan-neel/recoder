@@ -1,18 +1,4 @@
 import {
-	FileAudioIcon,
-	FileCsvIcon,
-	FileIcon as PageIcon,
-	FileImageIcon,
-	FileIniIcon,
-	FileLockIcon,
-	FilePdfIcon,
-	FileSqlIcon,
-	FileTxtIcon,
-	FileVideoIcon,
-	FileZipIcon,
-	type Icon
-} from '@phosphor-icons/react';
-import {
 	siC,
 	siCplusplus,
 	siCss,
@@ -54,14 +40,16 @@ import {
 	type SimpleIcon
 } from 'simple-icons';
 
+import type { IconName } from '../icon';
+
 /** How a file's type is drawn: a language's mark in its own hue (null when the hue would not read), or a glyph. */
-export type FileMark = { kind: 'mark'; path: string; hue: string | null } | { kind: 'glyph'; glyph: Icon };
+export type FileMark = { kind: 'mark'; path: string; hue: string | null } | { kind: 'glyph'; glyph: IconName };
 
 /** Files known by their whole name, before their extension is looked at. */
-const BY_NAME: Record<string, SimpleIcon | Icon> = {
+const BY_NAME: Record<string, SimpleIcon | IconName> = {
 	dockerfile: siDocker,
 	'package.json': siNpm,
-	'package-lock.json': FileLockIcon,
+	'package-lock.json': 'lock',
 	'.gitignore': siGit,
 	'.gitattributes': siGit,
 	'.gitmodules': siGit,
@@ -69,7 +57,7 @@ const BY_NAME: Record<string, SimpleIcon | Icon> = {
 };
 
 /** A language's mark, or a glyph for a kind of file no language owns, for each extension. */
-const BY_EXTENSION: Record<string, SimpleIcon | Icon> = {
+const BY_EXTENSION: Record<string, SimpleIcon | IconName> = {
 	ts: siTypescript,
 	mts: siTypescript,
 	cts: siTypescript,
@@ -123,33 +111,33 @@ const BY_EXTENSION: Record<string, SimpleIcon | Icon> = {
 	prisma: siPrisma,
 	svg: siSvg,
 	env: siDotenv,
-	png: FileImageIcon,
-	jpg: FileImageIcon,
-	jpeg: FileImageIcon,
-	gif: FileImageIcon,
-	webp: FileImageIcon,
-	avif: FileImageIcon,
-	ico: FileImageIcon,
-	sql: FileSqlIcon,
-	csv: FileCsvIcon,
-	tsv: FileCsvIcon,
-	pdf: FilePdfIcon,
-	zip: FileZipIcon,
-	gz: FileZipIcon,
-	tgz: FileZipIcon,
-	tar: FileZipIcon,
-	lock: FileLockIcon,
-	lockb: FileLockIcon,
-	txt: FileTxtIcon,
-	log: FileTxtIcon,
-	ini: FileIniIcon,
-	cfg: FileIniIcon,
-	conf: FileIniIcon,
-	mp4: FileVideoIcon,
-	mov: FileVideoIcon,
-	webm: FileVideoIcon,
-	mp3: FileAudioIcon,
-	wav: FileAudioIcon
+	png: 'image',
+	jpg: 'image',
+	jpeg: 'image',
+	gif: 'image',
+	webp: 'image',
+	avif: 'image',
+	ico: 'image',
+	sql: 'database',
+	csv: 'csv',
+	tsv: 'csv',
+	pdf: 'picture_as_pdf',
+	zip: 'folder_zip',
+	gz: 'folder_zip',
+	tgz: 'folder_zip',
+	tar: 'folder_zip',
+	lock: 'lock',
+	lockb: 'lock',
+	txt: 'text_snippet',
+	log: 'text_snippet',
+	ini: 'tune',
+	cfg: 'tune',
+	conf: 'tune',
+	mp4: 'video_file',
+	mov: 'video_file',
+	webm: 'video_file',
+	mp3: 'audio_file',
+	wav: 'audio_file'
 };
 
 /** A brand colour this dark or this light carries no hue on either theme, so its mark takes the text colour instead. */
@@ -175,7 +163,7 @@ function markHue(icon: SimpleIcon): string | null {
 }
 
 /** What a file's name says about its type: an `.env.local` is an env file, any other name by its whole name or its extension. */
-function lookup(name: string): SimpleIcon | Icon | null {
+function lookup(name: string): SimpleIcon | IconName | null {
 	if (name.startsWith('.env.')) return siDotenv;
 
 	const dot = name.lastIndexOf('.');
@@ -187,9 +175,9 @@ function lookup(name: string): SimpleIcon | Icon | null {
 export function fileMark(path: string): FileMark {
 	const found = lookup(path.slice(path.lastIndexOf('/') + 1).toLowerCase());
 
-	if (!found) return { kind: 'glyph', glyph: PageIcon };
+	if (!found) return { kind: 'glyph', glyph: 'draft' };
 
-	if ('path' in found) return { kind: 'mark', path: found.path, hue: markHue(found) };
+	if (typeof found === 'string') return { kind: 'glyph', glyph: found };
 
-	return { kind: 'glyph', glyph: found };
+	return { kind: 'mark', path: found.path, hue: markHue(found) };
 }

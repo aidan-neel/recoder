@@ -10,16 +10,9 @@ import {
 	DropdownMenuLabel,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
+	Icon,
 	Tooltip
 } from '@recoder/ui';
-import {
-	ArrowUpRightIcon,
-	ChatCircleIcon,
-	CheckIcon,
-	DotsThreeIcon,
-	ThumbsDownIcon,
-	ThumbsUpIcon
-} from '@phosphor-icons/react';
 
 import type { BugsView, BugView } from '@/lib/bugs/types';
 import { replaceAddress } from '@/lib/shell/navigation';
@@ -105,17 +98,17 @@ export function BugActions({ bug, view, asking, onAskToggle, reviewHref }: BugAc
 				<Tooltip content="More actions">
 					<DropdownMenuTrigger>
 						<Button variant="ghost" size="icon" className="bug-more" aria-label="More actions">
-							<DotsThreeIcon weight="bold" aria-hidden />
+							<Icon name="more_horiz" />
 						</Button>
 					</DropdownMenuTrigger>
 				</Tooltip>
 				<DropdownMenuContent align="end" className="w-[220px]">
-					<DropdownMenuItem icon={<ChatCircleIcon />} onSelect={onAskToggle}>
+					<DropdownMenuItem icon={<Icon name="chat_bubble" />} onSelect={onAskToggle}>
 						{asking ? 'Close the question' : 'Ask about it'}
 					</DropdownMenuItem>
 					{reviewHref ? (
 						<DropdownMenuItem
-							icon={<ArrowUpRightIcon />}
+							icon={<Icon name="arrow_outward" />}
 							onSelect={() => replaceAddress(`${reviewHref}#bug-${encodeURIComponent(bug.id)}`)}
 						>
 							Open in Review
@@ -123,13 +116,13 @@ export function BugActions({ bug, view, asking, onAskToggle, reviewHref }: BugAc
 					) : null}
 					{posted ? (
 						<DropdownMenuItem
-							icon={<ArrowUpRightIcon />}
+							icon={<Icon name="arrow_outward" />}
 							onSelect={() => window.open(posted.url, '_blank', 'noreferrer')}
 						>
 							See the comment
 						</DropdownMenuItem>
 					) : null}
-					<DropdownMenuItem icon={<CheckIcon />} disabled={pending} onSelect={accept}>
+					<DropdownMenuItem icon={<Icon name="check" />} disabled={pending} onSelect={accept}>
 						Accept
 					</DropdownMenuItem>
 					<DropdownMenuSeparator />
@@ -141,13 +134,13 @@ export function BugActions({ bug, view, asking, onAskToggle, reviewHref }: BugAc
 					))}
 					<DropdownMenuSeparator />
 					<DropdownMenuItem
-						icon={<ThumbsUpIcon weight={bug.vote === 'useful' ? 'fill' : 'regular'} />}
+						icon={<Icon name="thumb_up" fill={bug.vote === 'useful'} />}
 						onSelect={() => cast('useful')}
 					>
 						{bug.vote === 'useful' ? 'Take back "useful"' : 'Useful'}
 					</DropdownMenuItem>
 					<DropdownMenuItem
-						icon={<ThumbsDownIcon weight={bug.vote === 'not-useful' ? 'fill' : 'regular'} />}
+						icon={<Icon name="thumb_down" fill={bug.vote === 'not-useful'} />}
 						onSelect={() => cast('not-useful')}
 					>
 						{bug.vote === 'not-useful' ? 'Take back "not useful"' : 'Not useful'}
