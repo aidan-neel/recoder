@@ -137,8 +137,9 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   `--text-primary`, on the rows' text lane, with no chevron. At its right, at
   rest and without a fill, a quiet + that starts one (a new review, a new
   chat, Add repository) and a ⋯ that collapses or hides the group, in
-  `--text-faint` until pointed at. A click on the title folds the group too.
-  Settled uses the same title. Reviews, Chats and Settled draw every row
+  `--text-faint` until pointed at. The title itself does nothing on a
+  click, so a stray click on the sidebar never folds a list; only the ⋯
+  folds it. Settled uses the same title and, having no ⋯, folds from it. Reviews, Chats and Settled draw every row
   with one component (`ThreadRow`, `styles/thread-row.css`), Paper variant
   V3 of AID-18, in two densities picked in Settings → Appearance → Sidebar
   rows (saved in this browser, set on `<html>` before first paint, applied
@@ -158,7 +159,20 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   markup and the setting only decides what shows, and a row's two lines have
   fixed heights, so a change of setting or of state never moves a row.
   Pointed at or focused, the age gives way to a quiet Settle (✓) and ⋯;
-  the open row sits on `--bg-hover`. A repository is one line on
+  the open row sits on `--bg-hover`. Rows of Reviews and Chats pick as a
+  Mac list does: Shift-click selects from the row last opened or
+  Cmd/Ctrl-clicked, Cmd/Ctrl-click adds or drops one row (so it no longer
+  opens a tab; the middle button and the ⋯ still do), Shift+↑/↓ grow the
+  range from the focused row, and a plain click opens a row and empties the
+  selection. A selected row sits on `--accent-tint`, apart from the open
+  row's grey and the pointer's wash. With rows selected a bar on a menu
+  surface stands in for the sidebar's foot, in its height, so nothing above
+  moves: the count, a quiet ✕ (Escape) and the blue Settle (`e`); a
+  selected row's ✓ and menu read "Settle 4" and take the whole selection.
+  Settling folds the rows away over `--dur-disclose` while the rows under
+  them close up, and a toast names what settled with Undo. A review still
+  running is skipped and named, since its result would bring it straight
+  back. A repository is one line on
   the places' lanes: the forge's mark, the name, and a `--sev-high` dot while
   it has an open bug. Then Settled; and at the foot the model reviews run with,
   the shortcuts and the theme switch. A review a person cancelled wears a

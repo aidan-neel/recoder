@@ -4,8 +4,9 @@ import { toast } from '@recoder/ui';
 import { openSettings } from '../settings/open-settings';
 
 /** A finished action, with Undo when it can be taken back. Stays 5 seconds. */
-export function undoToast(title: string, undo?: () => void): void {
+export function undoToast(title: string, undo?: () => void, description?: string): void {
 	toast.success(title, {
+		description,
 		duration: 5000,
 		action: undo ? { label: 'Undo', onClick: undo } : undefined
 	});

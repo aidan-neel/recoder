@@ -37,8 +37,9 @@ interface SidebarSectionProps {
 
 /**
  * A sidebar group under its title, drawn as Capy draws its groups: the title in the body's ink at the title size, and
- * at its right the group's quiet + (what it starts) and ⋯ (its menu), shown at rest. A click on the title folds the
- * list away or brings it back, and the ⋯ menu offers the same.
+ * at its right the group's quiet + (what it starts) and ⋯ (its menu), shown at rest. A group with a ⋯ folds only from
+ * that menu, so a click that lands on its title by mistake changes nothing; a group without one (Settled) folds from
+ * its title.
  */
 export function SidebarSection({
 	title,
@@ -53,12 +54,19 @@ export function SidebarSection({
 	return (
 		<Collapsible open={open} onOpenChange={onOpenChange} className={className}>
 			<div className="section-row">
-				<RowButton asChild className="section-head">
-					<CollapsibleTrigger>
+				{onHide ? (
+					<div className="section-head">
 						<span className="section-title">{title}</span>
 						{aside}
-					</CollapsibleTrigger>
-				</RowButton>
+					</div>
+				) : (
+					<RowButton asChild className="section-head">
+						<CollapsibleTrigger>
+							<span className="section-title">{title}</span>
+							{aside}
+						</CollapsibleTrigger>
+					</RowButton>
+				)}
 				{add || onHide ? (
 					<div className="section-tools">
 						{add ? (

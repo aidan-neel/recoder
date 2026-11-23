@@ -441,7 +441,7 @@
 	padding: 0 8px 3px;
 }
 
-/* Recent reviews and chats, and the repositories: a section of two-line rows under a title that folds it. */
+/* Recent reviews and chats, and the repositories: a section of two-line rows under its title. */
 .recent {
 	display: flex;
 	flex: none;
@@ -450,11 +450,13 @@
 }
 /*
  * A sidebar group's title, as Capy titles its groups: the body's ink at the title size in regular weight, on the
- * rows' text lane. A click on it folds the list; nothing marks the fold but the list itself, as in Capy.
+ * rows' text lane. A group with a ⋯ folds from that menu only; Settled, which has none, folds from its title. Nothing
+ * marks the fold but the list itself, as in Capy.
  */
 .section-head {
 	--row-button-radius: var(--radius-row);
 
+	display: flex;
 	width: calc(100% - 16px);
 	height: 28px;
 	align-items: center;
@@ -492,6 +494,38 @@
 .section-tools [data-ui='button']:is(:hover, :focus-visible, [data-state='open']) {
 	color: var(--text-primary);
 }
+/*
+ * Rows picked in Reviews and Chats: how many, a way to let them go, and Settle. It stands in for the foot, in the
+ * foot's own height, so the list above never moves and nothing hides behind it; the foot fades back once it goes.
+ */
+.selection-bar {
+	position: absolute;
+	z-index: 2;
+	right: 8px;
+	bottom: 4px;
+	left: 8px;
+	display: flex;
+	height: calc(var(--bar-height) - 8px);
+	align-items: center;
+	gap: 4px;
+	padding: 4px 4px 4px 12px;
+	border-radius: var(--radius-card);
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-menu);
+}
+.selection-count {
+	min-width: 0;
+	flex: 1;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.sidebar:has(.selection-bar) .sidebar-foot {
+	visibility: hidden;
+	opacity: 0;
+}
+
 .sidebar-foot {
 	display: flex;
 	height: var(--bar-height);
@@ -499,6 +533,7 @@
 	align-items: center;
 	gap: 2px;
 	padding: 0 8px;
+	transition: opacity var(--dur-swap) var(--ease-hover);
 }
 /* The model in use: its dot centred in the icon lane, its name on the text lane. */
 .model-chip {
