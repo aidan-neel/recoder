@@ -118,7 +118,7 @@ export const FileCard = memo(function FileCard({
 					<Icon name="chevron_right" className="file-caret" />
 					{oldPath ? (
 						<span className="file-rename">
-							<FileChip path={oldPath} className="file-name file-old-name" />
+							<FileChip path={oldPath} tooltip={near} className="file-name file-old-name" />
 							<Icon
 								name="arrow_forward"
 								aria-label={file.status === 'copied' ? 'copied to' : 'renamed to'}
@@ -126,7 +126,7 @@ export const FileCard = memo(function FileCard({
 							/>
 						</span>
 					) : null}
-					<FileChip path={file.path} className="file-name" />
+					<FileChip path={file.path} tooltip={near} className="file-name" />
 					{part?.lines ? <span className="meta file-part-lines">{part.lines}</span> : null}
 				</button>
 				<div className="file-head-end">
