@@ -9,6 +9,19 @@ export interface Spot {
 	h: number;
 }
 
+/** The two measures put every spot in the same place, so the floor need not render again. */
+function sameSpots(a: Map<string, Spot>, b: Map<string, Spot>): boolean {
+	if (a.size !== b.size) return false;
+
+	for (const [key, spot] of b) {
+		const other = a.get(key);
+
+		if (!other || other.x !== spot.x || other.y !== spot.y || other.w !== spot.w || other.h !== spot.h) return false;
+	}
+
+	return true;
+}
+
 /**
  * Where each `[data-spot]` element sits inside `container`, measured after
  * every layout the key names, on resize, and when a transition inside it
@@ -37,7 +50,7 @@ export function useSpots(container: RefObject<HTMLElement | null>, layoutKey: st
 				});
 			}
 
-			setSpots(next);
+			setSpots((current) => (sameSpots(current, next) ? current : next));
 		};
 
 		measure();
