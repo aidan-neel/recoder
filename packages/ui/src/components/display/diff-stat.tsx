@@ -1,5 +1,8 @@
 import { cn } from '../../lib/cn';
 
+/** One formatter for every count: `toLocaleString` with a locale builds a new one per call, which a 300-file list feels. */
+const COUNT = new Intl.NumberFormat('en-US');
+
 interface DiffStatProps {
 	additions: number;
 	deletions: number;
@@ -12,8 +15,8 @@ export function DiffStat({ additions, deletions, className }: DiffStatProps) {
 
 	return (
 		<span data-ui="diff-stat" className={cn(className)} aria-label={`${additions} added, ${deletions} removed`}>
-			{additions > 0 ? <span data-sign="add">+{additions.toLocaleString('en-US')}</span> : null}
-			{deletions > 0 ? <span data-sign="del">−{deletions.toLocaleString('en-US')}</span> : null}
+			{additions > 0 ? <span data-sign="add">+{COUNT.format(additions)}</span> : null}
+			{deletions > 0 ? <span data-sign="del">−{COUNT.format(deletions)}</span> : null}
 		</span>
 	);
 }

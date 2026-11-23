@@ -16,19 +16,23 @@ type Reading = 'file' | 'hunk';
 /**
  * The last card whose top is above the reading line; the first card when none is yet. The line sits a third of the
  * way down, so a file that fills most of the view is the one being read even while the last line of the file before
- * it is still leaving at the top.
+ * it is still leaving at the top. The cards stack in order, so it halves the list rather than measuring every card
+ * above the line, which it does once a frame while the scroller moves.
  */
 export function cardAtReadingLine(host: HTMLElement, attribute: Reading): HTMLElement | null {
 	const line = host.getBoundingClientRect().top + Math.max(READING_LINE, host.clientHeight * READING_SHARE);
-	let current: HTMLElement | null = null;
+	const cards = host.querySelectorAll<HTMLElement>(`[data-${attribute}]`);
+	let low = 1;
+	let high = cards.length;
 
-	for (const card of host.querySelectorAll<HTMLElement>(`[data-${attribute}]`)) {
-		if (current !== null && card.getBoundingClientRect().top > line) break;
+	while (low < high) {
+		const middle = (low + high) >> 1;
 
-		current = card;
+		if (cards[middle].getBoundingClientRect().top > line) high = middle;
+		else low = middle + 1;
 	}
 
-	return current;
+	return cards[low - 1] ?? null;
 }
 
 /**

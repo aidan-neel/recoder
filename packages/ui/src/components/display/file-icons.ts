@@ -155,11 +155,21 @@ function luminance(hex: string): number {
 	return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/** Each mark's hue, worked out once: a list draws the same few marks hundreds of times. */
+const HUES = new WeakMap<SimpleIcon, string | null>();
+
 /** A mark's hue as a CSS colour, or null when it is too near black or white to tell apart from the text. */
 function markHue(icon: SimpleIcon): string | null {
-	const light = luminance(icon.hex);
+	const known = HUES.get(icon);
 
-	return light < MIN_LUMINANCE || light > MAX_LUMINANCE ? null : `#${icon.hex}`;
+	if (known !== undefined) return known;
+
+	const light = luminance(icon.hex);
+	const hue = light < MIN_LUMINANCE || light > MAX_LUMINANCE ? null : `#${icon.hex}`;
+
+	HUES.set(icon, hue);
+
+	return hue;
 }
 
 /** What a file's name says about its type: an `.env.local` is an env file, any other name by its whole name or its extension. */

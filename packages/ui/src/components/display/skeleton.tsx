@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import type { RevealSpec } from 'skullet';
 import { Skeleton as SkulletSkeleton, SkeletonBox as SkulletBox, SkulletProvider } from 'skullet/react';
 
@@ -19,6 +19,8 @@ interface SkeletonProps {
 	loading: boolean;
 	/** Remembers the content's shape under this key, so the next load draws its skeleton from it. */
 	id?: string;
+	/** The caller already held the skeleton back past a paint, so its data is on its way: measure at once. */
+	waited?: boolean;
 	className?: string;
 	style?: CSSProperties;
 	/** The content; while loading, a stand-in for it built from the same components. */
@@ -42,11 +44,39 @@ function Held({ content }: { content: ReactNode }) {
  * its `id`), laid out unseen, and a bar is drawn over every line, picture
  * and control. The skeleton takes the room the content will, so nothing
  * moves when it lands.
+ *
+ * Measuring the stand-in, and fading it out again, costs most of a page's
+ * first load, and data that is already near (the sample, a cache, a fast
+ * server) lands before the next frame, before any skeleton could show. So a
+ * skeleton that mounts loading first holds its stand-in unseen, outside
+ * Skullet, for one frame: data that lands in it mounts as content, and only
+ * data still on its way gets a measured skeleton.
  */
-export function Skeleton({ children, ...props }: SkeletonProps) {
+export function Skeleton({ children, loading, waited = false, className, style, ...props }: SkeletonProps) {
+	const [fresh, setFresh] = useState(loading && !waited);
+	const content = <Held content={children} />;
+
+	useEffect(() => {
+		if (!fresh) return;
+
+		const frame = requestAnimationFrame(() => setFresh(false));
+
+		return () => cancelAnimationFrame(frame);
+	}, [fresh]);
+
+	if (fresh && loading) {
+		return (
+			<div aria-busy className={className} style={style}>
+				<div aria-hidden inert style={{ visibility: 'hidden' }}>
+					{content}
+				</div>
+			</div>
+		);
+	}
+
 	return (
-		<SkulletSkeleton {...props}>
-			<Held content={children} />
+		<SkulletSkeleton {...props} loading={loading} className={className} style={style}>
+			{content}
 		</SkulletSkeleton>
 	);
 }
