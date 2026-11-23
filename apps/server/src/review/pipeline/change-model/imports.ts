@@ -1,4 +1,5 @@
 import { posix } from 'node:path';
+import { byCodePoint } from '@recoder/shared';
 import type { Node } from 'web-tree-sitter';
 
 /** Languages whose files import each other by path, so a hit can be tied to the module it came from. */
@@ -38,12 +39,14 @@ function withoutExtension(path: string): string {
 	return path.replace(SCRIPT_EXTENSION, '');
 }
 
-/** Whether an import path (extension optional, folders resolving to their index) names `target`. */
-function namesFile(target: string, path: string): boolean {
-	const wanted = withoutExtension(target);
-	const base = withoutExtension(path === '.' ? '' : path);
+function relativeStem(importer: string, specifier: string): string {
+	const path = posix.normalize(posix.join(posix.dirname(importer), specifier)).replace(/\/$/, '');
 
-	return wanted === base || wanted === (base ? `${base}/index` : 'index');
+	return withoutExtension(path === '.' ? '' : path);
+}
+
+function indexStem(stem: string): string {
+	return stem ? `${stem}/index` : 'index';
 }
 
 /** Whether `target` ends with the alias's path below its root folder. */
@@ -56,6 +59,29 @@ function aliasNames(target: string, specifier: string): boolean {
 	const path = withoutExtension(rest);
 
 	return [path, `${path}/index`].some((candidate) => wanted === candidate || wanted.endsWith(`/${candidate}`));
+}
+
+/** Finds definite import targets among changed files, resolving a relative import once rather than per target. */
+export function definiteImportTargets(paths: string[]): (importer: string, specifier: string) => string[] {
+	const byStem = new Map<string, string[]>();
+
+	for (const path of paths) {
+		const stem = withoutExtension(path);
+		const matches = byStem.get(stem);
+
+		if (matches) matches.push(path);
+		else byStem.set(stem, [path]);
+	}
+
+	return (importer, specifier) => {
+		if (!specifier.startsWith('.')) {
+			return ALIAS.test(specifier) ? paths.filter((path) => aliasNames(path, specifier)) : [];
+		}
+
+		const stem = relativeStem(importer, specifier);
+
+		return [...(byStem.get(stem) ?? []), ...(byStem.get(indexStem(stem)) ?? [])].sort(byCodePoint);
+	};
 }
 
 /** A bare package whose name is a folder on the target's path, such as `@scope/shared` for `packages/shared/…`. */
@@ -76,9 +102,10 @@ export function importsModule(importer: string, specifiers: string[], target: st
 
 	for (const specifier of specifiers) {
 		if (specifier.startsWith('.')) {
-			if (namesFile(target, posix.normalize(posix.join(posix.dirname(importer), specifier)).replace(/\/$/, ''))) {
-				return true;
-			}
+			const stem = relativeStem(importer, specifier);
+			const wanted = withoutExtension(target);
+
+			if (wanted === stem || wanted === indexStem(stem)) return true;
 		} else if (ALIAS.test(specifier)) {
 			if (aliasNames(target, specifier)) return true;
 		} else if (maybeWorkspace(target, specifier)) {

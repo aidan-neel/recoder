@@ -42,6 +42,22 @@ test('shared changed identifiers connect related files but common language token
 	expect(groups.map((group) => group.hunks.map((hunk) => hunk.file))).toEqual([['one.ts', 'two.ts'], ['other.ts']]);
 });
 
+test('relative imports link both a matching file and its directory index without linking same-name files elsewhere', () => {
+	const run = newRun(
+		added('src/a-caller.ts', "import './z.js';") +
+			added('src/z.ts', 'export const flat = 1;') +
+			added('src/z/index.ts', 'export const nested = 2;') +
+			added('unrelated/z/index.ts', 'export const separate = 3;')
+	);
+
+	const groups = seedDiffGuide(run.inventory, null).groups;
+
+	expect(groups.map((group) => group.hunks.map((hunk) => hunk.file))).toEqual([
+		['src/z.ts', 'src/z/index.ts', 'src/a-caller.ts'],
+		['unrelated/z/index.ts']
+	]);
+});
+
 test('parser reference edges group changed definitions with callers even without matching patch identifiers', () => {
 	const run = newRun(added('a-caller.ts', 'alpha();') + added('z-core.ts', 'beta();'));
 
@@ -52,6 +68,20 @@ test('parser reference edges group changed definitions with callers even without
 	expect(seedDiffGuide(run.inventory, model).groups[0].hunks.map((hunk) => hunk.file)).toEqual([
 		'z-core.ts',
 		'a-caller.ts'
+	]);
+});
+
+test('a test is grouped with all matching sources in its feature, regardless of their structural folders', () => {
+	const run = newRun(
+		added('src/feature/core.ts', 'export const first = 1;') +
+			added('lib/feature/core.py', 'def second(): pass') +
+			added('tests/feature/core.test.ts', 'expect(true);') +
+			added('src/unrelated/core.ts', 'export const separate = 2;')
+	);
+
+	expect(seedDiffGuide(run.inventory, null).groups.map((group) => group.hunks.map((hunk) => hunk.file))).toEqual([
+		['lib/feature/core.py', 'src/feature/core.ts', 'tests/feature/core.test.ts'],
+		['src/unrelated/core.ts']
 	]);
 });
 

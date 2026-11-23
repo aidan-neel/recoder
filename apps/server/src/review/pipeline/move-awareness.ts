@@ -8,19 +8,14 @@ export function pureMoveAt(
 	line: number | undefined,
 	side: 'old' | 'new' = 'new'
 ): DiffMove | undefined {
-	if (line === undefined) return;
+	if (line === undefined || !inventory.moves?.length) return;
 
-	const oldPath = inventory.files.find((file) => file.path === path)?.oldPath ?? path;
+	const sourcePath = side === 'old' ? (inventory.files.find((file) => file.path === path)?.oldPath ?? path) : path;
 
-	return inventory.moves?.find((move) => {
+	return inventory.moves.find((move) => {
 		const range = side === 'new' ? move.toLines : move.fromLines;
 		const source = side === 'new' ? move.toPath : move.fromPath;
 
-		return (
-			move.exact &&
-			source === (side === 'new' ? path : oldPath) &&
-			range.start <= line &&
-			(range.end === null || line <= range.end)
-		);
+		return move.exact && source === sourcePath && range.start <= line && (range.end === null || line <= range.end);
 	});
 }

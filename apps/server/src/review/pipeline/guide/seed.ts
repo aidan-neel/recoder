@@ -1,5 +1,5 @@
 import { byCodePoint, type DiffGuide, type DiffGuideHunk } from '@recoder/shared';
-import { importsModule } from '../change-model/imports.js';
+import { definiteImportTargets } from '../change-model/imports.js';
 import { isTestPath, testSourceKey } from '../change-model/test-files.js';
 import type { ChangeModel } from '../change-model/types.js';
 import type { ReviewInventory } from '../inventory.js';
@@ -55,6 +55,7 @@ export function seedDiffGuide(inventory: ReviewInventory, model: ChangeModel | n
 	const byFile = new Map(paths.map((path) => [path, hunks.filter((hunk) => hunk.file === path)]));
 	const dependencies = new Map(paths.map((path) => [path, new Set<string>()]));
 	const priorities = new Map(paths.map((path) => [path, rank(inventory, path)]));
+	const imports = definiteImportTargets(paths);
 
 	const root = (id: string): string => {
 		let current = id;
@@ -82,9 +83,24 @@ export function seedDiffGuide(inventory: ReviewInventory, model: ChangeModel | n
 
 	for (const file of byFile.values()) for (const hunk of file.slice(1)) link(file[0].id, hunk.id);
 
-	for (const path of paths.filter(isTestPath)) {
-		for (const source of paths.filter((other) => !isTestPath(other))) {
-			if (testSourceKey(source) === testSourceKey(path)) dependency(path, source);
+	const tests = paths.filter(isTestPath);
+
+	if (tests.length) {
+		const testPaths = new Set(tests);
+		const sourcesByKey = new Map<string, string[]>();
+
+		for (const path of paths) {
+			if (testPaths.has(path)) continue;
+
+			const key = testSourceKey(path);
+			const sources = sourcesByKey.get(key);
+
+			if (sources) sources.push(path);
+			else sourcesByKey.set(key, [path]);
+		}
+
+		for (const path of tests) {
+			for (const source of sourcesByKey.get(testSourceKey(path)) ?? []) dependency(path, source);
 		}
 	}
 
@@ -104,7 +120,7 @@ export function seedDiffGuide(inventory: ReviewInventory, model: ChangeModel | n
 		const text = patch?.lines.map((line) => line.text).join('\n') ?? '';
 
 		for (const match of text.matchAll(/\b(?:from|import|require)\s*(?:\(\s*)?['"]([^'"]+)['"]/g)) {
-			for (const path of paths) if (importsModule(hunk.file, [match[1]], path) === true) dependency(hunk.file, path);
+			for (const path of imports(hunk.file, match[1])) dependency(hunk.file, path);
 		}
 
 		const changed =
