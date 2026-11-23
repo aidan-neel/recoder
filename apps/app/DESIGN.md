@@ -910,6 +910,34 @@ control, explains an ordinary control, or describes the feature in general
 goes. A needed fact moves to where it is used rather than being shortened. A
 line that comes and goes keeps its space, so nothing jumps.
 
+## Messages
+
+Direct messages float over every page as chat bubbles at the window's bottom right, as Messenger draws them, instead
+of a sidebar section or window tabs. The design is V1, "Chat heads", of the Paper file
+https://app.paper.design/file/01M83XRZXCC3NW9JBP9HXHP8FD.
+
+- **The dock** sits 24px in from the window's corner: a 48px round launcher with the unread total on its shoulder,
+  and above it a 40px head (the person's avatar, their unread count) for each recent conversation, newest activity
+  first, at most four. A conversation is recent while it has unread messages, a message in the last day, or was
+  opened or minimised in the last day; everyone else is in the launcher's inbox, so the stack never climbs into the
+  page. Toasts rise beside the dock rather than over it.
+- **One window** is open at a time, 360px wide, 16px left of the bubbles with its foot on the launcher's line. Its
+  height stops short of the topbar and a page's 44px header, so a pull request's actions stay in reach. The launcher
+  opens the inbox in it: every conversation, newest first, unread ones bright and counted, a + for New message (the
+  people picker) and Close. A row opens that conversation in the same window, and its back arrow returns to the
+  inbox. A head opens its own conversation; pressing the open head, Minimise or Escape folds the window back into
+  its head and hands focus to it. Close shuts the window and lets the head go once the conversation is quiet. The
+  window is not modal: the page under it stays in use. Profiles' Message, the author card and "Message author" in a
+  pull request's ⋯ menu open it too, the last with the pull request waiting in the composer.
+- **Messages are chat bubbles**: the signed-in person's on the right in the primary blue, the other person's on the
+  left on `--bg-bubble` with their avatar beside the last of each run. A run breaks on another author, a pause over
+  five minutes or a new day; a new day or a pause puts its time over the next bubble. Attached pull requests follow
+  their bubble as chips. Seen follows the last message the other person read; a refused send says why, with Retry.
+- **Motion.** The window rises from the bubble it opened from: a 0.9 scale and an 8px rise on the menus' timing,
+  growing from that bubble's middle. A new message pulses its head once (a ring that swells and fades) and, while no
+  window is open, peeks its first line up and to the left of the head for six seconds. Under reduced motion every
+  one of these only fades.
+
 ## Changes
 
 The diff reads as one column, capped at 1080px and centred, so the code gets

@@ -24,10 +24,15 @@ import { useTabs } from '@/lib/shell/tabs';
 import { followSystemTheme } from '@/lib/shell/theme';
 import { useKeys } from '@/lib/shell/use-keys';
 
+import { MessageDock } from '@/components/messages/message-dock';
+
 import { CommandPalette } from './command-palette';
 import { ShortcutsModal } from './shortcuts-modal';
 import { Sidebar } from './sidebar';
 import { Topbar } from './topbar';
+
+/** Toasts rise beside the message bubbles instead of over them: the bubbles' 24px inset, their 48px and a 16px gap. */
+const TOAST_OFFSET = { right: 88, bottom: 24 };
 
 interface AppShellProps {
 	/** The model chip at the foot of the sidebar: the live one reads Settings, the sample's is fixed. */
@@ -62,7 +67,7 @@ function ordinalKeys(): Record<string, () => void> {
 /**
  * The frame every page sits in: a link past the chrome for keyboard users,
  * the topbar with the window's tabs, the sidebar, the page beside it, and the
- * app-wide overlays. It owns the keys that work anywhere. The browser keeps
+ * app-wide overlays, the floating messages among them. It owns the keys that work anywhere. The browser keeps
  * Cmd/Ctrl with T, W, 1–9 and Tab for its own tabs, so the window's tabs
  * answer to Alt (Option) instead.
  */
@@ -102,9 +107,10 @@ export function AppShell({ model, children }: AppShellProps) {
 						<Sidebar model={model} />
 						{children}
 					</Frame>
+					<MessageDock />
 					<CommandPalette />
 					<ShortcutsModal />
-					<Toaster />
+					<Toaster offset={TOAST_OFFSET} />
 				</TooltipProvider>
 			</SkeletonProvider>
 		</MotionConfig>

@@ -1,107 +1,432 @@
-/* ───────── Messages: a conversation with one person, in the chat page's reading column ───────── */
-.dm-column {
-	--page-measure: 720px;
+/* ───────── Messages: floating bubbles at the window's bottom right, and one window that rises from them ───────── */
 
+/* The dock: the launcher at the foot, the heads stacked above it, the window to their left on the launcher's line. */
+.dock {
+	--dock-inset: 24px;
+	--dock-launcher: 48px;
+	--dock-head: 40px;
+	--dock-gap: 10px;
+	--dock-window-gap: 16px;
+
+	position: fixed;
+	z-index: 60;
+	right: var(--dock-inset);
+	bottom: var(--dock-inset);
+	width: var(--dock-launcher);
+}
+.dock-bubbles {
+	display: flex;
+	flex-direction: column-reverse;
+	align-items: center;
+	gap: var(--dock-gap);
+}
+.dock-slot {
+	position: relative;
+	display: grid;
+	place-items: center;
+}
+
+/* A bubble: a round button whose face is an avatar or the launcher's mark, with a count on its shoulder. */
+.dock-bubble {
+	position: relative;
+	overflow: visible;
+	padding: 0;
+	border-radius: 999px;
+}
+.dock-bubble:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.dock-launcher {
+	width: var(--dock-launcher);
+	height: var(--dock-launcher);
+	border-radius: 999px;
+	box-shadow: var(--shadow-menu);
+}
+.dock-launcher > svg {
+	width: 20px;
+	height: 20px;
+}
+.dock-head {
+	width: var(--dock-head);
+	height: var(--dock-head);
+}
+.dock-head:hover {
+	background: transparent;
+}
+.dock-avatar {
+	width: 100%;
+	height: 100%;
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-menu);
+	color: var(--text-primary);
+	font-size: 15px;
+	transition: transform var(--dur-hover) var(--ease-hover);
+}
+.dock-head:hover .dock-avatar {
+	transform: scale(1.05);
+}
+.dock-head:active .dock-avatar {
+	transform: scale(0.96);
+	transition-duration: var(--dur-tap);
+}
+.dock-head[data-open] .dock-avatar {
+	box-shadow:
+		0 0 0 2px var(--bg-canvas),
+		0 0 0 4px var(--accent),
+		var(--shadow-menu);
+}
+.dock-badge {
+	position: absolute;
+	top: -3px;
+	right: -5px;
+	display: inline-grid;
+	min-width: 18px;
+	height: 18px;
+	place-items: center;
+	padding-inline: 5px;
+	border-radius: 999px;
+	background: var(--primary);
+	box-shadow: 0 0 0 2px var(--bg-canvas);
+	color: var(--on-primary);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	line-height: 1;
+}
+.dock-row .dock-badge {
+	position: static;
+	box-shadow: none;
+}
+
+/* A new message pulses its head once: a ring that swells out and fades; under reduced motion it only fades. */
+.dock-pulse {
+	position: absolute;
+	inset: 0;
+	border-radius: 999px;
+	box-shadow: 0 0 0 2px var(--accent);
+	opacity: 0;
+	pointer-events: none;
+	animation: dock-pulse calc(var(--dur-disclose) * 3) var(--ease-menu);
+}
+@keyframes dock-pulse {
+	0% {
+		opacity: 0.9;
+		transform: scale(1);
+	}
+	100% {
+		opacity: 0;
+		transform: scale(1.45);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.dock-pulse {
+		animation-name: dock-pulse-fade;
+	}
+	@keyframes dock-pulse-fade {
+		0% {
+			opacity: 0.9;
+		}
+		100% {
+			opacity: 0;
+		}
+	}
+}
+
+/* What a new message says, up and to the left of its head, clear of the head's tooltip, while no window is open. */
+.dock-peek {
+	position: absolute;
+	right: calc(100% + 4px);
+	bottom: calc(100% - 8px);
+	display: flex;
+	width: 240px;
+	flex-direction: column;
+	gap: 2px;
+	margin: 0;
+	padding: 9px 12px;
+	border-radius: var(--radius-modal) var(--radius-modal) var(--radius-chip) var(--radius-modal);
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-menu);
+	pointer-events: none;
+	animation: dock-peek var(--dur-menu) var(--ease-menu);
+}
+@keyframes dock-peek {
+	from {
+		opacity: 0;
+		transform: translateX(6px);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.dock-peek {
+		animation-name: dock-fade;
+	}
+	@keyframes dock-fade {
+		from {
+			opacity: 0;
+		}
+	}
+}
+.dock-peek-name {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 600;
+}
+.dock-peek-text {
+	display: -webkit-box;
+	overflow: hidden;
+	-webkit-box-orient: vertical;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	-webkit-line-clamp: 2;
+}
+
+/*
+ * The window: left of the bubbles with a steady gap, its foot on the launcher's line. Its height stops short of the
+ * topbar and a page's 44px header, so a pull request's actions stay in reach on any window.
+ */
+.dock-window {
+	position: absolute;
+	right: calc(100% + var(--dock-window-gap));
+	bottom: 0;
+	display: flex;
+	--dock-window-height: min(560px, calc(100dvh - var(--topbar-height) - 44px - var(--dock-inset) * 2));
+
+	width: min(360px, calc(100vw - var(--dock-inset) * 2 - var(--dock-launcher) - var(--dock-window-gap)));
+	height: var(--dock-window-height);
+	flex-direction: column;
+	overflow: hidden;
+	border-radius: var(--radius-modal);
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-modal);
+}
+/* The inbox is as tall as its rows, up to the same cap; a conversation keeps the full height for its thread. */
+.dock-window[data-view='inbox'] {
+	height: auto;
+	max-height: var(--dock-window-height);
+}
+.dock-window-head {
+	display: flex;
+	height: 44px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+	padding-inline: 8px;
+	border-bottom: 1px solid var(--line-menu);
+}
+.dock-window-head > .dock-window-title {
+	flex: 1;
+	padding-left: 6px;
+}
+.dock-window-title {
+	overflow: hidden;
+	margin: 0;
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.dock-person {
+	display: flex;
+	min-width: 0;
+	height: 30px;
+	flex: 1;
+	align-items: center;
+	gap: 8px;
+	padding-inline: 4px 6px;
+	border-radius: var(--radius-control);
+	outline: none;
+	transition: background-color var(--dur-hover) var(--ease-hover);
+}
+.dock-person:hover {
+	background: var(--bg-hover);
+}
+.dock-person:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.dock-person .person-handle {
+	overflow: hidden;
+	font-size: var(--font-size-meta);
+	white-space: nowrap;
+}
+.dock-person-avatar {
+	width: 22px;
+	height: 22px;
+	font-size: 10px;
+}
+.dock-scroll {
+	flex: 1;
+}
+.dock-skeleton {
+	padding: 14px;
+}
+.dock-empty {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	padding: 20px;
+}
+.dock-foot {
+	flex-shrink: 0;
+	padding: 8px;
+}
+.dock-to-end {
+	position: absolute;
+	bottom: 72px;
+	left: 50%;
+	transform: translateX(-50%);
+}
+
+/* The inbox: one row a conversation, unread ones bright and counted. */
+.dock-inbox {
 	display: flex;
 	flex-direction: column;
-	gap: 16px;
+	margin: 0;
+	padding: 6px;
+	list-style: none;
 }
-.dm-dock {
-	--page-measure: 720px;
+.dock-row {
+	width: 100%;
+	gap: 10px;
+	padding: 8px;
+	border-radius: var(--radius-row);
+	transition: background-color var(--dur-hover) var(--ease-hover);
 }
-
-/* Who it is with, over the thread. */
-.dm-head {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding-bottom: 16px;
-	border-bottom: 1px solid var(--line-subtle);
+.dock-row:hover {
+	background: var(--bg-hover);
 }
-.dm-head-avatar {
-	width: 36px;
-	height: 36px;
-	font-size: 14px;
+.dock-row-avatar {
+	width: 32px;
+	height: 32px;
+	font-size: 13px;
 }
-.dm-head-title {
+.dock-row-text {
 	display: flex;
 	min-width: 0;
 	flex: 1;
 	flex-direction: column;
-	gap: 4px;
+	gap: 2px;
 }
-.dm-head-name {
+.dock-row-line {
 	display: flex;
+	min-width: 0;
 	align-items: center;
-	gap: 8px;
+	gap: 6px;
+}
+.dock-row-name {
+	overflow: hidden;
+	flex: 1;
+	color: var(--text-secondary);
+	font-size: var(--font-size-body);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.dock-row-age {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.dock-row-preview {
+	overflow: hidden;
+	flex: 1;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.dock-row[data-unread] .dock-row-name {
 	color: var(--text-primary);
-	font-size: var(--font-size-title);
 	font-weight: 600;
 }
+.dock-row[data-unread] .dock-row-preview {
+	color: var(--text-secondary);
+}
 
+/* ───────── The conversation as chat bubbles ───────── */
 .dm-thread {
 	display: flex;
 	flex-direction: column;
+	padding: 10px 12px 6px;
 }
 .dm-older {
 	align-self: center;
 	margin-bottom: 8px;
 }
+.dm-line {
+	display: flex;
+	flex-direction: column;
+	margin-top: 3px;
+}
 .dm-line[data-run] {
-	margin-top: 14px;
+	margin-top: 12px;
 }
 .dm-line:first-of-type[data-run] {
 	margin-top: 0;
 }
-
-/* A day's divider: its name between two hairlines. */
-.dm-day {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	margin-block: 8px 14px;
+.dm-stamp {
+	align-self: center;
+	padding-bottom: 8px;
 	color: var(--text-faint);
 	font-size: var(--font-size-meta);
 }
-.dm-day::before,
-.dm-day::after {
-	height: 1px;
-	flex: 1;
-	background: var(--line-subtle);
-	content: '';
-}
-
-/* A run's author: avatar, name and hour on one line; the messages under it start on the name's edge. */
-.dm-author {
+.dm-row {
 	display: flex;
-	align-items: center;
-	gap: 10px;
-	margin-bottom: 2px;
+	align-items: flex-end;
+	gap: 6px;
+}
+.dm-line[data-mine] .dm-row {
+	justify-content: flex-end;
 }
 .dm-avatar {
-	width: 28px;
-	height: 28px;
-	font-size: 12px;
+	width: 22px;
+	height: 22px;
+	font-size: 10px;
 }
-.dm-name {
-	color: var(--text-primary);
-	font-size: var(--font-size-label);
-	font-weight: 600;
-}
-.dm-time {
-	color: var(--text-faint);
-	font-size: var(--font-size-meta);
+.dm-avatar[data-gap] {
+	flex-shrink: 0;
+	visibility: hidden;
 }
 .dm-message {
 	display: flex;
+	max-width: 80%;
 	flex-direction: column;
-	gap: 6px;
-	padding: 2px 0 2px 38px;
-	color: var(--text-secondary);
+	align-items: flex-start;
+	gap: 4px;
 	transition: opacity var(--dur-hover) var(--ease-hover);
+}
+.dm-line[data-mine] .dm-message {
+	align-items: flex-end;
 }
 .dm-message[data-state='sending'] {
 	opacity: 0.55;
+}
+.dm-bubble {
+	padding: 7px 12px;
+	border-radius: var(--radius-modal);
+	background: var(--bg-bubble);
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	overflow-wrap: anywhere;
+}
+.dm-line[data-end] .dm-bubble {
+	border-bottom-left-radius: var(--radius-chip);
+}
+.dm-line[data-mine] .dm-bubble {
+	background: var(--primary);
+	color: var(--on-primary);
+}
+.dm-line[data-mine][data-end] .dm-bubble {
+	border-bottom-left-radius: var(--radius-modal);
+	border-bottom-right-radius: var(--radius-chip);
+}
+.dm-line[data-mine] .dm-bubble a {
+	color: inherit;
+	text-decoration: underline;
+}
+.dm-bubble > * > :first-child {
+	margin-top: 0;
+}
+.dm-bubble > * > :last-child {
+	margin-bottom: 0;
 }
 .dm-attachments {
 	display: flex;
@@ -117,13 +442,10 @@
 	font-size: var(--font-size-label);
 }
 .dm-seen {
-	margin: 4px 0 0;
+	margin: 3px 0 0;
 	color: var(--text-faint);
 	font-size: var(--font-size-meta);
 	text-align: right;
-}
-.dm-closed {
-	padding-block: 8px;
 }
 
 /* An attached pull request: a quiet chip that opens it, with an x while the message is still being written. */
@@ -176,18 +498,5 @@
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
-	margin-bottom: 8px;
-}
-
-/* The sidebar's Messages: an avatar for a compact row's glyph, and a line while there are none. */
-.thread-avatar {
-	width: 16px;
-	height: 16px;
-	font-size: 9px;
-}
-.recent-empty {
-	margin: 0;
-	padding: 4px 8px 6px;
-	color: var(--text-faint);
-	font-size: var(--font-size-label);
+	margin-bottom: 6px;
 }

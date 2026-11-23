@@ -99,7 +99,6 @@ export type Route =
 	| { screen: 'pull'; repoId: string; number: number }
 	| { screen: 'chat'; chatId: string }
 	| { screen: 'person'; person: PersonRef }
-	| { screen: 'messages'; conversationId: string }
 	| { screen: 'review'; reviewId: string }
 	| { screen: 'settings'; section: SettingsSection; view: ServerView | null };
 
@@ -142,8 +141,6 @@ function screenOf(parts: string[], live: boolean): Route | null {
 			return first === 'gitlab'
 				? { screen: 'person', person: { provider: first, host: second, login: parts[3] } }
 				: null;
-		case 'messages/2':
-			return { screen: 'messages', conversationId: first };
 		case 'review/2':
 			return live ? { screen: 'review', reviewId: first } : null;
 		case 'automations/1':
@@ -198,8 +195,6 @@ export function titleOf(route: Route): string {
 			return 'Chat';
 		case 'person':
 			return displayName(route.person);
-		case 'messages':
-			return 'Messages';
 		case 'review':
 			return 'Review';
 		case 'automations':

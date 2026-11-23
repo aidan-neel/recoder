@@ -11,7 +11,6 @@ import { ChatScreen } from '@/components/chat/chat-screen';
 import { PageMissing } from '@/components/common/page-missing';
 import { ComposeScreen } from '@/components/compose/compose-screen';
 import { GuidelinesScreen } from '@/components/guidelines/guidelines-screen';
-import { ConversationScreen } from '@/components/messages/conversation-screen';
 import { PersonScreen } from '@/components/people/person-screen';
 import { PullScreen } from '@/components/pull/pull-screen';
 import { ReviewRedirect } from '@/components/pull/review-redirect';
@@ -41,8 +40,6 @@ function Screen({ route, live }: { route: Route; live: boolean }) {
 			return <ChatScreen chatId={route.chatId} />;
 		case 'person':
 			return <PersonScreen person={route.person} />;
-		case 'messages':
-			return <ConversationScreen conversationId={route.conversationId} />;
 		case 'review':
 			return <ReviewRedirect id={route.reviewId} />;
 		case 'automations':

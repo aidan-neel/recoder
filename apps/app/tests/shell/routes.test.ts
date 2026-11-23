@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { messageHref, personHref } from '../../src/lib/people/refs';
+import { personHref } from '../../src/lib/people/refs';
 import { pullHref, pullTabOf, repoHref, routeOf } from '../../src/lib/shell/routes';
 
 describe('pullTabOf', () => {
@@ -86,9 +86,5 @@ describe('routeOf', () => {
 	test('shows the missing page for a profile on a forge people do not come from', () => {
 		expect(routeOf('/people/local/mira', '')).toEqual({ screen: 'missing' });
 		expect(routeOf('/people/github/acme.dev/mira', '')).toEqual({ screen: 'missing' });
-	});
-
-	test('reads back the conversation a message link names', () => {
-		expect(routeOf(messageHref('', 'dm 1/2'), '')).toEqual({ screen: 'messages', conversationId: 'dm 1/2' });
 	});
 });
