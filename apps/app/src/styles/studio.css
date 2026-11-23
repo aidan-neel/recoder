@@ -256,8 +256,7 @@
 }
 
 .studio-table-where {
-	font-family: var(--font-code);
-	white-space: nowrap;
+	justify-self: start;
 }
 
 .studio-table .studio-chain {

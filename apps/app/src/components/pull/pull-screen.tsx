@@ -2,7 +2,7 @@
 
 import type { PullPage } from '@recoder/shared';
 import { Button, Icon, Skeleton } from '@recoder/ui';
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import type { BugView } from '@/lib/bugs/types';
@@ -23,6 +23,7 @@ import { isLive } from '@/lib/run/run-phase';
 import { useRunView } from '@/lib/run/use-run';
 import { replaceAddress } from '@/lib/shell/navigation';
 import { pullHref, pullsHref, repoHref } from '@/lib/shell/routes';
+import { useProseSources } from '@/lib/summary/use-prose-sources';
 
 import { BugsTab } from '@/components/bugs/bugs-tab';
 import { BugsTools } from '@/components/bugs/bugs-tools';
@@ -31,6 +32,7 @@ import { ChangesTools, type ChangesMode } from '@/components/changes/changes-too
 import { CommitsTab } from '@/components/commits/commits-tab';
 import { Crumbs } from '@/components/common/crumbs';
 import { Page } from '@/components/common/page';
+import { ProseRefsContext } from '@/components/common/prose-code';
 import { TokenUsageButton } from '@/components/common/token-usage-modal';
 import { DescriptionTab } from '@/components/summary/description-tab';
 
@@ -102,6 +104,19 @@ function LoadingHeader() {
 	);
 }
 
+/** The forge origin (`https://github.com`, a self-hosted GitLab host) from the pull request's URL, or null locally. */
+function forgeOriginOf(page: PullPage | null): string | null {
+	if (!page || page.provider === 'local' || !page.pull.url) return null;
+
+	try {
+		const parsed = new URL(page.pull.url);
+
+		return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.origin : null;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * The page inside its session: the bar, the header with its merge facts, the tabs and the open tab. The tabs
  * stand from the first frame, on the tab the address names or where the page lands; while the page loads, the header is a skeleton
@@ -123,14 +138,18 @@ function PullFrame({ repoId, number, tab: named }: PullOnTabProps) {
 		replaceAddress(changesHref);
 	}
 
-	/** Opens the Changes tab at a changed file: the tab scrolls to it once the file's card is drawn. */
+	/** Opens the Changes tab at a changed file, at a line when given: the tab scrolls there once the file's card is drawn. */
 	const openFile = useCallback(
-		(path: string) => {
-			nav.goTo(path);
+		(path: string, line: number | null = null) => {
+			nav.goTo(path, line);
 			replaceAddress(changesHref);
 		},
 		[nav, changesHref]
 	);
+
+	const { sources } = useProseSources();
+	const forgeOrigin = forgeOriginOf(page);
+	const refs = useMemo(() => ({ sources, openFile, forgeOrigin }), [sources, openFile, forgeOrigin]);
 
 	/** Opens the Changes tab at a finding, under its line. */
 	const openFinding = useCallback(
@@ -207,7 +226,9 @@ function PullFrame({ repoId, number, tab: named }: PullOnTabProps) {
 						<PullTabs repoId={repoId} number={number} tab={tab} counts={view.counts} />
 						<div className="pull-tools">{tools[tab]}</div>
 					</div>
-					<div className="pull-body">{bodies[tab]}</div>
+					<div className="pull-body">
+						<ProseRefsContext value={refs}>{bodies[tab]}</ProseRefsContext>
+					</div>
 				</>
 			) : null}
 		</Page>

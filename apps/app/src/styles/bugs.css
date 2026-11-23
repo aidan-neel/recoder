@@ -194,6 +194,83 @@
 	line-height: 18px;
 }
 
+/* A finding's explanation: the paragraph that says what is wrong at full ink, its files as chips, the rest folded. */
+.bug-body .bug-lead {
+	color: var(--text-primary);
+}
+/*
+ * Identifiers drop the code chip in a finding's prose, so a sentence full of them still reads as a sentence. The face
+ * and size are set here too, since under its line in Changes the card sits inside the diff's code, which resets both.
+ */
+.bug-body [data-ui='markdown'] .inline-code {
+	padding: 0;
+	background: none;
+	color: var(--text-primary);
+	font-family: var(--font-code);
+	font-size: 0.88em;
+}
+.bug-places {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+}
+.bug-places-label {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.bug-places-list {
+	display: flex;
+	min-width: 0;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.bug-details-head {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: -6px;
+	padding: 3px 8px 3px 6px;
+	border-radius: var(--radius-row);
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	outline: none;
+	transition:
+		color var(--dur-hover) var(--ease-hover),
+		background-color var(--dur-hover) var(--ease-hover);
+}
+.bug-details-head:hover {
+	background: var(--bg-hover);
+	color: var(--text-secondary);
+}
+.bug-details-head:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.bug-details-head > [data-ui='disclosure-chevron'] {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.bug-details-head[data-state='open'] > [data-ui='disclosure-chevron'] {
+	rotate: 90deg;
+}
+.bug-details-text {
+	padding-top: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+	.bug-details-head,
+	.bug-details-head > [data-ui='disclosure-chevron'] {
+		transition: none;
+	}
+}
+
 /* Where moved code came from and went, as the moved block's note in Changes reads, with a way to the original. */
 .bug-move {
 	display: flex;

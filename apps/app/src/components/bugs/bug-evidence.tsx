@@ -1,12 +1,27 @@
 'use client';
 
 import { parseUnifiedDiff } from '@recoder/shared';
-import { Button, CodeBlock, CodeLines, FileChip, Icon, langForPath, Markdown, type CodeLine } from '@recoder/ui';
+import {
+	Button,
+	CodeBlock,
+	CodeLines,
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+	FileChip,
+	Icon,
+	langForPath,
+	type CodeLine
+} from '@recoder/ui';
 import { useMemo } from 'react';
 
+import { splitLead } from '@/lib/bugs/finding-body';
 import { useGoToOrigin } from '@/lib/bugs/move-origin';
 import type { BugMove, BugView } from '@/lib/bugs/types';
 import { plural } from '@/lib/shell/format';
+import { namedFiles } from '@/lib/summary/prose-refs';
+
+import { FileRefChip, FileRefProse, useChangedPaths } from '@/components/common/prose-code';
 
 import { EvidencePill, HistoryPill } from './bug-facts';
 
@@ -45,7 +60,7 @@ function FixBlock({ fix }: { fix: NonNullable<BugView['fix']> }) {
 					</span>
 				) : null}
 			</div>
-			{'text' in fix ? <Markdown className="fix-text">{fix.text}</Markdown> : null}
+			{'text' in fix ? <FileRefProse className="fix-text">{fix.text}</FileRefProse> : null}
 			{'diff' in fix && patch ? (
 				<CodeLines lines={patch.lines} lang={langForPath(patch.path)} className="fix-code" />
 			) : null}
@@ -92,11 +107,50 @@ function MovedCode({ move }: { move: BugMove }) {
 	);
 }
 
-/** What backs a finding: the full explanation, how it was shown, and the suggested fix when it has one. */
+/**
+ * A finding's explanation read at a glance: its first paragraph says what is wrong, the changed files it names stand
+ * under it as chips that open Changes there, and the rest (the steps, the consequence) waits shut under Details.
+ */
+function Explanation({ text }: { text: string }) {
+	const paths = useChangedPaths();
+	const { lead, rest } = useMemo(() => splitLead(text), [text]);
+	const files = useMemo(() => namedFiles(text, paths), [text, paths]);
+
+	return (
+		<>
+			<FileRefProse className="bug-lead">{lead}</FileRefProse>
+			{files.length > 0 ? (
+				<div className="bug-places">
+					<span className="bug-places-label">Where</span>
+					<ul className="bug-places-list">
+						{files.map((file) => (
+							<li key={`${file.path}:${file.lines ?? ''}`}>
+								<FileRefChip file={file} />
+							</li>
+						))}
+					</ul>
+				</div>
+			) : null}
+			{rest ? (
+				<Collapsible className="bug-details">
+					<CollapsibleTrigger className="bug-details-head">
+						<Icon name="chevron_right" data-ui="disclosure-chevron" />
+						Details
+					</CollapsibleTrigger>
+					<CollapsibleContent>
+						<FileRefProse className="bug-details-text">{rest}</FileRefProse>
+					</CollapsibleContent>
+				</Collapsible>
+			) : null}
+		</>
+	);
+}
+
+/** What backs a finding: its explanation, how it was shown, and the suggested fix when it has one. */
 export function BugEvidence({ bug }: { bug: BugView }) {
 	return (
 		<>
-			<Markdown>{bug.explanation}</Markdown>
+			<Explanation text={bug.explanation} />
 			{bug.move ? <MovedCode move={bug.move} /> : null}
 			<div className="bug-section-head">
 				<EvidencePill bug={bug} />

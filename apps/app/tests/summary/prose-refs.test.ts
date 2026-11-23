@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { PullCommit } from '@recoder/shared';
 
-import { mayNameCommit, mayNameFile, readProseRef, type ProseSources } from '../../src/lib/summary/prose-refs';
+import {
+	markFileRefs,
+	mayNameCommit,
+	mayNameFile,
+	namedFiles,
+	readProseRef,
+	type ProseSources
+} from '../../src/lib/summary/prose-refs';
 
 function commit(sha: string): PullCommit {
 	return {
@@ -22,11 +29,12 @@ const SOURCES: ProseSources = {
 };
 
 describe('readProseRef', () => {
-	test('a whole changed path is that file, named by its last part', () => {
+	test('a whole changed path is that file, with no lines', () => {
 		expect(readProseRef('src/session/lease.ts', SOURCES)).toEqual({
 			kind: 'file',
 			path: 'src/session/lease.ts',
-			label: 'lease.ts'
+			lines: null,
+			line: null
 		});
 	});
 
@@ -35,13 +43,18 @@ describe('readProseRef', () => {
 	});
 
 	test.each([
-		['lease.ts:20', 'lease.ts:20'],
-		['lease.ts:20-34', 'lease.ts:20-34'],
-		['lease.ts:20:4', 'lease.ts:20'],
-		['./src/session/lease.ts#L20', 'lease.ts:20'],
-		['session/lease.ts#L20-L34', 'lease.ts:20-34']
-	])('%s keeps its lines in the label', (code, label) => {
-		expect(readProseRef(code, SOURCES)).toMatchObject({ kind: 'file', path: 'src/session/lease.ts', label });
+		['lease.ts:20', '20'],
+		['lease.ts:20-34', '20-34'],
+		['lease.ts:20:4', '20'],
+		['./src/session/lease.ts#L20', '20'],
+		['session/lease.ts#L20-L34', '20-34']
+	])('%s keeps its lines, and opens at the first', (code, lines) => {
+		expect(readProseRef(code, SOURCES)).toMatchObject({
+			kind: 'file',
+			path: 'src/session/lease.ts',
+			lines,
+			line: 20
+		});
 	});
 
 	test('a name two changed files share is not a file', () => {
@@ -97,5 +110,66 @@ describe('mayNameFile', () => {
 		expect(mayNameFile('Updated `lease.ts`.')).toBe(true);
 		expect(mayNameFile('Updated <code>lease.ts</code>.')).toBe(true);
 		expect(mayNameFile('Plain prose without code.')).toBe(false);
+	});
+});
+
+const PATHS = SOURCES.paths;
+
+describe('markFileRefs', () => {
+	test('a changed file named in running text becomes a code span, its lines and the full stop after it kept apart', () => {
+		expect(markFileRefs('See lease.ts:20-34. Then src/store/index.ts, too.', PATHS)).toBe(
+			'See `lease.ts:20-34`. Then `src/store/index.ts`, too.'
+		);
+	});
+
+	test('a file in a list item or under emphasis is marked where it stands', () => {
+		expect(markFileRefs('- lease.ts:20 renews\n- *in session/lease.ts*', PATHS)).toBe(
+			'- `lease.ts:20` renews\n- *in `session/lease.ts`*'
+		);
+	});
+
+	test('a name the change does not touch, or that two changed files share, stays text', () => {
+		const text = 'token.ts:4 and index.ts:9 and PermissionPrompt.ts:74 and e.g. v1.2.3.';
+
+		expect(markFileRefs(text, PATHS)).toBe(text);
+	});
+
+	test('code spans, fenced code, links and web addresses are never touched', () => {
+		const text = [
+			'Already `lease.ts:20` here, [lease.ts](https://x.dev/lease.ts) there,',
+			'and https://x.dev/src/session/lease.ts too.',
+			'```ts',
+			'import { renew } from "./lease.ts";',
+			'```',
+			'After the fence lease.ts counts again.'
+		].join('\n');
+
+		expect(markFileRefs(text, PATHS)).toBe(text.replace('fence lease.ts', 'fence `lease.ts`'));
+	});
+
+	test('a file name inside a longer word or path is not a mention', () => {
+		const text = 'Not mylease.ts, lease.tsx or lib/src/session/lease.ts.bak';
+
+		expect(markFileRefs(text, PATHS)).toBe(text);
+	});
+});
+
+describe('namedFiles', () => {
+	test('lists each changed file once per place, from running text and code spans, in order', () => {
+		const text = 'In `lease.ts:20` and store/index.ts, then lease.ts:20 again and `lease.ts:31`; not `renew()`.';
+
+		expect(namedFiles(text, PATHS)).toEqual([
+			{ path: 'src/session/lease.ts', lines: '20', line: 20 },
+			{ path: 'src/store/index.ts', lines: null, line: null },
+			{ path: 'src/session/lease.ts', lines: '31', line: 31 }
+		]);
+	});
+
+	test('a code span that wraps across a line still names its file', () => {
+		expect(namedFiles('Opens ` lease.ts:20 `\nthere.', PATHS)).toMatchObject([{ line: 20 }]);
+	});
+
+	test('fenced code names nothing', () => {
+		expect(namedFiles('```\nlease.ts:20\n```', PATHS)).toEqual([]);
 	});
 });

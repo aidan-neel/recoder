@@ -3,7 +3,8 @@
 import type { PullCommit } from '@recoder/shared';
 import { useCallback, useMemo } from 'react';
 
-import { usePullCommitsView, usePullDiffView } from '../pull/pull-session';
+import { usePullDiffView, useSessionData } from '../pull/pull-session';
+import { loaded } from '../pull/session-state';
 import { mayNameCommit, mayNameFile, type ProseSources } from './prose-refs';
 
 const NO_COMMITS: readonly PullCommit[] = [];
@@ -18,18 +19,19 @@ interface ProseSourcesView {
 }
 
 /**
- * The changed paths and the commits the Summary's prose may name. It reads the commits, which only the Commits tab
- * read before. A load that failed has nothing to name and nothing to wait for, so the prose still shows.
+ * The changed paths and the commits a pull request's prose may name. The diff loads with the page; the commits only
+ * once something reads them (the Summary or the Commits tab), so until then prose names files alone. A load that
+ * failed has nothing to name and nothing to wait for, so the prose still shows.
  */
 export function useProseSources(): ProseSourcesView {
 	const diff = usePullDiffView();
-	const commitsView = usePullCommitsView();
+	const commitsLoad = useSessionData((data) => data.commits);
 	const files = diff.phase === 'ready' ? diff.value.files : null;
-	const commits = commitsView.phase === 'ready' ? commitsView.value : NO_COMMITS;
+	const commits = loaded(commitsLoad) ?? NO_COMMITS;
 	const paths = useMemo(() => (files ?? []).map((file) => file.path), [files]);
 	const sources = useMemo(() => ({ paths, commits }), [paths, commits]);
 	const diffLoading = diff.phase === 'loading';
-	const commitsLoading = commitsView.phase === 'loading';
+	const commitsLoading = commitsLoad.phase === 'loading';
 
 	const awaits = useCallback(
 		(markdown: string | null) => {
