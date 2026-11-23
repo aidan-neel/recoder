@@ -21,6 +21,11 @@ interface FileChipProps {
 	framed?: boolean;
 	/** Makes the chip a button. */
 	onClick?: () => void;
+	/**
+	 * Gives the chip its path tooltip, as it has by default. A list of hundreds can leave it off for the chips still far
+	 * out of view and turn it on as they come near; turning it on mounts the chip again.
+	 */
+	tooltip?: boolean;
 	/** Shown after the name and the line, before the size. */
 	children?: ReactNode;
 	className?: string;
@@ -38,6 +43,7 @@ export function FileChip({
 	deletions,
 	framed = false,
 	onClick,
+	tooltip = true,
 	children,
 	className
 }: FileChipProps) {
@@ -45,26 +51,26 @@ export function FileChip({
 	const where = line === null || line === undefined || line === '' ? '' : `:${line}`;
 	const Element = onClick ? 'button' : 'span';
 
-	return (
-		<Tooltip content={path + where}>
-			<Element
-				type={onClick ? 'button' : undefined}
-				data-ui="file-chip"
-				data-framed={framed ? '' : undefined}
-				className={cn(className)}
-				onClick={onClick}
-			>
-				<FileIcon path={path} />
-				<span data-ui="file-chip-name">
-					<span data-ui="file-chip-folder">{path.slice(0, path.length - shown.length)}</span>
-					{shown}
-					{where ? <span data-ui="file-chip-line">{where}</span> : null}
-				</span>
-				{children}
-				{additions !== undefined || deletions !== undefined ? (
-					<DiffStat additions={additions ?? 0} deletions={deletions ?? 0} />
-				) : null}
-			</Element>
-		</Tooltip>
+	const chip = (
+		<Element
+			type={onClick ? 'button' : undefined}
+			data-ui="file-chip"
+			data-framed={framed ? '' : undefined}
+			className={cn(className)}
+			onClick={onClick}
+		>
+			<FileIcon path={path} />
+			<span data-ui="file-chip-name">
+				<span data-ui="file-chip-folder">{path.slice(0, path.length - shown.length)}</span>
+				{shown}
+				{where ? <span data-ui="file-chip-line">{where}</span> : null}
+			</span>
+			{children}
+			{additions !== undefined || deletions !== undefined ? (
+				<DiffStat additions={additions ?? 0} deletions={deletions ?? 0} />
+			) : null}
+		</Element>
 	);
+
+	return tooltip ? <Tooltip content={path + where}>{chip}</Tooltip> : chip;
 }
