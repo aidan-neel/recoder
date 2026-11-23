@@ -7,7 +7,7 @@ import type { ReviewAssignment, ReviewCandidate, ReviewProgress, ReviewTask, Rev
  * timed or guessed.
  */
 
-export type StudioRole = 'reviewer' | 'subagent' | 'verifier';
+type StudioRole = 'reviewer' | 'subagent' | 'verifier';
 
 export type StudioVerb =
 	'queued' | 'waiting' | 'reading' | 'searching' | 'running' | 'thinking' | 'idle' | 'done' | 'failed';
