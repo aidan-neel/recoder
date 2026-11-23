@@ -5,6 +5,8 @@ import { Slot } from 'radix-ui';
 import {
 	Children,
 	isValidElement,
+	useLayoutEffect,
+	useRef,
 	useState,
 	type ButtonHTMLAttributes,
 	type ReactElement,
@@ -133,6 +135,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 	successLabel?: ReactNode;
 	/** Shown beside the cross. Leave it out to keep the button its idle width; "Failed" is still announced. */
 	errorLabel?: ReactNode;
+	/**
+	 * Eases the button's width to fit new content instead of jumping, for a button whose label changes with what it
+	 * does. Pair it with a `SwapText` label so the words crossfade while the width moves.
+	 */
+	morph?: boolean;
 	ref?: Ref<HTMLButtonElement>;
 }
 
@@ -246,6 +253,37 @@ function Faces({ status, labels, children }: { status: ButtonStatus; labels: Fac
 	);
 }
 
+/**
+ * The button's content in a box whose width follows the content's own over `--dur-swap`, so a new label widens or
+ * narrows the button in one smooth move. The content keeps its natural width and starts at the box's start edge, so
+ * text leaving or arriving never moves; the box clips what is wider than it while it grows. The first measure sets
+ * the width without a move, and reduced motion snaps.
+ */
+function MorphWidth({ children }: { children: ReactNode }) {
+	const content = useRef<HTMLSpanElement>(null);
+	const [width, setWidth] = useState<number>();
+
+	useLayoutEffect(() => {
+		const node = content.current;
+
+		if (!node) return;
+
+		const observer = new ResizeObserver(([entry]) => setWidth(entry.borderBoxSize[0].inlineSize));
+
+		observer.observe(node);
+
+		return () => observer.disconnect();
+	}, []);
+
+	return (
+		<span data-ui="button-morph" style={{ width }}>
+			<span ref={content} data-ui="button-morph-content">
+				{children}
+			</span>
+		</span>
+	);
+}
+
 /** What the status announcer says: the face's own label, else a plain word for it. */
 function announcement(status: ButtonStatus, labels: FaceLabels): ReactNode {
 	if (status === 'idle') return null;
@@ -280,6 +318,7 @@ export function Button({
 	pendingLabel,
 	successLabel,
 	errorLabel,
+	morph = false,
 	className,
 	children,
 	onClick,
@@ -300,6 +339,14 @@ export function Button({
 		'data-icon-end': edges.end || undefined,
 		className: buttonClass(variant, size, className)
 	};
+
+	const content = status ? (
+		<Faces status={status} labels={labels}>
+			{children}
+		</Faces>
+	) : (
+		children
+	);
 
 	if (asChild) {
 		return (
@@ -324,13 +371,7 @@ export function Button({
 			onKeyDown={pressOnce(onKeyDown)}
 			{...props}
 		>
-			{status ? (
-				<Faces status={status} labels={labels}>
-					{children}
-				</Faces>
-			) : (
-				children
-			)}
+			{morph ? <MorphWidth>{content}</MorphWidth> : content}
 		</button>
 	);
 

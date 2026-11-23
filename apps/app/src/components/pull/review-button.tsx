@@ -1,7 +1,7 @@
 'use client';
 
 import { REVIEW_SPEED_PLANS, type ReviewSpeed } from '@recoder/shared';
-import { ConfirmDialog, DropdownMenuItem, Icon, Keycap, Spinner, SplitButton } from '@recoder/ui';
+import { ConfirmDialog, DropdownMenuItem, Icon, Keycap, Spinner, SplitButton, SwapText } from '@recoder/ui';
 import { useState } from 'react';
 
 import { isLive } from '@/lib/run/run-phase';
@@ -60,53 +60,33 @@ function StopGlyph() {
 function FaceLabel({ face, next }: { face: Face; next: boolean }) {
 	if (face === 'cancel') {
 		return (
-			<span>
+			<>
 				<StopGlyph />
 				{LABELS.cancel}
-			</span>
+			</>
 		);
 	}
 
 	if (face === 'resume') {
 		return (
-			<span>
+			<>
 				<Icon name="play_arrow" fill className="size-3" />
 				{LABELS.resume}
-			</span>
+			</>
 		);
 	}
 
 	return (
-		<span>
+		<>
 			{LABELS[face]}
 			{next ? <Keycap k="r" /> : null}
-		</span>
-	);
-}
-
-/** Every label the button can show, unseen in its cell, so the button keeps the widest one's width in every state. */
-function LabelSizer() {
-	return (
-		<>
-			{(['review', 'again', 'continue'] as const).map((face) => (
-				<span key={face} className="review-control-sizer" aria-hidden>
-					{LABELS[face]}
-					<Keycap k="r" />
-				</span>
-			))}
-			{[LABELS.cancel, LABELS.resume, CANCELLING, CANCELLED].map((label) => (
-				<span key={label} className="review-control-sizer" aria-hidden>
-					<span className="review-control-glyph" />
-					{label}
-				</span>
-			))}
 		</>
 	);
 }
 
 /**
- * The pull request page's one review control, at the end of the header's title row. It never leaves its place or
- * changes its width; it reads where the review stands. Review (Review again after one ran) starts the standard
+ * The pull request page's one review control, at the end of the header's title row. It never leaves its place; it
+ * reads where the review stands, each label at its own width, and a new label crossfades in as the width eases to it. Review (Review again after one ran) starts the standard
  * review on a click or `r`, and its menu offers Spark, the fast one; a failed review at the same head reads
  * Continue review. A queued or running review reads Cancel review, with a spinner that turns into a stop square
  * under the pointer, and its menu pauses it; a paused one reads Resume review, and its menu cancels it. Cancelling
@@ -159,16 +139,16 @@ export function ReviewButton({ run }: { run: RunView }) {
 				variant={next || face === 'resume' ? 'primary' : 'outline'}
 				status={status}
 				pendingLabel={cancelling.status === 'idle' ? undefined : CANCELLING}
-				successLabel={CANCELLED}
+				successLabel={cancelling.status === 'idle' ? undefined : CANCELLED}
+				morph
 				onClick={press}
 				menuLabel={live ? 'Review controls' : 'Other ways to review'}
 				menuClassName="w-[300px]"
 				menu={live ? <LiveMenu run={run} onPause={action.run} onCancel={askCancel} /> : <SparkItem onStart={start} />}
 			>
-				<span className="review-control-label">
-					<LabelSizer />
+				<SwapText id={`${face} ${next}`} textClassName="review-control-label">
 					<FaceLabel face={face} next={next} />
-				</span>
+				</SwapText>
 			</SplitButton>
 			<ConfirmDialog
 				open={asking}

@@ -1,15 +1,25 @@
 'use client';
 
-import { Button, Icon, Pill, SkeletonRows, StatusNotice } from '@recoder/ui';
+import {
+	Button,
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+	Icon,
+	SkeletonRows,
+	StatusNotice
+} from '@recoder/ui';
 import { useEffect, useState } from 'react';
 
 import type { BugsView } from '@/lib/bugs/types';
 import { useShowFyi } from '@/lib/bugs/show-fyi';
+import { usePreviousShown } from '@/lib/bugs/previous-shown';
 import { useBugsView } from '@/lib/bugs/use-bugs';
 import { shortSha } from '@/lib/files/ref-label';
 import { usePullPageView } from '@/lib/pull/pull-session';
 import { isLive } from '@/lib/run/run-phase';
 import { useRunView } from '@/lib/run/use-run';
+import { plural } from '@/lib/shell/format';
 import { useKeys } from '@/lib/shell/use-keys';
 import { useReviewArriving } from '@/lib/summary/use-review-arriving';
 
@@ -83,33 +93,50 @@ interface PreviousFindingsProps {
 }
 
 /**
- * The findings of the review before the one that runs now, under its steps:
- * named as the previous review, stepped back, and with nothing to act on, so
- * they read as what was found last time and never as current.
+ * The findings of the review before the one that runs now, under its steps: one line with how many it found, when
+ * and at which commit, shut until opened so the running review stays the page. Opened, they are stepped back and
+ * have nothing to act on, so they read as what was found last time and never as current.
  */
 function PreviousFindings({ view, open, onToggle }: PreviousFindingsProps) {
-	if (!view.previous || view.previous.open.length === 0) return null;
+	const { shown, setShown } = usePreviousShown();
+	const { previous } = view;
+
+	if (!previous || previous.open.length === 0) return null;
 
 	return (
-		<section className="bugs-previous" aria-label="Previous review">
-			<div className="bugs-previous-head">
-				<h2 className="section-label">Previous review</h2>
-				{view.previous.headSha ? (
-					<Pill face="code" icon={<Icon name="commit" />} title={view.previous.headSha}>
-						{shortSha(view.previous.headSha)}
-					</Pill>
-				) : null}
-				{view.previous.reviewedAt ? (
-					<Pill icon={<Icon name="schedule" />}>
-						<Age at={view.previous.reviewedAt} form="long" />
-					</Pill>
-				) : null}
+		<Collapsible open={shown} onOpenChange={setShown} className="bugs-previous">
+			<CollapsibleTrigger className="bug-group-head">
+				<Icon name="chevron_right" data-ui="disclosure-chevron" />
+				Previous review
+				<span className="meta tabular">
+					{plural(previous.open.length, 'finding')}
+					{previous.reviewedAt ? (
+						<span className="meta-sep">
+							<Age at={previous.reviewedAt} form="long" />
+						</span>
+					) : null}
+					{previous.headSha ? (
+						<span className="meta-sep mono" title={previous.headSha}>
+							{shortSha(previous.headSha)}
+						</span>
+					) : null}
+				</span>
+			</CollapsibleTrigger>
+			<CollapsibleContent className="bugs-previous-body">
 				<span className="meta bugs-previous-note">Replaced when this review finishes</span>
-			</div>
-			{view.previous.open.map((bug) => (
-				<BugCard key={bug.id} bug={bug} view={view} open={open.has(bug.id)} onToggle={onToggle} place="review" stale />
-			))}
-		</section>
+				{previous.open.map((bug) => (
+					<BugCard
+						key={bug.id}
+						bug={bug}
+						view={view}
+						open={open.has(bug.id)}
+						onToggle={onToggle}
+						place="review"
+						stale
+					/>
+				))}
+			</CollapsibleContent>
+		</Collapsible>
 	);
 }
 

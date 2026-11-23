@@ -514,10 +514,6 @@
 	color: var(--text-faint);
 }
 
-/*
- * The previous review's findings, under the steps of the review that runs now: a label line with the commit and
- * the time, then the findings with their badges and chevrons stepped back so they never read as current.
- */
 /* FYI notes under the open findings: a quiet head, then their cards. */
 .bugs-fyi {
 	display: flex;
@@ -533,22 +529,20 @@
 	border-bottom: 1px solid var(--line-subtle);
 }
 
+/*
+ * The previous review's findings, under the steps of the review that runs now: one line that opens like the groups
+ * under the findings, then a note and the findings with their badges and chevrons stepped back.
+ */
 .bugs-previous {
-	display: flex;
-	flex-direction: column;
 	margin-top: 18px;
 }
-.bugs-previous-head {
+.bugs-previous-body {
 	display: flex;
-	min-height: 32px;
-	align-items: center;
-	gap: 8px;
-	padding-bottom: 8px;
-	border-bottom: 1px solid var(--line-subtle);
+	flex-direction: column;
+	padding-top: 4px;
 }
 .bugs-previous-note {
-	margin-left: auto;
-	white-space: nowrap;
+	padding: 0 12px 6px calc(12px + 14px * 2 / 3 + 8px);
 }
 .bug-item[data-stale] .bug-title {
 	color: var(--text-secondary);
