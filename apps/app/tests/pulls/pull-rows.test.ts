@@ -24,7 +24,24 @@ describe('rowStatus', () => {
 		expect(rowStatus({ item: openPull(), review: review({ findings }) })).toEqual({
 			kind: 'bugs',
 			bugs: 1,
+			warnings: 0,
 			suggestions: 1
+		});
+	});
+
+	test('open findings count warnings apart from bugs and leave FYI notes out', () => {
+		const findings: ReviewListItem['findings'] = [
+			{ id: 'a', severity: 'error', tier: 'bug', kind: 'bug' },
+			{ id: 'b', severity: 'warning', tier: 'warning', kind: 'bug' },
+			{ id: 'c', severity: 'info', tier: 'fyi', kind: 'bug' },
+			{ id: 'd', severity: 'info', kind: 'bug' }
+		];
+
+		expect(rowStatus({ item: openPull(), review: review({ findings }) })).toEqual({
+			kind: 'bugs',
+			bugs: 1,
+			warnings: 2,
+			suggestions: 0
 		});
 	});
 

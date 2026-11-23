@@ -102,6 +102,7 @@ export const BugCard = memo(function BugCard({ bug, view, open, onToggle, place,
 				className="bug-item"
 				data-place={place}
 				data-tone={bug.kind === 'suggestion' ? 'low' : bug.tone}
+				data-tier={bug.tier}
 				data-open={open || undefined}
 				data-stale={stale || undefined}
 				data-bug={bug.id}
@@ -110,7 +111,7 @@ export const BugCard = memo(function BugCard({ bug, view, open, onToggle, place,
 				<CollapsibleTrigger ref={head} className="bug-head" data-finding={bug.id}>
 					<span className="bug-severity">
 						<span aria-hidden className="bug-mark" />
-						{bug.kind === 'suggestion' ? 'Suggestion' : bug.severity}
+						{bug.kind === 'suggestion' ? 'Suggestion' : bug.tierLabel}
 					</span>
 					{category ? <span className="bug-category">{category}</span> : null}
 					<span className="bug-title">{bug.title}</span>

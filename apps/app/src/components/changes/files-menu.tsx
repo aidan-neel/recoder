@@ -14,6 +14,7 @@ import {
 } from '@recoder/ui';
 import { CheckIcon } from '@phosphor-icons/react';
 
+import { foundLabel, foundTone } from '@/lib/bugs/tiers';
 import type { FileEntry, FileGroup, GuidePart } from '@/lib/changes/types';
 
 const HINTS: CommandHint[] = [
@@ -52,7 +53,9 @@ function sections(groups: FileGroup[], parts: GuidePart[] | null): Section[] {
 function FileEnd({ entry }: { entry: FileEntry }) {
 	return (
 		<span className="file-end">
-			{entry.bugs > 0 ? <span className="tree-bug" role="img" aria-label={`${entry.bugs} open findings`} /> : null}
+			{entry.found ? (
+				<span className="tree-bug" data-tone={foundTone(entry.found)} role="img" aria-label={foundLabel(entry.found)} />
+			) : null}
 			{entry.viewed ? (
 				<CheckIcon aria-label="Viewed" />
 			) : (

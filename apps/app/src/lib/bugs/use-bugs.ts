@@ -10,6 +10,7 @@ import type { BugsView, SummaryView } from './types';
 
 const NO_LISTS: BugLists = {
 	open: [],
+	fyi: [],
 	decided: [],
 	resolved: [],
 	quieted: [],
@@ -56,7 +57,9 @@ export function useBugsView(): BugsView {
 
 	const promptFor = useCallback(
 		(id: string) => {
-			const bug = [...lists.open, ...lists.decided, ...lists.quieted].find((candidate) => candidate.id === id);
+			const bug = [...lists.open, ...lists.fyi, ...lists.decided, ...lists.quieted].find(
+				(candidate) => candidate.id === id
+			);
 
 			return bug ? fixPrompt(bug, pull) : '';
 		},

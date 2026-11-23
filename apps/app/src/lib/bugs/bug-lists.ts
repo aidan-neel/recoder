@@ -4,12 +4,14 @@ import { isOpenFinding } from '../api/reviews';
 import type { Vote } from '../pull/session-state';
 import { formatDuration, plural } from '../shell/format';
 import { bugView } from './bug-view';
+import { countFound, type FoundCounts } from './tiers';
 import type { BugsView, BugTone, BugView, UnresolvedItem } from './types';
 
 /** What the Review tab lists, read from one finished review. */
 export type BugLists = Pick<
 	BugsView,
 	| 'open'
+	| 'fyi'
 	| 'decided'
 	| 'resolved'
 	| 'quieted'
@@ -23,7 +25,7 @@ export type BugLists = Pick<
 
 const TONE_ORDER: Record<BugTone, number> = { high: 0, medium: 1, low: 2 };
 
-/** Bugs before suggestions, then the strongest tone, then by file and line. */
+/** Bugs before suggestions, then the strongest tier, then by file and line. */
 function byUrgency(a: BugView, b: BugView): number {
 	return (
 		Number(a.kind === 'suggestion') - Number(b.kind === 'suggestion') ||
@@ -133,17 +135,9 @@ function durationOf(review: Review): string | null {
 	return Number.isFinite(took) && took >= 0 ? formatDuration(took) : null;
 }
 
-/** Open findings by kind, as every count on the page words them. */
-export interface OpenFound {
-	bugs: number;
-	suggestions: number;
-}
-
-/** How many of the open findings are bugs and how many suggestions. */
-export function openFound(open: Pick<BugView, 'kind'>[]): OpenFound {
-	const suggestions = open.filter((bug) => bug.kind === 'suggestion').length;
-
-	return { bugs: open.length - suggestions, suggestions };
+/** How many of the open findings are bugs, warnings and suggestions; FYI is left out. */
+export function openFound(open: readonly Pick<BugView, 'kind' | 'tier'>[]): FoundCounts {
+	return countFound(open.map((bug) => ({ tier: bug.tier, suggestion: bug.kind === 'suggestion' })));
 }
 
 /** The model the review's orchestrator ran on, in words; null until the review says. */
@@ -155,9 +149,11 @@ export function modelLabel(model: string | undefined): string | null {
 export function bugLists(review: Review, votes: Record<string, Vote>): BugLists {
 	const view = (finding: Review['findings'][number]) => bugView(finding, review, votes[finding.id] ?? null);
 	const shown = review.findings.filter((finding) => !finding.topic?.quieted);
+	const open = shown.filter(isOpenFinding).map(view).sort(byUrgency);
 
 	return {
-		open: shown.filter(isOpenFinding).map(view).sort(byUrgency),
+		open: open.filter((bug) => bug.tier !== 'fyi'),
+		fyi: open.filter((bug) => bug.tier === 'fyi'),
 		decided: shown
 			.filter((finding) => finding.decision)
 			.map(view)

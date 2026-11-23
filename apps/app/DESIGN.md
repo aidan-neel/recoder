@@ -146,7 +146,7 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   `--text-secondary` (full ink when pointed at, open or unread) and its age,
   then where it lives (a pull request mark and "api #214", or a chat mark and
   the repository) and the state as a kit `Pill` at the line's end: "2 bugs"
-  high, "No bugs" ok, "Failed" danger, "Reviewing" neutral with the spinner,
+  high, "1 warning" medium, "No bugs" ok, "Failed" danger, "Reviewing" neutral with the spinner,
   and "New reply" in the accent on a chat with news. Compact is one 30px
   line: the review's `StatusGlyph` (or a chat mark), the title, then the
   unread dot and the age. Settled is always compact, its glyph how the pull
@@ -160,7 +160,7 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   Pointed at or focused, the age gives way to a quiet Settle (✓) and ⋯;
   the open row sits on `--bg-hover`. A repository is one line on
   the places' lanes: the forge's mark, the name, and a `--sev-high` dot while
-  it has an open high bug. Then Settled; and at the foot the model reviews run with,
+  it has an open bug. Then Settled; and at the foot the model reviews run with,
   the shortcuts and the theme switch. A review a person cancelled wears a
   quiet slashed circle, never the failure triangle. The sample has no
   Automations, Guidelines or Settings, so its sidebar, account menu, palette,
@@ -232,7 +232,8 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   under the pointer and
   the row `j` and `k` are on wear the same fill; the keyboard's adds a short
   bar on its leading edge, which is its focus mark. Open findings are worded
-  one way wherever they are counted: "2 bugs, 1 suggestion". Filters:
+  one way wherever they are counted: "2 bugs, 1 warning, 1 suggestion". FYI
+  notes are commentary and are never counted. Filters:
   all, needs review, has bugs, ready, and one repository when more than one
   is tracked. A repository that failed to load says so in a strip above the
   rows. A fact about the review (reviewing, its bugs, or that it failed) is a
@@ -260,7 +261,7 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   covers the tile, with a 6px dot at the end that is green when auto review
   watches the repository and grey when it does not (a tip says which); the
   open pull requests as a 28px figure beside what waits for a review and the
-  open bugs (high ones in the high-severity colour, "No bugs" in the success
+  open bugs (in the bug colour, else the warnings in the warning colour, "No bugs" in the success
   tone once a review came back clean); the repository page's chart, a bar a
   day, 28px tall with no axis and no tips; and under a hairline the pull
   request to open next with its status, which is its own link. With nothing
@@ -287,10 +288,10 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   ("Auto review on" in the success tone, "Auto review off" neutral, each led
   by a dot). Then five figures on one line split by
   hairlines, no cards: open pull requests (and how many are not reviewed), open
-  bugs (the high ones in the high-severity colour), merged in the window (of
+  bugs (the warnings beside them in the warning colour), merged in the window (of
   how many reviewed), findings accepted (of raised) and the typical review time
   ("6m 40s"). Then two columns. The wide one: Needs you, the list's own rows
-  for the open pull requests most urgent first (high bugs, other bugs, no
+  for the open pull requests most urgent first (bugs, warnings, no
   review, conflicts or failing checks, a running review, ready), at most five,
   with a link to the list set to this repository; then Recently merged, up to
   three rows with what their reviews fixed ("3 fixed" or "Clean") and when.
@@ -375,7 +376,7 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
     up with the stream, each word fading in from a 2px blur, and a code span
     or link only once it is whole; there is no caret.
   - **Review**: one row a bug, the worst first, split by hairlines. Shut, a row
-    is the title over its badges: severity (or Suggestion), category, evidence
+    is the title over its badges: tier (Bug, Warning or FYI, or Suggestion), category, evidence
     class, file and line, and whether an earlier review reported it. Open, it
     adds the explanation (clamped), the proof (a command and its output in a
     terminal box, a trace, or a rule quoted word for word with its source as
@@ -500,7 +501,8 @@ The pull request screens show facts, not sentences about facts.
   `Pill`: 20px tall, 11.5px medium, 4px radius, wrapping in rows with a 6px
   gap. Paths, branches, commits and commands use `face="code"`. A pill whose
   text may not fit ends in an ellipsis and shows the whole on hover.
-- **Colour only for meaning.** Severity (high, medium, low, with a dot), pass
+- **Colour only for meaning.** A finding's tier (Bug red, Warning amber, with a
+  dot; FYI stays grey, because it is commentary and never a defect), pass
   or fail, and a reproduced bug are tinted. Category, traced, rule and time
   stay neutral; an icon tells them apart. A file's type mark is the one
   exception: it keeps its language's hue, because the hue is how a reader
@@ -894,7 +896,7 @@ tree.
   while the sidebar is not) opens a search dialog of every file by folder
   (or by the guide's parts in guide order), each with its finding dot and
   its size, or a check once viewed, and `t` opens it either way; Findings with a
-  severity glyph, its place (`2/3`) and previous and next (`p`, `n`),
+  tier glyph, its place (`2/3`) and previous and next (`p`, `n`),
   stepping through the open findings in reading order and wrapping; how
   many files are viewed, with a meter; Files or Guide; collapse or expand
   every file.
@@ -902,16 +904,33 @@ tree.
   the coloured lines and the sticky header never cover it. Its 40px header
   stays in view while its diff scrolls: caret, then the file chip (the
   type's mark and the name in ink; the folder is its tooltip), then its
-  findings pill, the size and Viewed. Marking it viewed shuts it; a diff
+  findings pill, the size and Viewed. A renamed or copied file shows its old
+  path, quiet, an arrow and the new one, with "Renamed" or "Copied, 92%
+  similar" before the size. Marking it viewed shuts it; a diff
   over 800 lines starts shut behind Show it; a renamed or binary file says
   it has no lines. Off screen it skips layout and paint, and its diff
   mounts only as it nears the view.
 - **Hunks** are numbered on both sides, a new file on its own side only.
   Where the diff skips lines, a quiet row says how many are unchanged.
-- **A finding** sits under the line it ends on as one raised line: severity
+- **Moved code.** A block the change moved or copied gets a quiet dashed row
+  over its hunk: "Moved from" (or "Copied from", or "Moved to" where it
+  left) with the other place as a file chip, "unchanged" or "with a small
+  change", and Go to original (or Go to new place) when the diff shows that
+  file. An exact move reads as old code: a neutral wash instead of green or
+  red, a ghost sign and quieter text, but every line still shows. A jump to
+  a removed line writes `#file=<path>&old=<n>`.
+- **A finding** sits under the line it ends on as one raised line: tier
   glyph, title, evidence and a caret, so the code around it stays
   readable. Pressed, it opens in place to its explanation, with Open in
-  Review. Its lines wear the bug's red wash and bar. The same card is the
+  Review; one on moved code says why the move matters under On moved code.
+  A bug's or warning's lines wear the bug's red wash and bar; an FYI note
+  flags no lines.
+- **FYI notes** are commentary, never a bug: a grey mark and word and a
+  quieter title, left out of every count, after the open findings under
+  their own FYI heading on the Review tab and after them in the
+  Description's rail. The FYI button in the Review and Changes tab rows hides
+  or shows them everywhere, kept per browser; it shows only when the review
+  left some. The same card is the
   Review tab's: its header line keeps its place open or shut, so the caret
   and title never move, and the whole line washes on hover and shuts it
   again, as do Enter and Space on it and Escape anywhere in the card. On

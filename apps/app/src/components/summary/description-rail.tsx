@@ -3,6 +3,7 @@
 import { Button, Skeleton } from '@recoder/ui';
 import { CaretRightIcon } from '@phosphor-icons/react';
 
+import { useShowFyi } from '@/lib/bugs/show-fyi';
 import type { BugsView, BugView } from '@/lib/bugs/types';
 
 import { FindingLink } from './finding-link';
@@ -58,15 +59,20 @@ export function DescriptionRail({ bugs, notes, standIn, onOpenFinding, onOpenRev
 	);
 }
 
-/** The open findings, or a quiet line when there are none or no review has finished. */
+/** The open findings, then the FYI notes unless hidden, or a quiet line when there are none or no review finished. */
 function RailFindings({ bugs, onOpenFinding }: Pick<DescriptionRailProps, 'bugs' | 'onOpenFinding'>) {
+	const fyiShown = useShowFyi((state) => state.shown);
+
 	if (bugs.phase === 'none') return <p className="description-rail-quiet">No review has finished yet.</p>;
 	if (bugs.phase !== 'ready') return null;
-	if (bugs.open.length === 0) return <p className="description-rail-quiet">No open findings.</p>;
+
+	if (bugs.open.length === 0 && (!fyiShown || bugs.fyi.length === 0)) {
+		return <p className="description-rail-quiet">No open findings.</p>;
+	}
 
 	return (
 		<ul className="finding-links">
-			{bugs.open.map((bug) => (
+			{[...bugs.open, ...(fyiShown ? bugs.fyi : [])].map((bug) => (
 				<FindingLink key={bug.id} bug={bug} onOpen={onOpenFinding} />
 			))}
 		</ul>

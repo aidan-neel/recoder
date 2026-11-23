@@ -1,4 +1,4 @@
-import type { DiffHunk, DiffLine, FileDiff } from '@recoder/shared';
+import type { DiffHunk, DiffLine, DiffMove, FileDiff } from '@recoder/shared';
 
 /** A hunk from `+`, `-` and ` ` prefixed lines, numbered from the given starts. */
 function hunk(oldStart: number, newStart: number, body: string): DiffHunk {
@@ -216,11 +216,67 @@ header and a JSON body:
 
 Health checks (\`/health\`) are never limited.`;
 
+const CLIENT_KEY_BODY = `/** The tenant a request belongs to: its header, else the caller's address. */
+export function clientKey(c: Context): string {
+\tconst forwarded = c.req.header('x-forwarded-for');
+
+\tif (forwarded) return forwarded.split(',')[0].trim();
+
+\treturn c.env?.remoteAddr ?? 'unknown';
+}`;
+
+/** Each line of \`text\` with a diff mark in front. */
+function marked(mark: '+' | '-', text: string): string {
+	return text
+		.split('\n')
+		.map((line) => `${mark}${line}`)
+		.join('\n');
+}
+
+/** `clientKey` moved, unchanged, from the projects route to its own module, for the limiter to share. */
+export const CLIENT_KEY_MOVE: DiffMove = {
+	fromPath: 'src/routes/projects.ts',
+	fromLines: { start: 30, end: 37 },
+	toPath: 'src/http/client-key.ts',
+	toLines: { start: 3, end: 10 },
+	kind: 'moved',
+	exact: true,
+	match: 'exact'
+};
+
 /** The sample pull request's files, in the order a forge lists them. */
 export const SAMPLE_DIFFS: FileDiff[] = [
 	added('src/rate-limit/limiter.ts', LIMITER),
 	added('src/rate-limit/middleware.ts', MIDDLEWARE),
 	added('src/rate-limit/store.ts', STORE),
+	{
+		...added('src/http/client-key.ts', `import type { Context } from 'hono';\n\n${CLIENT_KEY_BODY}`),
+		status: 'added',
+		moves: [CLIENT_KEY_MOVE]
+	},
+	file(
+		'src/routes/projects.ts',
+		hunk(
+			26,
+			26,
+			` import { config } from '../config';
+ 
+ export const projects = new Hono();
+ 
+${marked('-', CLIENT_KEY_BODY)}
+-
+ projects.get('/', async (c) => {`
+		)
+	),
+	{
+		path: 'src/shared/retry.ts',
+		oldPath: 'src/util/retry.ts',
+		status: 'renamed',
+		similarity: 100,
+		additions: 0,
+		deletions: 0,
+		hunks: []
+	},
 	file(
 		'src/server.ts',
 		hunk(

@@ -1,3 +1,5 @@
+import type { FoundCounts } from '../bugs/tiers';
+
 /** How a file changed. */
 export type FileChange = 'added' | 'deleted' | 'modified';
 
@@ -9,8 +11,8 @@ export interface FileEntry {
 	deletions: number;
 	change: FileChange;
 	viewed: boolean;
-	/** Open findings in this file. */
-	bugs: number;
+	/** Open findings in this file, FYI left out; null when it has none. */
+	found: FoundCounts | null;
 }
 
 /** The files that sit in one folder; `folder` is empty for the top of the repository. */
@@ -43,17 +45,17 @@ export interface GuidePart {
 	/** Why these files belong together, or what to look at; one or two sentences. */
 	reason: string;
 	paths: string[];
-	/** Open findings in the part's files. */
-	bugs: number;
-	/** How many of those are suggestions. */
-	suggestions: number;
+	/** Open findings in the part's files, FYI notes left out. */
+	found: FoundCounts;
 }
 
 /** A place in the diff the Changes tab was asked to bring into view: a file, one of its lines, or a finding in it. */
 export interface ChangesTarget {
 	path: string;
-	/** A new-side line to mark, or null for the top of the file. */
+	/** A line to mark, or null for the top of the file. */
 	line: number | null;
+	/** Which side `line` counts on: `old` for a removed line, such as where moved code came from. */
+	side: 'old' | 'new';
 	/** A finding to open, or null. */
 	findingId: string | null;
 	/** True once the tab brought it into view, so it is not brought there again when the tab next mounts. */
@@ -67,8 +69,8 @@ export interface ChangesFold {
 
 /** The Changes tab's moves that its tools and other tabs ask for. */
 export interface ChangesNav {
-	/** Brings a file, one of its lines, or a finding in it into view. */
-	goTo: (path: string, line?: number | null, findingId?: string | null) => void;
+	/** Brings a file, one of its lines (new side unless `side` says old), or a finding in it into view. */
+	goTo: (path: string, line?: number | null, findingId?: string | null, side?: 'old' | 'new') => void;
 	/** Shuts every file, or opens every file. */
 	foldAll: (open: boolean) => void;
 }

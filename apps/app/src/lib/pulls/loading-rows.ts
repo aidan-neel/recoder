@@ -2,7 +2,7 @@ import type { PullRow, PullRowStatus } from './types';
 
 /** What one stand-in row says; only how long each text runs matters, since no one reads it. */
 const SHAPES: readonly (readonly [title: string, author: string, status: PullRowStatus])[] = [
-	['Keep the session token fresh across tabs', 'maria', { kind: 'bugs', bugs: 2, suggestions: 1 }],
+	['Keep the session token fresh across tabs', 'maria', { kind: 'bugs', bugs: 2, warnings: 0, suggestions: 1 }],
 	['Add a retry to the upload client', 'devon', { kind: 'ready' }],
 	['Move the billing webhooks behind the queue and drop the old poller', 'priya', { kind: 'reviewed' }],
 	['Fix the date range on the usage chart', 'sam', { kind: 'outdated' }],

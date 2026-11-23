@@ -9,6 +9,7 @@ import type {
 } from '@recoder/shared';
 
 import { sampleTime } from './sample-clock';
+import { CLIENT_KEY_MOVE } from './sample-diff';
 
 const AT = sampleTime('2026-10-13T09:12:00.000Z');
 
@@ -20,6 +21,7 @@ const FINDINGS: Finding[] = [
 		line: 15,
 		endLine: 15,
 		severity: 'error',
+		tier: 'bug',
 		category: 'security',
 		kind: 'bug',
 		symbol: 'rateLimit',
@@ -62,6 +64,7 @@ const FINDINGS: Finding[] = [
 		line: 24,
 		endLine: 24,
 		severity: 'warning',
+		tier: 'warning',
 		category: 'correctness',
 		kind: 'bug',
 		symbol: 'Limiter.take',
@@ -90,7 +93,8 @@ const FINDINGS: Finding[] = [
 		file: 'src/rate-limit/middleware.ts',
 		line: 8,
 		endLine: 8,
-		severity: 'info',
+		severity: 'warning',
+		tier: 'warning',
 		category: 'repo-rule',
 		kind: 'quality',
 		ruleId: 'R4',
@@ -118,6 +122,39 @@ const FINDINGS: Finding[] = [
  });`,
 			checks: ['bun run check', 'bun test tests/rate-limit']
 		}
+	},
+	{
+		id: 'sample-f4',
+		title: 'Any client can pick its own bucket through x-forwarded-for',
+		file: 'src/http/client-key.ts',
+		line: 6,
+		endLine: 6,
+		severity: 'warning',
+		tier: 'warning',
+		category: 'security',
+		kind: 'bug',
+		symbol: 'clientKey',
+		message:
+			'The limiter keys anonymous callers by the first `x-forwarded-for` address, which the caller writes. Rotating the header gives a client a fresh bucket on every request.',
+		move: {
+			relation: CLIENT_KEY_MOVE,
+			reason:
+				'In routes/projects.ts this ran only behind the proxy check, so the header came from the load balancer. Moved here, the rate limiter calls it for every request, before that check.'
+		}
+	},
+	{
+		id: 'sample-f5',
+		title: 'Usage keys outlive their minute by one more',
+		file: 'src/rate-limit/store.ts',
+		line: 15,
+		endLine: 15,
+		severity: 'info',
+		tier: 'fyi',
+		category: 'maintainability',
+		kind: 'bug',
+		symbol: 'UsageStore.record',
+		message:
+			'Each per-minute key lives for 120 seconds, so the dashboard can read the minute that just closed. Worth a comment, since it looks like an off-by-one.'
 	}
 ];
 

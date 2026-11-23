@@ -59,7 +59,7 @@ function RepoItem({ repo, active }: { repo: SidebarRepo; active: boolean }) {
 			<Link href={repo.href} aria-current={active ? 'page' : undefined} {...intent}>
 				<ForgeMark provider={repo.provider} className="nav-forge" />
 				<span className="nav-label">{repo.name}</span>
-				{repo.highBugs > 0 ? <span className="nav-alert" role="img" aria-label="Has high-severity bugs" /> : null}
+				{repo.openBugs > 0 ? <span className="nav-alert" role="img" aria-label="Has open bugs" /> : null}
 			</Link>
 		</RowButton>
 	);

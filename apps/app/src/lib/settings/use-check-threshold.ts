@@ -18,8 +18,8 @@ export interface CheckThresholdView {
 }
 
 const LABELS: Record<CheckThreshold, string> = {
-	error: 'High severity',
-	warning: 'Medium and above',
+	error: 'Bugs',
+	warning: 'Bugs and warnings',
 	info: 'Any finding',
 	off: 'No check'
 };

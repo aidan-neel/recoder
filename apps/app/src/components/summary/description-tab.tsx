@@ -210,7 +210,7 @@ function Undescribed({ notice, awaits, onOpenGuide, conversation }: UndescribedP
 				by={page.page?.pull.author ?? null}
 				loading={arriving || page.phase === 'loading' || awaitingBadges}
 			/>
-			<Walkthrough parts={guide} open={bugs.open} onOpenGuide={onOpenGuide} />
+			<Walkthrough parts={guide} onOpenGuide={onOpenGuide} />
 			{conversation}
 		</div>
 	);

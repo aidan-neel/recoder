@@ -6,9 +6,11 @@ import { useEffect, useMemo, useRef } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import type { BugView } from '@/lib/bugs/types';
+import { useShowFyi } from '@/lib/bugs/show-fyi';
 import { useBugsView } from '@/lib/bugs/use-bugs';
 import { useDiffView } from '@/lib/changes/diff-view';
 import { LOADING_DIFF } from '@/lib/changes/loading-diff';
+import { moveSpans, type MoveSpan } from '@/lib/changes/moves';
 import { placeHash, readPlace } from '@/lib/changes/places';
 import type { ChangesTarget, GuidePart } from '@/lib/changes/types';
 import { useChangesNav, useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
@@ -29,6 +31,9 @@ import { GuidePartSection, partsWithRest } from './guide';
 
 /** No bugs: one shared empty list, so a file with none never re-renders for another file's bugs. */
 const NO_BUGS: BugView[] = [];
+
+/** No moved blocks, shared for the same reason. */
+const NO_SPANS: MoveSpan[] = [];
 
 /** How many frames a jump waits for its line or finding to be drawn before it settles for the file. */
 const REVEAL_FRAMES = 60;
@@ -62,7 +67,7 @@ function targetSelector(target: ChangesTarget): string {
 	const file = `[data-file="${CSS.escape(target.path)}"]`;
 
 	if (target.findingId) return `${file} [data-finding="${CSS.escape(target.findingId)}"]`;
-	if (target.line !== null) return `${file} [data-new-line="${target.line}"]`;
+	if (target.line !== null) return `${file} [data-${target.side}-line="${target.line}"]`;
 
 	return file;
 }
@@ -72,7 +77,7 @@ function targetHash(target: ChangesTarget): string {
 	return placeHash(
 		target.findingId
 			? { kind: 'finding', id: target.findingId }
-			: { kind: 'file', path: target.path, line: target.line }
+			: { kind: 'file', path: target.path, line: target.line, side: target.side }
 	);
 }
 
@@ -130,6 +135,7 @@ function DiffSkeleton() {
 						bugsHref="#"
 						target={null}
 						fold={null}
+						spans={NO_SPANS}
 					/>
 				))}
 			</div>
@@ -172,8 +178,10 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 		[loaded, hideWhitespace]
 	);
 
-	const byFile = useMemo(() => bugsByFile(bugs.open), [bugs.open]);
+	const fyiShown = useShowFyi((state) => state.shown);
+	const byFile = useMemo(() => bugsByFile(fyiShown ? [...bugs.open, ...bugs.fyi] : bugs.open), [bugs, fyiShown]);
 	const ordered = useMemo(() => inOrder(files ?? [], tree.order), [files, tree.order]);
+	const spans = useMemo(() => moveSpans(files ?? []), [files]);
 	const parts = useMemo(() => partsWithRest(guide, tree.order), [guide, tree.order]);
 	const bugsHref = pullHref(base, repoId, number, 'review');
 	const guided = mode === 'guide' && guide.length > 0;
@@ -220,7 +228,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 				if (!bug) return;
 
 				nav.goTo(bug.file, null, bug.id);
-			} else if (place) nav.goTo(place.path, place.line);
+			} else if (place) nav.goTo(place.path, place.line, null, place.side);
 
 			followed.current = hash;
 		}
@@ -267,6 +275,7 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 				bugsHref={bugsHref}
 				target={target?.path === file.path ? target : null}
 				fold={fold}
+				spans={spans.get(file.path) ?? NO_SPANS}
 			/>
 		);
 	}

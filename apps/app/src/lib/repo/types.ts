@@ -24,8 +24,8 @@ export interface RepoFigure {
 	label: string;
 	value: string;
 	detail: string | null;
-	/** `high` colours the fact as a high-severity bug does. */
-	tone: 'high' | null;
+	/** `high` colours the fact as a bug does, `medium` as a warning does. */
+	tone: 'high' | 'medium' | null;
 }
 
 /** One day's bar in the reviews chart. */

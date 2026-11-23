@@ -49,6 +49,14 @@
 	--bug-mark: var(--sev-medium);
 	--bug-ink: var(--sev-medium);
 }
+/* FYI is commentary: grey mark and word, and a title a step quieter, so it never reads as a defect. */
+.bug-item[data-tier='fyi'] {
+	--bug-mark: var(--text-faint);
+	--bug-ink: var(--text-muted);
+}
+.bug-item[data-tier='fyi'] .bug-title {
+	color: var(--text-muted);
+}
 .bug-item[data-open] {
 	background: var(--bg-raised);
 }
@@ -419,6 +427,21 @@
  * The previous review's findings, under the steps of the review that runs now: a label line with the commit and
  * the time, then the findings with their badges and chevrons stepped back so they never read as current.
  */
+/* FYI notes under the open findings: a quiet head, then their cards. */
+.bugs-fyi {
+	display: flex;
+	flex-direction: column;
+	margin-top: 18px;
+}
+.bugs-fyi-head {
+	display: flex;
+	min-height: 32px;
+	align-items: center;
+	gap: 8px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+
 .bugs-previous {
 	display: flex;
 	flex-direction: column;

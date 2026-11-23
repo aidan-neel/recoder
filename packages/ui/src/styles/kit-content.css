@@ -97,6 +97,18 @@
 	color: var(--text-ghost);
 }
 
+/* Code moved without a change is old code in a new place: a neutral wash for the add or remove, a ghost sign and quieter text. */
+[data-ui='code-line'][data-moved]:not([data-flagged], [data-marked]),
+[data-ui='code-line'][data-moved] > [data-ui='code-line-number'] {
+	background-color: var(--fill-moved);
+}
+[data-ui='code-line'][data-moved] > [data-ui='code-line-sign'] {
+	color: var(--text-ghost);
+}
+[data-ui='code-line'][data-moved] > [data-ui='code-line-text'] {
+	opacity: 0.62;
+}
+
 /* "N lines above": the label lines up with the code. */
 [data-ui='code-lines-gap'] {
 	display: flex;

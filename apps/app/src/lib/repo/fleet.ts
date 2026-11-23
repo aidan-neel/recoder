@@ -1,6 +1,6 @@
 import type { Provider, Repo, RepoOverview, ReviewListItem } from '@recoder/shared';
 
-import { highBugs } from '../pulls/high-bugs';
+import { openBugs } from '../pulls/open-bugs';
 import type { PullRow, PullRowStatus } from '../pulls/types';
 import type { RowEntry } from '../pulls/use-rows';
 import { repoHref } from '../shell/routes';
@@ -29,9 +29,10 @@ type FleetOverview =
 	| { phase: 'failed' }
 	| { phase: 'ready'; autoReview: boolean; merged: number; days: number; chart: ReviewChart };
 
-/** A repository's open bugs as its tile counts them: the high ones when it has any, else all of them. */
+/** A repository's open findings as its tile counts them: its bugs when it has any, else its warnings. */
 interface FleetBugs {
 	count: number;
+	/** True when `count` is bugs, false when it is warnings. */
 	high: boolean;
 }
 
@@ -97,14 +98,14 @@ function overviewFacts(overview: OverviewRead): FleetOverview {
 	};
 }
 
-/** The open bugs across a repository's pull requests: the high ones when there are any, else all of them. */
+/** The open findings across a repository's pull requests: the bugs when there are any, else the warnings. */
 function bugsOf(entries: readonly RowEntry[]): FleetBugs | null {
-	const high = entries.reduce((sum, entry) => sum + highBugs(entry), 0);
-	const all = entries.reduce((sum, { row }) => sum + (row.status.kind === 'bugs' ? row.status.bugs : 0), 0);
+	const bugs = entries.reduce((sum, entry) => sum + openBugs(entry), 0);
+	const warnings = entries.reduce((sum, { row }) => sum + (row.status.kind === 'bugs' ? row.status.warnings : 0), 0);
 
-	if (high > 0) return { count: high, high: true };
+	if (bugs > 0) return { count: bugs, high: true };
 
-	return all > 0 ? { count: all, high: false } : null;
+	return warnings > 0 ? { count: warnings, high: false } : null;
 }
 
 /** What follows the open count: the pull requests waiting, that none is, or with nothing open what merged. */

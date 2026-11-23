@@ -59,6 +59,14 @@ export function BugEvidence({ bug }: { bug: BugView }) {
 	return (
 		<>
 			<Markdown>{bug.explanation}</Markdown>
+			{bug.moveReason ? (
+				<section className="bug-section" aria-label="Why the move matters">
+					<div className="bug-section-head">
+						<h3 className="section-label">On moved code</h3>
+					</div>
+					<p className="bug-note">{bug.moveReason}</p>
+				</section>
+			) : null}
 			<div className="bug-section-head">
 				<EvidencePill bug={bug} />
 				<HistoryPill bug={bug} />

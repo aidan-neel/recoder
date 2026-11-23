@@ -12,10 +12,11 @@ function standing(review: ReviewListItem): Pick<RecentReview, 'state' | 'label'>
 	if (isCancelled(review)) return { state: 'cancelled', label: 'Cancelled' };
 	if (review.status === 'failed') return { state: 'failed', label: 'Failed' };
 
-	const { bugs, suggestions } = openCounts(review);
+	const { bugs, warnings, suggestions } = openCounts(review);
 
 	if (bugs > 0) return { state: 'bugs', label: plural(bugs, 'bug') };
-	if (suggestions > 0) return { state: 'bugs', label: plural(suggestions, 'suggestion') };
+	if (warnings > 0) return { state: 'warnings', label: plural(warnings, 'warning') };
+	if (suggestions > 0) return { state: 'warnings', label: plural(suggestions, 'suggestion') };
 
 	return { state: 'clean', label: 'No bugs' };
 }

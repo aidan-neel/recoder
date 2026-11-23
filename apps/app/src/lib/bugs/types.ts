@@ -1,6 +1,13 @@
-import type { DismissalReason, EvidenceClass, FindingDecision, FindingRule, ReviewSpeed } from '@recoder/shared';
+import type {
+	DismissalReason,
+	EvidenceClass,
+	FindingDecision,
+	FindingRule,
+	FindingTier,
+	ReviewSpeed
+} from '@recoder/shared';
 
-/** How strongly a finding asks for attention. */
+/** The colour a finding wears, from its tier. */
 export type BugTone = 'high' | 'medium' | 'low';
 
 /** The run that proves a reproduced finding. */
@@ -20,9 +27,11 @@ export interface BugView {
 	id: string;
 	kind: 'bug' | 'suggestion';
 	title: string;
+	/** `bug`: a probable defect. `warning`: risky, uncertain or lower impact. `fyi`: commentary, never a defect. */
+	tier: FindingTier;
 	tone: BugTone;
-	/** `High`, `Medium` or `Low`. */
-	severity: string;
+	/** `Bug`, `Warning` or `FYI`. */
+	tierLabel: string;
 	/** `Concurrency`, `Error handling`. */
 	category: string;
 	file: string;
@@ -49,6 +58,8 @@ export interface BugView {
 	posted: { url: string } | null;
 	/** The person's vote on whether the finding helped. */
 	vote: 'useful' | 'not-useful' | null;
+	/** Why moved code fails where it now sits, when the finding is on lines the change moved; null otherwise. */
+	moveReason: string | null;
 }
 
 /** Work the review could not finish. It is shown apart and never counts as a finding. */
@@ -66,8 +77,10 @@ export interface BugsView {
 	/** `none`: no finished review yet (the run card shows instead). */
 	phase: 'none' | 'loading' | 'ready' | 'failed';
 	error: string | null;
-	/** Open findings: bugs before suggestions, then by tone, then by file. */
+	/** Open findings that ask for something: bugs before suggestions, then by tier, then by file. FYI is not here. */
 	open: BugView[];
+	/** Open FYI notes: commentary on the change, never counted as a bug. */
+	fyi: BugView[];
 	/** Findings a person accepted or dismissed, newest decision first. */
 	decided: BugView[];
 	/** Findings of the review before this one that this review shows fixed, with what showed it. */

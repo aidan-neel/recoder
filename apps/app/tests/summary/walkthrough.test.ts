@@ -6,7 +6,7 @@ import { walkthroughSteps } from '../../src/lib/summary/walkthrough';
 const AREA = ['source/core/Ky.ts', 'source/index.ts', 'readme.md'];
 
 function part(id: string, title: string, paths = AREA, bugs = 1): GuidePart {
-	return { id, title, reason: `Reason for ${id}.`, paths, bugs, suggestions: 0 };
+	return { id, title, reason: `Reason for ${id}.`, paths, found: { bugs, warnings: 0, suggestions: 0 } };
 }
 
 describe('walkthroughSteps', () => {
@@ -23,7 +23,7 @@ describe('walkthroughSteps', () => {
 				title: 'source/core and 6 more folders',
 				note: 'Ky.ts, index.ts, readme.md',
 				paths: AREA,
-				bugs: 1
+				found: { bugs: 1, warnings: 0, suggestions: 0 }
 			}
 		]);
 	});

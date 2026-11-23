@@ -85,6 +85,9 @@
 .repo-figure-detail[data-tone='high'] {
 	color: var(--sev-high);
 }
+.repo-figure-detail[data-tone='medium'] {
+	color: var(--sev-medium);
+}
 
 .repo-columns {
 	display: flex;

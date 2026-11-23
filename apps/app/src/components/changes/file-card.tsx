@@ -2,15 +2,17 @@
 
 import type { FileDiff } from '@recoder/shared';
 import { Button, Checkbox, DiffStat, FileChip, Pill } from '@recoder/ui';
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { ArrowRightIcon, CaretRightIcon } from '@phosphor-icons/react';
 import { memo, useId, useRef, useState } from 'react';
 
 import { openFound } from '@/lib/bugs/bug-lists';
+import { foundLabel, foundTone, foundTotal } from '@/lib/bugs/tiers';
 import type { BugView } from '@/lib/bugs/types';
 import type { DiffLayout } from '@/lib/changes/diff-view';
+import type { MoveSpan } from '@/lib/changes/moves';
 import type { ChangesFold, ChangesTarget } from '@/lib/changes/types';
 import { useNear } from '@/lib/changes/use-near';
-import { findingsLabel, plural } from '@/lib/shell/format';
+import { plural } from '@/lib/shell/format';
 
 import { FileDiffBody } from './file-diff';
 
@@ -35,6 +37,15 @@ interface FileCardProps {
 	target: ChangesTarget | null;
 	/** The newest collapse all or expand all; the file follows it once. */
 	fold: ChangesFold | null;
+	/** Blocks the change moved into or out of this file. */
+	spans: readonly MoveSpan[];
+}
+
+/** `Renamed`, `Copied, 92% similar`: how the file came to its path, and how much it changed on the way. */
+function renameLabel(file: FileDiff): string {
+	const verb = file.status === 'copied' ? 'Copied' : 'Renamed';
+
+	return file.similarity !== undefined && file.similarity < 100 ? `${verb}, ${file.similarity}% similar` : verb;
 }
 
 /** How many lines the file's diff shows. */
@@ -61,7 +72,8 @@ export const FileCard = memo(function FileCard({
 	bugs,
 	bugsHref,
 	target,
-	fold
+	fold,
+	spans
 }: FileCardProps) {
 	const card = useRef<HTMLElement | null>(null);
 	const near = useNear(card);
@@ -98,12 +110,22 @@ export const FileCard = memo(function FileCard({
 					onClick={() => setOpen(!open)}
 				>
 					<CaretRightIcon aria-hidden className="file-caret" />
+					{file.oldPath && (file.status === 'renamed' || file.status === 'copied') ? (
+						<span className="file-rename">
+							<FileChip path={file.oldPath} className="file-name file-old-name" />
+							<ArrowRightIcon
+								aria-label={file.status === 'copied' ? 'copied to' : 'renamed to'}
+								className="file-rename-arrow"
+							/>
+						</span>
+					) : null}
 					<FileChip path={file.path} className="file-name" />
 				</button>
 				<div className="file-head-end">
-					{bugs.length > 0 ? (
-						<Pill tone={found.bugs > 0 ? 'high' : 'low'}>{findingsLabel(found.bugs, found.suggestions)}</Pill>
+					{file.oldPath && (file.status === 'renamed' || file.status === 'copied') ? (
+						<span className="meta">{renameLabel(file)}</span>
 					) : null}
+					{foundTotal(found) > 0 ? <Pill tone={foundTone(found)}>{foundLabel(found)}</Pill> : null}
 					<DiffStat additions={file.additions} deletions={file.deletions} />
 					<label className="file-viewed" htmlFor={viewedId}>
 						<Checkbox id={viewedId} checked={viewed} onCheckedChange={() => onToggleViewed(file.path)} />
@@ -114,7 +136,7 @@ export const FileCard = memo(function FileCard({
 			{open ? (
 				<div id={bodyId} className="file-body">
 					{near ? (
-						<FileDiffBody file={file} layout={layout} bugs={bugs} bugsHref={bugsHref} target={target} />
+						<FileDiffBody file={file} layout={layout} bugs={bugs} bugsHref={bugsHref} target={target} spans={spans} />
 					) : (
 						<div style={{ height: placeholderHeight(file) }} />
 					)}
