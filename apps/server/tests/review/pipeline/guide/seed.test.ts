@@ -85,6 +85,22 @@ test('a test is grouped with all matching sources in its feature, regardless of 
 	]);
 });
 
+test('ready files precede lexical cycle breaks and dependencies do not cross ordering phases', () => {
+	const run = newRun(
+		added('src/a.ts', "import './b';") +
+			added('src/b.ts', "import './a';") +
+			added('src/core.ts', "import '../tests/core.test';") +
+			added('src/ready.ts', 'export const readyPiece = 1;') +
+			added('tests/core.test.ts', "import '../src/core';")
+	);
+
+	expect(seedDiffGuide(run.inventory, null).groups.map((group) => group.hunks.map((hunk) => hunk.file))).toEqual([
+		['src/core.ts', 'tests/core.test.ts'],
+		['src/ready.ts'],
+		['src/a.ts', 'src/b.ts']
+	]);
+});
+
 test('pure moves and metadata-only renames carry deterministic notes and remain represented', () => {
 	const run = newRun(
 		'diff --git a/old.ts b/new.ts\nsimilarity index 100%\nrename from old.ts\nrename to new.ts\n' +

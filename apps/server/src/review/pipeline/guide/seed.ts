@@ -13,10 +13,21 @@ const COMMON = new Set(
 );
 
 /** Presentation priority is independent of the file's lexical order. */
-function rank(inventory: ReviewInventory, path: string): number {
+function rank(inventory: ReviewInventory, path: string): 0 | 1 | 2 {
 	const kind = inventory.files.find((file) => file.path === path)?.classification;
 
 	return kind === 'test' || isTestPath(path) ? 1 : kind === 'docs' || kind === 'config' || kind === 'lockfile' ? 2 : 0;
+}
+
+/** The first ready file in lexical order, or the first remaining file if dependencies form a cycle. */
+function nextInPhase(phase: Set<string>, dependencies: Map<string, Set<string>>): string {
+	paths: for (const path of phase) {
+		for (const other of dependencies.get(path)!) if (phase.has(other)) continue paths;
+
+		return path;
+	}
+
+	return phase.values().next().value!;
 }
 
 /** Every hunk has its inventory id; metadata-only renames get one explicit navigation entry. */
@@ -54,7 +65,6 @@ export function seedDiffGuide(inventory: ReviewInventory, model: ChangeModel | n
 	const parent = new Map(hunks.map((hunk) => [hunk.id, hunk.id]));
 	const byFile = new Map(paths.map((path) => [path, hunks.filter((hunk) => hunk.file === path)]));
 	const dependencies = new Map(paths.map((path) => [path, new Set<string>()]));
-	const priorities = new Map(paths.map((path) => [path, rank(inventory, path)]));
 	const imports = definiteImportTargets(paths);
 
 	const root = (id: string): string => {
@@ -146,17 +156,17 @@ export function seedDiffGuide(inventory: ReviewInventory, model: ChangeModel | n
 	}
 
 	const ordered: string[] = [];
-	const pending = new Set([...paths].sort((a, b) => priorities.get(a)! - priorities.get(b)! || byCodePoint(a, b)));
+	const phases = [new Set<string>(), new Set<string>(), new Set<string>()] as const;
 
-	while (pending.size) {
-		const remaining = [...pending];
-		const phase = remaining.filter((path) => priorities.get(path) === priorities.get(remaining[0]));
-		const phaseSet = new Set(phase);
+	for (const path of paths) phases[rank(inventory, path)].add(path);
 
-		const path = phase.find((path) => [...dependencies.get(path)!].every((other) => !phaseSet.has(other))) ?? phase[0];
+	for (const phase of phases) {
+		while (phase.size) {
+			const path = nextInPhase(phase, dependencies);
 
-		pending.delete(path);
-		ordered.push(path);
+			phase.delete(path);
+			ordered.push(path);
+		}
 	}
 
 	const groups = new Map<string, DiffGuideHunk[]>();
