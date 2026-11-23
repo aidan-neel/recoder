@@ -16,9 +16,10 @@ import {
 	Tooltip
 } from '@recoder/ui';
 import { CheckIcon, DotsThreeIcon } from '@phosphor-icons/react';
-import { Fragment, type ComponentType, type ReactNode } from 'react';
+import { Fragment, type ComponentType, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 
 import { useIntent } from '@/lib/shell/intent';
+import type { PickHow } from '@/lib/shell/row-selection';
 
 import { Link } from '@/components/common/link';
 
@@ -50,6 +51,61 @@ export const AGE_TICK = 60_000;
 /** `auto` follows Settings → Appearance → Sidebar rows; `compact` is one line whatever the setting. */
 type Density = 'auto' | 'compact';
 
+/** How a row that can be picked for a bulk action answers a modified click and Shift+arrows (`RowSelectionScope`). */
+export interface RowPick {
+	id: string;
+	onPick: (how: PickHow) => void;
+	onStep: (step: 1 | -1) => void;
+	onClear: () => void;
+}
+
+/** Shift picks a range, Cmd or Ctrl one row, and anything else opens the row. */
+function pickHow(event: MouseEvent): PickHow {
+	if (event.shiftKey) return 'range';
+
+	return event.metaKey || event.ctrlKey ? 'toggle' : 'open';
+}
+
+/**
+ * The row's handlers for picking: clicks on the row itself (not its tools or a menu it opened), Shift+↑/↓, and Escape,
+ * which empties the selection from a focused row even when an open tooltip has already taken the key for itself.
+ */
+function pickHandlers({ id, onPick, onStep, onClear }: RowPick) {
+	return {
+		'data-row-id': id,
+		onMouseDown(event: MouseEvent<HTMLElement>) {
+			if (event.shiftKey) event.preventDefault();
+		},
+		onClickCapture(event: MouseEvent<HTMLElement>) {
+			const target = event.target as Element;
+
+			if (!event.currentTarget.contains(target) || target.closest('.thread-tools')) return;
+
+			const how = pickHow(event);
+
+			if (how !== 'open') event.preventDefault();
+
+			onPick(how);
+		},
+		onKeyDown(event: KeyboardEvent<HTMLElement>) {
+			if (!event.currentTarget.contains(event.target as Node)) return;
+
+			if (event.key === 'Escape') {
+				onClear();
+
+				return;
+			}
+
+			const step = { ArrowDown: 1, ArrowUp: -1 }[event.key] as 1 | -1 | undefined;
+
+			if (!step || !event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+
+			event.preventDefault();
+			onStep(step);
+		}
+	};
+}
+
 interface ThreadRowProps {
 	href: string;
 	active: boolean;
@@ -72,6 +128,11 @@ interface ThreadRowProps {
 	onIntent?: () => void;
 	/** Moves the row down to Settled; a row with none has no Settle. */
 	onSettle?: () => void;
+	/** How many rows its Settle takes: more than one while it is part of a selection. */
+	settleCount?: number;
+	/** Picked with others for one action (Shift or Cmd/Ctrl-click, Shift+arrows). */
+	selected?: boolean;
+	pick?: RowPick;
 }
 
 /**
@@ -79,7 +140,9 @@ interface ThreadRowProps {
  * its state as a pill, with an unread dot in the gutter. Compact, it is one line: a glyph, the title, then the dot and
  * the age. Both are always drawn, and the CSS shows the one the density asks for, so a change of setting or of state
  * swaps ink in place and never moves a row. The whole row opens it; a right click opens its menu, and pointed at or
- * focused, the age gives way to Settle and the "more" button, which opens the same menu.
+ * focused, the age gives way to Settle and the "more" button, which opens the same menu. A row with `pick` can be
+ * picked with others: Shift or Cmd/Ctrl-click and Shift+↑/↓ select instead of opening, and a selected row wears the
+ * accent's tint.
  */
 export function ThreadRow({
 	href,
@@ -94,11 +157,15 @@ export function ThreadRow({
 	density = 'auto',
 	actions = [],
 	onIntent,
-	onSettle
+	onSettle,
+	settleCount = 1,
+	selected = false,
+	pick
 }: ThreadRowProps) {
 	const intent = useIntent(onIntent);
-	const said = [status, unread ? 'unread' : null].filter(Boolean).join(', ');
+	const said = [status, unread ? 'unread' : null, selected ? 'selected' : null].filter(Boolean).join(', ');
 	const tools = Number(Boolean(onSettle)) + Number(actions.length > 0);
+	const settleLabel = settleCount > 1 ? `Settle ${settleCount}` : 'Settle';
 
 	const row = (
 		<div
@@ -108,7 +175,9 @@ export function ThreadRow({
 			data-active={active || undefined}
 			data-unread={unread || undefined}
 			data-tools={tools || undefined}
+			data-selected={selected || undefined}
 			{...intent}
+			{...(pick ? pickHandlers(pick) : {})}
 		>
 			<span className="thread-glyph">{glyph}</span>
 			<span className="thread-text">
@@ -132,8 +201,13 @@ export function ThreadRow({
 			{tools > 0 ? (
 				<span className="thread-tools" skullet-ignore="">
 					{onSettle ? (
-						<Tooltip content="Settle">
-							<Button variant="ghost" size="icon" aria-label={`Settle ${title}`} onClick={onSettle}>
+						<Tooltip content={settleLabel}>
+							<Button
+								variant="ghost"
+								size="icon"
+								aria-label={settleCount > 1 ? `Settle ${settleCount} selected` : `Settle ${title}`}
+								onClick={onSettle}
+							>
 								<CheckIcon />
 							</Button>
 						</Tooltip>
@@ -156,7 +230,7 @@ export function ThreadRow({
 	);
 
 	const contextActions: RowAction[] = onSettle
-		? [{ id: 'settle', label: 'Settle', icon: CheckIcon, onSelect: onSettle }, ...actions]
+		? [{ id: 'settle', label: settleLabel, icon: CheckIcon, onSelect: onSettle }, ...actions]
 		: actions;
 
 	if (contextActions.length === 0) return row;
