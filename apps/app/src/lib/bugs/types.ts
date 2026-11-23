@@ -58,8 +58,27 @@ export interface BugView {
 	posted: { url: string } | null;
 	/** The person's vote on whether the finding helped. */
 	vote: 'useful' | 'not-useful' | null;
-	/** Why moved code fails where it now sits, when the finding is on lines the change moved; null otherwise. */
-	moveReason: string | null;
+	/** Set when the finding is on lines the change moved, copied or renamed; null otherwise. */
+	move: BugMove | null;
+}
+
+/** One side of a move: the file, its lines as a file chip shows them (`30-37`), and the first of them. */
+export interface BugMoveSide {
+	path: string;
+	/** Null for a whole file. */
+	lines: string | null;
+	line: number | null;
+}
+
+/** Where a finding's code came from and why the move itself changes what it does. */
+export interface BugMove {
+	kind: 'moved' | 'copied' | 'renamed';
+	/** The old place, by its path before the change. */
+	from: BugMoveSide;
+	to: BugMoveSide;
+	/** False for a block that changed a little on the way. */
+	exact: boolean;
+	reason: string;
 }
 
 /** Work the review could not finish. It is shown apart and never counts as a finding. */

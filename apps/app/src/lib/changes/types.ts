@@ -27,6 +27,8 @@ export interface CardPart {
 	explanation: string | null;
 	/** True when the hunk only moves code: the card starts shut on its move note. */
 	moved: boolean;
+	/** The review's note on where the code came from; shown, shut or open, when the card has no move note of its own. */
+	note: string | null;
 }
 
 export interface FileGroup {

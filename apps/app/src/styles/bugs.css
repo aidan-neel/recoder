@@ -194,6 +194,20 @@
 	line-height: 18px;
 }
 
+/* Where moved code came from and went, as the moved block's note in Changes reads, with a way to the original. */
+.bug-move {
+	display: flex;
+	min-width: 0;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 8px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+}
+.bug-move-go {
+	margin-left: auto;
+}
+
 /* The suggested fix: a quiet head with the file and the checks it passed, over the patch. */
 .fix {
 	overflow: hidden;

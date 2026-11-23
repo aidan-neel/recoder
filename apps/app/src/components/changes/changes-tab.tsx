@@ -83,7 +83,8 @@ function hunkCards(chapters: Chapter[], files: FileDiff[], byFile: Map<string, B
 					lines: shown ? hunkLines(shown) : null,
 					where: hunkWhere(hunk, file),
 					explanation: hunk.explanation,
-					moved: hunk.moved
+					moved: hunk.moved,
+					note: hunk.note
 				};
 
 				return [

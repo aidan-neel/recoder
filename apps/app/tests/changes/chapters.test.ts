@@ -101,6 +101,27 @@ describe('guideChapters', () => {
 
 		expect(chapters[0].hunks[0]).toMatchObject({ index: null, line: null, moved: false });
 	});
+
+	test('a hunk the review notes as moved keeps the note to show, and one with no note has none', () => {
+		const chapters = guideChapters(
+			guide([
+				{
+					id: 'one',
+					title: 'One',
+					hunks: [
+						{ id: ID.b, file: 'src/b.ts', note: 'moved from src/old.ts' },
+						{ id: ID.a1, file: 'src/a.ts' }
+					]
+				}
+			]),
+			[A, B]
+		);
+
+		expect(chapters[0].hunks.map(({ moved, note }) => ({ moved, note }))).toEqual([
+			{ moved: true, note: 'Moved from src/old.ts' },
+			{ moved: false, note: null }
+		]);
+	});
 });
 
 describe('hunkBugs', () => {
