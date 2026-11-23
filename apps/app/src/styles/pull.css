@@ -192,28 +192,12 @@
 	line-height: 16px;
 }
 
-/* The review control: every label it can show shares one cell, so it keeps the widest one's width in each state. */
+/* The review control's label: a glyph or keycap beside the words, one line that crossfades as a whole. */
 .review-control-label {
-	display: inline-grid;
-	place-items: center;
-}
-.review-control-label > * {
-	display: inline-flex;
-	grid-area: 1 / 1;
+	display: flex;
+	overflow: visible;
 	align-items: center;
 	gap: 6px;
-}
-.review-control-sizer {
-	visibility: hidden;
-	font-weight: var(--font-weight-medium, 500);
-}
-/* An outlined pair overlaps its halves by a pixel; the label takes it back so both looks are one width. */
-[data-variant='outline'] > [data-ui='button-faces'] .review-control-label {
-	margin-inline-end: 1px;
-}
-.review-control-glyph {
-	width: 14px;
-	height: 14px;
 }
 
 /* A live review's glyph: a spinner at rest, the stop square under the pointer or focus, crossfading in place. */

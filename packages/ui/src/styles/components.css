@@ -134,6 +134,23 @@
 		color: inherit;
 	}
 
+	/*
+	 * ───────── Button width morph: the box eases to its content's width; the content keeps its own width from the
+	 * start edge, and what is wider than the box while it grows is clipped ─────────
+	 */
+	[data-ui='button-morph'] {
+		display: inline-flex;
+		gap: inherit;
+		overflow-x: clip;
+		transition: width var(--dur-swap) var(--ease-out);
+	}
+	[data-ui='button-morph-content'] {
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: inherit;
+	}
+
 	/* ───────── Toast ───────── */
 	.ui-toast {
 		display: flex;
