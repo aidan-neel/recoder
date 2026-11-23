@@ -11,6 +11,8 @@ import tarfile
 import tempfile
 from urllib.parse import unquote, urlsplit
 
+from final_package import validate_final, attach_final
+
 def git(repo, *args):
     return subprocess.check_output(['git', '-C', str(repo), *args], stderr=subprocess.PIPE)
 
@@ -57,17 +59,17 @@ def label_bytes(root, path, ident):
     return data, label, repo
 
 
-def snapshot(root, stage):
-    source = root/'datasets/synth-rebuilt-v1'
+def snapshot(root, stage, dataset=None):
+    source = dataset or root/'datasets/synth-rebuilt-v1'
     frozen = root/'datasets/iteration5-heldout-v1'
     manifest = json.loads((source/'manifest.json').read_text())
     held = json.loads((frozen/'manifest.json').read_text()) if frozen.exists() else {'cases': {}, 'provenance': {}}
     upstreams = {u['name']: public_origin(u['origin']) for u in json.loads((root/'upstreams.json').read_text())}
     cases = dict(manifest['cases'])
     controls = {i: c for i, c in held['cases'].items() if i.startswith('clean-')}
-    if set(cases) & set(controls):
+    if not dataset and set(cases) & set(controls):
         raise ValueError('case id collision')
-    cases.update(controls)
+    if not dataset: cases.update(controls)
     if not cases:
         raise ValueError('no published cases')
     package = dict(format='recoder-dataset-v1', createdAt=datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -75,7 +77,7 @@ def snapshot(root, stage):
     groups = {}
     for ident, case in sorted(cases.items()):
         control = ident in controls
-        folder = frozen if control else source
+        folder = frozen if control and not dataset else source
         data, label, repo = label_bytes(root, folder/'labels'/(ident+'.json'), ident)
         for sha in (case['baseSha'], case['headSha']):
             if not re.fullmatch(r'[0-9a-f]{40}', sha): raise ValueError('invalid commit SHA')
@@ -118,6 +120,8 @@ def snapshot(root, stage):
             manualAudit=public_text(held['provenance'][ident].get('manualAudit', '')) if control else None,
             pull=dict(number=label['pull'], title=public_text(pull['title']), body=public_text(pull.get('body', '')),
                       author='benchmark-contributor', state='open', headRef='case-'+ident, baseRef='base-'+case['baseSha'], baseSha=case['baseSha']))
+        if dataset:
+            package['cases'][ident]['membership'] = manifest['provenance'][ident]['membership']
     for group, info in groups.items():
         bare = stage.parent/('objects-'+group)
         subprocess.run(['git', 'init', '--bare', '-q', str(bare)], check=True)
@@ -146,13 +150,17 @@ def snapshot(root, stage):
     return package
 
 
-def export_dataset(root, output):
+def export_dataset(root, output, dataset=None):
     root, output = root.resolve(), output.resolve()
     if output.exists(): raise ValueError('refusing to overwrite an existing archive')
     if not output.parent.is_dir(): raise ValueError('output parent must exist')
     with tempfile.TemporaryDirectory(prefix='dataset-package-', dir=output.parent) as temporary:
         stage = Path(temporary)/'recoder-dataset'; stage.mkdir()
-        package = snapshot(root, stage)
+        if dataset:
+            dataset = dataset.resolve()
+            validate_final(dataset, public_text)
+        package = snapshot(root, stage, dataset)
+        if dataset: attach_final(dataset, stage, package)
         write_json(stage/'manifest.json', package)
         for name in ('dataset_restore.py', 'DATASET-PACKAGE.md'):
             dest = 'restore.py' if name.endswith('.py') else 'README.md'
@@ -178,5 +186,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, default=Path('/home/ubuntu/eval-work'))
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--dataset', type=Path, help='Export an immutable final-v1 snapshot with both label views')
     args = parser.parse_args()
-    print(json.dumps(export_dataset(args.root, args.output), indent=2))
+    print(json.dumps(export_dataset(args.root, args.output, args.dataset), indent=2))

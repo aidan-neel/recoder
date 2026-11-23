@@ -52,7 +52,8 @@ def stop_isolated_server():
         raise RuntimeError('isolated server did not terminate; refusing to start another listener')
 
 
-def main(plan=None, prefix='verifier-ab', dataset=None, set_name='dev-v0', immutable_dataset=False, release_generation=True):
+def main(plan=None, prefix='verifier-ab', dataset=None, set_name='dev-v0', immutable_dataset=False, release_generation=True,
+         review_model='devin:swe-2-flash-medium'):
     data = Path(dataset) if dataset is not None else DATA
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     work = ROOT/'metrics'/(prefix+'-'+stamp)
@@ -71,7 +72,7 @@ def main(plan=None, prefix='verifier-ab', dataset=None, set_name='dev-v0', immut
             time.sleep(1)
     original = {k:api('/api/settings/models').get(k) for k in PICKS}
     state = dict(started_at=stamp,work=str(work),tasks=tasks,label_hashes=frozen,arms=[],generation_paused=paused,
-                 source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip(),budget=8 if plan is None else None,baseline_cache=False,dataset=str(data),set_name=set_name)
+                 source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip(),budget=8 if plan is None else None,baseline_cache=False,dataset=str(data),set_name=set_name,review_model=review_model)
     child = None
     def save():
         temp = work/'state.new'
@@ -101,7 +102,7 @@ def main(plan=None, prefix='verifier-ab', dataset=None, set_name='dev-v0', immut
                 time.sleep(.3)
         else:
             raise RuntimeError('isolated server readiness deadline')
-        picks={k:'devin:swe-2-flash-medium' for k in PICKS}
+        picks={k:review_model for k in PICKS}
         result=api('/api/settings/models',picks,method='PATCH')
         assert all(result.get(k)==v for k,v in picks.items())
         registered={r['url'] for r in api('/api/repos')}
@@ -148,7 +149,7 @@ def main(plan=None, prefix='verifier-ab', dataset=None, set_name='dev-v0', immut
                 throttled=not good and bool(re.search(r'rate.?limit|too many requests|\b429\b',text,re.I))
                 record.update(status='completed' if good else 'failed',exit_code=result.returncode,reports=[str(p) for p in reports],outcomes=[r.get('outcome') for r in runs],rate_limit_failure=throttled)
                 config_label=label if good else label+'-failed-overlap' if not state['generation_paused'] else label+'-failed-paused'
-                ingest=subprocess.run([sys.executable,str(ROOT/'scripts/ledger.py'),'--reports',str(isolated),'--config-label',config_label,'--notes',f'Fixed {set_name}; dataset={data}; all picks Flash Medium; judge SWE-2 Medium; flags={json.dumps(flags,sort_keys=True)}; generation paused={state["generation_paused"]}; attempt={attempt}.'],capture_output=True,text=True,env=env)
+                ingest=subprocess.run([sys.executable,str(ROOT/'scripts/ledger.py'),'--reports',str(isolated),'--config-label',config_label,'--notes',f'Fixed {set_name}; dataset={data}; all picks {review_model}; judge SWE-2 Medium; flags={json.dumps(flags,sort_keys=True)}; generation paused={state["generation_paused"]}; attempt={attempt}.'],capture_output=True,text=True,env=env)
                 (work/(tag+'-ledger.log')).write_text(ingest.stdout+ingest.stderr)
                 record['ledger_exit_code']=ingest.returncode;save()
                 print('Finished',tag,'good:',good,'outcomes:',record['outcomes'],'ledger:',ingest.returncode,flush=True)

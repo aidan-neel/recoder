@@ -44,6 +44,7 @@ def restore(source, output):
             if case['repository'] != group: continue
             for key, sha in (('headRef', case['headSha']), ('baseRef', case['baseSha'])):
                 subprocess.run(['git', '-C', str(target), 'update-ref', 'refs/heads/'+case['pull'][key], sha], check=True)
+            subprocess.run(['git', '-C', str(target), 'update-ref', 'refs/pull/'+str(case['pull']['number'])+'/head', case['headSha']], check=True)
             pulls.append(case['pull'])
             label = json.loads(safe_path(source, case['labelPath']).read_text())
             if label['id'] != ident or label['headSha'] != case['headSha']: raise ValueError('label/manifest mismatch')
@@ -57,6 +58,23 @@ def restore(source, output):
         (output/'sets'/(name+'.json')).write_text(json.dumps(dict(name=name, tasks=tasks, sources=['portable archive']), indent=2)+'\n')
     (output/'manifest.json').write_text(json.dumps(manifest, indent=2)+'\n')
     (output/'adjudications.json').write_text('{}\n')
+    views = manifest.get('labelViews', {})
+    if views:
+        if views != dict(primary='labels', continuity='views/continuity/labels'):
+            raise ValueError('unsupported label views')
+        view = output/'views/continuity'
+        (view/'labels').mkdir(parents=True)
+        (view/'sets').mkdir()
+        for ident, case in manifest['cases'].items():
+            name = views['continuity']+'/'+ident+'.json'
+            if name not in hashes: raise ValueError('unhashed continuity label')
+            label = json.loads(safe_path(source, name).read_text())
+            if label['id'] != ident or label['headSha'] != case['headSha']: raise ValueError('continuity label mismatch')
+            label['repo'] = (output/'repos'/case['repository']).as_uri()
+            (view/'labels'/(ident+'.json')).write_text(json.dumps(label, indent=2)+'\n')
+        for path in (output/'sets').glob('*.json'): (view/'sets'/path.name).write_bytes(path.read_bytes())
+        (view/'manifest.json').write_text(json.dumps(dict(manifest, view='continuity'), indent=2)+'\n')
+        (view/'adjudications.json').write_text('{}\n')
     return dict(dataset=str(output), prs=len(manifest['cases']), verifiedFiles=len(hashes))
 
 

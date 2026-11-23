@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -9,6 +10,7 @@ import unittest
 
 from dataset_package import export_dataset, public_origin, public_text
 from dataset_restore import restore, safe_path
+from final_package import validate_final
 
 
 class DatasetPackageTests(unittest.TestCase):
@@ -102,6 +104,55 @@ class DatasetPackageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'symlink'): export_dataset(root/'source', root/'one.tar.gz')
             (data/'manifest.json').write_text('{"cases":{}}')
             with self.assertRaisesRegex(ValueError, 'no published'): export_dataset(root/'source', root/'two.tar.gz')
+
+    def final_fixture(self, root):
+        shutil.copytree(self.root, root/'source')
+        source = root/'source'; final = source/'datasets/final-v1'
+        shutil.copytree(source/'datasets/synth-rebuilt-v1', final)
+        label = dict(self.label, repo=(source/'forges/example').as_uri())
+        continuity = final/'views/continuity/labels'; continuity.mkdir(parents=True)
+        (continuity/'example-1.json').write_text(json.dumps(label))
+        defect = dict(id='d1', kind='bug', file='source.py', line=1, title='Omission', provenance='audit-omission-confirmed')
+        (final/'labels/example-1.json').write_text(json.dumps(dict(label, defects=[defect])))
+        manifest = json.loads((final/'manifest.json').read_text())
+        manifest['cases']['example-1']['defects'] = dict(d1=dict(accepted=True, method='test', evidence='value is 2'))
+        manifest.update(labelViews=dict(primary='.', continuity='views/continuity'),
+                        provenance={'example-1': dict(membership=dict(generator='Flash-injected', evaluation='new', repository='tuned-repo'))})
+        (final/'manifest.json').write_text(json.dumps(manifest))
+        (final/'README.md').write_text('Disclosed overall: reject gate gap')
+        (final/'provenance/audits').mkdir(parents=True)
+        (final/'provenance/audits/example-1.json').write_text('{"overall":"reject"}')
+        inventory = {str(p.relative_to(final)): hashlib.sha256(p.read_bytes()).hexdigest() for p in final.rglob('*') if p.is_file()}
+        (final/'SHA256SUMS.json').write_text(json.dumps(inventory))
+        return source, final
+
+    def test_final_views_restore_both_denominators_and_preserve_original_audits_and_hashes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); source, final = self.final_fixture(root)
+            archive = root/'final.tar.gz'; export_dataset(source, archive, final)
+            with tarfile.open(archive) as tar: tar.extractall(root, filter='data')
+            package = root/'recoder-dataset'; restore(package, root/'restored')
+            for view, count in (('', 1), ('views/continuity', 0)):
+                label = json.loads((root/'restored'/view/'labels/example-1.json').read_text())
+                self.assertEqual(len(label['defects']), count)
+                self.assertEqual(label['repo'], (root/'restored/repos/example').as_uri())
+            manifest = json.loads((package/'manifest.json').read_text())
+            self.assertEqual(manifest['viewDefects'], dict(primary=1, continuity=0))
+            for path in final.rglob('*'):
+                if path.is_file(): self.assertEqual(path.read_bytes(), (package/'frozen/final-v1'/path.relative_to(final)).read_bytes())
+
+    def test_final_inventory_rejects_tampering_unhashed_files_and_unallowlisted_payloads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); _, final = self.final_fixture(root)
+            path = final/'README.md'; original = path.read_bytes(); path.write_text('changed')
+            with self.assertRaisesRegex(ValueError, 'hash mismatch'): validate_final(final, public_text)
+            path.write_bytes(original)
+            private = final/'raw-exports.json'; private.write_text('{}')
+            with self.assertRaisesRegex(ValueError, 'unhashed'): validate_final(final, public_text)
+            inventory = json.loads((final/'SHA256SUMS.json').read_text())
+            inventory['raw-exports.json'] = hashlib.sha256(private.read_bytes()).hexdigest()
+            (final/'SHA256SUMS.json').write_text(json.dumps(inventory))
+            with self.assertRaisesRegex(ValueError, 'unexpected final payload'): validate_final(final, public_text)
 
 
 if __name__ == '__main__': unittest.main()

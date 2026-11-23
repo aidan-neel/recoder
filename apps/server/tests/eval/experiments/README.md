@@ -58,3 +58,21 @@ The latency analyzer only reads the four completed F1/G1/F2/G′1 reports, store
 progress and model-call records. It never launches a review. Its per-PR CSV and
 stage-union tables distinguish overlapping verification time from additive wall
 time and keep observed provider backoff separate from internal CLI unknowns.
+
+## Final frozen corpus
+
+`final_omissions.py` reproduces the four accepted publication omissions;
+`final_freeze.py` creates final-v1 once, with primary150 and byte-identical original
+continuity146 labels. Never rerun freeze over an existing frozen set or edit it.
+`final_benchmark.py` runs A1/F1/A2/F2; its `neon` mode runs the subsequent single
+Neon Medium F sample. These invoke models: do not restart an existing driver.
+After both drivers finish, the following is model-free:
+
+```sh
+python3 apps/server/tests/eval/experiments/final_controls.py <af-artifacts> <neon-artifacts> --output <comparison>
+python3 apps/server/tests/eval/experiments/final_summary.py <af-artifacts> <neon-artifacts> --output <comparison>
+python3 apps/server/tests/eval/experiments/dataset_package.py --dataset /home/ubuntu/eval-work/datasets/final-v1 --output <new-archive.tar.gz>
+```
+
+See DATASET-PACKAGE.md for offline restoration, label-view relocation and privacy.
+The final report generator consumes those receipts without starting any reviews.

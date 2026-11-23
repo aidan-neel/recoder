@@ -1,7 +1,6 @@
 # Portable Recoder evaluation corpus
 
-This is a point-in-time export, not a claim that generation or the final 30-PR
-evaluation has completed. `manifest.json` identifies every included published PR,
+This is a point-in-time export. `manifest.json` identifies every included published PR,
 original base/head commit, public upstream URL, per-case generator allocation and
 structured independent Neon defect audit. Historical Flash High injections remain
 identified as Flash; they were not regenerated or silently relabeled High.
@@ -23,6 +22,14 @@ Upstream clean controls have human/source-audit provenance, not invented Neon au
   are exported. No raw model exports, transcripts, server databases, tokens,
   settings, prompts, private regression logs or credentials are included. Source
   and public upstream history remain untrusted code; do not execute blindly.
+
+Final exports use `dataset_package.py --dataset /path/to/datasets/final-v1 --output
+/path/to/archive.tar.gz`. They include primary and continuity runtime labels, plus
+the entire allowlisted immutable freeze under `frozen/final-v1` (original manifests,
+sets, labels, inventory, omission reproductions, structured Neon audits and README).
+That README discloses the contradictory `overall: reject` generator-gate gap.
+`viewDefects` records both denominators. Original local paths are inert provenance;
+restoration relocates only runtime labels. Historical Flash provenance is retained.
 
 ## Restore (model-free)
 
@@ -61,4 +68,6 @@ Keep controls/strata separate and do not treat unresolved findings as false.
 F defaults: MCP-only verifier routing and session fixes on; operation cap,
 compact payloads, unused-export ablation, detector precision, dependency grounding
 and discovery transitions off. Pin the Recoder commit and export snapshot hash in
-results. The full-30 and Neon confirmation benchmarks are intentionally pending.
+results. For a final export use `--set final-v1`, and select
+`--dataset /absolute/path/to/portable-corpus/views/continuity` for continuity.
+The same fixed review outputs should be scored under both views, not reviewed twice.
