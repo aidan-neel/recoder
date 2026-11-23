@@ -3,6 +3,6 @@ name: recoder
 description: A single-server Recoder deployment with the review app
 type: application
 version: 0.2.0
-appVersion: 'v0.3.0'
+appVersion: 'v0.3.1'
 kubeVersion: '>=1.26.0-0'
 home: https://github.com/aidan-neel/recoder
