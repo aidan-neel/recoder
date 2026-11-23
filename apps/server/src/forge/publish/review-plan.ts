@@ -1,5 +1,6 @@
 import {
 	evidenceClass,
+	findingTier,
 	FINDING_SEVERITIES,
 	type AutoReviewSettings,
 	type Finding,
@@ -57,6 +58,7 @@ export function reportableFindings(findings: readonly Finding[], ignoredPaths: r
 	return findings
 		.filter(
 			(finding) =>
+				findingTier(finding) !== 'fyi' &&
 				evidenceClass(finding) !== 'unverified' &&
 				finding.decision?.state !== 'dismissed' &&
 				!finding.topic?.quieted &&

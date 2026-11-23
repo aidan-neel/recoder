@@ -1,4 +1,4 @@
-import { findingKind } from '@recoder/shared';
+import { findingKind, findingTier } from '@recoder/shared';
 import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY, verifierTurns } from '../../session/review-policy.js';
 import { canLaunchInvestigation } from '../agent-loop.js';
@@ -107,6 +107,8 @@ export class VerifyQueue {
 	 * issue as one already being verified waits for that verdict instead.
 	 */
 	add(candidate: CandidateFinding): void {
+		if (findingTier(candidate) === 'fyi') return;
+
 		if (!candidate.valid && this.repair) {
 			this.startRepair(this.repair, candidate);
 

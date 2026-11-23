@@ -1,5 +1,6 @@
 import {
 	parseUnifiedDiff,
+	withDiffMoves,
 	type PrCheck,
 	type PullComment,
 	type PullCommit,
@@ -155,7 +156,14 @@ export async function pullDiff(
 
 	if (diff.headSha !== headSha) diffCache.delete(key);
 
-	return options?.includeHunkless ? diff : { ...diff, files: diff.files.filter((file) => file.hunks.length > 0) };
+	return options?.includeHunkless
+		? diff
+		: {
+				...diff,
+				files: diff.files.filter(
+					(file) => file.hunks.length > 0 || file.status === 'renamed' || file.status === 'copied'
+				)
+			};
 }
 
 /**
@@ -175,7 +183,7 @@ async function diffAtSteadyHead(repo: Repo, n: number, headBefore: string): Prom
 		const head = await pullForge(repo).head(n);
 
 		if (fetched.pr.headSha === expected && head === expected) {
-			return { headSha: expected, files: parseUnifiedDiff(fetched.diff, { includeHunkless: true }) };
+			return { headSha: expected, files: withDiffMoves(parseUnifiedDiff(fetched.diff, { includeHunkless: true })) };
 		}
 
 		expected = head;

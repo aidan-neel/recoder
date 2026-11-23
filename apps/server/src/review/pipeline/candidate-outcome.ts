@@ -1,4 +1,4 @@
-import type { DropStage } from '@recoder/shared';
+import { findingTier, type DropStage } from '@recoder/shared';
 import type { CandidateRepair } from './candidate-repair.js';
 import { isHeldBack, isPublishable, type CandidateFinding } from './consolidate.js';
 import type { PublishedBy } from './published-by.js';
@@ -33,7 +33,7 @@ function repairOf(candidate: CandidateFinding): Pick<CandidateOutcome, 'repair'>
 
 /** The stage that stopped a candidate and why, from the state the pipeline left it in. */
 export function candidateOutcome(candidate: CandidateFinding): CandidateOutcome {
-	const verified = candidate.valid && candidate.verification?.status === 'verified';
+	const verified = findingTier(candidate) !== 'fyi' && candidate.valid && candidate.verification?.status === 'verified';
 
 	if (!candidate.valid) {
 		return {
@@ -44,6 +44,7 @@ export function candidateOutcome(candidate: CandidateFinding): CandidateOutcome 
 		};
 	}
 
+	if (findingTier(candidate) === 'fyi') return { stage: null, reason: null, verified: false, ...repairOf(candidate) };
 	if (isHeldBack(candidate)) return { stage: 'severity', reason: HELD_REASON, verified, ...repairOf(candidate) };
 	if (isPublishable(candidate))
 		return { stage: null, reason: null, verified, ...publishedBy(candidate), ...repairOf(candidate) };

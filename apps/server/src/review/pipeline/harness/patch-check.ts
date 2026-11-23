@@ -1,4 +1,4 @@
-import { findingKind } from '@recoder/shared';
+import { findingKind, findingTier } from '@recoder/shared';
 import { patchFromEdits } from '../../fixes/fix-edits.js';
 import { patchApplies } from '../../fixes/patch-check.js';
 import { reviewNow } from '../../session/review-control.js';
@@ -34,6 +34,7 @@ function patchTargets(candidates: CandidateFinding[]): CandidateFinding[] {
 		.filter(
 			(candidate) =>
 				candidate.valid &&
+				findingTier(candidate) !== 'fyi' &&
 				!isHeldBack(candidate) &&
 				candidate.verification?.status === 'verified' &&
 				findingKind(candidate.category) === 'quality' &&

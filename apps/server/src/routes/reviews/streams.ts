@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
-import { expandFileDiff, parseUnifiedDiff, type Review } from '@recoder/shared';
+import { expandFileDiff, parseUnifiedDiff, withDiffMoves, type Review } from '@recoder/shared';
 import { readSandboxFile } from '../../review/pipeline/harness';
 import { subscribeReview } from '../../review/session/events';
 import { findReviewCheckout } from '../../review/session/review-checkout';
@@ -22,7 +22,7 @@ const filesCache = new TtlCache<{ body: string; etag: string }>(10_000, 50);
 
 /** The diff's files, each expanded to the whole file when the checkout has it. */
 async function expandedFiles(diff: string, sandboxPath: string | null): Promise<{ body: string; etag: string }> {
-	const files = parseUnifiedDiff(diff);
+	const files = withDiffMoves(parseUnifiedDiff(diff));
 
 	const expanded = !sandboxPath
 		? files

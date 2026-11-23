@@ -192,9 +192,9 @@ test('the summary list cuts each review to what the queue counts, and counts the
 	expect(reviewTally(item, {})).toEqual(reviewTally(full, {}));
 
 	expect(item.findings).toEqual([
-		{ id: 'f1', severity: 'error' },
-		{ id: 'f2', severity: 'warning' },
-		{ id: 'f3', severity: 'info' }
+		{ id: 'f1', severity: 'error', tier: 'bug' },
+		{ id: 'f2', severity: 'warning', tier: 'warning' },
+		{ id: 'f3', severity: 'info', tier: 'warning' }
 	]);
 
 	const { findings: _findings, questions: _questions, obligations: _obligations, ...fields } = item;

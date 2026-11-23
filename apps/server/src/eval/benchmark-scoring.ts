@@ -1,5 +1,5 @@
 import { chatCompletion } from '../models/llm';
-import type { Finding, ReasoningEffort } from '@recoder/shared';
+import { findingTier, type Finding, type ReasoningEffort } from '@recoder/shared';
 import { configForModel, configForOrchestrator, configForSubagent } from '../models/models';
 import type { CandidateOutcome } from '../review/pipeline/candidate-outcome';
 import { initReviewSettings } from '../review/session/review-settings';
@@ -104,14 +104,16 @@ async function cachedJudgement(
 
 /** A review's candidates as the eval keeps them, with the id each claim is traced by. */
 function candidatePool(candidates: readonly (Finding & CandidateOutcome)[]): PoolCandidate[] {
-	return candidates.map((candidate) => ({
-		...toEvalFinding(candidate),
-		id: candidate.id,
-		stage: candidate.stage,
-		reason: candidate.reason,
-		verified: candidate.verified,
-		...(candidate.publishedBy ? { publishedBy: candidate.publishedBy } : {})
-	}));
+	return candidates
+		.filter((candidate) => findingTier(candidate) !== 'fyi')
+		.map((candidate) => ({
+			...toEvalFinding(candidate),
+			id: candidate.id,
+			stage: candidate.stage,
+			reason: candidate.reason,
+			verified: candidate.verified,
+			...(candidate.publishedBy ? { publishedBy: candidate.publishedBy } : {})
+		}));
 }
 
 /** The pool a run saved, or the server's candidates of its review; null when neither is there. */
@@ -120,7 +122,7 @@ async function poolOf(
 	base: string,
 	saved: PoolCandidate[] | undefined
 ): Promise<PoolCandidate[] | null> {
-	if (saved) return saved;
+	if (saved) return saved.filter((candidate) => findingTier(candidate) !== 'fyi');
 
 	const candidates = await getCandidates(base, run.reviewId);
 
@@ -165,6 +167,18 @@ async function scoreStages(
 	}
 }
 
+/** Drops observations from old reports before a rescore, preserving each finding's id alignment. */
+function scorableRun(run: RunRecord): RunRecord {
+	const keep = run.findings.map((finding) => findingTier(finding) !== 'fyi');
+
+	return {
+		...run,
+		findings: run.findings.filter((_, index) => keep[index]),
+		findingIds: run.findingIds?.filter((_, index) => keep[index]),
+		unconfirmed: run.unconfirmed?.filter((finding) => findingTier(finding) !== 'fyi')
+	};
+}
+
 /**
  * Judges a passed run; a judge failure leaves the run unscored instead of
  * sinking the benchmark, and keeps its candidate pool so a later rescore can
@@ -180,6 +194,8 @@ export async function scoreRun(
 	adjudications: Adjudications,
 	saved?: PoolCandidate[]
 ): Promise<ScoredRun> {
+	run = scorableRun(run);
+
 	if (run.outcome !== 'passed') return { ...run, score: null };
 
 	const judged: Judged = async (findings) =>

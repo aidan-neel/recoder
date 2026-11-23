@@ -1,4 +1,4 @@
-import type { Finding, FindingSeverity } from './findings';
+import { findingTier, type Finding, type FindingSeverity, type FindingTier } from './findings';
 import type { ObligationResult } from './obligations';
 import type { PullState } from './pulls';
 import type { BriefQuestionResult } from './questions';
@@ -9,7 +9,7 @@ import type { Review } from './review';
  * decide, of which kind, and how urgent it is. A list item leaves quieted findings out; a full
  * review read as a list item still holds them, so `topic` says which they are.
  */
-export type ReviewListFinding = Pick<Finding, 'id' | 'severity' | 'topic' | 'kind' | 'decision'>;
+export type ReviewListFinding = Pick<Finding, 'id' | 'severity' | 'tier' | 'topic' | 'kind' | 'decision'>;
 
 /**
  * A review as `GET /api/reviews?view=summary` lists it: the fields the queue,
@@ -49,9 +49,11 @@ export interface ReviewTally {
 const TONE_RANK: Record<DecisionTone, number> = { high: 0, medium: 1, question: 2, low: 3 };
 
 /** A finding's tone: an error is high, a warning medium, the rest low. */
-export function findingTone(severity: FindingSeverity): DecisionTone {
-	if (severity === 'error') return 'high';
-	if (severity === 'warning') return 'medium';
+export function findingTone(severity: FindingSeverity | FindingTier): DecisionTone {
+	const tier = severity === 'bug' || severity === 'fyi' ? severity : findingTier({ severity });
+
+	if (tier === 'bug') return 'high';
+	if (tier === 'warning') return 'medium';
 
 	return 'low';
 }
@@ -80,6 +82,7 @@ export function reviewListItem(review: ReviewListItem): ReviewListItem {
 			.map((finding) => ({
 				id: finding.id,
 				severity: finding.severity,
+				tier: findingTier(finding),
 				...(finding.kind && { kind: finding.kind }),
 				...(finding.decision && { decision: finding.decision })
 			})),
@@ -108,7 +111,7 @@ export function reviewListItem(review: ReviewListItem): ReviewListItem {
 function decisionsOf(review: ReviewListItem): { id: string; tone: DecisionTone }[] {
 	const findings = review.findings
 		.filter((finding) => !finding.topic?.quieted)
-		.map((finding) => ({ id: finding.id, tone: findingTone(finding.severity) }));
+		.map((finding) => ({ id: finding.id, tone: findingTone(findingTier(finding)) }));
 
 	const questions = (review.questions?.questions ?? [])
 		.filter((question) => question.result === 'unresolved')

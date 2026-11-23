@@ -3,7 +3,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fetchPullRequest, GhError, listPullRequests, parseRepoSlug } from '../../src/forge/gh';
-import { extractJson } from '../../src/forge/gh';
+import { extractJson, listPullFiles } from '../../src/forge/gh';
 import { fakeBin } from '../helpers/fake-bin';
 
 const VIEW_JSON =
@@ -13,6 +13,23 @@ const VIEW_JSON =
 	'"createdAt":"2026-08-30T12:00:00Z"}';
 
 const DIFF = 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old\n+new';
+
+test('GitHub file metadata retains the previous filename for renames and copies', async () => {
+	const rows = (['renamed', 'copied'] as const).map((status) => ({
+		filename: `${status}.ts`,
+		previous_filename: 'source.ts',
+		status,
+		additions: 0,
+		deletions: 0
+	}));
+
+	const opts = await fakeBin('gh', `#!/bin/sh\nprintf '%s\\n' '${JSON.stringify(rows)}'\n`);
+	const files = await listPullFiles('o/r', 7, opts.env);
+
+	expect(files).toEqual(
+		rows.map((row) => ({ path: row.filename, oldPath: 'source.ts', status: row.status, additions: 0, deletions: 0 }))
+	);
+});
 
 describe('parseRepoSlug', () => {
 	test('parses https, ssh, and bare slugs', () => {

@@ -80,7 +80,13 @@ export async function listPullFiles(
 		if (!Array.isArray(rows)) throw new GhError('unknown', 'gh returned non-array files');
 
 		for (const row of rows) {
-			files.push({ path: row.filename, additions: row.additions, deletions: row.deletions });
+			files.push({
+				path: row.filename,
+				additions: row.additions,
+				deletions: row.deletions,
+				...(typeof row.previous_filename === 'string' && row.previous_filename && { oldPath: row.previous_filename }),
+				...(['renamed', 'copied'].includes(row.status) && { status: row.status })
+			});
 		}
 
 		if (rows.length < 100) break;

@@ -1,3 +1,4 @@
+import type { DiffGuide } from './diff-guide';
 import type { OutputRate } from './metrics';
 
 export type ReviewTaskStatus = 'queued' | 'waiting' | 'running' | 'done' | 'error' | 'skipped' | 'partial';
@@ -260,6 +261,7 @@ export interface ReviewWorkerWait {
 }
 
 export interface ReviewProgress {
+	diffGuide?: DiffGuide;
 	id: string;
 	sequence: number;
 	tasks: Record<string, ReviewTask>;
