@@ -6,7 +6,7 @@ For multiple API replicas, configure an external PostgreSQL service as described
 
 ## Choose the image
 
-The chart defaults to the published release image, `ghcr.io/aidan-neel/recoder`, at the tag named by an empty `server.image.tag`, which means the chart's `appVersion`: the release tag, `v0.3.1` for this release.
+The chart defaults to the published release image, `ghcr.io/aidan-neel/recoder`, at the tag named by an empty `server.image.tag`, which means the chart's `appVersion`: the release tag, `v0.4.0` for this release.
 A released image is signed; the in-app updater verifies it against the signed release manifest.
 Use immutable tags for upgrades: pin `server.image.tag` to a release tag instead of a moving one.
 
@@ -25,7 +25,7 @@ Create `recoder-values.yaml` with your image and non-secret configuration.
 ```yaml
 server:
   image:
-    tag: v0.3.1
+    tag: v0.4.0
   frontendUrl: https://recoder.example.org
   existingSecret: recoder-credentials
   managedCommand: helm upgrade recoder --namespace recoder --reuse-values
