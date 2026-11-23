@@ -10,7 +10,10 @@ import { initializeCoordinator } from '../../src/review/runtime/schema';
 import { initializePostgresEvents } from '../../src/storage/postgres-events';
 import { initializePublication } from '../../src/storage/postgres-publication';
 import { importLocalData } from '../../src/storage/import-local';
+import { initializePostgresMessages, initializeSqliteMessages } from '../../src/storage/message-schema';
+import { MessageStore } from '../../src/messages/store';
 import { testReview } from '../helpers/review';
+import { testAccount } from '../helpers/test-account';
 import { SHARED_SECRET_KEY } from './shared-secret-key';
 
 const testUrl = process.env.TEST_DATABASE_URL;
@@ -31,12 +34,14 @@ beforeAll(async () => {
 	await initializeCoordinator(sql);
 	await initializePostgresEvents(sql);
 	await initializePublication(sql);
+	await sql.begin(initializePostgresMessages);
 });
 
 beforeEach(async () => {
 	if (!testUrl) return;
 
 	await sql`TRUNCATE recoder_records, recoder_settings, review_actor_leases, review_actor_commands, recoder_review_events, recoder_publications CASCADE`;
+	await sql`TRUNCATE dm_inbox, dm_inbox_cursors, dm_reads, dm_messages, dm_conversations`;
 });
 
 afterAll(async () => {
@@ -69,6 +74,41 @@ async function hashes(directory: string): Promise<Record<string, string>> {
 }
 
 const integration = test.skipIf(!testUrl);
+
+integration('a local import keeps conversations, their account identities, and the inbox cursor', async () => {
+	const directory = await source();
+	const database = new Database(join(directory, 'recoder.db'));
+
+	connections.push(database);
+	database.exec('CREATE TABLE accounts (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+	initializeSqliteMessages(database);
+
+	for (const account of [testAccount('owner', 'cameron'), testAccount('member:github::2', 'mira')]) {
+		database.query('INSERT INTO accounts VALUES (?, ?)').run(account.id, JSON.stringify(account));
+	}
+
+	const local = new MessageStore({ kind: 'sqlite', open: () => database });
+	const member = 'member:github::2';
+	const { id } = await local.start('owner', { accountId: member });
+	const message = await local.send('owner', id, { clientId: 'first', body: 'Hi from local', attachments: [] });
+
+	await local.markRead(member, id, { through: 1 });
+	await importLocalData(sql, directory);
+
+	const imported = new MessageStore({ kind: 'postgres', sql });
+
+	expect(await imported.page(member, id)).toMatchObject({
+		conversation: { with: { accountId: 'owner' }, readSequence: 1 },
+		messages: [message]
+	});
+
+	expect(await imported.inbox(member, 1)).toMatchObject([{ type: 'read', cursor: 2 }]);
+
+	const second = await imported.send(member, id, { clientId: 'second', body: 'Hi from HA', attachments: [] });
+
+	expect(second.sequence).toBe(2);
+	expect(await imported.inbox(member, 2)).toMatchObject([{ type: 'message', cursor: 3 }]);
+});
 
 integration('import preserves committed WAL reviews, paused recovery, settings, and source bytes', async () => {
 	const directory = await source();

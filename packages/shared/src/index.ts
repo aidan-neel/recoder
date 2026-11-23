@@ -43,6 +43,8 @@ export * from './vllm';
 export * from './timing';
 export * from './sort';
 export * from './accounts';
+export * from './people';
+export * from './messages';
 export * from './usage';
 export * from './telemetry';
 export * from './chat-trail';

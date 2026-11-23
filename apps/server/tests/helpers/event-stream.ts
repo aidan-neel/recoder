@@ -25,7 +25,15 @@ export async function readEventsUntil<Event, Result>(
 			buffer = frames.pop() ?? '';
 
 			for (const frame of frames) {
-				const result = pick(JSON.parse(frame.slice(frame.indexOf('data:') + 5)) as Event);
+				const data = frame
+					.split('\n')
+					.filter((line) => line.startsWith('data:'))
+					.map((line) => line.slice(5))
+					.join('\n');
+
+				if (!data) continue;
+
+				const result = pick(JSON.parse(data) as Event);
 
 				if (result !== undefined) return result;
 			}

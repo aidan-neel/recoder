@@ -59,7 +59,8 @@ It imports `recoder.db`, its committed WAL contents, and these settings files wh
 
 Missing settings remain unset. An explicitly saved empty guidelines file remains empty.
 Legacy model settings pass through the same migration as local server startup.
-Temporary checkouts, caches, CLI login files, and unrelated files are not imported.
+Account records and direct messages move with the database; browser sessions don't. Temporary checkouts, caches,
+CLI login files, and unrelated files are not imported.
 
 1. Wait for active forge publications to finish, then stop the source server and all destination API replicas.
 2. Back up the complete source data directory, including SQLite WAL files.
@@ -116,7 +117,7 @@ under a PostgreSQL advisory lock. A server cannot start on a data version newer 
 Let active reviews finish when possible. A replacement executor can recover persisted checkpoints, but an interrupted provider call can repeat.
 
 Use your PostgreSQL provider's consistent backup and restore process for the entire application database.
-Include review records, settings, actor leases and commands, events, and publication records together.
+Include review records, settings, actor leases and commands, events, publication records, and direct messages together.
 Backups contain connected credentials and repository information; restrict and encrypt them like the live database.
 The API pods' temporary directories are disposable and do not replace a database backup.
 
@@ -127,7 +128,8 @@ Verify readiness, saved reviews, model settings, and forge publication state bef
 ### Portable snapshots
 
 The built-in database offers nightly and manual backups. Archives in `<data dir>/backups/<id>/backup.tar.zst` include
-the committed SQLite database and saved settings, not worktrees, caches, the local bearer token, or the encryption key.
+the committed SQLite database (including direct messages) and saved settings, not worktrees, caches, the local bearer token,
+or the encryption key.
 Keep the matching key in your secret manager; sealed credentials cannot be recovered without it. An admin can request
 a one-time download with the key included. Treat that download like a plaintext credential bundle.
 
@@ -141,7 +143,7 @@ bun apps/server/src/storage/backups/operator.ts restore --archive /path/to/backu
 For PostgreSQL, provider backups remain the normal HA recovery path. To make a portable snapshot of a stopped
 installation, install `pg_dump` and `pg_restore` for your database version, set `RECODER_DATABASE_URL` from your secret
 manager, and run `bun apps/server/src/storage/backups/operator.ts backup --stopped`. The archive includes a consistent
-database dump and local settings. To restore it, point `RECODER_DATABASE_URL` at a dedicated, empty PostgreSQL database
+database dump (including direct messages) and local settings. To restore it, point `RECODER_DATABASE_URL` at a dedicated, empty PostgreSQL database
 and run the same restore command. It refuses a nonempty database. PostgreSQL commits the dump in one transaction
 before the command restores local files, which PostgreSQL does not use for shared settings. If local file
 restoration fails, correct the filesystem issue and retry into another empty database; keep the failed

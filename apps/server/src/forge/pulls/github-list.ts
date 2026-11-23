@@ -5,7 +5,7 @@ import { extractJson, gh, parsePullRow, parseRepoSlug } from '../gh.js';
 import { record, records, STATUS_CONTEXT_STATES, tallyChecks, type OpenPulls, type PullEntry } from './status.js';
 
 const PULL_FIELDS = `
-	number title url author { login } baseRefName headRefName headRefOid
+	number title url author { login avatarUrl } baseRefName headRefName headRefOid
 	additions deletions changedFiles createdAt updatedAt isDraft
 	assignees(first: 10) { nodes { login name } }
 	commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 1) {

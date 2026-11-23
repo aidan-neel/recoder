@@ -226,16 +226,15 @@ async function listPullRows(
 
 /** Normalize one `gh pr view`/`pr list` JSON row, or a GraphQL pull request node with the same field names, to a PullRequest. */
 export function parsePullRow(view: Record<string, unknown>, fallbackNumber: number): PullRequest {
-	const author =
-		typeof view.author === 'object' && view.author !== null
-			? String((view.author as Record<string, unknown>).login ?? 'unknown')
-			: 'unknown';
+	const author = isJsonObject(view.author) ? view.author : {};
+	const avatar = author.avatarUrl ?? author.avatar_url;
 
 	return {
 		number: Number(view.number ?? fallbackNumber),
 		title: String(view.title ?? ''),
 		url: String(view.url ?? ''),
-		author,
+		author: String(author.login ?? 'unknown'),
+		...(typeof avatar === 'string' && { authorAvatarUrl: avatar }),
 		base: String(view.baseRefName ?? ''),
 		headRef: String(view.headRefName ?? ''),
 		headSha: String(view.headRefOid ?? 'unknown'),

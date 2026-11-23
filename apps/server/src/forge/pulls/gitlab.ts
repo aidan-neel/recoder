@@ -77,7 +77,7 @@ export function gitlabPullForge(repo: Repo): PullForge {
  * A merge request row as a list or page entry. The list endpoint carries no
  * pipeline, so its checks are null; the page reads them separately.
  */
-function gitlabEntry(pull: PullRequest, row: Record<string, unknown>): PullEntry {
+export function gitlabEntry(pull: PullRequest, row: Record<string, unknown>): PullEntry {
 	return {
 		pull,
 		status: {

@@ -16,6 +16,8 @@ import meModels from './routes/me-models';
 import telemetry from './routes/telemetry';
 import usage from './routes/usage';
 import home from './routes/home';
+import messages from './routes/messages';
+import people from './routes/people';
 import agent from './routes/agent';
 import settings from './routes/settings';
 import vllm from './routes/vllm';
@@ -56,7 +58,14 @@ const corsOptions = {
 	origin: (origin: string, c: Context) => (isTrustedOrigin(origin, c.req.url) ? origin : '*'),
 	credentials: true,
 	allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-	allowHeaders: ['Content-Type', 'Authorization', 'X-Hub-Signature-256', 'X-Gitlab-Token', 'If-None-Match'],
+	allowHeaders: [
+		'Content-Type',
+		'Authorization',
+		'X-Hub-Signature-256',
+		'X-Gitlab-Token',
+		'If-None-Match',
+		'Last-Event-ID'
+	],
 	exposeHeaders: ['ETag']
 };
 
@@ -120,6 +129,8 @@ app.route('/api/me/models', meModels);
 app.route('/api/usage', usage);
 app.route('/api/telemetry', telemetry);
 app.route('/api/home', home);
+app.route('/api/messages', messages);
+app.route('/api/people', people);
 app.route('/api/guidelines', guidelines);
 app.route('/api/settings/auto-review', autoReview);
 app.route('/api/settings/vllm', vllm);
