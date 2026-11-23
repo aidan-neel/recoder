@@ -107,24 +107,26 @@ interface StepBodyProps {
 	stage: RunStage;
 	/** What the review does now; only the active step has it. */
 	activity: RunActivity | null;
+	/** Lists the step's lines; off while Studio shows them on its floor. */
+	lines: boolean;
 }
 
 /** An open step: how far it is and what it does now while it runs, then its lines and what they leave out. */
-function StepBody({ stage, activity }: StepBodyProps) {
+function StepBody({ stage, activity, lines }: StepBodyProps) {
 	return (
 		<div className="run-step-body">
 			{stage.state === 'active' && stage.share !== null ? (
 				<Meter value={stage.share} color="var(--accent)" className="run-step-meter" aria-label={stage.label} />
 			) : null}
 			{activity ? <Activity activity={activity} /> : null}
-			{stage.lines.length ? (
+			{lines && stage.lines.length ? (
 				<ul className="run-lines">
 					{stage.lines.map((line) => (
 						<Line key={line.id} line={line} />
 					))}
 				</ul>
 			) : null}
-			{stage.rest ? <p className="run-rest">{stage.rest}</p> : null}
+			{lines && stage.rest ? <p className="run-rest">{stage.rest}</p> : null}
 		</div>
 	);
 }
@@ -132,6 +134,7 @@ function StepBody({ stage, activity }: StepBodyProps) {
 interface StepRowProps {
 	stage: RunStage;
 	activity: RunActivity | null;
+	lines: boolean;
 	paused: boolean;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
@@ -141,9 +144,9 @@ interface StepRowProps {
  * One step as a row of the list. A step with lines, or the active one with
  * something to show, opens like a bug row; the rest is its head alone.
  */
-function StepRow({ stage, activity, paused, open, onOpenChange }: StepRowProps) {
+function StepRow({ stage, activity, lines, paused, open, onOpenChange }: StepRowProps) {
 	const active = stage.state === 'active';
-	const opens = stage.lines.length > 0 || (active && (stage.share !== null || activity !== null));
+	const opens = (lines && stage.lines.length > 0) || (active && (stage.share !== null || activity !== null));
 
 	if (!opens) {
 		return (
@@ -162,7 +165,7 @@ function StepRow({ stage, activity, paused, open, onOpenChange }: StepRowProps) 
 					<StepHead stage={stage} paused={paused} chevron={<Icon name="expand_more" className="run-step-chevron" />} />
 				</CollapsibleTrigger>
 				<CollapsibleContent>
-					<StepBody stage={stage} activity={activity} />
+					<StepBody stage={stage} activity={activity} lines={lines} />
 				</CollapsibleContent>
 			</Collapsible>
 		</li>
@@ -192,9 +195,11 @@ function QueuedRow({ waiting }: { waiting: string | null }) {
  * to how far it is, what it does now and the claims under check; a waiting
  * step is its name alone. A step a person opened or shut stays that way; the
  * rest follow the review, so the step at work is the open one. A queued
- * review says why it waits above them.
+ * review says why it waits above them. With `lines` off, Studio below draws
+ * the plan's parts and the claims instead, so the steps keep their heads,
+ * badges, meter and activity alone.
  */
-export function RunSteps({ run }: { run: RunView }) {
+export function RunSteps({ run, lines = true }: { run: RunView; lines?: boolean }) {
 	const [chosen, setChosen] = useState<Partial<Record<RunStage['id'], boolean>>>({});
 	const paused = run.phase === 'paused';
 
@@ -207,6 +212,7 @@ export function RunSteps({ run }: { run: RunView }) {
 						key={stage.id}
 						stage={stage}
 						activity={stage.state === 'active' ? run.activity : null}
+						lines={lines}
 						paused={paused}
 						open={chosen[stage.id] ?? stage.state === 'active'}
 						onOpenChange={(open) => setChosen((current) => ({ ...current, [stage.id]: open }))}

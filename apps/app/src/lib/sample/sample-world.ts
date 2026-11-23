@@ -12,13 +12,10 @@ import {
 
 import { ApiError } from '../api/http';
 import type { StreamHandlers } from '../api/event-stream';
-import { SAMPLE_DIFFS } from './sample-diff';
+import { SAMPLE_DIFFS, SMALL_DIFF, TOKEN_DIFFS, TOKENS_PULL } from './sample-diff';
 import { sampleSeed, type SamplePull, type SampleSeed } from './sample-pulls';
 import { SAMPLE_PULL } from './sample-review';
 import { finishedPlan } from './sample-run';
-
-/** The files every sample pull request but the main one changes: the start of the main diff. */
-const SMALL_DIFF = 3;
 
 /**
  * The sample's memory: its repositories, pull requests, reviews and their
@@ -70,9 +67,15 @@ export function createSampleWorld() {
 		return { ...reviewListItem(review), pullState: findPull(review.repoId, review.prNumber).status.state };
 	}
 
-	/** The files of a pull request's diff: the full sample diff for the sample pull request, a short one for the rest. */
+	/**
+	 * The files of a pull request's diff: the full sample diff for the sample pull request, 300 components for the
+	 * tokens one, a short one for the rest.
+	 */
 	function diffOf(repoId: string, number: number): FileDiff[] {
-		return number === SAMPLE_PULL.number && repoId === 'sample-api' ? SAMPLE_DIFFS : SAMPLE_DIFFS.slice(0, SMALL_DIFF);
+		if (number === SAMPLE_PULL.number && repoId === 'sample-api') return SAMPLE_DIFFS;
+		if (number === TOKENS_PULL && repoId === 'sample-web') return TOKEN_DIFFS;
+
+		return SAMPLE_DIFFS.slice(0, SMALL_DIFF);
 	}
 
 	/**

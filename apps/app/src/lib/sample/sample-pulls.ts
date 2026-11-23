@@ -12,6 +12,7 @@ import {
 
 import { MANY_CHECKS, MANY_CHECKS_PASSING } from './sample-checks';
 import { exportsProgress } from './sample-claims';
+import { TOKENS_PULL } from './sample-diff';
 import { cleanReviewChecks } from './sample-clean-review';
 import { sampleTime } from './sample-clock';
 import { SAMPLE_CHECKS, SAMPLE_PULL, SAMPLE_REVIEW } from './sample-review';
@@ -170,7 +171,7 @@ const PULLS = {
 	}),
 	darkMode: samplePull({
 		repoId: 'sample-web',
-		number: 93,
+		number: TOKENS_PULL,
 		title: 'Dark mode tokens',
 		author: 'ana',
 		updatedAt: sampleTime('2026-10-13T06:45:00.000Z'),
