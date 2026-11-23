@@ -2,6 +2,7 @@ import { byCodePoint } from '@recoder/shared';
 import type { ChangeModel } from '../change-model/types.js';
 import type { ReviewInventory } from '../inventory.js';
 import type { DetectorResult } from './types.js';
+import { pureMoveAt } from '../move-awareness';
 
 /** Changed path → its added new-side lines (line number → text), in line order. */
 export type AddedLines = Map<string, Map<number, string>>;
@@ -23,7 +24,9 @@ export function addedLines(inventory: ReviewInventory): AddedLines {
 		const lines = new Map<number, string>();
 
 		for (const hunk of diff.hunks)
-			for (const line of hunk.lines) if (line.type === 'add' && line.newNo !== null) lines.set(line.newNo, line.text);
+			for (const line of hunk.lines)
+				if (line.type === 'add' && line.newNo !== null && !pureMoveAt(inventory, diff.path, line.newNo))
+					lines.set(line.newNo, line.text);
 
 		if (lines.size) added.set(diff.path, lines);
 	}

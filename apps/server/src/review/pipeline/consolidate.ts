@@ -1,5 +1,7 @@
 import {
 	findingKind,
+	findingTier,
+	findingSeverity,
 	type ClaimStep,
 	type DropStage,
 	type FixEdit,
@@ -28,6 +30,7 @@ import type { ChangeIntent, IntentClaim } from './intent/types.js';
 import { lensCategories, lensOwning } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
 import type { PublishedBy } from './published-by.js';
+import { pureMoveAt } from './move-awareness';
 
 export { isHeldBack, isReportable, publishHeldBack } from './published-by.js';
 
@@ -46,11 +49,7 @@ export interface CandidateFinding extends Finding {
 	dropReason?: string;
 	/** The stage that dropped it, set with `dropReason`. */
 	dropStage?: DropStage;
-	/**
-	 * Low severity while Settings keeps reviews to medium and above. It is
-	 * verified like any other candidate, then held back from the findings
-	 * unless `publishedBy` says why it is published anyway.
-	 */
+	/** Legacy reporting-bar metadata retained for checkpoints; FYI bypasses it. */
 	belowBar?: true;
 	/** Set once a verified candidate qualifies for the exception that publishes it despite `belowBar`. */
 	publishedBy?: PublishedBy;
@@ -72,7 +71,7 @@ export interface CandidateContext {
 	evidence: EvidenceStore;
 	changeModel: ChangeModel | null;
 	ledger: RuleLedger | null;
-	/** Whether a low-severity report is kept; without it the bar is medium. */
+	/** Legacy setting; FYI observations are retained independently. */
 	reportLowSeverity?: boolean;
 	/** The change intent, so a cited claim id is checked against the claims it holds. Absent when none was distilled. */
 	intent?: ChangeIntent | null;
@@ -115,7 +114,8 @@ function locationProblem(
 	path: string,
 	line: number | undefined,
 	side: 'old' | 'new',
-	link?: RepairLink
+	link?: RepairLink,
+	metadataMove = false
 ): string | undefined {
 	const file = inventory.files.find((entry) => entry.path === path);
 
@@ -124,7 +124,13 @@ function locationProblem(
 
 	const linked = file.status !== 'added' && link?.file === path && addedLine(inventory, path, link.line);
 
-	if (side === 'new' && line && !linked && !newSideAnchored(inventory, file.path, line)) {
+	if (
+		side === 'new' &&
+		line &&
+		!linked &&
+		!(metadataMove && file.hunks.length === 0) &&
+		!newSideAnchored(inventory, file.path, line)
+	) {
 		return 'new-side line is not associated with this change';
 	}
 
@@ -192,6 +198,8 @@ export function categoryIssue(
 		};
 	}
 
+	if (findingTier({ tier: raw.tier, severity: toBackendSeverity[raw.severity] }) === 'fyi') return;
+
 	if (raw.category === 'repo-rule' && !(raw.ruleId && ledger?.rules.some((rule) => rule.id === raw.ruleId))) {
 		return { issue: 'rule', reason: 'repo-rule finding cites no rule from the ledger' };
 	}
@@ -239,8 +247,8 @@ function claimTexts(raw: ReviewerFinding): string[] {
  * Turns one reported finding into a candidate. It is invalid (and never
  * verified or shown) when its place isn't part of the change, its evidence
  * wasn't provided, it breaks its category's requirements, or a person already
- * dismissed the same finding in this repository. A low-severity one that
- * Settings keeps out of the review stays valid and is marked `belowBar`.
+ * dismissed the same finding in this repository. FYI observations remain
+ * valid without defect-proof requirements or the legacy reporting bar.
  * Only a repair passes `link`, which lets a finding on an unchanged line pass.
  */
 export function validateCandidate(
@@ -269,25 +277,46 @@ export function validateCandidate(
 	);
 
 	const dismissed = [...(ctx.dismissed ?? [])].some((held) => matchesDismissal(held, dismissal));
+	const tier = findingTier({ tier: raw.tier, severity: toBackendSeverity[raw.severity] });
+	const move = pureMoveAt(ctx.inventory, raw.file, line, side);
+	const moveReason = raw.moveReason?.trim();
 
 	const drop = firstDrop([
-		['location', locationProblem(ctx.inventory, raw.file, line, side, link)],
+		[
+			'location',
+			locationProblem(
+				ctx.inventory,
+				raw.file,
+				line,
+				side,
+				link,
+				Boolean(move && move.toLines.end === null && moveReason)
+			)
+		],
+		[
+			'covered',
+			move &&
+				tier !== 'fyi' &&
+				!moveReason &&
+				'exactly moved code needs evidence of a behavior change caused by the move'
+		],
 		['evidence', raw.evidenceIds.length > 0 && evidenceIds.length === 0 && 'cited evidence was not provided'],
 		['category', categoryIssue(raw, meta.lenses, ctx)?.reason],
 		['dismissed', dismissed && 'a person dismissed this finding in an earlier review']
 	]);
 
-	const belowBar = !drop.dropReason && raw.severity === 'low' && !ctx.reportLowSeverity;
 	const ledgerRule = findLedgerRule(ctx.ledger, ruleId);
 
 	return {
 		id: crypto.randomUUID(),
 		title: raw.title,
 		candidateId: meta.candidateId,
+		...(move && moveReason && { move: { relation: move, reason: moveReason } }),
 		file: raw.file,
 		line,
 		endLine,
-		severity: toBackendSeverity[raw.severity],
+		severity: findingSeverity(tier),
+		tier,
 		message,
 		agent: meta.role,
 		model: meta.model,
@@ -298,7 +327,7 @@ export function validateCandidate(
 		...(ledgerRule ? { rule: toFindingRule(ledgerRule) } : {}),
 		smell,
 		symbol: shownSymbol,
-		claim: { ...raw.claim, existingGuard: raw.claim.existingGuard ?? undefined },
+		claim: tier === 'fyi' ? undefined : { ...raw.claim, existingGuard: raw.claim.existingGuard ?? undefined },
 		lens: meta.lenses ? lensOwning(raw.category, meta.lenses) : undefined,
 		evidenceIds,
 		relatedLocations: raw.relatedLocations,
@@ -306,7 +335,6 @@ export function validateCandidate(
 		...identity(ctx, { file: raw.file, category: raw.category, ruleId, smell, symbol }, line, side),
 		...(raw.fix.length ? { fix: raw.fix } : {}),
 		...(raw.examples.length ? { examples: raw.examples } : {}),
-		...(belowBar ? { belowBar } : {}),
 		valid: !drop.dropReason,
 		...drop
 	};
@@ -365,6 +393,7 @@ export function candidateFromDetector(
 		line: result.line,
 		endLine,
 		severity: result.severity ?? (result.category === 'correctness' ? 'error' : 'warning'),
+		tier: findingTier({ severity: result.severity ?? (result.category === 'correctness' ? 'error' : 'warning') }),
 		message: `[${result.category}] ${result.body}`,
 		agent: lens,
 		category: result.category,
@@ -423,15 +452,18 @@ function newSideAnchored(inventory: ReviewInventory, path: string, line: number)
 
 /** Whether the candidate is a bug no verifier tried, because none of the repository's checks could run in this review. */
 export function isNotRun(candidate: CandidateFinding): boolean {
-	return candidate.verification?.outcome === 'not-run';
+	return findingTier(candidate) !== 'fyi' && candidate.verification?.outcome === 'not-run';
 }
 
 /**
- * Whether the candidate can become a finding: a verifier proved it, or it is
- * a bug in a review where no code could run, shown marked unverified.
+ * Whether the candidate can become review data: an observation, a proven
+ * problem, or a bug where no code could run, shown marked unverified.
  */
 export function isPublishable(candidate: CandidateFinding): boolean {
-	return candidate.valid && (candidate.verification?.status === 'verified' || isNotRun(candidate));
+	return (
+		candidate.valid &&
+		(findingTier(candidate) === 'fyi' || candidate.verification?.status === 'verified' || isNotRun(candidate))
+	);
 }
 
 /** A candidate as the developer sees it, without the fields only the pipeline reads. */
@@ -450,6 +482,8 @@ export function toFinding(candidate: CandidateFinding): Finding {
 		ruleCheck,
 		...finding
 	} = candidate;
+
+	finding.tier = findingTier(finding);
 
 	if (ruleCheck && finding.verification && !finding.verification.ruleCheck) {
 		return { ...finding, verification: { ...finding.verification, ruleCheck } };

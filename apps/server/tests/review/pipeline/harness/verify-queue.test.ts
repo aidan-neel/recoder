@@ -28,6 +28,23 @@ function testRun(): ReviewRun {
 	} as unknown as ReviewRun;
 }
 
+test('FYI never reserves verifier calls or starts a verifier or repair', () => {
+	let calls = 0;
+
+	const verify = async () => {
+		calls++;
+
+		return true;
+	};
+
+	const queue = new VerifyQueue(testRun(), verify, verify);
+
+	queue.add({ ...candidate('observation'), tier: 'fyi' });
+	queue.add({ ...candidate('invalid-observation'), tier: 'fyi', valid: false });
+	expect(calls).toBe(0);
+	expect(queue.heldCalls).toBe(0);
+});
+
 /** A queue whose verifiers each wait for `release`, recording the order they start in. */
 function gatedQueue() {
 	const started: string[] = [];

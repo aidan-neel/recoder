@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FINDING_TIERS } from '@recoder/shared';
 import { REVIEW_POLICY } from '../session/review-policy.js';
 
 /** Shortens an over-long string to `max` characters, ending in an ellipsis; anything else passes through. */
@@ -14,6 +15,7 @@ export function findingShape<S extends z.ZodType>(severity: S) {
 		line: z.number().int().positive().nullable().optional(),
 		endLine: z.number().int().positive().nullable().optional(),
 		severity,
+		tier: z.enum(FINDING_TIERS).optional(),
 		category: z.string().min(1).max(50),
 		body: z.string().min(1).max(2000)
 	};

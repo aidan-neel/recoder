@@ -1,4 +1,10 @@
-import { findingKind, type Finding, type FindingLocation, type FindingVerification } from '@recoder/shared';
+import {
+	findingKind,
+	findingTier,
+	type Finding,
+	type FindingLocation,
+	type FindingVerification
+} from '@recoder/shared';
 import { isHeldBack, isPublishable, toFinding, type CandidateFinding } from './consolidate.js';
 import { claimTerms, lineAnchor, refineFingerprint, sameClaim, type ClaimTerms } from './harness/findings.js';
 import type { ReviewInventory } from './inventory.js';
@@ -79,6 +85,7 @@ function mergeCluster(group: CandidateFinding[]): Finding {
 		...toFinding(lead),
 		...(rule ? { rule } : {}),
 		severity: quality && lead.severity === 'error' ? 'warning' : lead.severity,
+		tier: quality && findingTier(lead) === 'bug' ? 'warning' : findingTier(lead),
 		evidenceIds,
 		relatedLocations: related.length ? related : undefined,
 		patch: lead.patch ?? members.find((member) => member.patch)?.patch,
@@ -89,6 +96,7 @@ function mergeCluster(group: CandidateFinding[]): Finding {
 /** Bugs before quality, then most severe, then by place, so the same findings always list in the same order. */
 function compareFindings(a: Finding, b: Finding): number {
 	return (
+		Number(findingTier(a) === 'fyi') - Number(findingTier(b) === 'fyi') ||
 		Number(findingKind(a.category) === 'quality') - Number(findingKind(b.category) === 'quality') ||
 		(SEVERITY_RANK[a.severity] ?? 3) - (SEVERITY_RANK[b.severity] ?? 3) ||
 		a.file.localeCompare(b.file) ||
@@ -219,7 +227,7 @@ function settleFingerprints(findings: Finding[]): void {
  * the findings do not depend on the order they arrive in. Findings that still
  * share a fingerprint keep apart by refining it, after they are listed, so
  * the refinement never reorders them. Quality findings never rank above
- * medium. This is where the reporting bar applies: a group whose every
+ * warning. FYI stays separate from defects and bypasses the legacy bar: a group whose every
  * member is below the bar is held back, and one with a member above it is
  * published.
  */
@@ -230,7 +238,7 @@ export function consolidateFindings(candidates: CandidateFinding[], inventory: R
 	for (const candidate of [...candidates].sort(byId)) {
 		if (!isPublishable(candidate)) continue;
 
-		const key = groupKey(candidate, byTitle);
+		const key = `${findingTier(candidate) === 'fyi' ? 'fyi:' : ''}${groupKey(candidate, byTitle)}`;
 
 		groups.set(key, [...(groups.get(key) ?? []), candidate]);
 	}

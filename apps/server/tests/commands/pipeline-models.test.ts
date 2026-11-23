@@ -92,7 +92,14 @@ test('a review keeps the models it started on for every call when the pick chang
 	const { runs, calls } = await storedRuns(reviewId);
 
 	expect((await db.reviews.get(reviewId))?.status).toBe('passed');
-	expect([...new Set(requests.map((request) => request.kind))].sort()).toEqual(['brief', 'reviewer', 'subagent']);
+
+	expect([...new Set(requests.map((request) => request.kind))].sort()).toEqual([
+		'brief',
+		'diff-guide',
+		'reviewer',
+		'subagent'
+	]);
+
 	expect(calls).toHaveLength(requests.length);
 	expect([...new Set(requests.map((request) => request.model))].sort()).toEqual(FIRST);
 	expect(modelsByRun(calls)).toEqual({ 'run 0': FIRST });

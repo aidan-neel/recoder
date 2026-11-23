@@ -16,6 +16,7 @@ export type ModelCallOutcome = 'ok' | 'failed' | 'cancelled';
  * keys or credentials.
  */
 export interface ModelCallRow {
+	purpose?: string;
 	/** The call's own id; a review's metrics record the same call under it. */
 	id: string;
 	/** When the call started, an ISO timestamp. */

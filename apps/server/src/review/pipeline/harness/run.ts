@@ -31,6 +31,7 @@ import { variantStage } from '../variants/stage.js';
 import { cutUnits, retryFailedUnits } from './unit-stage.js';
 import { drainVerification, finishVerification, startVerification } from './verification.js';
 import { withReviewAgentSlots } from '../agent-loop/agent-slots.js';
+import { startDiffGuide } from '../guide/stage.js';
 
 /**
  * Custom review harness. Reviewers never change the pull request:
@@ -78,8 +79,9 @@ export async function runAdaptiveReview(
 	try {
 		return await withReviewAgentSlots(() => runStages(run));
 	} catch (err) {
-		return stoppedReview(run, err);
+		return { ...stoppedReview(run, err), ...(run.diffGuide && { diffGuide: run.diffGuide }) };
 	} finally {
+		await run.diffGuideJob?.stop();
 		clearInterval(timeout);
 		input.signal?.removeEventListener('abort', onAbort);
 		await closeWorkspace(run);
@@ -101,6 +103,9 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	const context = Promise.all([
 		repoInventoryStage(run)
 			.then(() => changeModelStage(run))
+			.then(() => {
+				run.diffGuideJob = startDiffGuide(run);
+			})
 			.then((): Promise<unknown> =>
 				run.obligations ? Promise.all([intentStage(run), deriveObligationsStage(run)]) : intentStage(run)
 			),

@@ -3,6 +3,8 @@
  * Lives in shared so the server pipeline and the web diff view use one implementation.
  */
 
+import type { DiffMove } from './diff-moves';
+
 export type DiffLineType = 'context' | 'add' | 'del';
 
 export interface DiffLine {
@@ -24,6 +26,12 @@ export interface DiffHunk {
 export interface FileDiff {
 	/** Display path, e.g. `src/rate-limit/limiter.ts`. */
 	path: string;
+	/** Optional for legacy/client-created diffs; the parser always supplies a status. */
+	status?: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied';
+	oldPath?: string;
+	similarity?: number;
+	/** Destination relations, computed before expanding head-side context. */
+	moves?: DiffMove[];
 	additions: number;
 	deletions: number;
 	hunks: DiffHunk[];
@@ -37,7 +45,29 @@ function stripPrefix(path: string): string {
 
 /** Remove git's double-quoting around paths containing spaces. */
 function unquote(path: string): string {
-	return path.startsWith('"') && path.endsWith('"') && path.length >= 2 ? path.slice(1, -1) : path;
+	if (!path.startsWith('"') || !path.endsWith('"') || path.length < 2) return path;
+
+	const escapes: Record<string, string> = {
+		a: '\x07',
+		b: '\b',
+		f: '\f',
+		n: '\n',
+		r: '\r',
+		t: '\t',
+		v: '\v',
+		'"': '"',
+		'\\': '\\'
+	};
+
+	const encoder = new TextEncoder();
+	const bytes: number[] = [];
+
+	for (const match of path.slice(1, -1).matchAll(/\\([0-7]{1,3}|.)|([^\\]+)/gs)) {
+		if (match[1] && /^[0-7]+$/.test(match[1])) bytes.push(parseInt(match[1], 8));
+		else for (const byte of encoder.encode(match[2] ?? escapes[match[1]] ?? '\\' + match[1])) bytes.push(byte);
+	}
+
+	return new TextDecoder().decode(Uint8Array.from(bytes));
 }
 
 /**
@@ -67,7 +97,7 @@ function gitHeaderPath(header: string): string {
 }
 
 function blankFile(path: string): FileDiff {
-	return { path, additions: 0, deletions: 0, hunks: [] };
+	return { path, status: 'modified', additions: 0, deletions: 0, hunks: [] };
 }
 
 /**
@@ -128,11 +158,6 @@ export function parseUnifiedDiff(input: string, options?: { includeHunkless?: bo
 			continue;
 		}
 
-		if (options?.includeHunkless && current && (raw.startsWith('rename to ') || raw.startsWith('copy to '))) {
-			current.path = unquote(raw.slice(raw.startsWith('rename') ? 10 : 8));
-			continue;
-		}
-
 		if (raw.startsWith('--- ') || raw.startsWith('+++ ')) {
 			const p = raw.slice(4).trim();
 			const path = p === '/dev/null' ? null : stripPrefix(unquote(p.split('\t')[0]));
@@ -140,12 +165,34 @@ export function parseUnifiedDiff(input: string, options?: { includeHunkless?: bo
 			if (raw.startsWith('--- ')) pendingOld = path;
 			else pendingNew = path;
 
-			if (current && current.path === 'unknown' && path) {
+			if (current && raw.startsWith('+++ ') && path) {
 				current.path = path;
 			}
 
+			if (current && raw.startsWith('--- ') && path === null) current.status = 'added';
+			if (current && raw.startsWith('+++ ') && path === null) current.status = 'deleted';
+
 			continue;
 		}
+
+		if (current && /^(rename|copy) (from|to) /.test(raw)) {
+			const [, operation, side, path] = /^(rename|copy) (from|to) (.*)$/.exec(raw)!;
+
+			current.status = operation === 'rename' ? 'renamed' : 'copied';
+			if (side === 'from') current.oldPath = unquote(path);
+			else current.path = unquote(path);
+			continue;
+		}
+
+		if (current && /^similarity index \d+%$/.test(raw)) {
+			const similarity = Number(raw.slice('similarity index '.length, -1));
+
+			if (similarity <= 100) current.similarity = similarity;
+			continue;
+		}
+
+		if (current && raw.startsWith('new file mode ')) current.status = 'added';
+		if (current && raw.startsWith('deleted file mode ')) current.status = 'deleted';
 
 		const m = HUNK_RE.exec(raw);
 
@@ -176,7 +223,17 @@ export function parseUnifiedDiff(input: string, options?: { includeHunkless?: bo
 
 	pushHunk();
 
-	return options?.includeHunkless ? files : files.filter((f) => f.hunks.length > 0);
+	for (const file of files) {
+		if (file.status !== 'modified') continue;
+		if (file.additions > 0 && file.deletions === 0 && file.hunks.every((hunk) => hunk.oldCount === 0))
+			file.status = 'added';
+		if (file.deletions > 0 && file.additions === 0 && file.hunks.every((hunk) => hunk.newCount === 0))
+			file.status = 'deleted';
+	}
+
+	return options?.includeHunkless
+		? files
+		: files.filter((f) => f.hunks.length > 0 || f.status === 'renamed' || f.status === 'copied');
 }
 
 /** File lines without the empty entry a trailing newline leaves behind. */

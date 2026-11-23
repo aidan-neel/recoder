@@ -10,6 +10,7 @@ import {
 	addedFile,
 	confirmingVerifier,
 	finding,
+	isDiffGuide,
 	isVerifier,
 	modelReply,
 	restoreAfterEach,
@@ -169,13 +170,23 @@ test('a subagent finding in the category of a lens that was not selected is drop
 	expect(result.funnel?.dropped.category).toBe(1);
 });
 
-test('a documentation-only change that no selected lens fits gets no reviewer, no model call and shows as not reviewed', async () => {
+test('a documentation-only change that no selected lens fits gets no defect-review call but still gets a reading guide', async () => {
 	useTestModel();
 
-	const seen = stubNoCalls();
+	let guideCalls = 0;
+	let defectCalls = 0;
+
+	globalThis.fetch = (async (_url, init) => {
+		if (isDiffGuide(init)) guideCalls++;
+		else defectCalls++;
+
+		return modelReply({ groups: [] });
+	}) as typeof fetch;
+
 	const result = await runAdaptiveReview({ diff: DOCS, sandboxPath: null, lenses: ['correctness'] });
 
-	expect(seen.calls).toBe(0);
+	expect(guideCalls).toBe(1);
+	expect(defectCalls).toBe(0);
 	expect(result.assignments).toEqual([]);
 	expect(result.coverage).toMatchObject({ reviewed: 0, pending: 0, partial: 0, excluded: 1, total: 1 });
 	expect(result.coverageGaps).toHaveLength(1);

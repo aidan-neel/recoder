@@ -6,6 +6,7 @@ import {
 	type SubagentCap,
 	type BriefQuestion,
 	type Finding,
+	type DiffGuide,
 	type ReviewAssignment,
 	type ReviewContext
 } from '@recoder/shared';
@@ -88,6 +89,8 @@ export interface ReviewRun {
 	changeModel: ChangeModel | null;
 	/** What the change is meant to do; null when there was no context to distill. */
 	intent: ChangeIntent | null;
+	diffGuide?: DiffGuide;
+	diffGuideJob?: { stop(): Promise<void> };
 	/** The repo's guidelines as numbered rules; null when the repo has none. */
 	ledger: RuleLedger | null;
 	/** What every agent reads about repository skills, built once; empty when there are none or no checkout. */

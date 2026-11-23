@@ -1,12 +1,28 @@
+import type { DiffMove } from './diff-moves';
 import type { ReasoningEffort } from './models';
 
-/**
- * Every severity a finding can have, lowest first. `info` is a reviewer's "low";
- * informational notes are never reported.
- */
+/** Legacy storage and UI compatibility, lowest first. */
 export const FINDING_SEVERITIES = ['info', 'warning', 'error'] as const;
 
 export type FindingSeverity = (typeof FINDING_SEVERITIES)[number];
+
+export const FINDING_TIERS = ['fyi', 'warning', 'bug'] as const;
+
+/** Bugs are probable defects; warnings are risky, uncertain or lower-impact problems; FYI is non-defect commentary. */
+export type FindingTier = (typeof FINDING_TIERS)[number];
+
+/** Stored info findings were reportable low-severity risks, not the model's discarded informational notes. */
+const LEGACY_TIERS: Record<FindingSeverity, FindingTier> = { error: 'bug', warning: 'warning', info: 'warning' };
+
+/** Resolves a stored finding's canonical tier without requiring a data migration. */
+export function findingTier(finding: { tier?: FindingTier; severity: FindingSeverity }): FindingTier {
+	return finding.tier ?? LEGACY_TIERS[finding.severity];
+}
+
+/** The compatibility severity for clients that have not adopted tiers. */
+export function findingSeverity(tier: FindingTier): FindingSeverity {
+	return FINDING_SEVERITIES[FINDING_TIERS.indexOf(tier)];
+}
 
 export interface FindingLocation {
 	file: string;
@@ -351,6 +367,8 @@ export interface Finding {
 	/** Inclusive end of the range this finding refers to (defaults to `line`). */
 	endLine?: number;
 	severity: FindingSeverity;
+	/** Omitted only by legacy stored records and clients; server responses populate it on read. */
+	tier?: FindingTier;
 	message: string;
 	suggestion?: string;
 	/** Reviewer role that produced this finding (e.g. `security`). */
@@ -379,6 +397,8 @@ export interface Finding {
 	/** The enclosing function, method or class, as the change model names it (`ReviewRun.createRun`). */
 	symbol?: string;
 	claim?: FindingClaim;
+	/** Set when the finding sits in moved code: the move and why the move itself changes behavior. */
+	move?: { relation: DiffMove; reason: string };
 	/** A checked fix, on quality findings. */
 	patch?: FindingPatch;
 	/** What feedback on it counts toward, and whether that feedback quieted it. Older saved reviews omit it. */

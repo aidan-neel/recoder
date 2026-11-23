@@ -13,16 +13,17 @@ beforeEach(() => {
 
 const DIFF = addedFile('src/a.ts', 5);
 
-test('a low-severity bug where code cannot run is held back unverified and counted under severity in the funnel', async () => {
+test('FYI is retained without verifier spend or bug-funnel counts even when code cannot run', async () => {
 	let verifiers = 0;
 
-	stubFindings([{ ...finding('quiet problem', 'low'), line: 1 }], () => verifiers++);
+	stubFindings([{ ...finding('quiet problem', 'low'), tier: 'fyi', line: 1 }], () => verifiers++);
 
 	const result = await runAdaptiveReview({ diff: DIFF, sandboxPath: null });
 
 	expect(verifiers).toBe(0);
-	expect(result.findings).toEqual([]);
+	expect(result.findings).toMatchObject([{ tier: 'fyi' }]);
+	expect(result.findings[0].verification).toBeUndefined();
 	expect(result.unconfirmed).toEqual([]);
-	expect(result.funnel).toMatchObject({ raised: 1, unproven: 0, verified: 0, shown: 0 });
-	expect(result.funnel?.dropped.severity).toBe(1);
+	expect(result.funnel).toMatchObject({ raised: 0, unproven: 0, verified: 0, shown: 0 });
+	expect(result.funnel?.dropped.severity).toBe(0);
 });

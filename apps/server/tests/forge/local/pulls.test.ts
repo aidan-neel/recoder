@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,9 @@ import { localHeadSha } from '../../../src/forge/local/pulls';
 import { fetchPullPreview } from '../../../src/forge/pull-preview';
 import { git } from '../../helpers/git';
 import { localForgeFixture } from '../../helpers/local-forge';
+import { pullDiff } from '../../../src/forge/pulls/cached';
+import { revisionDiff } from '../../../src/sandbox/sandbox';
+import { parseUnifiedDiff } from '@recoder/shared';
 
 test('a local pull reads its head from refs/pull/N/head and counts lines from baseSha, renames included', async () => {
 	const { repo } = await localForgeFixture();
@@ -25,6 +28,40 @@ test('a local pull reads its head from refs/pull/N/head and counts lines from ba
 	]);
 
 	expect([preview.pr.additions, preview.pr.deletions, preview.pr.changedFiles]).toEqual([2, 1, 2]);
+
+	const diff = await pullDiff(repo, 7, preview.pr.headSha);
+
+	expect(diff.files.find((file) => file.path === 'new.ts')).toMatchObject({
+		status: 'renamed',
+		oldPath: 'old.ts',
+		similarity: 100,
+		hunks: [],
+		moves: [{ kind: 'renamed-file', exact: true }]
+	});
+});
+
+test('local and revision diffs detect copies from unchanged old files', async () => {
+	const { repo, pull7Head, squash } = await localForgeFixture();
+	const dir = fileURLToPath(repo.url);
+
+	git(dir, ['checkout', '--detach', pull7Head]);
+	await writeFile(join(dir, 'copy.ts'), 'export {}\n');
+	git(dir, ['add', 'copy.ts']);
+	git(dir, ['commit', '-m', 'Copy unchanged helper']);
+
+	const headSha = git(dir, ['rev-parse', 'HEAD']);
+
+	git(dir, ['update-ref', 'refs/pull/7/head', headSha]);
+
+	const local = await pullDiff(repo, 7, headSha);
+	const revision = parseUnifiedDiff(await revisionDiff({ checkoutPath: dir, mergeBaseSha: squash, headSha }));
+
+	for (const files of [local.files, revision])
+		expect(files.find((file) => file.path === 'copy.ts')).toMatchObject({
+			status: 'copied',
+			oldPath: 'helper.ts',
+			similarity: 100
+		});
 });
 
 test('a pull missing from the metadata file is a not-found GhError', async () => {

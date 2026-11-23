@@ -1,4 +1,11 @@
-import { REVIEW_CANCELLED, type Finding, type Repo, type RepoOverview, type Review } from '@recoder/shared';
+import {
+	REVIEW_CANCELLED,
+	findingTier,
+	type Finding,
+	type Repo,
+	type RepoOverview,
+	type Review
+} from '@recoder/shared';
 import { pullStates, type PullStateRecord } from '../forge/pulls/pull-states';
 import { isWatchedRepo } from '../forge/watch/scope';
 import { readAutoReviewSettings } from '../forge/watch/settings';
@@ -75,7 +82,7 @@ function pullFindings(reviews: readonly DatedReview[]): TrackedFinding[] {
 
 /** True when a finding is a bug rather than a suggestion. */
 function isBug(finding: Finding): boolean {
-	return finding.kind !== 'quality';
+	return findingTier(finding) !== 'fyi' && finding.kind !== 'quality';
 }
 
 /** True when a passed review holds a bug feedback did not quiet. */

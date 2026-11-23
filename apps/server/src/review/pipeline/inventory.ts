@@ -1,7 +1,7 @@
-import { parseUnifiedDiff, type DiffHunk, type FileDiff } from '@recoder/shared';
+import { parseUnifiedDiff, withDiffMoves, type DiffHunk, type FileDiff, type DiffMove } from '@recoder/shared';
 import { classifyPath, extraExcludes, packageBoundary, type FileClassification } from './review-scope.js';
 
-type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
+type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'copied';
 
 interface InventoryHunk {
 	id: string;
@@ -38,6 +38,7 @@ export interface ReviewInventory {
 	files: InventoryFile[];
 	hunksById: Map<string, { file: InventoryFile; hunk: InventoryHunk }>;
 	diffs: FileDiff[];
+	moves?: DiffMove[];
 	instructionFiles: InstructionFile[];
 	/** Trusted owner guidelines block (global + repo layer), when any are set. */
 	guidelines: string | null;
@@ -51,6 +52,8 @@ function hunkId(path: string, hunk: DiffHunk): string {
 }
 
 function changeStatus(file: FileDiff): ChangeStatus {
+	if (file.status) return file.status;
+
 	if (file.deletions === 0 && file.additions > 0 && file.hunks.every((h) => h.oldStart === 0 || h.oldCount === 0)) {
 		return 'added';
 	}
@@ -87,7 +90,7 @@ export function inventoryFlags(files: readonly InventoryFile[]): Pick<ReviewInve
 }
 
 export function buildInventory(diff: string, extras: string[] = extraExcludes()): ReviewInventory {
-	const diffs = parseUnifiedDiff(diff);
+	const diffs = withDiffMoves(parseUnifiedDiff(diff));
 	const files: InventoryFile[] = [];
 	const hunksById = new Map<string, { file: InventoryFile; hunk: InventoryHunk }>();
 
@@ -111,6 +114,7 @@ export function buildInventory(diff: string, extras: string[] = extraExcludes())
 
 		const entry: InventoryFile = {
 			path: file.path,
+			...(file.oldPath && { oldPath: file.oldPath }),
 			status: changeStatus(file),
 			language: classified.language,
 			packageId: packageBoundary(file.path),
@@ -130,6 +134,7 @@ export function buildInventory(diff: string, extras: string[] = extraExcludes())
 		files,
 		hunksById,
 		diffs,
+		moves: diffs.flatMap((file) => file.moves ?? []),
 		instructionFiles: [],
 		guidelines: null,
 		relatedPaths: [],
@@ -148,7 +153,18 @@ export function inventorySummary(inventory: ReviewInventory, maxFiles = 200): st
 
 	const extra = inventory.files.length > maxFiles ? `\n…${inventory.files.length - maxFiles} more files` : '';
 
-	return rows.join('\n') + extra;
+	const moves = (inventory.moves ?? [])
+		.slice(0, maxFiles)
+		.map(
+			(move) =>
+				`${move.match ?? 'modified'} ${move.kind}: ${move.fromPath}:${move.fromLines.start}-${move.fromLines.end ?? 'EOF'} → ${move.toPath}:${move.toLines.start}-${move.toLines.end ?? 'EOF'}`
+		);
+
+	return (
+		rows.join('\n') +
+		extra +
+		(moves.length ? `\nCode movement (not new code; check integration and behavior changes):\n${moves.join('\n')}` : '')
+	);
 }
 
 function eligibleFiles(inventory: ReviewInventory): InventoryFile[] {

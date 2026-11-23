@@ -1,6 +1,7 @@
 import { reviewListItem, type Review, type ReviewListItem } from '@recoder/shared';
 import { collection, postgres } from './backend';
 import { sqlite } from './sqlite';
+import { withFindingTiers } from './finding-tiers';
 
 /**
  * SQLite keeps the list projection apart from the full review. Triggers discard a changed review's projection,
@@ -12,6 +13,19 @@ export function reviewCollection() {
 
 	return {
 		...records,
+		get: async (id: string) => {
+			const review = await records.get(id);
+
+			return review && withFindingTiers(review);
+		},
+		list: async () => (await records.list()).map(withFindingTiers),
+		set: (review: Review) => records.set(withFindingTiers(review)),
+		update: (id: string, mutate: (current: Review | undefined) => Review | undefined) =>
+			records.update(id, (current) => {
+				const next = mutate(current && withFindingTiers(current));
+
+				return next && withFindingTiers(next);
+			}),
 		summaries: async (): Promise<ReviewListItem[]> => {
 			if (postgres) return (await records.list()).map(reviewListItem);
 
@@ -27,7 +41,8 @@ export function reviewCollection() {
 
 			const rows = read();
 
-			if (rows.every((row) => row.cached !== null)) return rows.map((row) => JSON.parse(row.value) as ReviewListItem);
+			if (rows.every((row) => row.cached !== null))
+				return rows.map((row) => reviewListItem(JSON.parse(row.value) as ReviewListItem));
 
 			return database
 				.transaction(() => {
@@ -36,7 +51,7 @@ export function reviewCollection() {
 					const save = database.query('INSERT INTO review_list_items (id, value) VALUES (?, ?)');
 
 					return rows.map((row) => {
-						if (row.cached !== null) return JSON.parse(row.value) as ReviewListItem;
+						if (row.cached !== null) return reviewListItem(JSON.parse(row.value) as ReviewListItem);
 
 						const item = reviewListItem(JSON.parse(row.value) as Review);
 

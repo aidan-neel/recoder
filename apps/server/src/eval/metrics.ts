@@ -1,4 +1,4 @@
-import { findingKind, type Finding, type FindingSeverity } from '@recoder/shared';
+import { findingKind, findingTier, type Finding, type FindingSeverity } from '@recoder/shared';
 
 /** The fields of a finding the eval keeps: enough to name it and to tell identity drift from finding drift. */
 export type EvalFinding = Pick<
@@ -14,6 +14,7 @@ export type EvalFinding = Pick<
 	| 'smell'
 	| 'symbol'
 	| 'severity'
+	| 'tier'
 	| 'title'
 	| 'verification'
 	| 'memberIds'
@@ -193,6 +194,8 @@ function rankFindings(
 
 /** Every stability measure over the findings of N completed runs of the same PR. */
 export function stabilityMetrics(runs: readonly (readonly EvalFinding[])[]): StabilityMetrics {
+	runs = runs.map((run) => run.filter((finding) => findingTier(finding) !== 'fyi'));
+
 	const keySets = (key: (finding: EvalFinding) => string) => runs.map((run) => new Set(run.map(key)));
 
 	return {

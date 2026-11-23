@@ -128,6 +128,9 @@ export function verifierUserPrompt(
 		`Finding ${candidate.candidateId} (${candidate.severity}, ${candidate.agent}) at ${candidateLocation(candidate)}`,
 		candidate.title ? `Title: ${candidate.title}` : '',
 		claimBlock(candidate.claim),
+		candidate.move
+			? `Exact code movement from ${candidate.move.relation.fromPath}:${candidate.move.relation.fromLines.start}. Claimed behavior change: ${candidate.move.reason}. Establish that the old behavior was correct and the new location introduces this failure; unchanged pre-existing behavior is not a new defect.`
+			: '',
 		`Claim:\n${candidate.message}`,
 		cited
 			? `Evidence the reviewer cited (reuse a run id if it already proves the claim):\n${cited}`
