@@ -87,6 +87,8 @@ export const FileCard = memo(function FileCard({
 	const [open, setOpen] = useState((!viewed && !large && !part?.moved) || target !== null);
 	const oldPath = file.status === 'renamed' || file.status === 'copied' ? (file.oldPath ?? null) : null;
 	const [seen, setSeen] = useState({ viewed, target, fold });
+	const moveSpans = part ? file.hunks.flatMap((hunk) => spansIn(hunk, spans)) : [];
+	const note = moveSpans.length === 0 ? (part?.note ?? null) : null;
 
 	if (viewed !== seen.viewed || target !== seen.target || fold !== seen.fold) {
 		setSeen({ viewed, target, fold });
@@ -138,7 +140,12 @@ export const FileCard = memo(function FileCard({
 					</label>
 				</div>
 			</header>
-			{open && part?.explanation ? <p className="hunk-why">{part.explanation}</p> : null}
+			{(open && part?.explanation) || note ? (
+				<div className="hunk-why">
+					{open && part?.explanation ? <p>{part.explanation}</p> : null}
+					{note ? <p className="hunk-note">{note}</p> : null}
+				</div>
+			) : null}
 			{open ? (
 				<div id={bodyId} className="file-body">
 					{near ? (
@@ -159,9 +166,9 @@ export const FileCard = memo(function FileCard({
 			{!open && part?.moved && !viewed ? (
 				<div id={bodyId} className="file-moved">
 					<div className="file-moved-notes">
-						{file.hunks.flatMap((hunk) =>
-							spansIn(hunk, spans).map((span) => <MoveNote key={`${span.direction}:${span.start}`} span={span} />)
-						)}
+						{moveSpans.map((span) => (
+							<MoveNote key={`${span.direction}:${span.start}`} span={span} />
+						))}
 					</div>
 					<Button variant="ghost" size="sm" className="file-moved-show" onClick={() => setOpen(true)}>
 						Show {plural(lineCount(file), 'line')}

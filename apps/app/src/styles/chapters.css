@@ -56,6 +56,12 @@
 	font-size: var(--font-size-label);
 	line-height: 19px;
 }
+.hunk-why > p {
+	margin: 0;
+}
+.hunk-note {
+	color: var(--text-muted);
+}
 .hunk-why::before {
 	position: absolute;
 	top: 9px;

@@ -6,6 +6,7 @@ import {
 	splitCategoryTag,
 	type BaseComparisonResult,
 	type Finding,
+	type MoveRange,
 	type FindingVerification,
 	type Review,
 	type VerificationBaseline
@@ -13,7 +14,7 @@ import {
 
 import type { Vote } from '../pull/session-state';
 import { TIER_LABELS, TIER_TONES } from './tiers';
-import type { BugProof, BugView } from './types';
+import type { BugMove, BugMoveSide, BugProof, BugView } from './types';
 
 /** How the proving command ended on the base branch, by what the comparison found. */
 const BASE_SENTENCE: Record<BaseComparisonResult, string> = {
@@ -56,6 +57,31 @@ function proofOf(verification: FindingVerification | undefined): BugProof | null
 		expected: null,
 		output: verification.reason,
 		base: null
+	};
+}
+
+/** One side of a move as a file chip names it; a whole file has no lines. */
+function moveSide(path: string, range: MoveRange): BugMoveSide {
+	if (range.end === null) return { path, lines: null, line: null };
+
+	return {
+		path,
+		lines: range.end === range.start ? String(range.start) : `${range.start}-${range.end}`,
+		line: range.start
+	};
+}
+
+function moveOf(finding: Finding): BugMove | null {
+	if (!finding.move) return null;
+
+	const { relation, reason } = finding.move;
+
+	return {
+		kind: relation.kind === 'renamed-file' ? 'renamed' : relation.kind,
+		from: moveSide(relation.fromPath, relation.fromLines),
+		to: moveSide(relation.toPath, relation.toLines),
+		exact: relation.exact,
+		reason
 	};
 }
 
@@ -108,6 +134,6 @@ export function bugView(finding: Finding, review: Pick<Review, 'findingComments'
 		decision: finding.decision ?? null,
 		posted: posted ? { url: posted.url } : null,
 		vote,
-		moveReason: finding.move?.reason ?? null
+		move: moveOf(finding)
 	};
 }

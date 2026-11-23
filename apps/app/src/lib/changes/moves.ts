@@ -55,13 +55,14 @@ function departures(file: FileDiff, moves: readonly DiffMove[]): MoveSpan[] {
 		}));
 }
 
+/** The file the diff shows for a path on one side of the change: by its path before the change for `old`. */
+export function diffFileAt(files: readonly FileDiff[], path: string, side: 'old' | 'new'): FileDiff | undefined {
+	return files.find((file) => (side === 'old' ? (file.oldPath ?? file.path) : file.path) === path);
+}
+
 /** Names a span's other side as the diff does: a block's old place by the file's path now, if it was renamed. */
 function placed(span: MoveSpan, files: readonly FileDiff[]): MoveSpan {
-	const file = files.find((candidate) =>
-		span.direction === 'from'
-			? (candidate.oldPath ?? candidate.path) === span.other.path
-			: candidate.path === span.other.path
-	);
+	const file = diffFileAt(files, span.other.path, span.direction === 'from' ? 'old' : 'new');
 
 	return { ...span, other: { ...span.other, path: file?.path ?? span.other.path, inDiff: Boolean(file) } };
 }

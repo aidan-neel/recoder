@@ -17,6 +17,8 @@ export interface ChapterHunk {
 	explanation: string | null;
 	/** True when the hunk only moves code, so it reads as a note and not as new code. A renamed file is never one. */
 	moved: boolean;
+	/** Where the code came from, as the review notes a hunk that only moves code or a file renamed as it was. */
+	note: string | null;
 	/** This hunk among its file's hunks in reading order, from 1, and the other chapters that hold the rest. */
 	place: { at: number; of: number; elsewhere: number[] };
 }
@@ -46,7 +48,7 @@ function entries(files: readonly FileDiff[]): Map<string, Draft> {
 		if (file.hunks.length === 0) {
 			const id = `${file.path}:renamed-file`;
 
-			known.set(id, { id, path: file.path, index: null, line: null, explanation: null, moved: false });
+			known.set(id, { id, path: file.path, index: null, line: null, explanation: null, moved: false, note: null });
 		}
 
 		file.hunks.forEach((hunk, index) => {
@@ -54,7 +56,7 @@ function entries(files: readonly FileDiff[]): Map<string, Draft> {
 
 			const line = hunk.newCount > 0 ? hunk.newStart : hunk.oldStart;
 
-			known.set(id, { id, path: file.path, index, line, explanation: null, moved: false });
+			known.set(id, { id, path: file.path, index, line, explanation: null, moved: false, note: null });
 		});
 	}
 
@@ -89,6 +91,11 @@ function placed(chapters: { number: number; hunks: Draft[] }[]): Chapter['hunks'
 	);
 }
 
+/** The review writes a note as a phrase (`moved from src/a.ts`); it reads as a sentence start. */
+function sentence(note: string): string {
+	return note.charAt(0).toUpperCase() + note.slice(1);
+}
+
 /**
  * The guide's chapters over the diff as it is now. A hunk the guide names that the diff no longer has is dropped, a
  * hunk named twice reads where it is named first, and every hunk the guide leaves out reads in a last chapter, in
@@ -110,7 +117,12 @@ export function guideChapters(guide: DiffGuide, files: readonly FileDiff[]): Cha
 			taken.add(entry.id);
 
 			return [
-				{ ...hunk, explanation: entry.explanation ?? null, moved: entry.note !== undefined && hunk.index !== null }
+				{
+					...hunk,
+					explanation: entry.explanation ?? null,
+					moved: entry.note !== undefined && hunk.index !== null,
+					note: entry.note ? sentence(entry.note) : null
+				}
 			];
 		})
 	}));

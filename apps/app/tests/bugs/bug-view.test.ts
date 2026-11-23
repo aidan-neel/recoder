@@ -133,6 +133,36 @@ describe('bugView fields', () => {
 			vote: 'useful'
 		});
 	});
+
+	test('a finding on moved code names both places with their lines, and a renamed file with none', () => {
+		const block = {
+			fromPath: 'src/routes/projects.ts',
+			fromLines: { start: 30, end: 37 },
+			toPath: 'src/http/client-key.ts',
+			toLines: { start: 3, end: 3 },
+			kind: 'moved' as const,
+			exact: false
+		};
+
+		const renamed = { ...block, fromLines: { start: 1, end: null }, toLines: { start: 1, end: null } };
+
+		expect(bugView(finding({ move: { relation: block, reason: 'Why.' } }), NO_COMMENTS, null).move).toEqual({
+			kind: 'moved',
+			from: { path: 'src/routes/projects.ts', lines: '30-37', line: 30 },
+			to: { path: 'src/http/client-key.ts', lines: '3', line: 3 },
+			exact: false,
+			reason: 'Why.'
+		});
+
+		const view = bugView(
+			finding({ move: { relation: { ...renamed, kind: 'renamed-file', exact: true }, reason: 'Why.' } }),
+			NO_COMMENTS,
+			null
+		);
+
+		expect(view.move).toMatchObject({ kind: 'renamed', from: { lines: null, line: null } });
+		expect(bugView(finding(), NO_COMMENTS, null).move).toBeNull();
+	});
 });
 
 describe('baseSentence', () => {
