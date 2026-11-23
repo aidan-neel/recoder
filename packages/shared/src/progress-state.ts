@@ -5,6 +5,7 @@
 import type { Review } from './review';
 import type {
 	ReviewAssignment,
+	ReviewCandidate,
 	ReviewChatMessage,
 	ReviewProgress,
 	ReviewReasoningEntry,
@@ -26,6 +27,7 @@ export interface ProgressMessage {
 		task?: ReviewTask;
 		assignment?: ReviewAssignment;
 		assignments?: ReviewAssignment[];
+		candidate?: ReviewCandidate;
 		reasoning?: Omit<ReviewReasoningEntry, 'at'> & { at?: string };
 		tool?: ReviewToolCall;
 		chatMessage?: ReviewChatMessage;
@@ -105,6 +107,16 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 		next.assignments = list;
 	}
 
+	if (event.type === 'candidate' && event.data?.candidate) {
+		const candidate = event.data.candidate;
+		const list = [...(current.candidates ?? [])];
+		const index = list.findIndex((item) => item.id === candidate.id);
+
+		if (index >= 0) list[index] = candidate;
+		else list.push(candidate);
+		next.candidates = list.slice(-500);
+	}
+
 	if (event.type === 'reasoning' && event.data?.reasoning) {
 		const prior = current.reasoning?.find((item) => item.id === event.data?.reasoning?.id);
 
@@ -143,6 +155,7 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 		event.type !== 'reasoning' &&
 		event.type !== 'message' &&
 		event.type !== 'finding' &&
+		event.type !== 'candidate' &&
 		!(event.type === 'tool' && event.data?.tool?.status === 'running')
 	) {
 		next.activity = [
