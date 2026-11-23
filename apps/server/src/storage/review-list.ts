@@ -1,7 +1,8 @@
-import { reviewListItem, type Review, type ReviewListItem } from '@recoder/shared';
+import { latestReviews, reviewListItem, type Review, type ReviewListItem } from '@recoder/shared';
 import { collection, postgres } from './backend';
 import { sqlite } from './sqlite';
 import { withFindingTiers } from './finding-tiers';
+import { cacheReviewList } from './review-list-response';
 
 /**
  * SQLite keeps the list projection apart from the full review. Triggers discard a changed review's projection,
@@ -10,14 +11,35 @@ import { withFindingTiers } from './finding-tiers';
  */
 export function reviewCollection() {
 	const records = collection<Review>('reviews');
+	const cachedLatest = cacheReviewList<ReadonlyMap<string, ReviewListItem>>();
 
-	return {
+	async function get(id: string): Promise<Review | undefined>;
+	async function get(id: string, unlessStatus: Review['status']): Promise<Review | null | undefined>;
+
+	/** An unchanged status returns null; a missing review returns undefined. */
+	async function get(id: string, unlessStatus?: Review['status']): Promise<Review | null | undefined> {
+		if (!postgres && unlessStatus !== undefined) {
+			const row = sqlite()
+				.query<{ value: string | null }, [Review['status'], string]>(
+					"SELECT CASE WHEN json_extract(value, '$.status') = ? THEN NULL ELSE value END AS value FROM reviews WHERE id = ?"
+				)
+				.get(unlessStatus, id);
+
+			if (!row) return;
+
+			return row.value === null ? null : withFindingTiers(JSON.parse(row.value) as Review);
+		}
+
+		const review = await records.get(id);
+
+		if (unlessStatus !== undefined && review?.status === unlessStatus) return null;
+
+		return review && withFindingTiers(review);
+	}
+
+	const reviews = {
 		...records,
-		get: async (id: string) => {
-			const review = await records.get(id);
-
-			return review && withFindingTiers(review);
-		},
+		get,
 		list: async () => (await records.list()).map(withFindingTiers),
 		set: (review: Review) => records.set(withFindingTiers(review)),
 		update: (id: string, mutate: (current: Review | undefined) => Review | undefined) =>
@@ -73,5 +95,10 @@ export function reviewCollection() {
 				})
 				.immediate();
 		}
+	};
+
+	return {
+		...reviews,
+		latestSummaries: () => cachedLatest(async () => latestReviews(await reviews.summaries()))
 	};
 }

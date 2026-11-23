@@ -53,6 +53,31 @@ test('a write from another connection invalidates a persisted summary', async ()
 	expect((await db.reviews.summaries())[0].summary).toBe('CLI');
 });
 
+test('the newest pull review index sees a second connection change which review outranks a draft', async () => {
+	const passed = testReview({ status: 'passed', updatedAt: '2026-01-01T00:00:00Z' });
+	const draft = { ...passed, id: 'draft', status: 'draft' as const, updatedAt: '2026-01-02T00:00:00Z' };
+	const key = `${passed.repoId}#${passed.prNumber}`;
+
+	track(passed.id);
+	track(draft.id);
+	await db.reviews.set(passed);
+	await db.reviews.set(draft);
+
+	expect((await db.reviews.latestSummaries()).get(key)?.id).toBe(passed.id);
+
+	const other = new Database(join(serverDataDir(), 'recoder.db'));
+
+	try {
+		other
+			.query('UPDATE reviews SET value = ? WHERE id = ?')
+			.run(JSON.stringify({ ...draft, status: 'passed' }), draft.id);
+	} finally {
+		other.close();
+	}
+
+	expect((await db.reviews.latestSummaries()).get(key)?.id).toBe(draft.id);
+});
+
 test('deleted and cleared reviews leave no summaries when their ids are reused', async () => {
 	const review = testReview();
 
