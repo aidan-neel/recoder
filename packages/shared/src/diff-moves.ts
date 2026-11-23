@@ -71,8 +71,8 @@ function blocks(files: readonly FileDiff[], type: DiffLine['type']): Block[] {
 	return result.filter((block) => block.lines.length >= 3);
 }
 
-function anchor(block: Block, index: number): string {
-	return JSON.stringify(block.lines.slice(index, index + 3).map((line) => line.text));
+function anchor({ lines }: Block, index: number): string {
+	return JSON.stringify([lines[index].text, lines[index + 1].text, lines[index + 2].text]);
 }
 
 /** Maximal exact blocks, seeded by three non-blank lines. Repeated seeds fail closed rather than exploding in cost. */
@@ -88,14 +88,19 @@ function exactMatches(sources: Block[], targets: Block[]): Match[] {
 			const entries = index.get(key);
 
 			if (entries === null) continue;
-			if (entries && entries.length >= 32) index.set(key, null);
-			else index.set(key, [...(entries ?? []), { block, offset }]);
+			if (!entries) index.set(key, [{ block, offset }]);
+			else if (entries.length >= 32) index.set(key, null);
+			else entries.push({ block, offset });
 		}
 	}
 
 	for (const [targetId, target] of targets.entries()) {
 		for (let offset = 0; offset <= target.lines.length - 3; offset++) {
-			for (const { block: source, offset: start } of index.get(anchor(target, offset)) ?? []) {
+			const entries = index.get(anchor(target, offset));
+
+			if (!entries) continue;
+
+			for (const { block: source, offset: start } of entries) {
 				const diagonal = `${ids.get(source)}:${targetId}:${start - offset}`;
 
 				if ((covered.get(diagonal) ?? -1) >= offset + 2) continue;

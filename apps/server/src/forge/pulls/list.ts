@@ -55,11 +55,13 @@ export async function listOpenPulls(
 	return { items, failures, nextCursors, openCounts, fetchedAt: new Date().toISOString() };
 }
 
-/** Looks up each pull request's newest review; a real review outranks a newer empty draft. */
+/** Uses the stored projection when supplied; otherwise a real review outranks a newer empty draft. */
 export function newestReviews(
 	reviews: ReviewListItem[] | ReadonlyMap<string, ReviewListItem>
 ): (repoId: string, n: number) => ReviewListItem | null {
-	const latest = Array.isArray(reviews) ? latestReviews(reviews) : reviews;
+	if (!Array.isArray(reviews)) return (repoId, n) => reviews.get(`${repoId}#${n}`) ?? null;
+
+	const latest = latestReviews(reviews);
 
 	return (repoId, n) => {
 		const review = latest.get(`${repoId}#${n}`);
