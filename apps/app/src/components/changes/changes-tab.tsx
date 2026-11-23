@@ -171,7 +171,7 @@ function reveal(host: HTMLElement, target: ChangesTarget, onDone: (element: HTML
  */
 function DiffSkeleton() {
 	return (
-		<Skeleton loading>
+		<Skeleton loading waited>
 			<div className="changes-stack">
 				{LOADING_DIFF.map((file) => (
 					<FileCard
