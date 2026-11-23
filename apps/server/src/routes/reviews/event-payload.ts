@@ -46,7 +46,14 @@ export class ReviewEventPayloads {
 	async event(event: ReviewEvent) {
 		const terminal = !event.step && (event.type === 'done' || event.type === 'error');
 		const restarted = event.data?.reset === true;
-		const current = await db.reviews.get(this.review.id);
+
+		const current =
+			terminal || restarted
+				? await db.reviews.get(this.review.id)
+				: await db.reviews.get(this.review.id, this.lastStatus);
+
+		if (current === null) return event;
+
 		const statusChanged = current?.status !== this.lastStatus;
 
 		if (current) this.lastStatus = current.status;

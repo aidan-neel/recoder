@@ -71,6 +71,31 @@ test('slow subscriber reads cannot reorder live review events', async () => {
 	}
 });
 
+test('live events send the review when its status changes and still send a snapshot on completion', async () => {
+	const { review, reader, next } = await openReviewStream();
+
+	try {
+		emitReviewEvent(review.id, { type: 'log', message: 'Unchanged' });
+		expect(await next()).not.toHaveProperty('review');
+
+		await db.reviews.update(review.id, (current) => ({ ...current!, status: 'failed' }));
+		emitReviewEvent(review.id, { type: 'log', message: 'Status changed' });
+		expect(await next()).toMatchObject({ message: 'Status changed', review: { id: review.id, status: 'failed' } });
+
+		emitReviewEvent(review.id, { type: 'error', message: 'Finished' });
+
+		expect(await next()).toMatchObject({
+			type: 'error',
+			review: { id: review.id, status: 'failed' },
+			snapshot: { sequence: 3 }
+		});
+	} finally {
+		await reader.cancel();
+		await db.reviews.delete(review.id);
+		await clearReviewEvents(review.id);
+	}
+});
+
 test('a subscriber database failure closes its stream without stopping event persistence', async () => {
 	const { review, reader } = await openReviewStream();
 

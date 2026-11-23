@@ -31,7 +31,7 @@ app.get(
 		const [entry, methods, reviews] = await Promise.all([
 			pullEntryStale(repo, n, PAGE_STALE_MS),
 			mergeMethods(repo),
-			db.reviews.summaries()
+			db.reviews.latestSummaries()
 		]);
 
 		const page: PullPage = {

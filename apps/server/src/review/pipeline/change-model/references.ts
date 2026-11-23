@@ -18,6 +18,9 @@ const MATCHES_PER_FILE = 4;
 const MAX_MATCH_LINES = 400;
 const TEXT_CHARS = 120;
 const MIN_NAME_CHARS = 3;
+const SEARCH_CONCURRENCY = 6;
+/** Small trees need no additional Git worker threads when all search slots are already in use. */
+const SINGLE_THREAD_FILE_LIMIT = 128;
 /** Files parsed to classify one symbol's hits, and in all; hits in the rest keep a line-based guess. */
 const CLASSIFIED_FILES_PER_SYMBOL = 20;
 const MAX_CLASSIFIED_FILES = 150;
@@ -58,13 +61,14 @@ type Searched = SymbolRange & {
 };
 
 /** Every line at the checkout that names `name` as a whole word, sorted and capped. */
-async function grepName(root: string, name: string, signal: AbortSignal): Promise<NameHits> {
+async function grepName(root: string, name: string, signal: AbortSignal, singleThread: boolean): Promise<NameHits> {
 	const out = await git(
 		root,
 		[
 			'-c',
 			'core.quotePath=false',
 			'grep',
+			...(singleThread ? ['--threads=1'] : []),
 			'-z',
 			'-n',
 			'-w',
@@ -296,7 +300,8 @@ export async function findUsage(
 		byCodePoint
 	);
 
-	const hits = await mapLimit(names, 6, (name) => grepName(root, name, signal));
+	const singleThread = names.length >= SEARCH_CONCURRENCY && tracked.length <= SINGLE_THREAD_FILE_LIMIT;
+	const hits = await mapLimit(names, SEARCH_CONCURRENCY, (name) => grepName(root, name, signal, singleThread));
 	const byName = new Map(names.map((name, index) => [name, hits[index]]));
 
 	const outside = symbols.map((symbol, index) =>

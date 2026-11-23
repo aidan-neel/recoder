@@ -25,7 +25,7 @@ const REPO_TIMEOUT_MS = 25_000;
  */
 export async function listOpenPulls(
 	repos: Repo[],
-	reviews: ReviewListItem[],
+	reviews: ReviewListItem[] | ReadonlyMap<string, ReviewListItem>,
 	loadPulls: (repo: Repo) => Promise<OpenPulls>
 ): Promise<PullList> {
 	const reviewOf = newestReviews(reviews);
@@ -56,8 +56,10 @@ export async function listOpenPulls(
 }
 
 /** Looks up each pull request's newest review; a real review outranks a newer empty draft. */
-export function newestReviews(reviews: ReviewListItem[]): (repoId: string, n: number) => ReviewListItem | null {
-	const latest = latestReviews(reviews);
+export function newestReviews(
+	reviews: ReviewListItem[] | ReadonlyMap<string, ReviewListItem>
+): (repoId: string, n: number) => ReviewListItem | null {
+	const latest = Array.isArray(reviews) ? latestReviews(reviews) : reviews;
 
 	return (repoId, n) => {
 		const review = latest.get(`${repoId}#${n}`);
