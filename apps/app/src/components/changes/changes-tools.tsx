@@ -18,7 +18,9 @@ import { useBugsView } from '@/lib/bugs/use-bugs';
 import { useDiffView } from '@/lib/changes/diff-view';
 import { readingOrder } from '@/lib/changes/places';
 import { useSideOpen } from '@/lib/changes/side-open';
-import { useChangesNav, useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
+import type { Chapter } from '@/lib/changes/chapters';
+import type { GuidePart } from '@/lib/changes/types';
+import { useChangesNav, useChapters, useFileTree, useGuide, useViewedFiles } from '@/lib/changes/use-changes';
 import { useSessionData } from '@/lib/pull/pull-session';
 import { useKeys } from '@/lib/shell/use-keys';
 
@@ -40,6 +42,17 @@ const LAYOUTS = [
 	{ value: 'split', label: <span className="changes-tool-label">Split</span>, icon: <ColumnsIcon aria-hidden /> }
 ];
 
+/** A chapter as the file menu groups it: its title and its files, each once, in reading order. */
+function chapterPart(chapter: Chapter): GuidePart {
+	return {
+		id: chapter.id,
+		title: chapter.title,
+		reason: chapter.explanation ?? '',
+		paths: [...new Set(chapter.hunks.map((hunk) => hunk.path))],
+		found: { bugs: 0, warnings: 0, suggestions: 0 }
+	};
+}
+
 interface ChangesToolsProps {
 	mode: ChangesMode;
 	onModeChange: (mode: ChangesMode) => void;
@@ -57,6 +70,7 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 	const viewed = useViewedFiles();
 	const tree = useFileTree();
 	const guide = useGuide();
+	const chapters = useChapters();
 	const bugs = useBugsView();
 	const nav = useChangesNav();
 	const target = useSessionData((data) => data.changesTarget);
@@ -68,7 +82,15 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 	const findings = useMemo(() => readingOrder(bugs.open, tree.order), [bugs.open, tree.order]);
 	const at = target?.findingId ? findings.findIndex((bug) => bug.id === target.findingId) : -1;
 	const shut = fold?.open === false;
-	const guided = mode === 'guide' && guide.length > 0;
+
+	const menuParts =
+		mode !== 'guide'
+			? null
+			: chapters.length > 0
+				? chapters.map(chapterPart)
+				: guide.length > 0
+					? partsWithRest(guide, tree.order)
+					: null;
 
 	/** Goes to the finding `by` places on from the one last gone to, wrapping; the first or last when none was. */
 	function stepFinding(by: 1 | -1): false | void {
@@ -198,7 +220,7 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 				open={menuOpen}
 				onOpenChange={setMenuOpen}
 				groups={tree.groups}
-				parts={guided ? partsWithRest(guide, tree.order) : null}
+				parts={menuParts}
 				current={current}
 				onOpen={(path) => nav.goTo(path)}
 			/>

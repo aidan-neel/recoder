@@ -10,6 +10,7 @@ import type {
 
 import { sampleTime } from './sample-clock';
 import { CLIENT_KEY_MOVE } from './sample-diff';
+import { SAMPLE_GUIDE } from './sample-guide';
 
 const AT = sampleTime('2026-10-13T09:12:00.000Z');
 
@@ -280,6 +281,7 @@ export const SAMPLE_REVIEW: Review = {
 	summary:
 		'Adds per-tenant rate limiting to the public API: a token bucket of 100 requests a minute for each tenant, a `429` with `Retry-After` when it runs out, and per-minute usage counts in Redis. Health checks stay unlimited.',
 	findings: FINDINGS,
+	diffGuide: SAMPLE_GUIDE,
 	questions: REPORT,
 	runs: [],
 	source: 'github',

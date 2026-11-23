@@ -892,6 +892,27 @@ tree.
   tab row hides or shows it, kept per browser. Under 860px of page the
   sidebar steps out and the Files button stands in for it. Bars stand in
   while the diff loads; a diff with no files has no sidebar.
+- **Guide order** reads the diff as the review's reading guide (`diffGuide`):
+  numbered chapters, each a title and one or two sentences on why its hunks
+  belong together, then its hunks as cards, so a file split across
+  chapters shows only its own hunks in each. A hunk card's header names the
+  file and its lines (`lines 18–24`) and, on its right, where the file's
+  other hunks read (`hunk 1 of 2 in this file · the other is in 04`) or
+  `new file`; under it, behind an accent rule, the sentence on what the hunk
+  does. A hunk that only moves code stays shut on its move note with Show N
+  lines. Hunks the guide leaves out read in a last chapter, Everything else.
+  The sidebar becomes the guide's outline: `5 chapters · 13 hunks` and the
+  guide's state (Refining while the review writes it, Refined once the model
+  reordered it), each chapter by number and title with its hunks under it as
+  file chips and their first line; the chapter being read is marked as the
+  diff scrolls. The review lays the seed down at once and the refined guide
+  replaces it later: the hunk card at the top of the diff keeps its place on
+  screen through the swap, and a scroll, key or touch lets go at once.
+  Switching between Files and Guide keeps the file being read at the top,
+  and from the top it stays at the top. `j` and `k` step through hunks. A
+  review with no `diffGuide` falls back to the plan's file-level parts. The
+  guide's state sits in the outline, not the tab row, which has no room for
+  it at 1280–1440.
 - **Tab row tools**, left to right: the sidebar button; Files (`t`, shown
   while the sidebar is not) opens a search dialog of every file by folder
   (or by the guide's parts in guide order), each with its finding dot and

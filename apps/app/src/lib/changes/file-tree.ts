@@ -17,7 +17,7 @@ interface Folder {
 }
 
 /** How a file changed: every hunk starts from nothing (added), or leaves nothing (deleted). */
-function fileChange(file: FileDiff): FileChange {
+export function fileChange(file: FileDiff): FileChange {
 	if (file.hunks.length === 0) return 'modified';
 	if (file.hunks.every((hunk) => hunk.oldStart === 0 && hunk.oldCount === 0)) return 'added';
 	if (file.hunks.every((hunk) => hunk.newStart === 0 && hunk.newCount === 0)) return 'deleted';

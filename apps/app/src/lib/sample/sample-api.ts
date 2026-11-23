@@ -26,6 +26,7 @@ import { createSampleSkills } from './sample-skills';
 import { sampleClaims } from './sample-claims';
 import { sampleDescription, sampleRedescribe } from './sample-description';
 import { sampleCommits } from './sample-pulls';
+import { SAMPLE_GUIDE, SAMPLE_SEED_GUIDE } from './sample-guide';
 import { SAMPLE_REVIEW } from './sample-review';
 import { adoptSampleRun, playSampleRun, type RunScript, type SampleRun } from './sample-run';
 import { createSampleWorld, type SampleWorld } from './sample-world';
@@ -35,6 +36,7 @@ function sampleScript(world: SampleWorld, review: Review): RunScript {
 	return {
 		paths: world.diff(review.repoId, review.prNumber).map((file) => file.path),
 		claims: sampleClaims(review, SAMPLE_REVIEW.findings),
+		guide: { seed: SAMPLE_SEED_GUIDE, refined: SAMPLE_GUIDE },
 		ending: { findings: structuredClone(SAMPLE_REVIEW.findings), summary: SAMPLE_REVIEW.summary ?? '' }
 	};
 }

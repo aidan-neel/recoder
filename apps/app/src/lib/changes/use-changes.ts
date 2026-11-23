@@ -1,12 +1,13 @@
 'use client';
 
-import type { FileDiff } from '@recoder/shared';
+import type { DiffGuide, FileDiff } from '@recoder/shared';
 import type { TreeRow } from '@recoder/ui';
 import { useCallback, useMemo } from 'react';
 
 import { useSession, useSessionData } from '../pull/pull-session';
 import type { FoundCounts } from '../bugs/tiers';
 import { loaded } from '../pull/session-state';
+import { guideChapters, type Chapter } from './chapters';
 import { fileGroups, sideRows, treeOrder } from './file-tree';
 import { guideParts, openBugsByFile } from './guide';
 import type { ChangesNav, FileTreeView, GuidePart, ViewedFilesView } from './types';
@@ -93,6 +94,22 @@ export function useSideRows(query: string): { rows: TreeRow[]; toggleFolder: (pa
 	);
 
 	return { rows, toggleFolder };
+}
+
+/** The followed review's reading guide: the one it streams while it runs, else the one it kept; null when it has none. */
+export function useDiffGuide(): DiffGuide | null {
+	const live = useSessionData((data) => data.progress?.diffGuide);
+	const kept = useSessionData((data) => data.review?.diffGuide);
+
+	return live ?? kept ?? null;
+}
+
+/** The guide's chapters over the diff as loaded; empty without a guide. */
+export function useChapters(): Chapter[] {
+	const guide = useDiffGuide();
+	const files = useDiffFiles();
+
+	return useMemo(() => (guide ? guideChapters(guide, files) : []), [guide, files]);
 }
 
 /** The review plan's parts in plan order; empty until the review planned. */

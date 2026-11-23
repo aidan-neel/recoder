@@ -16,6 +16,19 @@ export interface FileEntry {
 }
 
 /** The files that sit in one folder; `folder` is empty for the top of the repository. */
+/** A guide hunk's card: one hunk of a file, named by its lines and placed among the file's other hunks. */
+export interface CardPart {
+	/** The hunk's id, so the guide can find its card. */
+	id: string;
+	/** `lines 18–24`; null for a file renamed with no line changed. */
+	lines: string | null;
+	/** `hunk 1 of 2 in this file · the other is in 04`, `new file`, or null. */
+	where: string | null;
+	explanation: string | null;
+	/** True when the hunk only moves code: the card starts shut on its move note. */
+	moved: boolean;
+}
+
 export interface FileGroup {
 	folder: string;
 	files: FileEntry[];

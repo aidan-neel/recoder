@@ -26,6 +26,8 @@ interface FileDiffBodyProps {
 	target: ChangesTarget | null;
 	/** Blocks the change moved into or out of this file. */
 	spans: readonly MoveSpan[];
+	/** True for a guide hunk's card, which names its lines in its header, so no row counts the lines above it. */
+	part?: boolean;
 }
 
 /** The new-side line a bug's note sits under: the end of its range. */
@@ -67,7 +69,7 @@ function codeLines(
 }
 
 /** A moved or copied block's place on its other side, and a way there when the diff shows that file. */
-function MoveNote({ span }: { span: MoveSpan }) {
+export function MoveNote({ span }: { span: MoveSpan }) {
 	const nav = useChangesNav();
 	const verb = span.direction === 'to' ? 'Moved to' : span.kind === 'copied' ? 'Copied from' : 'Moved from';
 
@@ -191,7 +193,8 @@ export const FileDiffBody = memo(function FileDiffBody({
 	bugs,
 	bugsHref,
 	target,
-	spans
+	spans,
+	part = false
 }: FileDiffBodyProps) {
 	const lang = langForPath(file.path);
 	const loose = bugs.filter((bug) => !anchored(file, bug));
@@ -226,7 +229,7 @@ export const FileDiffBody = memo(function FileDiffBody({
 					lang={lang}
 					bugs={bugs}
 					bugsHref={bugsHref}
-					hidden={hidden[index]}
+					hidden={part ? 0 : hidden[index]}
 					fresh={fresh}
 					target={target}
 					spans={spans}
