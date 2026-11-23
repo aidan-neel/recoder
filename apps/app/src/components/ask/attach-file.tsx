@@ -11,9 +11,9 @@ import {
 	DiffStat,
 	FileIcon,
 	focusComposerField,
+	Icon,
 	type CommandHint
 } from '@recoder/ui';
-import { PlusIcon } from '@phosphor-icons/react';
 import { useRef, useState } from 'react';
 
 import { useSessionData } from '@/lib/pull/pull-session';
@@ -51,7 +51,7 @@ export function AttachFile({ onAttach }: { onAttach: (path: string) => void }) {
 				disabled={!files || files.length === 0}
 				onClick={() => setOpen(true)}
 			>
-				<PlusIcon />
+				<Icon name="add" />
 			</ComposerTool>
 			<CommandDialog
 				open={open}

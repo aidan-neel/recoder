@@ -1,9 +1,7 @@
 'use client';
 
-import { HoverList, RowButton } from '@recoder/ui';
-import { BookOpenIcon, ClockIcon, FolderSimpleIcon, GitPullRequestIcon, PlusIcon } from '@phosphor-icons/react';
+import { HoverList, Icon, RowButton, type IconName } from '@recoder/ui';
 import { usePathname } from '@/lib/shell/navigation';
-import type { ComponentType } from 'react';
 
 import { useApi } from '@/lib/api/client';
 import { useIntent } from '@/lib/shell/intent';
@@ -17,7 +15,7 @@ interface NavRow {
 	id: Place;
 	label: string;
 	href: string;
-	icon: ComponentType<{ className?: string }>;
+	icon: IconName;
 }
 
 /**
@@ -33,8 +31,8 @@ const WARM: Partial<Record<Place, () => void>> = {
 
 /** The places only the live app has. */
 const LIVE_ROWS: NavRow[] = [
-	{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: ClockIcon },
-	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: BookOpenIcon }
+	{ id: 'automations', label: 'Automations', href: AUTOMATIONS_HREF, icon: 'schedule' },
+	{ id: 'guidelines', label: 'Guidelines', href: GUIDELINES_HREF, icon: 'menu_book' }
 ];
 
 /** The place the address belongs to, or null on a page the sidebar does not list, such as a chat. */
@@ -59,9 +57,9 @@ export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 	const active = placeOf(usePathname(), base);
 
 	const rows: NavRow[] = [
-		{ id: 'new', label: 'New review', href: newReviewHref(base), icon: PlusIcon },
-		{ id: 'pulls', label: 'Pull requests', href: pullsHref(base), icon: GitPullRequestIcon },
-		{ id: 'repos', label: 'Repositories', href: reposHref(base), icon: FolderSimpleIcon },
+		{ id: 'new', label: 'New review', href: newReviewHref(base), icon: 'add' },
+		{ id: 'pulls', label: 'Pull requests', href: pullsHref(base), icon: 'pull_request' },
+		{ id: 'repos', label: 'Repositories', href: reposHref(base), icon: 'folder' },
 		...(isLiveApp(base) ? LIVE_ROWS : [])
 	];
 
@@ -78,13 +76,13 @@ export function SidebarNav({ openPulls }: { openPulls: number | null }) {
 
 /** One place: the whole row is its link, and resting on it warms what the place reads first. */
 function NavItem({ row, active, openPulls }: { row: NavRow; active: boolean; openPulls: number | null }) {
-	const { id, label, href, icon: Icon } = row;
+	const { id, label, href, icon } = row;
 	const intent = useIntent(WARM[id]);
 
 	return (
 		<RowButton asChild data-nav data-active={active || undefined} className="nav-item">
 			<Link href={href} aria-current={active ? 'page' : undefined} {...intent}>
-				<Icon aria-hidden />
+				<Icon name={icon} />
 				{label}
 				{id === 'pulls' && openPulls !== null ? (
 					<span className="nav-count" aria-label={`${openPulls} open`}>

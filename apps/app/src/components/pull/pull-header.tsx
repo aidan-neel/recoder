@@ -1,6 +1,5 @@
 import type { PullPage, PullState } from '@recoder/shared';
-import { Collapsible, Pill, type PillTone } from '@recoder/ui';
-import { GitBranchIcon } from '@phosphor-icons/react';
+import { Collapsible, Pill, type PillTone, Icon } from '@recoder/ui';
 import type { ReactNode } from 'react';
 
 import { Avatar } from '@/components/common/avatar';
@@ -61,7 +60,7 @@ export function PullHeader({ page, actions, merge, children }: PullHeaderProps) 
 						<Pill icon={<Avatar name={page.pull.author} src={page.pull.authorAvatarUrl} className="pill-avatar" />}>
 							<AuthorLink login={page.pull.author} repoId={page.repoId} />
 						</Pill>
-						<Pill face="code" icon={<GitBranchIcon aria-hidden />} title={`${headRef} into ${base}`}>
+						<Pill face="code" icon={<Icon name="fork_right" />} title={`${headRef} into ${base}`}>
 							{base} ← {headRef}
 						</Pill>
 						{merge}

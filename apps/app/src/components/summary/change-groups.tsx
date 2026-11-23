@@ -1,7 +1,15 @@
 'use client';
 
-import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, DiffStat, FileChip, Pill } from '@recoder/ui';
-import { CaretDownIcon, CaretRightIcon } from '@phosphor-icons/react';
+import {
+	Button,
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+	DiffStat,
+	FileChip,
+	Icon,
+	Pill
+} from '@recoder/ui';
 
 import type { BugView } from '@/lib/bugs/types';
 import type { GroupView } from '@/lib/summary/change-groups';
@@ -36,7 +44,7 @@ export function ChangeGroups({ groups, onOpenGuide, onOpenFile, onOpenFinding }:
 				</h2>
 				<Button variant="ghost" onClick={onOpenGuide}>
 					Read in Changes
-					<CaretRightIcon aria-hidden />
+					<Icon name="chevron_right" />
 				</Button>
 			</div>
 			<ol className="change-groups">
@@ -74,7 +82,7 @@ function Group({ view, place, onOpenFile, onOpenFinding }: GroupProps) {
 							</Pill>
 						) : null}
 						{view.size ? <DiffStat additions={view.size.additions} deletions={view.size.deletions} /> : null}
-						<CaretDownIcon aria-hidden className="change-group-caret" />
+						<Icon name="expand_more" className="change-group-caret" />
 					</span>
 				</CollapsibleTrigger>
 				<ul className="change-group-files" aria-label={`Files in ${group.title}`}>

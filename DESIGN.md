@@ -144,7 +144,7 @@ When a model's plan runs out (ChatGPT's cap, a hosted provider's 429 or 402 afte
 - **Menus** close on outside click and Esc.
 
 ## Assets
-- Icons: Lucide, stroke 1.75, 12–16px, in apps/web. apps/app, apps/site and the React kit draw Phosphor in its bold weight.
+- Icons: Lucide, stroke 1.75, 12–16px, in apps/web. apps/app, apps/site and the React kit draw Material Symbols (Rounded, weight 500, optical size 20) through the kit's `Icon`, and no other set.
 - Fonts: Geist, Geist Mono and Lora from Google Fonts.
 - No images or logo mark. The brand is the "Recoder" wordmark.
 

@@ -1,5 +1,4 @@
-import { RadioGroup } from '@recoder/ui';
-import { CheckIcon } from '@phosphor-icons/react';
+import { Icon, RadioGroup } from '@recoder/ui';
 
 import { PALETTE, type PaletteId } from '@/lib/appearance/choices';
 
@@ -64,7 +63,7 @@ function PaletteSwatch({ id, name, chosen }: PaletteSwatchProps) {
 			</span>
 			<span className="palette-swatch-name">
 				{name}
-				{chosen ? <CheckIcon aria-hidden /> : null}
+				{chosen ? <Icon name="check" /> : null}
 			</span>
 		</span>
 	);

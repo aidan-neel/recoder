@@ -26,8 +26,18 @@ It departs from the root `DESIGN.md` (apps/web) in six places:
   step darker;
   the palettes in Settings → Appearance bring their own) and one indigo-blue (`#3777ec`) accent (links, the selected line,
   hunk headers).
-- **Phosphor icons in their bold weight**, set once by the kit's `IconRoot`,
-  not Lucide. Import the `*Icon` names (`MagnifyingGlassIcon`).
+- **Material Symbols are the only icon set**: Rounded, weight 500, optical
+  size 20, outlined, with fill only to mark an active state (a vote cast).
+  Draw every UI icon with the kit's `<Icon name="search" />`; its glyphs are
+  inlined SVG paths in `packages/ui/src/components/icon-glyphs.ts`, so the
+  app never loads an icon font or a CDN. Add a symbol with
+  `bun run --filter @recoder/ui icons <name>` (`<name>:fill` adds its
+  filled face), using the name from fonts.google.com/icons. The kit crops
+  each symbol's frame 12% tighter than Google's box so it fills a slot the
+  way the text beside it expects. Slots size icons in CSS (a menu row's
+  is 14px); pass `size` only where no slot does. Language
+  marks on the file chip (`simple-icons`) and the Re mark are logos, not UI
+  icons, and stay as they are.
 - **Capy's edges and lift**, not flat rings. Controls, fields, cards and
   overlays draw a hairline inside their edge and, in dark, a subtle dark
   outline outside it; what should feel pressable adds a soft contact shadow
@@ -538,7 +548,7 @@ The pull request screens show facts, not sentences about facts.
   The mark is the language's (`simple-icons`) in its own hue, eased toward
   the ink on each theme so a deep brand colour still reads, and a brand near
   black or white takes the text colour; a kind of file no language owns
-  (an image, a table, a lock file, an archive) gets a Phosphor glyph, and an
+  (an image, a table, a lock file, an archive) gets a Material Symbol, and an
   unknown name a plain page. A chip is bare in a list and framed (a tint,
   the badge height) where it stands alone among words or badges. A picker
   that searches files (Files, the composer's +) keeps each row's folder as

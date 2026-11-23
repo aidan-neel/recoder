@@ -1,8 +1,7 @@
 'use client';
 
 import type { PersonRef } from '@recoder/shared';
-import { Button, HoverCard, HoverCardContent, HoverCardTrigger, Pill, SkeletonText } from '@recoder/ui';
-import { UserIcon } from '@phosphor-icons/react';
+import { Button, HoverCard, HoverCardContent, HoverCardTrigger, Pill, SkeletonText, Icon } from '@recoder/ui';
 import { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 
@@ -82,7 +81,7 @@ function PersonCard({ person }: { person: PersonRef }) {
 					>
 						<Button asChild variant="outline">
 							<Link href={href}>
-								<UserIcon aria-hidden />
+								<Icon name="person" />
 								Profile
 							</Link>
 						</Button>
@@ -90,7 +89,7 @@ function PersonCard({ person }: { person: PersonRef }) {
 				) : (
 					<Button asChild variant="outline">
 						<Link href={href}>
-							<UserIcon aria-hidden />
+							<Icon name="person" />
 							Profile
 						</Link>
 					</Button>

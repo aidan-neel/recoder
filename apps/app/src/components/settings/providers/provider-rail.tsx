@@ -1,7 +1,6 @@
 'use client';
 
-import { HoverList, RowButton, StatusGlyph, Switch } from '@recoder/ui';
-import { PlusIcon } from '@phosphor-icons/react';
+import { HoverList, Icon, RowButton, StatusGlyph, Switch } from '@recoder/ui';
 
 import { entryGlyph, entryStatus, type ProviderEntry } from '@/lib/settings/providers/provider-entries';
 import type { ProviderSwitches } from '@/lib/settings/providers/use-provider-switches';
@@ -37,7 +36,7 @@ export function ProviderRail({ entries, selectedKey, onSelect, switches, onAdd }
 			))}
 			<li className="provider-rail-row" data-rail-row>
 				<RowButton cover className="provider-rail-add" onClick={onAdd}>
-					<PlusIcon aria-hidden />
+					<Icon name="add" />
 					Add provider
 				</RowButton>
 			</li>

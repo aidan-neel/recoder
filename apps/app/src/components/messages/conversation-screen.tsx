@@ -1,8 +1,7 @@
 'use client';
 
 import { MESSAGE_MAX_LENGTH, type Conversation } from '@recoder/shared';
-import { Button, focusComposerField, ForgeMark, Pill, StatusNotice } from '@recoder/ui';
-import { ArrowCounterClockwiseIcon, ArrowDownIcon, ChatSlashIcon, UserIcon } from '@phosphor-icons/react';
+import { Button, focusComposerField, ForgeMark, Pill, StatusNotice, Icon } from '@recoder/ui';
 import { useEffect, useRef } from 'react';
 
 import { useAccountView } from '@/lib/account/use-account-menu';
@@ -41,7 +40,7 @@ function ConversationHead({ conversation }: { conversation: Conversation }) {
 			</div>
 			<Button asChild variant="outline">
 				<Link href={personHref(base, person)}>
-					<UserIcon aria-hidden />
+					<Icon name="person" />
 					Profile
 				</Link>
 			</Button>
@@ -83,7 +82,7 @@ function ConversationDock({
 			<div className="chat-dock-column">
 				{away ? (
 					<Button variant="secondary" className="chat-to-end" onClick={toEnd}>
-						<ArrowDownIcon aria-hidden />
+						<Icon name="arrow_downward" />
 						Scroll to end
 					</Button>
 				) : null}
@@ -155,7 +154,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 					<StatusNotice
 						variant="banner"
 						heading="h1"
-						glyph={<ChatSlashIcon aria-hidden />}
+						glyph={<Icon name="chat_bubble_off" />}
 						title="This conversation does not exist."
 						detail="The link may be old or mistyped, or the conversation is someone else’s."
 					/>
@@ -170,7 +169,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 						detail={view.error}
 						actions={
 							<Button onClick={view.retry}>
-								<ArrowCounterClockwiseIcon aria-hidden />
+								<Icon name="replay" />
 								Try again
 							</Button>
 						}

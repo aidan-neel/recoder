@@ -8,12 +8,12 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 	ForgeMark,
+	Icon,
 	Pill,
 	RowButton,
 	SkeletonBox,
 	Tooltip
 } from '@recoder/ui';
-import { MinusCircleIcon, DotsThreeIcon } from '@phosphor-icons/react';
 
 import { useApi } from '@/lib/api/client';
 import type { PullRowStatus } from '@/lib/pulls/types';
@@ -54,11 +54,11 @@ function TileMenu({ tile, onStop }: Pick<FleetTileProps, 'tile' | 'onStop'>) {
 			<DropdownMenu>
 				<DropdownMenuTrigger>
 					<Button variant="ghost" size="icon" aria-label={`More for ${tile.name}`}>
-						<DotsThreeIcon />
+						<Icon name="more_horiz" />
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">
-					<DropdownMenuItem icon={<MinusCircleIcon />} onSelect={() => onStop(tile)}>
+					<DropdownMenuItem icon={<Icon name="do_not_disturb_on" />} onSelect={() => onStop(tile)}>
 						Stop tracking
 					</DropdownMenuItem>
 				</DropdownMenuContent>

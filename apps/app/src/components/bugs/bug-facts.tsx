@@ -1,6 +1,5 @@
 import { categoryLabel, type EvidenceClass } from '@recoder/shared';
-import { Pill } from '@recoder/ui';
-import { BookIcon, CheckCircleIcon, CircleDashedIcon, PathIcon, type Icon } from '@phosphor-icons/react';
+import { Icon, Pill, type IconName } from '@recoder/ui';
 
 import type { BugView } from '@/lib/bugs/types';
 
@@ -11,19 +10,19 @@ const HISTORY_LABELS = { carried: 'From the last review', rechecked: 'Checked ag
 const RULE_CATEGORY = categoryLabel('repo-rule');
 
 /** Each class of evidence as an icon. Only a reproduced bug, proven by a run, is coloured. */
-const EVIDENCE_ICONS: Record<EvidenceClass, Icon> = {
-	reproduced: CheckCircleIcon,
-	traced: PathIcon,
-	rule: BookIcon,
-	unverified: CircleDashedIcon
+const EVIDENCE_ICONS: Record<EvidenceClass, IconName> = {
+	reproduced: 'check_circle',
+	traced: 'route',
+	rule: 'book',
+	unverified: 'pending'
 };
 
 /** How the bug was shown: reproduced by a run (green), traced in code, a repository rule, or not checked. */
 export function EvidencePill({ bug }: { bug: Pick<BugView, 'evidence' | 'evidenceLabel'> }) {
-	const Icon = EVIDENCE_ICONS[bug.evidence];
+	const icon = EVIDENCE_ICONS[bug.evidence];
 
 	return (
-		<Pill tone={bug.evidence === 'reproduced' ? 'ok' : 'neutral'} icon={<Icon aria-hidden />}>
+		<Pill tone={bug.evidence === 'reproduced' ? 'ok' : 'neutral'} icon={<Icon name={icon} />}>
 			{bug.evidenceLabel}
 		</Pill>
 	);

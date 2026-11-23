@@ -4,12 +4,12 @@ import {
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
+	Icon,
 	Meter,
 	Pill,
 	StatusGlyph,
 	type GlyphKind
 } from '@recoder/ui';
-import { CaretDownIcon, TimerIcon } from '@phosphor-icons/react';
 import { useState, type ReactNode } from 'react';
 
 import type { RunActivity } from '@/lib/run/run-activity';
@@ -45,7 +45,7 @@ function FactPill({ fact }: { fact: RunFact }) {
 	return (
 		<Pill
 			face={fact.kind === 'code' ? 'code' : 'text'}
-			icon={fact.kind === 'time' ? <TimerIcon aria-hidden /> : undefined}
+			icon={fact.kind === 'time' ? <Icon name="timer" /> : undefined}
 			className={fact.tone === 'progress' ? 'run-fact-progress' : undefined}
 		>
 			{fact.text}
@@ -159,11 +159,7 @@ function StepRow({ stage, activity, paused, open, onOpenChange }: StepRowProps) 
 		<li className="run-step" data-state={stage.state} aria-current={active ? 'step' : undefined}>
 			<Collapsible open={open} onOpenChange={onOpenChange}>
 				<CollapsibleTrigger className="run-step-head">
-					<StepHead
-						stage={stage}
-						paused={paused}
-						chevron={<CaretDownIcon aria-hidden className="run-step-chevron" />}
-					/>
+					<StepHead stage={stage} paused={paused} chevron={<Icon name="expand_more" className="run-step-chevron" />} />
 				</CollapsibleTrigger>
 				<CollapsibleContent>
 					<StepBody stage={stage} activity={activity} />

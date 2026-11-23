@@ -1,33 +1,20 @@
 'use client';
 
-import { HoverList, Input, RowButton } from '@recoder/ui';
-import {
-	PulseIcon,
-	SquaresFourIcon,
-	ChartBarIcon,
-	CpuIcon,
-	GaugeIcon,
-	HardDrivesIcon,
-	LinkSimpleIcon,
-	PaletteIcon,
-	MagnifyingGlassIcon,
-	UserGearIcon,
-	type Icon
-} from '@phosphor-icons/react';
+import { HoverList, Icon, Input, RowButton, type IconName } from '@recoder/ui';
 import { useState, type KeyboardEvent } from 'react';
 
 import { matchSections, sectionsFor, type SettingsSection } from '@/lib/settings/sections';
 
-const ICONS: Record<SettingsSection, Icon> = {
-	models: CpuIcon,
-	providers: SquaresFourIcon,
-	connections: LinkSimpleIcon,
-	limits: GaugeIcon,
-	usage: ChartBarIcon,
-	telemetry: PulseIcon,
-	admin: UserGearIcon,
-	server: HardDrivesIcon,
-	appearance: PaletteIcon
+const ICONS: Record<SettingsSection, IconName> = {
+	models: 'memory',
+	providers: 'grid_view',
+	connections: 'link',
+	limits: 'speed',
+	usage: 'bar_chart',
+	telemetry: 'vital_signs',
+	admin: 'manage_accounts',
+	server: 'dns',
+	appearance: 'palette'
 };
 
 interface SettingsNavProps {
@@ -49,7 +36,7 @@ export function SettingsNav({ active, admin, onSelect }: SettingsNavProps) {
 	const adminOwn = sections.filter((section) => 'adminOnly' in section);
 
 	function row({ id, label }: (typeof sections)[number]) {
-		const Icon = ICONS[id];
+		const icon = ICONS[id];
 
 		return (
 			<RowButton
@@ -60,7 +47,7 @@ export function SettingsNav({ active, admin, onSelect }: SettingsNavProps) {
 				className="nav-item"
 				onClick={() => onSelect(id)}
 			>
-				<Icon aria-hidden />
+				<Icon name={icon} />
 				{label}
 			</RowButton>
 		);
@@ -81,7 +68,7 @@ export function SettingsNav({ active, admin, onSelect }: SettingsNavProps) {
 				type="search"
 				aria-label="Search settings"
 				placeholder="Search settings"
-				leading={<MagnifyingGlassIcon aria-hidden />}
+				leading={<Icon name="search" />}
 				value={query}
 				onChange={(event) => setQuery(event.target.value)}
 				onKeyDown={openFirst}

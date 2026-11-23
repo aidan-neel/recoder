@@ -1,7 +1,7 @@
 'use client';
 
+import { Icon, type IconName } from '@recoder/ui';
 import type { PullMergeability, PullPage } from '@recoder/shared';
-import { CheckCircleIcon, CircleDashedIcon, XCircleIcon } from '@phosphor-icons/react';
 
 import type { MergeView, PullChecksView } from '@/lib/pull/types';
 
@@ -14,7 +14,7 @@ interface Fact {
 	text: string;
 }
 
-const FACT_ICONS = { ok: CheckCircleIcon, bad: XCircleIcon, wait: CircleDashedIcon };
+const FACT_ICONS: Record<Fact['tone'], IconName> = { ok: 'check_circle', bad: 'cancel', wait: 'pending' };
 
 /** What the forge says about merging into `base`; nothing while it has not worked it out. */
 function mergeFact(mergeability: PullMergeability, base: string): Fact | null {
@@ -37,16 +37,16 @@ interface MergeFactsProps {
  */
 export function MergeFacts({ page, checks }: MergeFactsProps) {
 	const fact = page.status.state === 'open' ? mergeFact(page.status.mergeability, page.pull.base) : null;
-	const FactIcon = fact ? FACT_ICONS[fact.tone] : null;
+	const factIcon = fact ? FACT_ICONS[fact.tone] : null;
 
 	if (checks.phase === 'none' && !fact) return null;
 
 	return (
 		<div className="merge-facts">
 			<ChecksToggle view={checks} />
-			{fact && FactIcon ? (
+			{fact && factIcon ? (
 				<span className="merge-fact" data-tone={fact.tone}>
-					<FactIcon aria-hidden />
+					<Icon name={factIcon} />
 					{fact.text}
 				</span>
 			) : null}

@@ -1,8 +1,7 @@
 'use client';
 
 import type { RepoGuidelines } from '@recoder/shared';
-import { Pill, Tooltip } from '@recoder/ui';
-import { ArrowUpRightIcon } from '@phosphor-icons/react';
+import { Icon, Pill, Tooltip } from '@recoder/ui';
 
 import { activeSource } from '@/lib/guidelines/rules';
 
@@ -33,7 +32,7 @@ export function RepoStatus({ data }: { data: RepoGuidelines }) {
 				>
 					<Pill tone="medium">
 						Pending in #{data.pending.number}
-						<ArrowUpRightIcon aria-hidden />
+						<Icon name="arrow_outward" />
 					</Pill>
 				</a>
 			) : null}

@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, SkeletonRows, Tree } from '@recoder/ui';
-import { ArrowCounterClockwiseIcon } from '@phosphor-icons/react';
+import { Button, Icon, SkeletonRows, Tree } from '@recoder/ui';
 
 import type { RepoTreeView } from '@/lib/files/use-repo-tree';
 
@@ -33,7 +32,7 @@ export function FileTreePane({ tree, selected, revealId, onOpenFile }: FileTreeP
 			<nav className="file-tree file-state" aria-label="Files">
 				<p>{tree.error}</p>
 				<Button variant="outline" onClick={tree.retry}>
-					<ArrowCounterClockwiseIcon aria-hidden />
+					<Icon name="replay" />
 					Retry
 				</Button>
 			</nav>

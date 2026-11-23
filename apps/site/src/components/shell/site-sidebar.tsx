@@ -7,11 +7,11 @@ import {
 	CollapsibleTrigger,
 	ForgeMark,
 	HoverList,
+	Icon,
 	NavPill,
 	RowButton,
 	Tooltip
 } from '@recoder/ui';
-import { ArrowUpRightIcon, CaretDownIcon, MoonIcon, SunIcon } from '@phosphor-icons/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -80,7 +80,7 @@ function DocsPageItem({ page, active, open, onOpenChange }: DocsPageItemProps) {
 					<PageLink page={page} active={active} />
 					<CollapsibleTrigger asChild>
 						<Button variant="ghost" size="icon" className="site-page-toggle" aria-label={`Sections of ${page.title}`}>
-							<CaretDownIcon aria-hidden className="site-page-chevron" />
+							<Icon name="expand_more" className="site-page-chevron" />
 						</Button>
 					</CollapsibleTrigger>
 				</div>
@@ -139,13 +139,13 @@ function SidebarFoot() {
 				<a href={REPO_URL} target="_blank" rel="noopener noreferrer" aria-label="GitHub">
 					<ForgeMark provider="github" />
 					<span className="site-github-label">GitHub</span>
-					<ArrowUpRightIcon aria-hidden className="site-github-arrow" />
+					<Icon name="arrow_outward" className="site-github-arrow" />
 				</a>
 			</RowButton>
 			<Tooltip content="Switch theme">
 				<Button variant="ghost" size="icon" className="site-theme" aria-label="Switch theme" onClick={toggleTheme}>
-					<SunIcon className="hidden dark:block" />
-					<MoonIcon className="dark:hidden" />
+					<Icon name="light_mode" className="hidden dark:block" />
+					<Icon name="dark_mode" className="dark:hidden" />
 				</Button>
 			</Tooltip>
 		</div>

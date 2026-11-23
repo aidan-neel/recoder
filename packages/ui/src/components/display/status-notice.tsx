@@ -1,6 +1,6 @@
 'use client';
 
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { Icon } from '../icon';
 import type { ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
@@ -106,7 +106,7 @@ export function StatusNoticeDetails({ code }: { code: string }) {
 	return (
 		<Collapsible>
 			<CollapsibleTrigger>
-				<CaretRightIcon aria-hidden data-ui="disclosure-chevron" />
+				<Icon name="chevron_right" data-ui="disclosure-chevron" />
 				Details
 			</CollapsibleTrigger>
 			<CollapsibleContent>

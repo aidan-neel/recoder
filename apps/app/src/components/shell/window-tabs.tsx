@@ -11,23 +11,10 @@ import {
 	DURATION,
 	EASE_OUT,
 	Tooltip,
-	type GlyphKind
+	type GlyphKind,
+	Icon,
+	type IconName
 } from '@recoder/ui';
-import {
-	BookOpenIcon,
-	ChatCircleIcon,
-	ChatsCircleIcon,
-	ClockIcon,
-	FolderSimpleIcon,
-	GearIcon,
-	GitPullRequestIcon,
-	ListBulletsIcon,
-	PlusIcon,
-	QuestionIcon,
-	UserIcon,
-	XIcon,
-	type Icon
-} from '@phosphor-icons/react';
 import { AnimatePresence, Reorder, useIsPresent, useReducedMotionConfig, type Variants } from 'motion/react';
 import { useEffect, useRef, useState, type KeyboardEvent as KeyEvent, type MouseEvent, type WheelEvent } from 'react';
 
@@ -39,20 +26,20 @@ import { useTabNames, type TabName } from '@/lib/shell/tab-names';
 import { currentHref, pathOf, useTabs, type WindowTab } from '@/lib/shell/tabs';
 
 /** The mark each screen's tab carries before its name. */
-const ICONS: Record<Route['screen'], Icon> = {
-	pulls: ListBulletsIcon,
-	pull: GitPullRequestIcon,
-	review: GitPullRequestIcon,
-	new: PlusIcon,
-	repos: FolderSimpleIcon,
-	repo: FolderSimpleIcon,
-	chat: ChatCircleIcon,
-	person: UserIcon,
-	messages: ChatsCircleIcon,
-	automations: ClockIcon,
-	guidelines: BookOpenIcon,
-	settings: GearIcon,
-	missing: QuestionIcon
+const ICONS: Record<Route['screen'], IconName> = {
+	pulls: 'format_list_bulleted',
+	pull: 'pull_request',
+	review: 'pull_request',
+	new: 'add',
+	repos: 'folder',
+	repo: 'folder',
+	chat: 'chat_bubble',
+	person: 'person',
+	messages: 'forum',
+	automations: 'schedule',
+	guidelines: 'menu_book',
+	settings: 'settings',
+	missing: 'help'
 };
 
 /** The review states a tab marks at its end: work under way or something to look at. A clean review needs no mark. */
@@ -239,7 +226,7 @@ export function WindowTabs() {
 					className="window-tab-new"
 					onClick={() => openTab(newReviewHref(base))}
 				>
-					<PlusIcon />
+					<Icon name="add" />
 				</Button>
 			</Tooltip>
 		</div>
@@ -264,7 +251,7 @@ interface WindowTabItemProps {
 /** One tab: its mark, its page's name, a review's state at the end, and the X that closes it in that place on hover. */
 function WindowTabItem({ tab, tabs, ordinal, active, name, route, home, fresh, reopenable }: WindowTabItemProps) {
 	const onScreen = useIsPresent() && active;
-	const Icon = ICONS[route.screen];
+	const icon = ICONS[route.screen];
 	const label = name?.label ?? titleOf(route);
 	const glyph = name?.review ? GLYPHS[name.review] : undefined;
 	const index = tabs.indexOf(tab);
@@ -301,7 +288,7 @@ function WindowTabItem({ tab, tabs, ordinal, active, name, route, home, fresh, r
 						onKeyDown={openMenuFromKeys}
 					>
 						<span className="window-tab-mark">
-							<Icon aria-hidden />
+							<Icon name={icon} />
 							{ordinal === null ? null : (
 								<span className="window-tab-ordinal" aria-hidden>
 									{ordinal}
@@ -348,7 +335,7 @@ function WindowTabItem({ tab, tabs, ordinal, active, name, route, home, fresh, r
 				aria-label={`Close ${label}`}
 				onClick={() => closeTabs([tab.id], home)}
 			>
-				<XIcon />
+				<Icon name="close" />
 			</Button>
 		</Reorder.Item>
 	);

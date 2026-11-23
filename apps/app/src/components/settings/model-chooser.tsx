@@ -8,11 +8,11 @@ import {
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
+	Icon,
 	Input,
 	ScrollArea,
 	SkeletonBox
 } from '@recoder/ui';
-import { CaretDownIcon, MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { useId } from 'react';
 
 import { shownCount, type ChooserGroup } from '@/lib/settings/model-chooser';
@@ -87,7 +87,7 @@ function ProviderBlock({ group, chooser }: ProviderBlockProps) {
 						<span className="chooser-count">
 							{shown} of {group.options.length}
 						</span>
-						<CaretDownIcon aria-hidden />
+						<Icon name="expand_more" />
 					</CollapsibleTrigger>
 				</h3>
 			</div>
@@ -152,7 +152,7 @@ export function ModelChooser() {
 		<SettingsGroup title="Available models" action={<SaveStatus state={chooser.state} />}>
 			<div className="chooser-search">
 				<Input
-					leading={<MagnifyingGlassIcon aria-hidden />}
+					leading={<Icon name="search" />}
 					placeholder="Search models"
 					aria-label="Search models"
 					value={chooser.query}

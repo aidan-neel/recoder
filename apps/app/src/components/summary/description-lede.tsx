@@ -8,11 +8,11 @@ import {
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
+	Icon,
 	Skeleton,
 	Spinner,
 	Tooltip
 } from '@recoder/ui';
-import { ArrowClockwiseIcon, CaretDownIcon, SparkleIcon } from '@phosphor-icons/react';
 
 import { shortSha } from '@/lib/files/ref-label';
 
@@ -58,7 +58,7 @@ export function DescriptionLede({ description, phase, standIn, author, onRedescr
 							<CollapsibleTrigger asChild>
 								<Button variant="ghost" className="description-author-toggle">
 									Author’s description
-									<CaretDownIcon aria-hidden />
+									<Icon name="expand_more" />
 								</Button>
 							</CollapsibleTrigger>
 						) : null}
@@ -71,7 +71,7 @@ export function DescriptionLede({ description, phase, standIn, author, onRedescr
 									className="description-redo"
 									onClick={onRedescribe}
 								>
-									<ArrowClockwiseIcon aria-hidden />
+									<Icon name="refresh" />
 								</Button>
 							</Tooltip>
 						) : null}
@@ -93,7 +93,7 @@ function WrittenBy({ description }: { description: PullDescription }) {
 
 	return (
 		<span className="description-by">
-			<SparkleIcon aria-hidden className="description-by-mark" />
+			<Icon name="auto_awesome" className="description-by-mark" />
 			AI description
 			<span className="meta-sep" />
 			{description.model.label}

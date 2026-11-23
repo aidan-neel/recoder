@@ -1,6 +1,5 @@
 'use client';
 
-import { DotsThreeIcon } from '@phosphor-icons/react';
 import type { Backup, BackupReason } from '@recoder/shared';
 import {
 	Button,
@@ -9,6 +8,7 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
+	Icon,
 	Select,
 	Switch
 } from '@recoder/ui';
@@ -87,7 +87,7 @@ function BackupRow({ backup, restorable, onAsk, triggerRef }: BackupRowProps) {
 			<DropdownMenu>
 				<DropdownMenuTrigger>
 					<Button ref={triggerRef} variant="ghost" size="icon" aria-label={`Backup from ${when}`}>
-						<DotsThreeIcon />
+						<Icon name="more_horiz" />
 					</Button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end">

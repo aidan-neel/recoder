@@ -4,6 +4,7 @@ import type { AgentStatus } from '@recoder/shared';
 import {
 	Button,
 	CopyButton,
+	Icon,
 	Modal,
 	ModalBody,
 	ModalClose,
@@ -15,7 +16,6 @@ import {
 	swapMotion,
 	useMotionVariants
 } from '@recoder/ui';
-import { CheckIcon } from '@phosphor-icons/react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useRef, type Ref } from 'react';
 
@@ -30,7 +30,7 @@ import { CheckAgain } from './provider-notice';
 function InstalledMark() {
 	return (
 		<span className="add-provider-installed">
-			<CheckIcon aria-hidden />
+			<Icon name="check" />
 			Installed
 		</span>
 	);

@@ -1,6 +1,6 @@
 'use client';
 
-import { MinusIcon, PlusIcon } from '@phosphor-icons/react';
+import { Icon } from '../icon';
 import type { InputHTMLAttributes, KeyboardEvent, MouseEvent, Ref } from 'react';
 
 import { cn } from '../../lib/cn';
@@ -87,7 +87,7 @@ export function NumberField({
 				onMouseDown={keepFocus}
 				onClick={(event) => onStep?.(-1, event.shiftKey)}
 			>
-				<MinusIcon aria-hidden />
+				<Icon name="remove" />
 			</button>
 			<input
 				ref={ref}
@@ -113,7 +113,7 @@ export function NumberField({
 				onMouseDown={keepFocus}
 				onClick={(event) => onStep?.(1, event.shiftKey)}
 			>
-				<PlusIcon aria-hidden />
+				<Icon name="add" />
 			</button>
 		</div>
 	);

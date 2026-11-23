@@ -1,8 +1,7 @@
 'use client';
 
 import type { Conversation, DirectMessage, PullAttachment } from '@recoder/shared';
-import { Button, Markdown } from '@recoder/ui';
-import { ArrowClockwiseIcon } from '@phosphor-icons/react';
+import { Button, Markdown, Icon } from '@recoder/ui';
 
 import type { ConversationView, OutgoingMessage } from '@/lib/messages/use-conversation';
 import { displayName } from '@/lib/people/refs';
@@ -147,7 +146,7 @@ export function ConversationThread({ view, conversation, me }: ThreadProps) {
 								<p className="dm-failed" role="alert">
 									{line.outgoing.error ?? 'The message was not sent.'}
 									<Button variant="outline" onClick={() => view.resend(line.key)}>
-										<ArrowClockwiseIcon aria-hidden />
+										<Icon name="refresh" />
 										Retry
 									</Button>
 								</p>

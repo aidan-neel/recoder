@@ -1,8 +1,7 @@
 'use client';
 
 import type { Repo } from '@recoder/shared';
-import { HoverList, RowButton } from '@recoder/ui';
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { HoverList, Icon, RowButton } from '@recoder/ui';
 
 import { useRecentActivity, type RecentRow } from '@/lib/settings/use-activity';
 
@@ -21,7 +20,7 @@ function RecentLink({ row }: { row: RecentRow }) {
 				}
 				detail={row.description}
 			>
-				<CaretRightIcon aria-hidden />
+				<Icon name="chevron_right" />
 			</SettingsRow>
 		</li>
 	);

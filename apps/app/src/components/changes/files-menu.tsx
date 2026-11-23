@@ -10,9 +10,9 @@ import {
 	CommandList,
 	DiffStat,
 	FileIcon,
+	Icon,
 	type CommandHint
 } from '@recoder/ui';
-import { CheckIcon } from '@phosphor-icons/react';
 
 import { foundLabel, foundTone } from '@/lib/bugs/tiers';
 import type { FileEntry, FileGroup, GuidePart } from '@/lib/changes/types';
@@ -57,7 +57,7 @@ function FileEnd({ entry }: { entry: FileEntry }) {
 				<span className="tree-bug" data-tone={foundTone(entry.found)} role="img" aria-label={foundLabel(entry.found)} />
 			) : null}
 			{entry.viewed ? (
-				<CheckIcon aria-label="Viewed" />
+				<Icon name="check" aria-label="Viewed" />
 			) : (
 				<DiffStat additions={entry.additions} deletions={entry.deletions} />
 			)}

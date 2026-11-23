@@ -1,6 +1,5 @@
 import { isStepRunning, type ChatTrailThought } from '@recoder/shared';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@recoder/ui';
-import { CaretRightIcon } from '@phosphor-icons/react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger, Icon } from '@recoder/ui';
 import { Fragment } from 'react';
 
 import { stepSpan, thoughtLabel } from '@/lib/chat/trail';
@@ -25,7 +24,7 @@ export function ThoughtStep({ step }: { step: ChatTrailThought }) {
 				<Collapsible>
 					<CollapsibleTrigger className="trail-label trail-toggle">
 						{label}
-						<CaretRightIcon className="trail-chevron" aria-hidden />
+						<Icon name="chevron_right" className="trail-chevron" />
 					</CollapsibleTrigger>
 					<CollapsibleContent>
 						<ThoughtText text={step.text} />

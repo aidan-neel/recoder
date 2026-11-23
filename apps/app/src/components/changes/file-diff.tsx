@@ -1,8 +1,7 @@
 'use client';
 
 import type { DiffHunk, FileDiff } from '@recoder/shared';
-import { Button, CodeLines, FileChip, langForPath, type CodeLine } from '@recoder/ui';
-import { ArrowBendDownRightIcon } from '@phosphor-icons/react';
+import { Button, CodeLines, FileChip, Icon, langForPath, type CodeLine } from '@recoder/ui';
 import { memo, useMemo, useState } from 'react';
 
 import type { BugView } from '@/lib/bugs/types';
@@ -75,7 +74,7 @@ export function MoveNote({ span }: { span: MoveSpan }) {
 
 	return (
 		<div className="move-note" data-exact={span.exact || undefined}>
-			<ArrowBendDownRightIcon aria-hidden className="move-note-icon" />
+			<Icon name="subdirectory_arrow_right" className="move-note-icon" />
 			<span>{verb}</span>
 			<FileChip path={span.other.path} line={span.other.line} framed />
 			<span className="meta">{span.exact ? 'unchanged' : 'with a small change'}</span>

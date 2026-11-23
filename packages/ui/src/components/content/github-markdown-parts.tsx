@@ -1,21 +1,7 @@
 'use client';
 
-import {
-	CaretRightIcon,
-	ChatCircleTextIcon,
-	InfoIcon,
-	LightbulbIcon,
-	WarningIcon,
-	WarningOctagonIcon
-} from '@phosphor-icons/react';
-import {
-	Children,
-	isValidElement,
-	type ComponentProps,
-	type ComponentType,
-	type CSSProperties,
-	type ReactNode
-} from 'react';
+import { Icon, type IconName } from '../icon';
+import { Children, isValidElement, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../display/collapsible';
@@ -244,7 +230,7 @@ function GitHubDetails({ open, node, children }: ComponentProps<'details'> & Ext
 	return (
 		<Collapsible defaultOpen={defaultOpen} data-markdown-details="">
 			<CollapsibleTrigger data-markdown-summary="">
-				<CaretRightIcon aria-hidden data-ui="disclosure-chevron" />
+				<Icon name="chevron_right" data-ui="disclosure-chevron" />
 				<span data-ui="markdown-summary-label">{summary ?? 'Details'}</span>
 			</CollapsibleTrigger>
 			<CollapsibleContent>
@@ -256,15 +242,15 @@ function GitHubDetails({ open, node, children }: ComponentProps<'details'> & Ext
 
 interface AlertSpec {
 	label: string;
-	Icon: ComponentType<{ 'aria-hidden'?: boolean }>;
+	icon: IconName;
 }
 
 const ALERTS: Record<string, AlertSpec> = {
-	note: { label: 'Note', Icon: InfoIcon },
-	tip: { label: 'Tip', Icon: LightbulbIcon },
-	important: { label: 'Important', Icon: ChatCircleTextIcon },
-	warning: { label: 'Warning', Icon: WarningIcon },
-	caution: { label: 'Caution', Icon: WarningOctagonIcon }
+	note: { label: 'Note', icon: 'info' },
+	tip: { label: 'Tip', icon: 'lightbulb' },
+	important: { label: 'Important', icon: 'chat' },
+	warning: { label: 'Warning', icon: 'warning' },
+	caution: { label: 'Caution', icon: 'report' }
 };
 
 type AlertBlockquoteProps = ComponentProps<'blockquote'> & ExtraProps & { 'data-alert'?: string };
@@ -275,12 +261,12 @@ function GitHubBlockquote({ children, 'data-alert': alert, node: _node, ...props
 
 	if (!spec) return <blockquote {...props}>{children}</blockquote>;
 
-	const { label, Icon } = spec;
+	const { label, icon } = spec;
 
 	return (
 		<blockquote {...props} data-alert={alert}>
 			<p data-ui="markdown-alert-title">
-				<Icon aria-hidden />
+				<Icon name={icon} />
 				{label}
 			</p>
 			{children}

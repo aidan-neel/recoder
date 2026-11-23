@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Tooltip } from '@recoder/ui';
-import { ChatCenteredTextIcon } from '@phosphor-icons/react';
+import { Button, Icon, Tooltip } from '@recoder/ui';
 
 import { useShowFyi } from '@/lib/bugs/show-fyi';
 
@@ -26,7 +25,7 @@ export function FyiToggle({ count }: { count: number }) {
 				aria-label={label}
 				onClick={fyi.toggle}
 			>
-				<ChatCenteredTextIcon aria-hidden />
+				<Icon name="speaker_notes" />
 				FYI
 				<span className="meta tabular">{count}</span>
 			</Button>

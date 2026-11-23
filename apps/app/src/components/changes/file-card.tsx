@@ -1,8 +1,7 @@
 'use client';
 
 import type { FileDiff } from '@recoder/shared';
-import { Button, Checkbox, DiffStat, FileChip, Pill } from '@recoder/ui';
-import { ArrowRightIcon, CaretRightIcon } from '@phosphor-icons/react';
+import { Button, Checkbox, DiffStat, FileChip, Icon, Pill } from '@recoder/ui';
 import { memo, useId, useRef, useState } from 'react';
 
 import { openFound } from '@/lib/bugs/bug-lists';
@@ -116,11 +115,12 @@ export const FileCard = memo(function FileCard({
 					aria-controls={bodyId}
 					onClick={() => setOpen(!open)}
 				>
-					<CaretRightIcon aria-hidden className="file-caret" />
+					<Icon name="chevron_right" className="file-caret" />
 					{oldPath ? (
 						<span className="file-rename">
 							<FileChip path={oldPath} className="file-name file-old-name" />
-							<ArrowRightIcon
+							<Icon
+								name="arrow_forward"
 								aria-label={file.status === 'copied' ? 'copied to' : 'renamed to'}
 								className="file-rename-arrow"
 							/>

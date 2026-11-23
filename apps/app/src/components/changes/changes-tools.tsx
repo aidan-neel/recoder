@@ -1,17 +1,6 @@
 'use client';
 
-import { Button, Meter, SegmentedControl, StatusGlyph, Tooltip } from '@recoder/ui';
-import {
-	ArrowDownIcon,
-	ArrowsInLineVerticalIcon,
-	ArrowsOutLineVerticalIcon,
-	ArrowUpIcon,
-	ColumnsIcon,
-	ListIcon,
-	ParagraphIcon,
-	RowsIcon,
-	TreeViewIcon
-} from '@phosphor-icons/react';
+import { Button, Icon, Meter, SegmentedControl, StatusGlyph, Tooltip } from '@recoder/ui';
 import { useMemo, useState } from 'react';
 
 import { useBugsView } from '@/lib/bugs/use-bugs';
@@ -38,8 +27,8 @@ const MODES = [
 ];
 
 const LAYOUTS = [
-	{ value: 'unified', label: <span className="changes-tool-label">Unified</span>, icon: <RowsIcon aria-hidden /> },
-	{ value: 'split', label: <span className="changes-tool-label">Split</span>, icon: <ColumnsIcon aria-hidden /> }
+	{ value: 'unified', label: <span className="changes-tool-label">Unified</span>, icon: <Icon name="view_agenda" /> },
+	{ value: 'split', label: <span className="changes-tool-label">Split</span>, icon: <Icon name="view_column_2" /> }
 ];
 
 /** A chapter as the file menu groups it: its title and its files, each once, in reading order. */
@@ -130,7 +119,7 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 						aria-pressed={side.open}
 						onClick={side.toggle}
 					>
-						<TreeViewIcon aria-hidden />
+						<Icon name="account_tree" />
 					</Button>
 				</Tooltip>
 			) : null}
@@ -143,7 +132,7 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 						data-beside={side.open || undefined}
 						onClick={() => setMenuOpen(true)}
 					>
-						<ListIcon aria-hidden />
+						<Icon name="list" />
 						Files
 						<span className="meta tabular">{viewed.total}</span>
 					</Button>
@@ -158,12 +147,12 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 					</span>
 					<Tooltip content="Previous finding" shortcut="p">
 						<Button variant="quiet" size="icon" aria-label="Previous finding" onClick={() => stepFinding(-1)}>
-							<ArrowUpIcon aria-hidden />
+							<Icon name="arrow_upward" />
 						</Button>
 					</Tooltip>
 					<Tooltip content="Next finding" shortcut="n">
 						<Button variant="quiet" size="icon" aria-label="Next finding" onClick={() => stepFinding(1)}>
-							<ArrowDownIcon aria-hidden />
+							<Icon name="arrow_downward" />
 						</Button>
 					</Tooltip>
 				</div>
@@ -192,7 +181,7 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 					aria-pressed={diffView.hideWhitespace}
 					onClick={diffView.toggleWhitespace}
 				>
-					<ParagraphIcon aria-hidden />
+					<Icon name="format_paragraph" />
 					<span className="changes-tool-label">Hide whitespace</span>
 				</Button>
 			</Tooltip>
@@ -212,7 +201,7 @@ export function ChangesTools({ mode, onModeChange }: ChangesToolsProps) {
 						aria-label={shut ? 'Expand every file' : 'Collapse every file'}
 						onClick={() => nav.foldAll(shut)}
 					>
-						{shut ? <ArrowsOutLineVerticalIcon aria-hidden /> : <ArrowsInLineVerticalIcon aria-hidden />}
+						{shut ? <Icon name="expand" /> : <Icon name="compress" />}
 					</Button>
 				</Tooltip>
 			) : null}

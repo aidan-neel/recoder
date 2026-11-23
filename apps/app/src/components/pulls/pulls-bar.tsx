@@ -1,7 +1,6 @@
 'use client';
 
-import { Button, Select, Tooltip, type SelectOption } from '@recoder/ui';
-import { ArrowsClockwiseIcon } from '@phosphor-icons/react';
+import { Button, Icon, Select, Tooltip, type SelectOption } from '@recoder/ui';
 
 import type { RepoOption } from '@/lib/pulls/types';
 
@@ -60,7 +59,7 @@ export function RefreshButton({ refreshing, onRefresh }: { refreshing: boolean; 
 				status={refreshing ? 'pending' : 'idle'}
 				onClick={onRefresh}
 			>
-				<ArrowsClockwiseIcon />
+				<Icon name="sync" />
 			</Button>
 		</Tooltip>
 	);

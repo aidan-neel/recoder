@@ -1,7 +1,6 @@
 'use client';
 
-import { XIcon } from '@phosphor-icons/react';
-
+import { Icon } from '../icon';
 import { Button } from '../button';
 import { Tooltip } from '../overlay/tooltip';
 import type { InlineImage } from './link-image';
@@ -79,7 +78,7 @@ export function ImageTiles({ images, onRemove }: ImageTilesProps) {
 									data-ui="image-tile-remove"
 									onClick={() => onRemove(image.id)}
 								>
-									<XIcon />
+									<Icon name="close" />
 								</Button>
 							</Tooltip>
 						</span>

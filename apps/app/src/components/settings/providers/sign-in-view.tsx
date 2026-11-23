@@ -1,8 +1,7 @@
 'use client';
 
 import type { AgentOAuthAttempt } from '@recoder/shared';
-import { Button, CopyButton, Field, Input } from '@recoder/ui';
-import { ArrowUpRightIcon } from '@phosphor-icons/react';
+import { Button, CopyButton, Field, Icon, Input } from '@recoder/ui';
 import type { FormEvent } from 'react';
 
 import { SIGN_IN_FORM, type ProviderFlow } from '@/lib/settings/providers/use-provider-flow';
@@ -59,7 +58,7 @@ export function SignInView({ flow, attempt }: { flow: ProviderFlow; attempt: Age
 			<Button variant="outline" asChild className="provider-sign-in-link">
 				<a href={attempt.url} target="_blank" rel="noopener noreferrer">
 					Open sign-in page
-					<ArrowUpRightIcon aria-hidden />
+					<Icon name="arrow_outward" />
 				</a>
 			</Button>
 			<Finish flow={flow} attempt={attempt} />

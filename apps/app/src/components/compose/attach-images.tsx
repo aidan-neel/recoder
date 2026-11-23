@@ -1,8 +1,7 @@
 'use client';
 
 import { IMAGE_TYPES } from '@recoder/shared';
-import { ComposerTool } from '@recoder/ui';
-import { PaperclipIcon } from '@phosphor-icons/react';
+import { ComposerTool, Icon } from '@recoder/ui';
 import { useRef, type ChangeEvent } from 'react';
 
 /** The file chooser's filter: the image types Recoder accepts. */
@@ -28,7 +27,7 @@ export function AttachImages({ onAttach, disabled }: { onAttach: (files: File[])
 	return (
 		<>
 			<ComposerTool label="Attach images" disabled={disabled} onClick={() => input.current?.click()}>
-				<PaperclipIcon />
+				<Icon name="attach_file" />
 			</ComposerTool>
 			<input ref={input} type="file" accept={ACCEPT} multiple hidden onChange={chosen} />
 		</>
