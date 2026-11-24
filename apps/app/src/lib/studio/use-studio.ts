@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReviewProgress } from '@recoder/shared';
+import { emptyReviewProgress, type ReviewProgress } from '@recoder/shared';
 import { useMemo, useState } from 'react';
 
 import { createMemory, remember, studioView, type StudioMemory, type StudioView } from './studio-view';
@@ -20,21 +20,21 @@ function memoryOf(memories: Map<string, StudioMemory>, id: string): StudioMemory
 }
 
 /**
- * Studio's view of a review's progress. It remembers what the stream lets go
- * of (diff reads and verifier calls past the newest 300) for as long as the
- * same review shows, and starts over for another one.
+ * Studio's view of a review's progress, an empty office until the progress
+ * arrives. It remembers what the stream lets go of (diff reads, files read and
+ * verifier calls past the newest 300) for as long as the same review shows,
+ * and starts over for another one.
  */
-export function useStudio(progress: ReviewProgress | null): StudioView | null {
+export function useStudio(progress: ReviewProgress | null): StudioView {
 	const [memories] = useState(() => new Map<string, StudioMemory>());
 
 	return useMemo(() => {
-		if (!progress) return null;
+		const live = progress ?? emptyReviewProgress('');
+		const memory = memoryOf(memories, live.id);
 
-		const memory = memoryOf(memories, progress.id);
+		remember(memory, live.toolCalls ?? []);
 
-		remember(memory, progress.toolCalls ?? []);
-
-		return studioView(progress, memory);
+		return studioView(live, memory);
 	}, [progress, memories]);
 }
 

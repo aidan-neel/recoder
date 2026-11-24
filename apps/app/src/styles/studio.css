@@ -345,6 +345,10 @@
 	transition: transform 900ms cubic-bezier(0.45, 0, 0.2, 1);
 }
 
+.studio-agent[data-arriving] {
+	transition: none;
+}
+
 .studio-tag {
 	position: absolute;
 	right: -6px;
@@ -412,6 +416,13 @@
 .studio-bot-visor {
 	fill: color-mix(in oklab, var(--hue) 15%, black);
 	opacity: 0.35;
+}
+
+.studio-bot-antenna {
+	fill: var(--hue);
+	stroke: var(--hue);
+	stroke-width: 1.4;
+	stroke-linecap: round;
 }
 
 .studio-bot-happy path {

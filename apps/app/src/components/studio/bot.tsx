@@ -18,7 +18,8 @@ interface BotProps {
  * A reviewer character: a rounded screen with two eyes on a small body, in its
  * colour. Its pose follows its real verb: eyes scan while it reads, the head
  * tilts while it searches, dots rise while it thinks, eyes close while it waits
- * for a model, and it smiles once done. Decoration only: the words beside it
+ * for a model, and it smiles once done. The orchestrator wears an antenna,
+ * a verifier a visor. Decoration only: the words beside it
  * carry the status.
  */
 export function Bot({ agent, size = 26, face, walking, className }: BotProps) {
@@ -50,6 +51,12 @@ export function Bot({ agent, size = 26, face, walking, className }: BotProps) {
 								<rect x="15" y="7.5" width="3" height="5.5" rx="1.5" />
 							</g>
 						)}
+						{agent.role === 'lead' ? (
+							<g className="studio-bot-antenna">
+								<path d="M13 2V1.2" />
+								<circle cx="13" cy="1" r="1" />
+							</g>
+						) : null}
 						{agent.role === 'verifier' ? (
 							<rect className="studio-bot-visor" x="6" y="4.2" width="14" height="1.6" rx=".8" />
 						) : null}

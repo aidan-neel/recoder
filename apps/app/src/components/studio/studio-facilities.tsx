@@ -117,22 +117,25 @@ export function HelpDesk({ rows }: { rows: number }) {
 	);
 }
 
-/** The sandbox: the command running there now, from the stream's newest running `run` call; one line while idle. */
+/**
+ * The sandbox: the command running there now, from the stream's newest running `run` call, else the checkout or
+ * the checks the pipeline runs there, in its own words; one line while idle.
+ */
 export function Sandbox({ rows }: { rows: number }) {
 	const { view } = useScene();
-	const command = view.running?.input?.command ?? null;
+	const work = view.sandbox;
 
 	return (
-		<Card as="section" className="studio-facility" aria-label="Sandbox" data-settled={command ? undefined : ''}>
+		<Card as="section" className="studio-facility" aria-label="Sandbox" data-settled={work ? undefined : ''}>
 			<header className="studio-facility-head">
 				<span className="studio-facility-name">Sandbox</span>
-				{command ? null : <span className="meta">Idle</span>}
+				{work ? null : <span className="meta">Idle</span>}
 			</header>
-			{command ? (
+			{work ? (
 				<>
 					<Bench spot="sandbox" rows={rows} />
-					<Pill face="code" title={command}>
-						$ {command}
+					<Pill face={work.command ? 'code' : 'text'} title={work.text}>
+						{work.command ? `$ ${work.text}` : work.text}
 					</Pill>
 				</>
 			) : null}
