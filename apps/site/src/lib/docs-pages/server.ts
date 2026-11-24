@@ -27,7 +27,7 @@ Its flags:
 | \`--internal-tls\` | Issue the certificate from Caddy's internal CA instead of a public one. For air-gapped and test installs; browsers will warn about the certificate. |
 | \`--yes\` | Answer yes to every question. |
 
-Environment variables: \`RECODER_VERSION\` pins a release tag (\`v0.4.0\`) instead of the latest, and \`RECODER_INSTALL_DIR\` moves the files somewhere other than \`/opt/recoder\`.
+Environment variables: \`RECODER_VERSION\` pins a release tag (\`v0.4.1\`) instead of the latest, and \`RECODER_INSTALL_DIR\` moves the files somewhere other than \`/opt/recoder\`.
 
 Running the script again is safe: data, secrets and settings are kept, and only the generated files are rewritten — so do not edit \`compose.yaml\` or the \`Caddyfile\`; put extra environment for the server in \`.env\` instead. The script pins the release tag it installed; updates come from the app's updater, not from running the script again.
 
@@ -91,9 +91,9 @@ A \`v*\` tag builds the CLI binaries for four platforms, the server image and th
 
 The checklist for a release:
 
-1. The versions on \`main\` are the number you are about to tag: the root and server \`package.json\`, the server's fallback in \`apps/server/src/version.ts\`, and the chart's \`appVersion\`, which is the image tag the chart deploys by default (\`v0.4.0\`).
+1. The versions on \`main\` are the number you are about to tag: the root and server \`package.json\`, the server's fallback in \`apps/server/src/version.ts\`, and the chart's \`appVersion\`, which is the image tag the chart deploys by default (\`v0.4.1\`).
 2. \`main\` is green: CI runs the whole verify suite on it.
-3. Tag \`v0.4.0\` and push the tag. Everything above happens by itself.
+3. Tag \`v0.4.1\` and push the tag. Everything above happens by itself.
 4. First release only: make [the image package](https://github.com/aidan-neel/recoder/pkgs/container/recoder) and [the updater's](https://github.com/aidan-neel/recoder/pkgs/container/recoder-updater) public on ghcr.io, or installs cannot pull them.
 
 Every route refuses an unclaimed browser until setup finishes, so the first public server is safe to expose.`
