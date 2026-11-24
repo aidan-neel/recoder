@@ -1,6 +1,7 @@
 import type { FailureAction, UsageLimit } from '@recoder/shared';
 
 import { takeEarly } from './early-fetch';
+import { reportAnswered, reportUnreachable } from './reachability';
 import { plainError } from './server-error';
 import { reportSessionRefused } from './session-refused';
 
@@ -79,14 +80,23 @@ function isPlainRead(init: RequestInit | undefined): boolean {
  * `fetch`, with a failure to reach the server (the `TypeError` fetch rejects
  * with) turned into a `NetworkError`. An abort stays an abort. A plain read
  * the early fetch script already started is taken instead of asked again.
+ * Whether the server answered is reported, so the app notices it going away and coming back.
  */
 async function send(path: string, init?: RequestInit): Promise<Response> {
 	try {
 		const early = isPlainRead(init) ? takeEarly(path) : undefined;
 
-		return await (early ?? fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' }));
+		const response = await (early ?? fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' }));
+
+		reportAnswered();
+
+		return response;
 	} catch (error) {
-		if (error instanceof TypeError) throw new NetworkError(error.message, { cause: error });
+		if (error instanceof TypeError) {
+			reportUnreachable();
+
+			throw new NetworkError(error.message, { cause: error });
+		}
 
 		throw error;
 	}

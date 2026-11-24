@@ -2,6 +2,7 @@ import { Button } from '@recoder/ui';
 
 import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
 import { OFFLINE_TEXT } from '@/lib/api/http';
+import { useRetryWhenBack } from '@/lib/api/use-retry-when-back';
 import type { ActionFace } from '@/lib/connections/use-remote-list';
 
 interface FailedGroupProps {
@@ -14,6 +15,8 @@ interface FailedGroupProps {
 
 /** A group whose load failed: what did not load, why, and a way to load it again. */
 export function FailedGroup({ title, reason, retry }: FailedGroupProps) {
+	useRetryWhenBack(retry.run);
+
 	return (
 		<SettingsGroup title={title}>
 			<SettingsRow name={`${title} did not load`} error={reason ?? OFFLINE_TEXT}>

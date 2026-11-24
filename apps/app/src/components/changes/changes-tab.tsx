@@ -5,6 +5,7 @@ import { Button, Skeleton, StatusNotice } from '@recoder/ui';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 
 import { useApi } from '@/lib/api/client';
+import { useRetryWhenBack } from '@/lib/api/use-retry-when-back';
 import type { BugView } from '@/lib/bugs/types';
 import { useShowFyi } from '@/lib/bugs/show-fyi';
 import { useBugsView } from '@/lib/bugs/use-bugs';
@@ -206,6 +207,9 @@ export function ChangesTab({ repoId, number, mode }: ChangesTabProps) {
 	const { base } = useApi();
 	const session = useSession();
 	const diff = usePullDiffView();
+
+	useRetryWhenBack(diff.phase === 'failed' ? diff.retry : null);
+
 	const tree = useFileTree();
 	const viewed = useViewedFiles();
 	const guide = useGuide();
