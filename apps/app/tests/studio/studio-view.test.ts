@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { emptyReviewProgress, type ReviewProgress, type ReviewToolCall } from '@recoder/shared';
+import { emptyReviewProgress, type ReviewProgress, type ReviewTask, type ReviewToolCall } from '@recoder/shared';
 
 import { createMemory, remember, studioView } from '../../src/lib/studio/studio-view';
 
@@ -98,5 +98,68 @@ describe('studioView', () => {
 
 		expect(view.rooms[0].files[0]).toMatchObject({ read: 0, done: false });
 		expect(view.agents.find((agent) => agent.id === 'part-1')).toMatchObject({ verb: 'reading', path: 'src/a.ts' });
+	});
+
+	test('before the plan the orchestrator works from the pipeline tasks and its own calls, and reads open rooms', () => {
+		const task = (id: string, kind: ReviewTask['kind'], message: string): ReviewTask => ({
+			id,
+			label: id,
+			status: 'running',
+			message,
+			kind,
+			updatedAt: AT
+		});
+
+		const empty = studioView(emptyReviewProgress('review-2'), createMemory());
+
+		expect(empty.agents).toEqual([]);
+
+		const checkout = studioView(
+			{ ...emptyReviewProgress('review-2'), tasks: { sandbox: task('sandbox', 'checkout', 'Cloning repository') } },
+			createMemory()
+		);
+
+		expect(checkout.agents).toMatchObject([{ id: 'lead', verb: 'running', say: 'Cloning repository' }]);
+		expect(checkout.sandbox).toEqual({ text: 'Cloning repository', command: false });
+
+		const memory = createMemory();
+
+		const read = call('read-1', '', 'readFile', {
+			status: 'running',
+			input: { action: 'readFile', path: 'AGENTS.md' }
+		});
+
+		const unassigned = { ...read, assignmentId: undefined };
+
+		remember(memory, [unassigned]);
+
+		const reading = studioView(
+			{
+				...emptyReviewProgress('review-2'),
+				tasks: { inventory: task('inventory', 'inventory', 'Building the change inventory') },
+				toolCalls: [unassigned]
+			},
+			memory
+		);
+
+		expect(reading.agents).toMatchObject([{ id: 'lead', verb: 'reading', path: 'AGENTS.md' }]);
+		expect(reading.rooms).toMatchObject([{ folder: '.', files: [{ path: 'AGENTS.md', hunks: 0, done: false }] }]);
+	});
+
+	test('a reviewer that searches after reading stays at the file it read', () => {
+		const calls = [
+			call('read-1', 'part-1', 'readDiff', { input: { action: 'readDiff', path: 'src/a.ts', hunkIds: ['h1'] } }),
+			call('search-1', 'part-1', 'search', { status: 'running', input: { action: 'search', query: 'refill' } })
+		];
+
+		const view = studioView(progress(calls), createMemory());
+
+		expect(view.agents.find((agent) => agent.id === 'part-1')).toMatchObject({ verb: 'searching', path: 'src/a.ts' });
+	});
+
+	test('a running reviewer with no call in flight is thinking, not idle', () => {
+		const view = studioView(progress([]), createMemory());
+
+		expect(view.agents.find((agent) => agent.id === 'part-1')).toMatchObject({ verb: 'thinking' });
 	});
 });

@@ -22,6 +22,7 @@ const VERB_WORD: Record<StudioVerb, string> = {
 
 /** What an agent is for, in a few words, from the plan. */
 function roleOf(agent: StudioAgent, agents: Map<string, StudioAgent>): string {
+	if (agent.role === 'lead') return 'Runs the review';
 	if (agent.role === 'verifier') return 'Checks candidates';
 	if (agent.role === 'subagent') return `Asked by ${agents.get(agent.askedBy ?? '')?.short ?? 'a reviewer'}`;
 

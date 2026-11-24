@@ -26,13 +26,14 @@ export function useStudioShown(run: RunView): { shown: boolean; ended: boolean }
 	return { shown: live || ended, ended };
 }
 
-/** Studio for the pull request's newest review, from the session's live progress; nothing until the plan has parts. */
+/**
+ * Studio for the pull request's newest review, from the session's live progress. It shows from the first second:
+ * an empty office until the pipeline's first task, then the orchestrator, then the reviewers once the plan lands.
+ */
 export function ReviewStudio({ run, ended }: { run: RunView; ended: boolean }) {
 	const progress = useSessionData((data) => data.progress);
 	const view = useStudio(progress);
 	const [selected, setSelected] = useState<string | null>(null);
-
-	if (!view || view.agents.length === 0) return null;
 
 	return (
 		<Studio

@@ -1,4 +1,12 @@
-import type { ReviewAssignment, ReviewCandidate, ReviewProgress, ReviewTask, ReviewToolCall } from '@recoder/shared';
+import {
+	ORCHESTRATOR_ID,
+	type ReviewAssignment,
+	type ReviewCandidate,
+	type ReviewProgress,
+	type ReviewTask,
+	type ReviewTaskKind,
+	type ReviewToolCall
+} from '@recoder/shared';
 
 /**
  * Studio's cast and floor, read from the review's progress. Everything that
@@ -7,16 +15,16 @@ import type { ReviewAssignment, ReviewCandidate, ReviewProgress, ReviewTask, Rev
  * timed or guessed.
  */
 
-type StudioRole = 'reviewer' | 'subagent' | 'verifier';
+type StudioRole = 'lead' | 'reviewer' | 'subagent' | 'verifier';
 
 export type StudioVerb =
 	'queued' | 'waiting' | 'reading' | 'searching' | 'running' | 'thinking' | 'idle' | 'done' | 'failed';
 
 export interface StudioAgent {
-	/** The assignment id, or the verification lane (`verifier-1`). */
+	/** The assignment id, the verification lane (`verifier-1`), or `lead` for the orchestrator. */
 	id: string;
 	role: StudioRole;
-	/** `R1`, `S1`, `V1`: the name on its chip. */
+	/** `O`, `R1`, `S1`, `V1`: the name on its chip. */
 	short: string;
 	name: string;
 	/** The colour it wears, a chart token. */
@@ -30,11 +38,11 @@ export interface StudioAgent {
 	question: string | null;
 	/** A verifier: the candidate it checks now. */
 	candidateId: string | null;
-	/** The ids it posts tool calls under: the assignment, or a verifier's verification tasks. */
+	/** The ids it posts tool calls under: the assignment, a verifier's verification tasks, or none for the orchestrator. */
 	owners: string[];
 }
 
-/** A file of the plan: the hunks its reviewers were given, and how many of them a reviewer has read. */
+/** A file of the plan or one a tool call touched: the hunks its reviewers were given, and how many of them were read. */
 export interface StudioFile {
 	path: string;
 	folder: string;
@@ -66,12 +74,21 @@ export interface ChainStep {
 
 /**
  * What Studio keeps across updates, because the stream keeps only the newest
- * 300 tool calls: the hunks read and the steps each verifier took.
+ * 300 tool calls: the hunks read, the files any call touched and finished
+ * with, and the steps each verifier took.
  */
 export interface StudioMemory {
 	hunks: Set<string>;
 	files: Set<string>;
+	touched: Set<string>;
+	visited: Set<string>;
 	steps: Map<string, { candidate: string; kind: 'traced' | 'ran' | 'checked'; at: string }>;
+}
+
+/** What runs in the sandbox now: a reviewer's or verifier's command, else the checkout or checks the pipeline runs there. */
+interface SandboxWork {
+	text: string;
+	command: boolean;
 }
 
 export interface StudioView {
@@ -79,8 +96,7 @@ export interface StudioView {
 	rooms: StudioRoom[];
 	candidates: ReviewCandidate[];
 	chains: Map<string, ChainStep[]>;
-	/** The newest `run` call still at work, for the sandbox. */
-	running: ReviewToolCall | null;
+	sandbox: SandboxWork | null;
 }
 
 const REVIEWER_HUES = ['--chart-1', '--chart-2', '--chart-5', '--chart-6'];
@@ -88,7 +104,7 @@ const REVIEWER_HUES = ['--chart-1', '--chart-2', '--chart-5', '--chart-6'];
 const VERIFY_PREFIX = 'verify:';
 
 export function createMemory(): StudioMemory {
-	return { hunks: new Set(), files: new Set(), steps: new Map() };
+	return { hunks: new Set(), files: new Set(), touched: new Set(), visited: new Set(), steps: new Map() };
 }
 
 function stepKind(call: ReviewToolCall): 'traced' | 'ran' | 'checked' {
@@ -101,10 +117,14 @@ function stepKind(call: ReviewToolCall): 'traced' | 'ran' | 'checked' {
 	return 'checked';
 }
 
-/** Folds the stream's tool calls into the memory: finished diff reads, and every call a verifier made. */
+/** Folds the stream's tool calls into the memory: the files they touch, finished diff reads, and every call a verifier made. */
 export function remember(memory: StudioMemory, calls: ReviewToolCall[]): void {
 	for (const call of calls) {
 		const owner = call.assignmentId ?? '';
+		const touched = call.input?.path;
+
+		if (touched) memory.touched.add(touched);
+		if (touched && call.status !== 'running') memory.visited.add(touched);
 
 		if (owner.startsWith(VERIFY_PREFIX) && !memory.steps.has(call.id))
 			memory.steps.set(call.id, {
@@ -129,7 +149,11 @@ function folderOf(path: string): string {
 	return cut === -1 ? '.' : path.slice(0, cut);
 }
 
-/** The files the plan hands out, each once, with the hunks read so far, grouped by folder in plan order. */
+/**
+ * The files the plan hands out, each once, with the hunks read so far, then the
+ * files a tool call touched outside the plan, grouped by folder in that order.
+ * A touched file has no hunks to count and is read once a call on it finished.
+ */
 function roomsOf(assignments: ReviewAssignment[], memory: StudioMemory): StudioRoom[] {
 	const files = new Map<string, Set<string>>();
 
@@ -144,10 +168,12 @@ function roomsOf(assignments: ReviewAssignment[], memory: StudioMemory): StudioR
 		}
 	}
 
+	for (const path of memory.touched) if (!files.has(path)) files.set(path, new Set());
+
 	const rooms = new Map<string, StudioRoom>();
 
 	for (const [path, hunks] of files) {
-		const whole = memory.files.has(path);
+		const whole = memory.files.has(path) || (hunks.size === 0 && memory.visited.has(path));
 		const read = whole ? hunks.size : [...hunks].filter((hunk) => memory.hunks.has(`${path}\n${hunk}`)).length;
 		const done = whole || (hunks.size > 0 && read === hunks.size);
 		const folder = folderOf(path);
@@ -161,14 +187,12 @@ function roomsOf(assignments: ReviewAssignment[], memory: StudioMemory): StudioR
 	return [...rooms.values()];
 }
 
-function verbOf(call: ReviewToolCall | undefined, thinking: boolean): StudioVerb {
-	if (call?.status === 'running') {
-		if (call.input?.action === 'run') return 'running';
+/** What a working agent does: the kind of call it has running, else it waits on its model's turn, which reads as thinking. */
+function verbOf(call: ReviewToolCall | undefined): StudioVerb {
+	if (call?.status !== 'running') return 'thinking';
+	if (call.input?.action === 'run') return 'running';
 
-		return call.input?.action === 'search' ? 'searching' : 'reading';
-	}
-
-	return thinking ? 'thinking' : 'idle';
+	return call.input?.action === 'search' ? 'searching' : 'reading';
 }
 
 const SETTLED: Partial<Record<ReviewAssignment['status'], StudioVerb>> = {
@@ -179,23 +203,32 @@ const SETTLED: Partial<Record<ReviewAssignment['status'], StudioVerb>> = {
 	skipped: 'failed'
 };
 
+/** The orchestrator's calls carry no assignment, or its own conversation's id. */
+const LEAD_OWNERS = ['', ORCHESTRATOR_ID];
+
+/**
+ * Each owner's newest tool call, and the file of its newest call that named
+ * one, so a search or a command keeps it where it was reading. The
+ * orchestrator's are under `lead`.
+ */
 interface Calls {
 	newest: Map<string, ReviewToolCall>;
-	thinking: Set<string>;
+	place: Map<string, string>;
 }
 
 function callsOf(progress: ReviewProgress): Calls {
 	const newest = new Map<string, ReviewToolCall>();
+	const place = new Map<string, string>();
 
-	for (const call of progress.toolCalls ?? []) if (call.assignmentId) newest.set(call.assignmentId, call);
+	for (const call of progress.toolCalls ?? []) {
+		const owner = call.assignmentId ?? '';
+		const key = LEAD_OWNERS.includes(owner) ? 'lead' : owner;
 
-	const thinking = new Set(
-		(progress.reasoning ?? [])
-			.filter((entry) => entry.status === 'streaming' && entry.assignmentId)
-			.map((entry) => entry.assignmentId ?? '')
-	);
+		newest.set(key, call);
+		if (call.input?.path) place.set(key, call.input.path);
+	}
 
-	return { newest, thinking };
+	return { newest, place };
 }
 
 function assignmentAgent(assignment: ReviewAssignment, short: string, hue: string, calls: Calls): StudioAgent {
@@ -209,8 +242,8 @@ function assignmentAgent(assignment: ReviewAssignment, short: string, hue: strin
 		short,
 		name: assignment.title,
 		hue,
-		verb: settled ?? verbOf(call, calls.thinking.has(assignment.id)),
-		path: working ? (call?.input?.path ?? null) : null,
+		verb: settled ?? verbOf(call),
+		path: working ? (calls.place.get(assignment.id) ?? null) : null,
 		say: working && call?.status === 'running' ? call.command : (assignment.currentOperation ?? null),
 		askedBy: assignment.askedBy ?? null,
 		question: assignment.question ?? null,
@@ -242,8 +275,8 @@ function verifiers(tasks: ReviewTask[], candidates: ReviewCandidate[], calls: Ca
 				short: `V${index + 1}`,
 				name: `Verifier ${index + 1}`,
 				hue: 'var(--chart-3)',
-				verb: task ? verbOf(call, calls.thinking.has(task.id)) : 'idle',
-				path: task ? (call?.input?.path ?? candidate?.path ?? null) : null,
+				verb: task ? verbOf(call) : 'idle',
+				path: task ? (calls.place.get(task.id) ?? candidate?.path ?? null) : null,
 				say: task ? (call?.status === 'running' ? call.command : task.message) : null,
 				askedBy: null,
 				question: null,
@@ -251,6 +284,49 @@ function verifiers(tasks: ReviewTask[], candidates: ReviewCandidate[], calls: Ca
 				owners: own.map((item) => item.id)
 			} satisfies StudioAgent;
 		});
+}
+
+/** The pipeline's own steps that run in the review checkout: fetching and checking it out, setting it up, the checks. */
+const SANDBOX_KINDS: ReviewTaskKind[] = ['checkout', 'setup', 'checks'];
+
+/** The orchestrator's own tasks running now, newest first: none of them belong to a reviewer or a verifier. */
+function leadTasks(progress: ReviewProgress): ReviewTask[] {
+	return Object.values(progress.tasks)
+		.filter((task) => task.status === 'running' && !task.assignmentId && task.kind !== 'verification')
+		.sort((a, b) => (b.activityAt ?? b.updatedAt).localeCompare(a.activityAt ?? a.updatedAt));
+}
+
+/**
+ * The orchestrator, there from the pipeline's first task: at the file its own
+ * call reads, thinking while it understands, plans or writes the summary, and
+ * in the sandbox while it checks the change out or runs the checks. Between
+ * its steps it waits in the commons. Before any task it is not there yet.
+ */
+function leadAgent(progress: ReviewProgress, calls: Calls): StudioAgent | null {
+	const tasks = leadTasks(progress);
+	const call = calls.newest.get('lead');
+
+	if (Object.keys(progress.tasks).length === 0 && !call) return null;
+
+	const busy = call?.status === 'running';
+	const thinking = tasks.find((task) => !SANDBOX_KINDS.includes(task.kind ?? 'other'));
+	const checking = tasks.find((task) => SANDBOX_KINDS.includes(task.kind ?? 'other'));
+	const verb: StudioVerb = busy ? verbOf(call) : thinking ? 'thinking' : checking ? 'running' : 'idle';
+
+	return {
+		id: 'lead',
+		role: 'lead',
+		short: 'O',
+		name: 'Orchestrator',
+		hue: 'var(--text-muted)',
+		verb,
+		path: busy || thinking ? (calls.place.get('lead') ?? null) : null,
+		say: busy ? call.command : (thinking ?? checking)?.message || null,
+		askedBy: null,
+		question: null,
+		candidateId: null,
+		owners: LEAD_OWNERS
+	};
 }
 
 function castOf(progress: ReviewProgress, calls: Calls): StudioAgent[] {
@@ -275,7 +351,13 @@ function castOf(progress: ReviewProgress, calls: Calls): StudioAgent[] {
 		);
 	});
 
-	return [...cast, ...verifiers(Object.values(progress.tasks), progress.candidates ?? [], calls)];
+	const lead = leadAgent(progress, calls);
+
+	return [
+		...(lead ? [lead] : []),
+		...cast,
+		...verifiers(Object.values(progress.tasks), progress.candidates ?? [], calls)
+	];
 }
 
 const VERDICT: Partial<Record<ReviewCandidate['state'], StepKind>> = {
@@ -328,11 +410,17 @@ export function studioView(progress: ReviewProgress, memory: StudioMemory): Stud
 		(call) => call.status === 'running' && call.input?.action === 'run'
 	);
 
+	const checking = leadTasks(progress).find((task) => SANDBOX_KINDS.includes(task.kind ?? 'other'));
+
 	return {
 		agents: castOf(progress, calls),
 		rooms: roomsOf(progress.assignments ?? [], memory),
 		candidates,
 		chains: new Map(candidates.map((candidate) => [candidate.id, chainOf(candidate, memory)])),
-		running: running ?? null
+		sandbox: running?.input?.command
+			? { text: running.input.command, command: true }
+			: checking?.message
+				? { text: checking.message, command: false }
+				: null
 	};
 }

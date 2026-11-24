@@ -3,7 +3,7 @@
 import { Button, Card, cn, FileChip, Popover, PopoverContent, PopoverTrigger, RowButton } from '@recoder/ui';
 import type { ReviewToolCall } from '@recoder/shared';
 import { useReducedMotion } from 'motion/react';
-import { useEffect, useMemo, useRef, type CSSProperties, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 
 import { plural } from '@/lib/shell/format';
 import type { StudioAgent, StudioView } from '@/lib/studio/studio-view';
@@ -68,11 +68,41 @@ function focusPanel(event: Event) {
 }
 
 /**
+ * The characters that just came on the floor, until two frames have passed: they
+ * appear at their spot instead of walking there from wherever the floor stood
+ * before the plan or a reload laid it out.
+ */
+function useArriving(agents: StudioAgent[]): Set<string> {
+	const [placed, setPlaced] = useState<ReadonlySet<string>>(() => new Set());
+	const arriving = agents.filter((agent) => !placed.has(agent.id)).map((agent) => agent.id);
+	const key = arriving.join('\n');
+
+	useEffect(() => {
+		if (!key) return;
+
+		let second = 0;
+
+		const first = requestAnimationFrame(() => {
+			second = requestAnimationFrame(() => setPlaced((current) => new Set([...current, ...key.split('\n')])));
+		});
+
+		return () => {
+			cancelAnimationFrame(first);
+			cancelAnimationFrame(second);
+		};
+	}, [key]);
+
+	return new Set(arriving);
+}
+
+/**
  * The characters, laid over the floor at their spots. Each walks there with a
- * transform transition; while it moves its legs go. A click opens its ledger.
+ * transform transition, except on arriving; while it moves its legs go. A
+ * click opens its ledger.
  */
 function Cast({ agents, where, spots, selected, select }: CastProps) {
 	const seats = new Map<string, number>();
+	const arriving = useArriving(agents);
 
 	return (
 		<div className="studio-cast">
@@ -95,6 +125,7 @@ function Cast({ agents, where, spots, selected, select }: CastProps) {
 							<RowButton
 								className={cn('studio-agent', selected === agent.id && 'is-selected')}
 								data-agent={agent.id}
+								data-arriving={arriving.has(agent.id) || undefined}
 								style={{ transform: `translate(${x}px, ${y}px)`, '--hue': agent.hue } as CSSProperties}
 								aria-label={`${agent.short}, ${agent.name}${agent.say ? `: ${agent.say}` : ''}`}
 								onTransitionRun={(event) => {
@@ -148,6 +179,7 @@ function Commons({ view, ended, rows }: { view: StudioView; ended: boolean; rows
 			<header className="studio-facility-head">
 				<span className="studio-facility-name">{ended ? 'Everyone is back' : 'Commons'}</span>
 				{ended ? <span className="meta tabular">{plural(proven.length, 'finding')} on the table</span> : null}
+				{view.agents.length === 0 ? <span className="meta">Setting up the office</span> : null}
 			</header>
 			<Bench spot="commons" rows={Math.max(rows, ended ? 1 : 0)} />
 			{ended && proven.length ? (
@@ -183,7 +215,9 @@ interface StudioProps {
 }
 
 /**
- * Studio: the review as an office. Rooms are folders and desks are files; the
+ * Studio: the review as an office. Rooms are folders and desks are files, each
+ * there once the plan hands it out or a call reads it; the orchestrator runs
+ * the checkout and the reading before the plan, the
  * reviewers walk to the file their newest tool call is in, verifiers take
  * candidates at their desk, subagents answer at the help desk, commands run in
  * the sandbox, and everyone ends in the commons with the findings. Status
@@ -197,7 +231,7 @@ export function Studio({ view, calls, startedAt, ended, selected, onSelect }: St
 
 	for (const spot of where.values()) crowd.set(spot, (crowd.get(spot) ?? 0) + 1);
 
-	const layout = [...crowd.entries(), view.rooms.length, view.candidates.length, ended, view.running?.id].join();
+	const layout = [...crowd.entries(), view.rooms.length, view.candidates.length, ended, view.sandbox?.text].join();
 	const spots = useSpots(floor, layout);
 	const rows = (spot: string) => rowsFor(crowd.get(spot) ?? 0, spots.get(spot));
 	const agents = useMemo(() => new Map(view.agents.map((agent) => [agent.id, agent])), [view.agents]);
