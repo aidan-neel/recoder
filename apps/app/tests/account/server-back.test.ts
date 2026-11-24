@@ -40,6 +40,12 @@ function authApi(): AuthApi {
 	} as AuthApi;
 }
 
+/**
+ * The client the store is left on after each test. The store is one per process, so a test file that runs later and
+ * reports a refusal makes it read again; this client answers that without a request.
+ */
+const offline = { me: () => Promise.reject(new Error('No server in this test.')) } as unknown as AuthApi;
+
 /** Lets the store's promise chains settle between timer steps. */
 async function settle(): Promise<void> {
 	for (let i = 0; i < 5; i++) await Promise.resolve();
@@ -64,6 +70,7 @@ afterEach(async () => {
 	server = 'up';
 	await request('/api/auth/me');
 	await useAccount.getState().reload();
+	await useAccount.getState().ensure(offline);
 	stopRefused();
 	globalThis.fetch = realFetch;
 	jest.useRealTimers();
