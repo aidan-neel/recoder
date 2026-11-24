@@ -82,7 +82,7 @@ export async function runAdaptiveReview(
 		const wasAborted = run.controller.signal.aborted;
 
 		run.controller.abort();
-		await run.verifying?.drain().catch(() => undefined);
+		await drainVerification(run).catch(() => undefined);
 
 		return { ...stoppedReview(run, err, wasAborted), ...(run.diffGuide && { diffGuide: run.diffGuide }) };
 	} finally {
@@ -125,9 +125,9 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	await context;
 	await variantStage(run);
 
-	run.events?.onStage?.('reviewing');
 	if (run.controller.signal.aborted) throw new ReviewAbortedError('review aborted');
 
+	run.events?.onStage?.('reviewing');
 	startVerification(run, sandbox);
 
 	const detectors = detectorStage(run);
