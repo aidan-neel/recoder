@@ -143,10 +143,9 @@ function whyCodeCannotRun(run: ReviewRun, sandbox: Promise<BackgroundChecks>): (
 	return () => (answer ??= decide());
 }
 
-/** Resolves once every verifier queued so far has finished. */
+/** Enters the foreground verification stage and waits for every verifier queued so far. */
 export async function drainVerification(run: ReviewRun): Promise<void> {
-	if (run.verifying?.busy) run.events?.onStage?.('verify');
-
+	run.verifying?.enterStage();
 	await run.verifying?.drain();
 }
 
@@ -156,7 +155,7 @@ export async function drainVerification(run: ReviewRun): Promise<void> {
  * checked, and whatever is not verified is hidden.
  */
 export async function finishVerification(run: ReviewRun): Promise<void> {
-	await drainVerification(run);
+	await run.verifying?.drain();
 
 	publishCandidates(run);
 	publishBudget(run);

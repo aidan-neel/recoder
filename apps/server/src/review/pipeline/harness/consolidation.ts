@@ -33,6 +33,8 @@ function withLedgerRules(findings: Finding[], ledger: RuleLedger | null): Findin
  * citing one), its feedback topic, and quieted where people keep dismissing it.
  */
 export function confirmedFindings(run: ReviewRun): Finding[] {
+	run.events?.onStage?.('consolidation');
+
 	const findings = consolidateFindings(run.candidates, run.inventory, (folded, lead) =>
 		run.verifying?.progress.merge(folded, lead)
 	);
@@ -48,7 +50,6 @@ export function confirmedFindings(run: ReviewRun): Finding[] {
 export function consolidate(run: ReviewRun): Consolidated {
 	const { task } = run;
 
-	run.events?.onStage?.('consolidation');
 	publishCandidates(run);
 
 	const checks = [...run.recommended];

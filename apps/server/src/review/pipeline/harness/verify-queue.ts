@@ -72,6 +72,8 @@ export class VerifyQueue {
 
 	private accepted = 0;
 
+	private stage: 'background' | 'started' | 'foreground' | 'reported' = 'background';
+
 	/** Repairs still running; a candidate one makes valid joins the line when it finishes. */
 	private repairing = 0;
 
@@ -114,6 +116,17 @@ export class VerifyQueue {
 	 */
 	get heldCalls(): number {
 		return [...this.room.values()].reduce((sum, calls) => sum + calls, 0);
+	}
+
+	/** The pipeline has left reviewing and subagents. Report only once a verifier actually starts, even if it already finished. */
+	enterStage(): void {
+		if (this.stage === 'background') this.stage = 'foreground';
+		else if (this.stage === 'started') this.reportStage();
+	}
+
+	private reportStage(): void {
+		this.stage = 'reported';
+		this.run.events?.onStage?.('verify');
 	}
 
 	/**
@@ -329,6 +342,9 @@ export class VerifyQueue {
 
 			return;
 		}
+
+		if (this.stage === 'background') this.stage = 'started';
+		else if (this.stage === 'foreground') this.reportStage();
 
 		this.progress.verify(candidate, verifierId);
 

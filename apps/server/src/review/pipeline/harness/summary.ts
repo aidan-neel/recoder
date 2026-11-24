@@ -212,6 +212,7 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 	const settled = settleAssignments(run.assignments, 'Not finished: the review ran out of time');
 
 	hideUnproven(run);
+	run.verifying?.enterStage();
 
 	const confirmed = confirmedFindings(run);
 	const obligations = run.obligations && obligationReport(run.obligations, run.candidates);
