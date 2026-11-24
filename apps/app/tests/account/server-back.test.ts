@@ -63,6 +63,7 @@ beforeEach(() => {
 afterEach(async () => {
 	server = 'up';
 	await request('/api/auth/me');
+	await useAccount.getState().reload();
 	stopRefused();
 	globalThis.fetch = realFetch;
 	jest.useRealTimers();
@@ -89,7 +90,7 @@ test('an app opened while the server is down asks again until it answers, then o
 	expect(refused).toBe(0);
 });
 
-test('a server that goes down or answers 502 mid-session never signs the person out', async () => {
+test('a server that goes down or answers 502 mid-session never signs the person out, and stops being asked once it answers', async () => {
 	await useAccount.getState().ensure(authApi());
 	expect(useAccount.getState().auth).toEqual(signedIn);
 
@@ -101,6 +102,12 @@ test('a server that goes down or answers 502 mid-session never signs the person 
 	server = 'error';
 	await request('/api/repos').catch(() => {});
 	await useAccount.getState().reload();
+
+	const asked = meCalls;
+
+	jest.advanceTimersByTime(30000);
+	await settle();
+	expect(meCalls).toBe(asked);
 
 	expect(useAccount.getState().auth).toEqual(signedIn);
 	expect(gateOf(useAccount.getState())).toBe('open');

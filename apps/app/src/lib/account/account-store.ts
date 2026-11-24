@@ -133,6 +133,17 @@ function probe(wait = PROBE_MS): void {
 	}, wait);
 }
 
+/** The server answered, so the next ask waits for it to go quiet again. */
+function stopProbe(): void {
+	if (probeTimer) clearTimeout(probeTimer);
+
+	probeTimer = null;
+}
+
 onSessionRefused(() => void reload());
 onServerLost(() => probe());
-onServerBack(() => void reload());
+
+onServerBack(() => {
+	stopProbe();
+	void reload();
+});
