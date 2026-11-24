@@ -40,6 +40,12 @@ function authApi(): AuthApi {
 	} as AuthApi;
 }
 
+/**
+ * The client the store is left on after each test. The store is one per process, so a test file that runs later and
+ * reports a refusal makes it read again; this client answers that without a request.
+ */
+const offline = { me: () => Promise.reject(new Error('No server in this test.')) } as unknown as AuthApi;
+
 /** Lets the store's promise chains settle between timer steps. */
 async function settle(): Promise<void> {
 	for (let i = 0; i < 5; i++) await Promise.resolve();
@@ -63,6 +69,8 @@ beforeEach(() => {
 afterEach(async () => {
 	server = 'up';
 	await request('/api/auth/me');
+	await useAccount.getState().reload();
+	await useAccount.getState().ensure(offline);
 	stopRefused();
 	globalThis.fetch = realFetch;
 	jest.useRealTimers();
@@ -89,7 +97,7 @@ test('an app opened while the server is down asks again until it answers, then o
 	expect(refused).toBe(0);
 });
 
-test('a server that goes down or answers 502 mid-session never signs the person out', async () => {
+test('a server that goes down or answers 502 mid-session never signs the person out, and stops being asked once it answers', async () => {
 	await useAccount.getState().ensure(authApi());
 	expect(useAccount.getState().auth).toEqual(signedIn);
 
@@ -101,6 +109,12 @@ test('a server that goes down or answers 502 mid-session never signs the person 
 	server = 'error';
 	await request('/api/repos').catch(() => {});
 	await useAccount.getState().reload();
+
+	const asked = meCalls;
+
+	jest.advanceTimersByTime(30000);
+	await settle();
+	expect(meCalls).toBe(asked);
 
 	expect(useAccount.getState().auth).toEqual(signedIn);
 	expect(gateOf(useAccount.getState())).toBe('open');
