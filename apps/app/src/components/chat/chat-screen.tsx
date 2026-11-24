@@ -3,6 +3,7 @@
 import { Button, Icon, StatusNotice } from '@recoder/ui';
 
 import { useApi } from '@/lib/api/client';
+import { useRetryWhenBack } from '@/lib/api/use-retry-when-back';
 import type { RepoChatView } from '@/lib/chat/types';
 import { useRepoChat } from '@/lib/chat/use-repo-chat';
 import { newReviewHref } from '@/lib/shell/routes';
@@ -77,6 +78,8 @@ function ChatMissing() {
 
 /** A chat that did not load: the server did not answer, or answered with an error. */
 function ChatFailed({ error, retry }: { error: string | null; retry: () => void }) {
+	useRetryWhenBack(retry);
+
 	return (
 		<div className="page-notice">
 			<StatusNotice

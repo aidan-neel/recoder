@@ -14,6 +14,7 @@ import {
 import { useEffect, useRef } from 'react';
 
 import { useAccountView } from '@/lib/account/use-account-menu';
+import { useRetryWhenBack } from '@/lib/api/use-retry-when-back';
 import { useApi } from '@/lib/api/client';
 import { useFollowEnd } from '@/lib/ask/use-follow-end';
 import { useDock } from '@/lib/messages/dock-store';
@@ -167,6 +168,9 @@ export function ConversationPanel({
 	onClose
 }: WindowControls & { conversationId: string }) {
 	const view = useConversation(conversationId);
+
+	useRetryWhenBack(view.phase === 'failed' ? view.retry : null);
+
 	const { conversation } = view;
 
 	return (

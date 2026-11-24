@@ -15,6 +15,7 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 
 import type { Forge } from '@/lib/api/connections';
+import { useRetryWhenBack } from '@/lib/api/use-retry-when-back';
 import { OFFLINE_TEXT } from '@/lib/api/http';
 import { FORGES, forgeLabel } from '@/lib/connections/forges';
 import {
@@ -179,6 +180,8 @@ interface RemoteListProps {
  * searching never resize the dialog.
  */
 export function RemoteList({ view, onConnect }: RemoteListProps) {
+	useRetryWhenBack(view.kind === 'auth-error' ? view.retry.run : view.kind === 'failed' ? view.retry : null);
+
 	switch (view.kind) {
 		case 'checking':
 		case 'loading':

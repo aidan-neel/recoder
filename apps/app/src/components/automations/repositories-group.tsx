@@ -5,6 +5,7 @@ import { Button } from '@recoder/ui';
 
 import { ForgeTile } from '@/components/common/forge-tile';
 import { OFFLINE_TEXT } from '@/lib/api/http';
+import { useRetryWhenBack } from '@/lib/api/use-retry-when-back';
 import type { AutoReviewSection } from '@/lib/settings/use-auto-review-section';
 import { useAutoReviewSwitch } from '@/lib/settings/use-auto-review-switch';
 import { useWatchRepo, type WatchRepoView } from '@/lib/settings/use-watch-repo';
@@ -71,6 +72,8 @@ function NoRepositories() {
 
 /** The list did not load while the settings did: say why, and offer to read it again. */
 function LoadFailed({ error, retry }: { error: string | null; retry: Retry }) {
+	useRetryWhenBack(retry.run);
+
 	return (
 		<SettingsRow name="Repositories did not load" detail={error ?? OFFLINE_TEXT}>
 			<Button variant="outline" status={retry.status} onClick={retry.run}>

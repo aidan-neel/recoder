@@ -4,6 +4,7 @@ import type { PullCommit } from '@recoder/shared';
 import { Button, CopyButton, HoverList, RowButton, Skeleton, StatusNotice } from '@recoder/ui';
 
 import { LOADING_COMMITS } from '@/lib/commits/loading-commits';
+import { useRetryWhenBack } from '@/lib/api/use-retry-when-back';
 import { shortSha } from '@/lib/files/ref-label';
 import { usePullCommitsView, useSession } from '@/lib/pull/pull-session';
 import { author } from '@/lib/shell/format';
@@ -52,6 +53,9 @@ function CommitRow({ commit, repoId }: { commit: PullCommit; repoId: string }) {
 /** The Commits tab: every commit of the pull request, oldest first. While they load, the skeleton is drawn from stand-in commits. */
 export function CommitsTab() {
 	const commits = usePullCommitsView();
+
+	useRetryWhenBack(commits.phase === 'failed' ? commits.retry : null);
+
 	const { repoId } = useSession();
 
 	return (

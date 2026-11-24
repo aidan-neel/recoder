@@ -3,6 +3,7 @@ import { forgetSkeletonShapes } from '@recoder/ui';
 import { create } from 'zustand';
 
 import type { AuthApi } from '../api/accounts';
+import { isServerUnreachable, onServerBack, onServerLost } from '../api/reachability';
 import { onSessionRefused } from '../api/session-refused';
 import { useConnections } from '../connections/connections-store';
 
@@ -108,4 +109,30 @@ async function signOut(): Promise<void> {
 	await reload();
 }
 
+/** The first wait before asking a quiet server again; each failed try doubles it, up to the ceiling. */
+const PROBE_MS = 1000;
+
+const PROBE_MAX_MS = 10000;
+
+let probeTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Asks who is signed in again, after a wait that grows, for as long as the server does not answer. Its answer is how
+ * the app finds out the server is back: a failed request is never a sign-out, so the session the browser holds is
+ * read again rather than dropped.
+ */
+function probe(wait = PROBE_MS): void {
+	if (probeTimer || !source) return;
+
+	probeTimer = setTimeout(() => {
+		probeTimer = null;
+
+		void reload().then(() => {
+			if (isServerUnreachable()) probe(Math.min(wait * 2, PROBE_MAX_MS));
+		});
+	}, wait);
+}
+
 onSessionRefused(() => void reload());
+onServerLost(() => probe());
+onServerBack(() => void reload());
