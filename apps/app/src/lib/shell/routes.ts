@@ -72,6 +72,12 @@ export function newReviewHref(base: string): string {
 	return `${base}/new`;
 }
 
+export type ComposeLabVariant = 'a' | 'b' | 'c';
+
+export function composeLabHref(variant: ComposeLabVariant): string {
+	return `${SAMPLE_HREF}/compose-lab/${variant}`;
+}
+
 /** A chat with Recoder about a repository. */
 export function chatHref(base: string, chatId: string): string {
 	return `${base}/chats/${encodeURIComponent(chatId)}`;
@@ -95,6 +101,7 @@ function sectionOf(id: string | undefined): SettingsSection | null {
 /** The screen an address opens, with the parts of the address that screen reads. */
 export type Route =
 	| { screen: 'pulls' | 'new' | 'repos' | 'automations' | 'guidelines' | 'missing' }
+	| { screen: 'compose-lab'; variant: ComposeLabVariant }
 	| { screen: 'repo'; repoId: string }
 	| { screen: 'pull'; repoId: string; number: number }
 	| { screen: 'chat'; chatId: string }
@@ -125,6 +132,10 @@ function screenOf(parts: string[], live: boolean): Route | null {
 			return { screen: 'pulls' };
 		case 'new/1':
 			return { screen: 'new' };
+		case 'compose-lab/2':
+			return !live && (first === 'a' || first === 'b' || first === 'c')
+				? { screen: 'compose-lab', variant: first }
+				: null;
 		case 'repos/1':
 			return { screen: 'repos' };
 		case 'repos/2':
@@ -185,6 +196,8 @@ export function titleOf(route: Route): string {
 			return 'Pull requests';
 		case 'new':
 			return 'New review';
+		case 'compose-lab':
+			return 'Composer lab';
 		case 'repos':
 			return 'Repositories';
 		case 'repo':

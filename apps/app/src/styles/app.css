@@ -23,6 +23,7 @@
 @import './files.css';
 @import './commits.css';
 @import './compose.css';
+@import './compose-lab.css';
 @import './settings.css';
 @import './usage.css';
 @import './token-usage.css';

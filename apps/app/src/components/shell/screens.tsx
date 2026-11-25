@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useEffect, useMemo } from 'react';
 
 import { useApi } from '@/lib/api/client';
@@ -20,6 +21,10 @@ import { RepoScreen } from '@/components/repo/repo-screen';
 import { ReposScreen } from '@/components/repo/repos-screen';
 import { SettingsScreen } from '@/components/settings/settings-screen';
 
+const ComposeLabScreen = dynamic(() =>
+	import('@/components/compose/compose-lab-screen').then((module) => module.ComposeLabScreen)
+);
+
 /** The app's name, which follows the screen's own title in the browser tab. */
 const APP_NAME = 'Recoder';
 
@@ -30,6 +35,8 @@ function Screen({ route, live }: { route: Route; live: boolean }) {
 			return live ? <LivePulls /> : <PullsScreen />;
 		case 'new':
 			return <ComposeScreen />;
+		case 'compose-lab':
+			return <ComposeLabScreen variant={route.variant} />;
 		case 'repos':
 			return <ReposScreen />;
 		case 'repo':

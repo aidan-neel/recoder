@@ -31,6 +31,7 @@ const ICONS: Record<Route['screen'], IconName> = {
 	pull: 'pull_request',
 	review: 'pull_request',
 	new: 'add',
+	'compose-lab': 'add',
 	repos: 'folder',
 	repo: 'folder',
 	chat: 'chat_bubble',

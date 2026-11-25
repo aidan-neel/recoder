@@ -1,0 +1,300 @@
+.compose-lab-nav {
+	display: flex;
+	gap: 4px;
+}
+
+.compose-lab-nav-short {
+	display: none;
+}
+
+.compose-lab-nav [aria-current='page'],
+.compose-lab-activity-button[aria-pressed='true'] {
+	background: var(--accent-tint);
+	color: var(--text-primary);
+}
+
+.compose-lab-letter,
+.compose-lab-meta {
+	color: var(--text-muted);
+	font-family: var(--font-mono);
+	font-size: var(--font-size-meta);
+}
+
+.compose-lab-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	container-type: inline-size;
+}
+
+.compose-lab {
+	--lab-width: 600px;
+	--lab-top: 116px;
+	display: grid;
+	gap: 24px;
+	width: min(calc(100% - 64px), var(--lab-width));
+	margin-inline: auto;
+	padding-block: clamp(32px, 11cqi, var(--lab-top)) 36px;
+}
+
+.compose-lab[data-variant='b'] {
+	--lab-width: 816px;
+	--lab-top: 104px;
+}
+
+.compose-lab[data-variant='c'] {
+	--lab-width: 760px;
+	--lab-top: 72px;
+}
+
+.compose-lab h1 {
+	margin: 0;
+	color: var(--text-primary);
+	font-size: clamp(24px, 4cqi, 30px);
+	font-weight: 600;
+	letter-spacing: -0.035em;
+	line-height: 1.2;
+	text-wrap: balance;
+}
+
+.compose-lab p {
+	margin: 0;
+}
+
+.compose-lab-label,
+.compose-lab-target-copy > :first-child,
+.compose-lab-match h2 {
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	font-weight: 500;
+}
+
+.compose-lab-label span,
+.compose-lab-muted,
+.compose-lab-age,
+.compose-lab-run-note {
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+}
+
+.compose-lab-brief,
+.compose-lab-target-copy {
+	display: grid;
+	gap: 8px;
+	min-width: 0;
+}
+
+.compose-lab-target-copy {
+	gap: 4px;
+	overflow-wrap: anywhere;
+}
+
+.compose-lab-link-line {
+	display: flex;
+	gap: 8px;
+}
+
+.compose-lab-link-line [data-ui='input'] {
+	flex: 1;
+	min-width: 0;
+}
+
+.compose-lab-link-line [data-ui='input-field'] {
+	font-family: var(--font-mono);
+	font-size: var(--font-size-meta);
+}
+
+.compose-lab-receipt {
+	display: grid;
+	align-items: center;
+	min-block-size: 84px;
+	padding: 14px 16px;
+}
+
+.compose-lab-receipt-body {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.compose-lab-receipt-body > svg,
+.compose-lab-dock-target > svg,
+.compose-lab-run-note > svg {
+	flex: none;
+	width: 16px;
+	height: 16px;
+}
+
+.compose-lab-receipt-body > svg,
+.compose-lab-dock-target > svg {
+	color: var(--text-muted);
+}
+
+.compose-lab-receipt-body > [data-ui='button'],
+.compose-lab-receipt-body > [data-ui='pill'] {
+	margin-inline-start: auto;
+}
+
+.compose-lab-run-note {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-block-size: 20px;
+}
+
+.compose-lab-run-note > svg {
+	color: var(--ok);
+}
+
+.compose-lab-brief-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 292px);
+	align-items: start;
+	gap: 24px;
+}
+
+.compose-lab-match {
+	display: grid;
+	align-content: start;
+	gap: 12px;
+	min-block-size: 224px;
+	padding: 16px;
+}
+
+.compose-lab-match h2 {
+	margin: 0;
+	padding-block-end: 12px;
+	border-bottom: 1px solid var(--line-card);
+}
+
+.compose-lab-match-action,
+.compose-lab-candidates {
+	display: grid;
+	justify-items: start;
+	gap: 8px;
+}
+
+.compose-lab-candidates [data-ui='button'] {
+	max-inline-size: 100%;
+	min-block-size: var(--size-control-md);
+	height: auto;
+	padding-block: 5px;
+	text-align: start;
+	white-space: normal;
+}
+
+.compose-lab-examples {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.compose-lab-recent {
+	display: grid;
+	gap: 12px;
+}
+
+.compose-lab-recent-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.compose-lab-recent-head [data-ui='input'] {
+	width: min(100%, 346px);
+}
+
+.compose-lab-recent-head .compose-lab-meta {
+	flex: none;
+}
+
+.compose-lab-activity {
+	display: grid;
+	align-content: start;
+	min-block-size: 168px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.compose-lab-activity:has([data-ui='status-notice']) {
+	align-content: center;
+}
+
+.compose-lab-activity li + li {
+	border-top: 1px solid var(--line-divider);
+}
+
+.compose-lab-activity-button {
+	display: grid;
+	grid-template-columns: 16px minmax(0, 1fr) auto;
+	gap: 12px;
+	width: 100%;
+	height: auto;
+	min-height: 56px;
+	padding: 8px 12px;
+	text-align: start;
+	white-space: normal;
+}
+
+.compose-lab-activity-button > svg {
+	color: var(--text-muted);
+}
+
+.compose-lab-activity-button[aria-pressed='true'] > svg {
+	color: var(--accent);
+}
+
+.compose-lab-dock-target {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-muted);
+	font-size: var(--font-size-meta);
+}
+
+@container (max-width: 720px) {
+	.compose-lab-brief-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.compose-lab-match {
+		min-block-size: 0;
+	}
+}
+
+@container (max-width: 520px) {
+	.compose-lab {
+		width: calc(100% - 32px);
+	}
+
+	.compose-lab-receipt-body {
+		flex-wrap: wrap;
+	}
+
+	.compose-lab-recent-head {
+		align-items: start;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.compose-lab-activity-button {
+		column-gap: 8px;
+	}
+
+	.compose-lab-age {
+		font-size: var(--font-size-meta);
+	}
+}
+
+@media (max-width: 520px) {
+	.compose-lab-letter,
+	.compose-lab-nav-name {
+		display: none;
+	}
+
+	.compose-lab-nav-short {
+		display: inline;
+	}
+}
